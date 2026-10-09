@@ -123,6 +123,34 @@ These are local measurements on four images, not a universal ranking. Different 
   - no external requests
 - The page sets `data-settled` when the visible result was produced from the current settings. Tests wait on it rather than on timers.
 
+## Tutorial video
+
+The tool page's help section embeds `public/videos/image-compressor-tutorial.mp4` with:
+
+- a poster (`-poster.webp`)
+- an English captions track (`.vtt`)
+- the same six steps written out beside the video
+- an "Every option explained" reference
+- `VideoObject` structured data
+
+The video loads only when played (`preload="none"`); the page fetches just the 0.1 MB poster.
+
+The video is recorded from the real, built app by `scripts/tutorial-video.mjs`:
+
+```bash
+npm run build
+npx serve out --listen tcp://127.0.0.1:4180
+KEEPSIMP_PREVIEW_URL=http://127.0.0.1:4180 npm run tutorial:video
+```
+
+- **Recording:** every frame is a 1920×1080 screenshot (a 1280×720 layout at 1.5×) taken with reduced motion. The cursor, captions, highlights and title slates are an overlay animated per frame, so pacing does not depend on machine speed.
+- **Sharp text:** text is only faded, never scaled. Scrolling moves in whole device pixels.
+- **Encoding:** H.264 High profile at up to 12 Mbps, through WebCodecs in Playwright's Chromium, muxed by [Mediabunny](https://mediabunny.dev) (a dev dependency only). No system ffmpeg is needed.
+- **Keyframes:** encoders re-render static text slightly differently on each keyframe, which looks like shimmering. Keyframes are therefore placed during scrolls and slate fades, with a 12-second cap.
+- **Verification:** a frame-by-frame scan of the October 2026 render found no visible pulses in static text. The only isolated changes were cursor and hover updates.
+
+The captions file is generated from the same script. If the recording length changes, update `DURATION` in `components/image-compressor/tutorial.tsx`. The current render is 1 min 44 s and 10.0 MB, and it plays in Chromium and WebKit.
+
 ## Licences
 
 The codec licences and source links are in `public/licenses/image-codecs.txt`:

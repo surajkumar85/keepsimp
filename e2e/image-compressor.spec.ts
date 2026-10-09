@@ -82,7 +82,9 @@ test("compresses a photo with smart defaults and compares before downloading", a
   expect(name).toBe("holiday-keepsimp.jpg")
   expect(meta).toMatchObject({ format: "jpeg", width: 1600, height: 1200 })
   expect(buffer.byteLength).toBeLessThan(source.byteLength)
-  await expect(page.getByText("Detail kept")).toBeVisible()
+  await expect(
+    page.getByTestId("image-compressor").getByText("Detail kept")
+  ).toBeVisible()
   await expect(page.getByRole("img", { name: "Original image" })).toBeVisible()
   await expect(
     page.getByRole("img", { name: "Compressed result" })
@@ -350,4 +352,59 @@ test("chips, results and errors stay accessible, local and responsive", async ({
   await expect(page.getByTestId("drop-zone")).toBeVisible()
   expect(external).toEqual([])
   expect(errors).toEqual([])
+})
+
+test("the tutorial video, captions and written guide are available", async ({
+  page,
+  request,
+  browserName,
+}) => {
+  await page.goto(ROUTE)
+  const section = page.getByRole("region", {
+    name: "A little help along the way",
+  })
+  const video = section.locator("video")
+  await expect(video).toHaveAttribute(
+    "poster",
+    "/videos/image-compressor-tutorial-poster.webp"
+  )
+  await expect(video).toHaveAttribute("preload", "none")
+  for (const [path, type] of [
+    ["/videos/image-compressor-tutorial.mp4", "video/mp4"],
+    ["/videos/image-compressor-tutorial-poster.webp", "image/webp"],
+    ["/videos/image-compressor-tutorial.vtt", "text/vtt"],
+  ]) {
+    const response = await request.get(path)
+    expect(response.ok()).toBe(true)
+    expect(response.headers()["content-type"]).toContain(type)
+  }
+  const captions = await (
+    await request.get("/videos/image-compressor-tutorial.vtt")
+  ).text()
+  expect(captions.startsWith("WEBVTT")).toBe(true)
+  expect(captions).toContain("Step 6 of 6: Download your image")
+
+  // Playwright's Firefox build has no H.264 decoder; real Firefox uses the system one.
+  if (browserName !== "firefox") {
+    const metadata = await video.evaluate(
+      (element: HTMLVideoElement) =>
+        new Promise<{ duration: number; width: number }>((resolve, reject) => {
+          element.addEventListener("loadedmetadata", () =>
+            resolve({ duration: element.duration, width: element.videoWidth })
+          )
+          element.addEventListener("error", () => reject(new Error("decode")))
+          element.preload = "metadata"
+          element.load()
+        })
+    )
+    expect(metadata.width).toBe(1920)
+    expect(metadata.duration).toBeGreaterThan(90)
+  }
+
+  await expect(section.locator("#tutorial-steps > li")).toHaveCount(6)
+  const details = section.locator("details")
+  await details.locator("summary").focus()
+  await page.keyboard.press("Enter")
+  await expect(details).toHaveAttribute("open", "")
+  await expect(section.getByText("Target size", { exact: true })).toBeVisible()
 })
