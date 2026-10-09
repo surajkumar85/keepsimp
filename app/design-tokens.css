@@ -31,6 +31,7 @@
   --sidebar-accent-foreground: oklch(0.205 0 0);
   --sidebar-border: oklch(0.922 0 0);
   --sidebar-ring: oklch(0.708 0 0);
+  --marketing-surface: oklch(0.985 0.009 95);
   --radius-sm: 4px;
   --radius-md: 8px;
   --radius-lg: 12px;
@@ -60,6 +61,12 @@
   --type-section-leading: 28px;
   --type-title-mobile: 24px;
   --type-title-mobile-leading: 30px;
+  --type-display: 72px;
+  --type-display-leading: 76px;
+  --type-display-mobile: 44px;
+  --type-display-mobile-leading: 48px;
+  --type-marketing-section: 40px;
+  --type-marketing-section-leading: 46px;
   --motion-fast: 150ms;
   --motion-standard: 200ms;
   --shadow-card: none;
@@ -97,4 +104,5 @@
   --sidebar-accent-foreground: oklch(0.985 0 0);
   --sidebar-border: oklch(1 0 0 / 10%);
   --sidebar-ring: oklch(0.556 0 0);
+  --marketing-surface: oklch(0.18 0.008 186);
 }

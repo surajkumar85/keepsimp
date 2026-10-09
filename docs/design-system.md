@@ -1,6 +1,6 @@
 # KeepSimp design reference
 
-Version 2 · compact single-sidebar revision · updated 9 October 2026 · applies to every future implementation.
+Version 3 · marketing and functional dashboard · updated 10 October 2026 · applies to every future implementation.
 
 KeepSimp combines the requested shadcn preset with Airbnb-informed clarity, spacing, hierarchy, and human language. The exact numbers below are **KeepSimp decisions**, not an official Airbnb token export. Airbnb's public references reviewed here do not provide a complete numerical radius specification. We retain our own teal identity and fonts.
 
@@ -49,7 +49,17 @@ The base unit is 4px. Prefer 8, 12, 16, 20, 24, 32, 40, 48, and 64px spacing. Ca
 
 Sidebar-01 provides one 224px desktop navigation panel without an additional icon rail. The main header is 56px high. Collapsing the sidebar hides the panel completely; it remains out of the keyboard tab order while hidden. Below 768px it becomes one 256px modal sheet with full navigation. The sheet has a close button, Escape dismissal, focus containment, and return to the trigger. Tool cards progress from one to two to three columns as available width increases. Do not hide essential actions on mobile or allow page-width overflow.
 
-The homepage uses a short, flat introduction rather than a large hero panel. Tool cards use a 12px radius, 16px padding, 32px icon tiles, 16px titles, and 14px descriptions. Do not restore large empty card headers, oversized badges, or a second navigation panel in later phases. Exact layout dimensions are recorded under `layout` in the token file.
+The dashboard uses a short, flat introduction rather than a large hero panel. Tool cards use a 12px radius, 16px padding, 32px icon tiles, 16px titles, and 14px descriptions. Do not restore large empty card headers, oversized badges, or a second navigation panel in later phases. Exact layout dimensions are recorded under `layout` in the token file.
+
+### Marketing pages
+
+The homepage is a separate landing page, with the workspace moved to `/dashboard/`. Landing, journal and privacy routes use a shared marketing header/footer without a sidebar. Width is capped at 1152px, with 24px desktop gutters and 16px mobile gutters. The header is 72px high. Sections use 88px vertical padding on desktop and 56px on mobile; this storytelling layout does not change workspace density.
+
+Use `marketing-surface` for a quiet warm background in light mode and a subdued teal charcoal in dark mode. Outfit display headings use 72/76px desktop and 44/48px mobile. Marketing section headings use 40/46px desktop and 32/38px mobile. Explanatory text uses 16px and supporting copy 14px. Hero actions use the existing 48px large button; header actions retain 44px targets.
+
+Use optimized original local imagery with responsive static AVIF sources and WebP fallbacks. Load hero imagery eagerly with high fetch priority. Marketing links disable automatic prefetch to avoid eager tool downloads and interrupted background requests during rapid Safari navigation. Use accurate live demonstrations. The sample processes a real image and reports measured sizes; never hardcode a savings percentage. Ready tools are linked; future tools remain marked as coming soon. Avoid fabricated testimonials, user counts, ratings and supported formats. Blog illustrations and exported sharing graphics may carry fixed artwork colors; live product styles use semantic tokens.
+
+Entry animations are finite; processing animation starts on a user action and stops with the operation. Reduced-motion styles apply to all movement. Essential copy is rendered in static HTML and stays visible with scripts disabled; animation must not conceal it. Native `details` elements provide keyboard-operable FAQ disclosure.
 
 ## Typography and icons
 
@@ -100,3 +110,5 @@ For an intentional system change: edit tokens, regenerate CSS, update this docum
 `npm run check` runs design checks, ESLint, a production static build, TypeScript, and unit coverage. `npm run test:e2e` tests the built output on Chromium, Firefox, WebKit, Android Chromium emulation, and iPhone WebKit emulation. Browser tests cover search/category behavior, sidebar operation, focus, theme persistence, axe scans in both themes, computed radii, reduced motion, overflow, runtime errors, and external requests.
 
 Use browser tests for complete rendered flows. Pure logic belongs in unit tests; async server components are covered through browser journeys. [Next.js Vitest guide](https://nextjs.org/docs/app/guides/testing/vitest), [Next.js Playwright guide](https://nextjs.org/docs/app/guides/testing/playwright)
+
+The marketing phase adds real image and JSON download journeys, metadata and sitemap validation, responsive marketing checks, article navigation, and accessibility scans. Unit coverage includes catalogue, image processing lifecycle, precision-preserving JSON formatting, and SEO helpers. Coverage refers to those modules, not every application component.

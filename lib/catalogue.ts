@@ -14,7 +14,7 @@ export type Tool = {
   description: string
   category: Exclude<Category, "all">
   keywords: readonly string[]
-  status: "planned"
+  status: "planned" | "available"
 }
 
 export const tools: readonly Tool[] = [
@@ -72,7 +72,7 @@ export const tools: readonly Tool[] = [
     description: "Less weight, with the details you love.",
     category: "image",
     keywords: ["compress", "photo", "jpeg", "png"],
-    status: "planned",
+    status: "available",
   },
   {
     id: "image-resizer",
@@ -80,7 +80,7 @@ export const tools: readonly Tool[] = [
     description: "Make your images fit wherever they go.",
     category: "image",
     keywords: ["resize", "photo", "dimensions"],
-    status: "planned",
+    status: "available",
   },
   {
     id: "image-converter",
@@ -88,7 +88,7 @@ export const tools: readonly Tool[] = [
     description: "From one image format to the next.",
     category: "image",
     keywords: ["jpg", "jpeg", "png", "webp", "convert"],
-    status: "planned",
+    status: "available",
   },
   {
     id: "pdf-merger",
@@ -112,7 +112,7 @@ export const tools: readonly Tool[] = [
     description: "Turn a wall of data into something readable.",
     category: "developer",
     keywords: ["json", "format", "prettify", "data"],
-    status: "planned",
+    status: "available",
   },
 ]
 

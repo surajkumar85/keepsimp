@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import Link from "next/link"
 import { useSearchParams } from "next/navigation"
 import { IconArrowUpRight, IconSearch, IconX } from "@tabler/icons-react"
 import { categories, filterTools, parseCategory } from "@/lib/catalogue"
@@ -27,12 +28,12 @@ export function ToolCatalogue() {
               : `${selected.label} tools`}
           </h2>
           <p className="mt-1 text-xs text-muted-foreground">
-            Our first tools are in the works.
+            Four tools ready to use. More good things on the way.
           </p>
         </div>
         <div className="relative w-full sm:max-w-72">
           <label htmlFor="tool-search" className="sr-only">
-            Search planned tools
+            Search tools
           </label>
           <IconSearch
             className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground"
@@ -64,7 +65,9 @@ export function ToolCatalogue() {
         role="status"
         aria-live="polite"
       >
-        {results.length} {results.length === 1 ? "tool" : "tools"} planned
+        {results.length} {results.length === 1 ? "tool" : "tools"} ·{" "}
+        {results.filter((tool) => tool.status === "available").length} ready to
+        use
       </p>
       {results.length ? (
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
@@ -72,16 +75,37 @@ export function ToolCatalogue() {
             <article
               key={tool.id}
               data-testid="tool-card"
-              className="tool-card rounded-lg border bg-card p-4"
+              className="tool-card relative rounded-lg border bg-card p-4"
             >
               <div className="mb-3 flex items-center justify-between gap-3">
                 <div className="flex size-8 items-center justify-center rounded-md bg-accent text-primary">
                   <CategoryIcon category={tool.category} className="size-4.5" />
                 </div>
-                <span className="text-xs text-muted-foreground">Planned</span>
+                <span
+                  className={
+                    tool.status === "available"
+                      ? "text-xs text-primary"
+                      : "text-xs text-muted-foreground"
+                  }
+                >
+                  {tool.status === "available" ? "Ready to use" : "Coming soon"}
+                </span>
               </div>
               <h3 className="font-heading text-base font-medium">
-                {tool.name}
+                {tool.status === "available" ? (
+                  <Link
+                    href={`/dashboard/${tool.id}/`}
+                    className="after:absolute after:inset-0 after:rounded-lg hover:text-primary"
+                  >
+                    {tool.name}{" "}
+                    <IconArrowUpRight
+                      className="ml-1 inline size-4"
+                      aria-hidden="true"
+                    />
+                  </Link>
+                ) : (
+                  tool.name
+                )}
               </h3>
               <p className="mt-1 text-sm leading-5 text-muted-foreground">
                 {tool.description}

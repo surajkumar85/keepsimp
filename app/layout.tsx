@@ -3,7 +3,7 @@ import localFont from "next/font/local"
 
 import "./globals.css"
 import { ThemeProvider } from "@/components/theme-provider"
-import { AppShell } from "@/components/app-shell"
+import { site, pageMetadata } from "@/lib/site"
 import { cn } from "@/lib/utils"
 
 const outfitHeading = localFont({
@@ -29,12 +29,16 @@ const fontMono = localFont({
 })
 
 export const metadata: Metadata = {
+  ...pageMetadata(
+    "Free browser tools for everyday work",
+    "Compress, resize and convert images, or format JSON, for free. KeepSimp works in your browser with no account and no file uploads.",
+    "/"
+  ),
+  metadataBase: new URL(site.origin),
   title: {
-    default: "KeepSimp — Simple little tools",
+    default: "KeepSimp — Free browser tools for everyday work",
     template: "%s | KeepSimp",
   },
-  description:
-    "A home for free, private tools that work in your browser. Explore the KeepSimp foundation preview.",
   applicationName: "KeepSimp",
   icons: { icon: "/icon.svg" },
 }
@@ -57,9 +61,7 @@ export default function RootLayout({
       )}
     >
       <body>
-        <ThemeProvider>
-          <AppShell>{children}</AppShell>
-        </ThemeProvider>
+        <ThemeProvider>{children}</ThemeProvider>
       </body>
     </html>
   )

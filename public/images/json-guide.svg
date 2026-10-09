@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="800" viewBox="0 0 1200 800" role="img" aria-labelledby="title desc">
+<title id="title">A clearer view of JSON</title><desc id="desc">Compact JSON on the left becomes a neatly indented document on the right.</desc>
+<rect width="1200" height="800" fill="#edf5f1" />
+<rect x="85" y="200" width="420" height="400" rx="24" fill="#ffffff" />
+<rect x="695" y="140" width="420" height="520" rx="24" fill="#00786f" />
+<g fill="#00786f" font-family="monospace" font-size="30"><text x="120" y="270">{"hello":"world",</text><text x="120" y="315">"simple":true,</text><text x="120" y="360">"free":true}</text></g>
+<g fill="#ffffff" font-family="monospace" font-size="30"><text x="735" y="225">{</text><text x="760" y="290">"hello": "world",</text><text x="760" y="355">"simple": true,</text><text x="760" y="420">"free": true</text><text x="735" y="485">}</text></g>
+<path d="M550 400h90m-24-24 24 24-24 24" fill="none" stroke="#00786f" stroke-width="7" stroke-linecap="round" stroke-linejoin="round" />
+<g fill="#00786f" font-family="sans-serif" font-size="22"><text x="120" y="550">A little compact.</text></g><g fill="#ffffff" font-family="sans-serif" font-size="22"><text x="735" y="610">A lot more readable.</text></g>
+</svg>

@@ -3,7 +3,7 @@ import AxeBuilder from "@axe-core/playwright"
 import tokens from "../design-system/tokens.json" with { type: "json" }
 
 test("search, empty state, and validated category URLs", async ({ page }) => {
-  await page.goto("/")
+  await page.goto("/dashboard/")
   await expect(page.getByTestId("tool-card")).toHaveCount(12)
   await page.getByRole("searchbox").fill("WEBP")
   await expect(page.getByTestId("tool-card")).toHaveCount(1)
@@ -17,9 +17,9 @@ test("search, empty state, and validated category URLs", async ({ page }) => {
     .first()
     .click()
   await expect(page.getByTestId("tool-card")).toHaveCount(12)
-  await page.goto("/?category=video")
+  await page.goto("/dashboard/?category=video")
   await expect(page.getByTestId("tool-card")).toHaveCount(3)
-  await page.goto("/?category=invalid")
+  await page.goto("/dashboard/?category=invalid")
   await expect(page.getByTestId("tool-card")).toHaveCount(12)
 })
 
@@ -27,7 +27,7 @@ test("sidebar navigation works on desktop and mobile", async ({
   page,
   isMobile,
 }) => {
-  await page.goto("/")
+  await page.goto("/dashboard/")
   if (isMobile)
     await page.getByRole("button", { name: "Toggle Sidebar" }).click()
   const navigation = page.getByRole("navigation", { name: "Tool categories" })
@@ -59,7 +59,7 @@ test("sidebar navigation works on desktop and mobile", async ({
 test("theme persists and both themes pass accessibility checks", async ({
   page,
 }) => {
-  await page.goto("/")
+  await page.goto("/dashboard/")
   for (const theme of ["light", "dark"]) {
     if (theme === "dark")
       await page.getByRole("button", { name: "Switch to dark theme" }).click()
@@ -119,7 +119,7 @@ test("compact production pages run without errors or external requests", async (
     if (new URL(request.url()).origin !== new URL(baseURL!).origin)
       external.push(request.url())
   })
-  await page.goto("/")
+  await page.goto("/dashboard/")
   await expect(page.getByRole("heading", { level: 1 })).toBeVisible()
   await expect(page.locator(".page-intro")).toBeVisible()
   const intro = await page.locator(".page-intro").boundingBox()
@@ -157,7 +157,7 @@ test("compact production pages run without errors or external requests", async (
 })
 
 test("skip link moves keyboard focus into the content", async ({ page }) => {
-  await page.goto("/")
+  await page.goto("/dashboard/")
   await page.keyboard.press("Tab")
   await expect(
     page.getByRole("link", { name: "Skip to content" })
@@ -168,7 +168,7 @@ test("skip link moves keyboard focus into the content", async ({ page }) => {
 
 test("navigation remains usable at 320px", async ({ page }) => {
   await page.setViewportSize({ width: 320, height: 740 })
-  await page.goto("/")
+  await page.goto("/dashboard/")
   await page.getByRole("searchbox").waitFor()
   expect(
     await page.evaluate(

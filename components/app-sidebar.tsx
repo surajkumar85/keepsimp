@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import Image from "next/image"
+import { BrandLogo } from "@/components/brand-logo"
 import { usePathname, useSearchParams } from "next/navigation"
 import { IconLock, IconPalette, IconX } from "@tabler/icons-react"
 import { categories, isActivePath, parseCategory, tools } from "@/lib/catalogue"
@@ -39,22 +39,7 @@ export function AppSidebar() {
             onClick={closeMobile}
             className="flex min-h-11 items-center gap-2 font-heading text-base font-semibold tracking-tight md:min-h-9"
           >
-            <Image
-              src="/brand/keepsimp-logo.svg"
-              width={268}
-              height={64}
-              alt=""
-              className="h-7 w-auto dark:hidden"
-              unoptimized
-            />
-            <Image
-              src="/brand/keepsimp-logo-dark.svg"
-              width={268}
-              height={64}
-              alt=""
-              className="hidden h-7 w-auto dark:block"
-              unoptimized
-            />
+            <BrandLogo />
           </Link>
           <div className="md:hidden">
             <Button
@@ -83,19 +68,21 @@ export function AppSidebar() {
                         <Link
                           href={
                             category.id === "all"
-                              ? "/"
-                              : `/?category=${category.id}`
+                              ? "/dashboard/"
+                              : `/dashboard/?category=${category.id}`
                           }
                         />
                       }
                       onClick={closeMobile}
                       aria-current={
-                        pathname === "/" && activeCategory === category.id
+                        isActivePath(pathname, "/dashboard") &&
+                        activeCategory === category.id
                           ? "page"
                           : undefined
                       }
                       isActive={
-                        pathname === "/" && activeCategory === category.id
+                        isActivePath(pathname, "/dashboard") &&
+                        activeCategory === category.id
                       }
                       className="h-11 gap-2.5 px-2.5 md:h-9 data-active:bg-primary/10 data-active:text-sidebar-accent-foreground"
                     >

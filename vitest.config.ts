@@ -10,7 +10,12 @@ export default defineConfig({
     include: ["**/*.test.{ts,tsx}"],
     coverage: {
       provider: "v8",
-      include: ["lib/catalogue.ts"],
+      include: [
+        "lib/catalogue.ts",
+        "lib/json-tools.ts",
+        "lib/image-tools.ts",
+        "lib/site.ts",
+      ],
       reporter: ["text", "html", "lcov"],
       thresholds: {
         lines: 100,

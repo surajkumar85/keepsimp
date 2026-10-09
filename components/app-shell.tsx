@@ -1,6 +1,7 @@
 "use client"
 
 import { Suspense } from "react"
+import Link from "next/link"
 import type { CSSProperties } from "react"
 import { usePathname } from "next/navigation"
 import { AppSidebar } from "@/components/app-sidebar"
@@ -51,12 +52,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               <ThemeToggle />
             </div>
           </header>
-          <div id="main-content" tabIndex={-1} className="flex-1 outline-none">
+          <main id="main-content" tabIndex={-1} className="flex-1 outline-none">
             {children}
-          </div>
+          </main>
           <footer className="flex flex-wrap items-center justify-between gap-2 border-t px-4 py-4 text-xs text-muted-foreground md:px-6">
             <span>KeepSimp · A little less complicated.</span>
-            <span>Foundation preview · Tools coming next</span>
+            <Link href="/blog/" className="underline underline-offset-4">
+              Tips from the journal
+            </Link>
           </footer>
         </SidebarInset>
       </SidebarProvider>

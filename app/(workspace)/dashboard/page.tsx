@@ -1,6 +1,13 @@
 import { Suspense } from "react"
 import { IconDeviceLaptop, IconHeart, IconLock } from "@tabler/icons-react"
 import { ToolCatalogue } from "@/components/tool-catalogue"
+import { pageMetadata } from "@/lib/site"
+
+export const metadata = pageMetadata(
+  "Free tools dashboard",
+  "Compress, resize and convert images, and format JSON locally. Find your next free browser tool in the KeepSimp dashboard.",
+  "/dashboard/"
+)
 
 export default function Home() {
   return (
