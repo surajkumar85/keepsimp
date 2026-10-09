@@ -32,7 +32,7 @@ export const posts: readonly BlogPost[] = [
         title: "Start with the original, and keep it.",
         paragraphs: [
           "Work from the best version you have. Repeatedly opening a lossy file and saving it again can introduce further changes. Keep a separate original so you can make a different export later.",
-          "KeepSimp accepts still JPEG, PNG and WebP images up to 20 MB and 16 million pixels. It reads the file on your device, draws the image in a local browser canvas, and creates a downloadable output. The tool does not send the selected file to a server.",
+          "The KeepSimp image compressor accepts JPEG, PNG, WebP, AVIF, HEIC, GIF, BMP, TIFF, SVG and JPEG XL files up to 50 MB and 50 million pixels. Animated files use their first frame. It decodes and encodes the image on your device with WebAssembly codecs running in your browser. The tool does not send the selected file to a server.",
         ],
       },
       {
@@ -40,23 +40,23 @@ export const posts: readonly BlogPost[] = [
         title: "Set the size for where it will live.",
         paragraphs: [
           "A smaller pixel count is often the clearest way to reduce an image's weight. For example, a picture intended for a small card usually does not need the same dimensions as a full-screen photograph. Check the space where the image will appear before choosing a width.",
-          "Open Image compressor, choose a file, and enter a width in pixels. The height follows the original proportions. Output is limited to 4096 pixels on either side. Increasing the width cannot recreate detail that was never in the source.",
+          "Open Image compressor and choose, drop or paste a file. Under Size, pick a percentage, a long edge such as 1920 pixels, or exact custom dimensions; proportions stay locked unless you unlock them. You can also crop to a shape such as 1:1 or 16:9 and rotate the image. Outputs can be up to 16,383 pixels on a side. Enlarging cannot recreate detail that was never in the source.",
         ],
       },
       {
         id: "pick-quality",
         title: "Adjust quality, then look closely.",
         paragraphs: [
-          "For JPEG and WebP, the quality setting asks the browser to balance fidelity and file size. A quality of 80 is a useful starting experiment, not a guarantee. Gradients, text and busy textures may need a different setting. PNG does not use this lossy quality control.",
-          "Download the result and inspect it at the size people will actually view it. Look for blurred lettering, halos around edges, or banding in smooth areas. If the change is distracting, increase quality or use a more suitable format. Compare the measured size; an export can be larger than its source.",
+          "Smart compression tries several quality levels and keeps the smallest file that still measures close to your original, using a structural similarity score. Images with text and flat colour are judged by their weakest areas, so edges stay clean. Choose High quality for more detail, Smallest for lighter files, Custom to set quality yourself, or Target size to fit a limit such as 200 KB.",
+          "Drag the comparison slider across the image, and zoom to 100% or 200% to inspect detail. Look for blurred lettering, halos around edges, or banding in smooth areas. If the change is distracting, choose High quality or a different format. Compare the measured size; if re-encoding cannot beat your original, KeepSimp tells you and offers the original instead.",
         ],
       },
       {
         id: "check-before-replacing",
         title: "Check the result before replacing anything.",
         paragraphs: [
-          "The tool reports output dimensions and file size after processing. Open the downloaded file in the app or page where you plan to use it. Confirm that it displays correctly before removing a larger copy from your workflow.",
-          "Canvas exports may remove metadata or color profiles, and animation is not preserved. JPEG also replaces transparency with a white background in KeepSimp. Use a still image, keep the original, and choose PNG or WebP when transparency matters. For archival or print work, use a workflow that explicitly preserves the properties you need.",
+          "The tool reports the output format, dimensions, file size, saving and how much detail it measured as kept. Open the downloaded file in the app or page where you plan to use it. Confirm that it displays correctly before removing a larger copy from your workflow.",
+          "Compressed files leave out metadata such as camera details and location, and colours are converted to sRGB. Animation is not preserved. JPEG replaces transparency with a background colour, white by default. Keep the original, and choose PNG, WebP or AVIF when transparency matters. For archival or print work, use a workflow that explicitly preserves the properties you need.",
         ],
       },
     ],
@@ -64,6 +64,15 @@ export const posts: readonly BlogPost[] = [
       {
         title: "MDN: Canvas image export and quality",
         url: "https://developer.mozilla.org/en-US/docs/Web/API/HTMLCanvasElement/toBlob",
+      },
+      {
+        title:
+          "Wang et al.: Image quality assessment, from error visibility to structural similarity",
+        url: "https://ece.uwaterloo.ca/~z70wang/publications/ssim.pdf",
+      },
+      {
+        title: "MozJPEG: improved JPEG encoder",
+        url: "https://github.com/mozilla/mozjpeg",
       },
     ],
   },

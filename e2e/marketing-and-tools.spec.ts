@@ -84,8 +84,8 @@ test("image tools export the requested dimensions and formats locally", async ({
     )
       external.push(request.url())
   })
+  // The image compressor has its own engine and journeys in image-compressor.spec.ts.
   for (const [id, action, format, extension] of [
-    ["image-compressor", "Compress image", "image/webp", "webp"],
     ["image-resizer", "Resize image", "image/png", "png"],
     ["image-converter", "Convert image", "image/jpeg", "jpg"],
   ]) {

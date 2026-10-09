@@ -81,6 +81,17 @@
 }
 
 @layer components {
+  /* Neutral checkerboard behind transparent pixels, built from theme tokens. */
+  .checkerboard {
+    background-color: var(--background);
+    background-image: conic-gradient(
+      var(--muted) 25%,
+      transparent 0 50%,
+      var(--muted) 0 75%,
+      transparent 0
+    );
+    background-size: 16px 16px;
+  }
   .marketing-container {
     width: min(100% - 48px, 1152px);
     margin-inline: auto;

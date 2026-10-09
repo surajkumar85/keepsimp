@@ -15,6 +15,13 @@ export default defineConfig({
         "lib/json-tools.ts",
         "lib/image-tools.ts",
         "lib/site.ts",
+        "lib/image-compressor/formats.ts",
+        "lib/image-compressor/geometry.ts",
+        "lib/image-compressor/pixels.ts",
+        "lib/image-compressor/pipeline.ts",
+        "lib/image-compressor/quality.ts",
+        "lib/image-compressor/settings.ts",
+        "lib/image-compressor/ssim.ts",
       ],
       reporter: ["text", "html", "lcov"],
       thresholds: {

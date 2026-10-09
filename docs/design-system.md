@@ -1,6 +1,6 @@
 # KeepSimp design reference
 
-Version 3 · marketing and functional dashboard · updated 10 October 2026 · applies to every future implementation.
+Version 3.1 · marketing, functional dashboard, choice chips and image comparison · updated 10 October 2026 · applies to every future implementation. Tokens are unchanged from version 3.
 
 KeepSimp combines the requested shadcn preset with Airbnb-informed clarity, spacing, hierarchy, and human language. The exact numbers below are **KeepSimp decisions**, not an official Airbnb token export. Airbnb's public references reviewed here do not provide a complete numerical radius specification. We retain our own teal identity and fonts.
 
@@ -99,6 +99,16 @@ Use Tabler outline icons, normally 20px with a 1.7 stroke. Hide decorative icons
 - Provide honest empty, error, progress, cancellation, and completion states. Never show a planned utility as an active processor.
 - Before each tool release, test 320px layouts, 200% zoom, keyboard navigation, and manual assistive technology behavior in addition to automated checks.
 
+## Choice chips, uploads and comparisons
+
+Use `components/ui/choice-chips.tsx` when a visitor picks one option from a short list (about eight or fewer) and seeing every option at once helps them decide. It replaces native selects for formats, presets, sizes and aspect ratios. Chips use Base UI `RadioGroup`/`Radio`, so Tab enters the group and arrow keys move between options. Each group needs a label; hide it visually only when a heading directly above says the same thing. The shape is the pill radius, 36px high on desktop and 44px on mobile, with 12px horizontal padding and 14px medium text. The selected chip uses `primary` with `primary-foreground`. Unavailable chips stay visible, disabled at 50% opacity, with the reason in the helper text. Rows wrap; they never scroll horizontally. Static format badges use the same pill shape at 12px text and are not interactive.
+
+File drop zones are `rounded-xl` cards with a 2px dashed border, a 48px `rounded-lg` icon tile tinted with `primary/10`, one heading and one primary action. Dragging a file over the zone switches to a `primary` border and `primary/5` fill, with a 1% lift that reduced motion removes. A labelled native file input sits behind the visible action, which shows its focus ring. After a file loads, the zone collapses to a compact file bar: thumbnail, name, facts, Replace and Remove.
+
+Before/after comparisons stack the processed result over the original at identical pixel size. The result is revealed to the right of a divider with a 44px/36px `rounded-full` grip. A visually hidden native range input labelled "Comparison position" provides keyboard and screen-reader control. Transparent areas sit on the `.checkerboard` utility, built from `background` and `muted`. Corner labels are small pill tags. Progress shows as a pill at the bottom of the stage with a Cancel action; the previous result stays visible but dimmed until the new one arrives.
+
+Crop overlays dim the excluded area with a `background` veil, show rule-of-thirds guides and eight handles with 44px/28px hit areas, and pair the box with exact pixel fields. The image compressor reference is `docs/image-compressor.md`.
+
 ## Adding components and changing the system
 
 Reuse the existing shadcn primitives. This preset uses Base UI `render` composition, not Radix `asChild`. Review newly added registry components against these roles, especially radii, hit areas, focus, and contrast. Keep the same design on uploads, settings, progress, output previews, and downloads.
@@ -111,4 +121,4 @@ For an intentional system change: edit tokens, regenerate CSS, update this docum
 
 Use browser tests for complete rendered flows. Pure logic belongs in unit tests; async server components are covered through browser journeys. [Next.js Vitest guide](https://nextjs.org/docs/app/guides/testing/vitest), [Next.js Playwright guide](https://nextjs.org/docs/app/guides/testing/playwright)
 
-The marketing phase adds real image and JSON download journeys, metadata and sitemap validation, responsive marketing checks, article navigation, and accessibility scans. Unit coverage includes catalogue, image processing lifecycle, precision-preserving JSON formatting, and SEO helpers. Coverage refers to those modules, not every application component.
+The marketing phase adds real image and JSON download journeys, metadata and sitemap validation, responsive marketing checks, article navigation, and accessibility scans. Unit coverage includes catalogue, image processing lifecycle, precision-preserving JSON formatting, SEO helpers and the image compressor's pure modules. Coverage refers to those modules, not every application component.

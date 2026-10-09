@@ -71,7 +71,7 @@ export const tools: readonly Tool[] = [
     name: "Image compressor",
     description: "Less weight, with the details you love.",
     category: "image",
-    keywords: ["compress", "photo", "jpeg", "png"],
+    keywords: ["compress", "photo", "jpeg", "png", "avif", "heic"],
     status: "available",
   },
   {

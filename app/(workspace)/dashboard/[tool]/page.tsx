@@ -5,6 +5,7 @@ import { tools } from "@/lib/catalogue"
 import { pageMetadata, absoluteUrl } from "@/lib/site"
 import { StructuredData } from "@/components/structured-data"
 import { ImageTool } from "@/components/image-tool"
+import { ImageCompressor } from "@/components/image-compressor/image-compressor"
 import { JsonTool } from "@/components/json-tool"
 
 const ready = tools.filter((tool) => tool.status === "available")
@@ -61,13 +62,21 @@ export default async function ToolPage({
       <p className="mt-2 mb-6 text-sm text-muted-foreground">
         {tool.description} Free, with no account or uploads.
       </p>
-      {tool.category === "image" ? <ImageTool mode={id} /> : <JsonTool />}
+      {id === "image-compressor" ? (
+        <ImageCompressor />
+      ) : tool.category === "image" ? (
+        <ImageTool mode={id} />
+      ) : (
+        <JsonTool />
+      )}
       <div className="mt-8 border-t pt-5">
         <h2 className="section-title">A little help along the way</h2>
         <p className="mt-2 text-sm text-muted-foreground">
-          {tool.category === "image"
-            ? "Choose a still image, adjust the format, width and quality, then download your result. Compare it with your original before replacing anything."
-            : "Paste valid JSON, choose Format JSON or Minify, then copy or download the result. Invalid JSON shows an error without changing your input."}
+          {id === "image-compressor"
+            ? "Drop or paste an image. Smart compression starts straight away; pick a format, size, crop or file-size target and the preview updates. Drag the slider to compare with your original, then download. Keep your original until you are happy with the result."
+            : tool.category === "image"
+              ? "Choose a still image, adjust the format, width and quality, then download your result. Compare it with your original before replacing anything."
+              : "Paste valid JSON, choose Format JSON or Minify, then copy or download the result. Invalid JSON shows an error without changing your input."}
         </p>
         <Link
           href={

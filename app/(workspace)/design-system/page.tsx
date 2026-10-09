@@ -2,6 +2,7 @@ import type { Metadata } from "next"
 import tokens from "@/design-system/tokens.json"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { ChoiceChipsDemo } from "@/components/choice-chips-demo"
 
 export const metadata: Metadata = {
   title: "Design reference",
@@ -110,6 +111,9 @@ export default function DesignSystem() {
           <p className="mt-2 text-xs text-muted-foreground">
             36px desktop control. 44px mobile touch target. 8px radius.
           </p>
+        </div>
+        <div className="mt-6 max-w-md" data-testid="choice-chips-example">
+          <ChoiceChipsDemo />
         </div>
       </section>
       <div className="rounded-xl border bg-accent p-4">
