@@ -1,19 +1,37 @@
-import { Button } from "@/components/ui/button"
+import { Suspense } from "react"
+import { IconDeviceLaptop, IconHeart, IconLock } from "@tabler/icons-react"
+import { ToolCatalogue } from "@/components/tool-catalogue"
 
-export default function Page() {
+export default function Home() {
   return (
-    <div className="flex min-h-svh p-6">
-      <div className="flex max-w-md min-w-0 flex-col gap-4 text-sm leading-loose">
-        <div>
-          <h1 className="font-medium">Project ready!</h1>
-          <p>You may now add components and start building.</p>
-          <p>We&apos;ve already added the button component for you.</p>
-          <Button className="mt-2">Button</Button>
+    <div className="mx-auto w-full max-w-7xl px-4 py-6 md:px-6">
+      <section
+        aria-labelledby="hero-heading"
+        className="page-intro mb-6 border-b pb-6"
+      >
+        <h1 id="hero-heading" className="page-title">
+          Simple tools. Less fuss.
+        </h1>
+        <p className="mt-2 text-sm text-muted-foreground">
+          Free, private tools for the things you do every day.
+        </p>
+        <div className="mt-4 flex flex-wrap gap-x-4 gap-y-2 text-xs text-muted-foreground">
+          <span className="flex items-center gap-1.5">
+            <IconLock className="size-3.5" aria-hidden="true" /> Private by
+            design
+          </span>
+          <span className="flex items-center gap-1.5">
+            <IconHeart className="size-3.5" aria-hidden="true" /> Always free
+          </span>
+          <span className="flex items-center gap-1.5">
+            <IconDeviceLaptop className="size-3.5" aria-hidden="true" /> In your
+            browser
+          </span>
         </div>
-        <div className="font-mono text-xs text-muted-foreground">
-          (Press <kbd>d</kbd> to toggle dark mode)
-        </div>
-      </div>
+      </section>
+      <Suspense fallback={<p role="status">Loading the collection…</p>}>
+        <ToolCatalogue />
+      </Suspense>
     </div>
   )
 }

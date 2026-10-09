@@ -5,3 +5,8 @@ node_modules/
 coverage/
 pnpm-lock.yaml
 .pnpm-store/
+out/
+playwright-report/
+test-results/
+package-lock.json
+app/design-tokens.css

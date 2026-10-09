@@ -7,3 +7,20 @@ This version has breaking changes — APIs, conventions, and file structure may 
 This block is written and re-added by `next dev` — verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
 
 <!-- END:nextjs-agent-rules -->
+
+## KeepSimp project rules
+
+Read `docs/design-system.md`, `design-system/tokens.json`, and `docs/phase-one.md` before implementing product UI. The design reference is the persistent authority for future phases.
+
+- Use Next.js App Router, TypeScript strict mode, npm, and the committed lockfile. The app exports static files; browser file processing must stay local. Do not introduce uploads, accounts, paid tools, or server processing without a user request.
+- Preserve the requested shadcn preset `b2zSMmeGTw`: Base Nova, Base UI primitives, Tabler icons, Inter body, Outfit headings, Geist Mono code, and a teal brand. Do not substitute Radix or Lucide APIs from memory.
+- Use sidebar-01's single panel with grouped navigation. The user rejected the double-sidebar layout: do not reintroduce nested sidebars or a second icon rail. Desktop width is 224px; mobile uses one 256px sheet with the same categories and keyboard access.
+- Reuse `components/ui`. Product screens use semantic tokens and named radius utilities. No arbitrary radii, hardcoded colors, copied Airbnb marks, or proprietary Cereal fonts.
+- Reuse the outlined KeepSimp logo assets in `public/brand/` and the matching favicon. Preserve their proportions and geometry; use the light-wordmark variant on dark surfaces. Brand export colors are documented in `docs/design-system.md`.
+- Edit `design-system/tokens.json`, then run `npm run design:generate`. Never hand-edit `app/design-tokens.css`. Update the reference and relevant browser assertions when intentionally changing the system.
+- Use the compact density: 36px desktop controls and navigation rows, at least 44px on mobile. Label fields, keep focus visible, support reduced motion and both themes, and use honest loading/error/empty states. Planned tools must not appear functional.
+- Put pure tool logic in `lib/` or its tool module, with meaningful unit tests covering edge cases. Browser tests should verify real journeys and actual outputs when engines arrive; do not substitute mocked processing for end-to-end validation.
+- Before delivery, run `npm run check`, `npm run test:e2e`, and inspect desktop/mobile UI. Run `npm run build` before standalone browser tests. CI runs all five browser/device profiles. Keep generated reports out of Git.
+- Adding new shadcn components can restore default styles. Review their geometry and rerun design/browser checks before using them. Registry-internal geometry in `components/ui` is exempt from the product style scanner; it still requires review against the reference.
+
+Research statements in the design reference must retain source links and distinguish Airbnb's public principles from KeepSimp's own numerical decisions. Phase one is a tested foundation, not the completed utility library.
