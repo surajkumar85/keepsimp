@@ -8,7 +8,7 @@
  */
 import { record } from "./tutorial/recorder.mjs"
 
-const tools = ["image-compressor", "image-resizer"]
+const tools = ["image-compressor", "image-resizer", "image-converter"]
 const tool = process.argv[2] ?? tools[0]
 if (!tools.includes(tool)) {
   console.error(

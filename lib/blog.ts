@@ -101,24 +101,24 @@ export const posts: readonly BlogPost[] = [
         id: "jpeg",
         title: "JPEG: a familiar choice for photographs.",
         paragraphs: [
-          "JPEG uses lossy compression, and it does not support transparent pixels. It is a practical choice for photographic scenes when a solid background is acceptable. In KeepSimp, transparent areas become white when you choose JPEG.",
-          "Adjust width and quality in the image converter, then inspect your export. Fine lines and lettering can reveal changes more readily than natural textures, so a format suitable for a photograph may be a poor fit for a small diagram.",
+          "JPEG uses lossy compression, and it does not support transparent pixels. It is a practical choice for photographic scenes when a solid background is acceptable. In KeepSimp, transparent areas take the background you choose (white, black or a custom colour) when you convert to JPEG.",
+          "Choose a quality in the image converter, then inspect the before and after preview and your export. Fine lines and lettering can reveal changes more readily than natural textures, so a format suitable for a photograph may be a poor fit for a small diagram.",
         ],
       },
       {
         id: "png",
         title: "PNG: preserve crisp graphics and transparency.",
         paragraphs: [
-          "PNG supports lossless compression and transparency. It is useful for interface graphics, diagrams and images whose sharp edges matter. The quality slider does not apply to PNG exports in KeepSimp.",
-          "Lossless output does not mean every part of the original file is retained. KeepSimp creates a new canvas export, which can remove metadata and color profiles. Resizing changes pixel data as well. Preserve the original when those properties matter.",
+          "PNG supports lossless compression and transparency. It is useful for interface graphics, diagrams and images whose sharp edges matter. In KeepSimp, choose Lossless to keep every pixel of a PNG; the other quality choices may reduce it to a smaller colour palette.",
+          "Lossless output does not mean every part of the original file is retained. KeepSimp encodes a new file, which removes metadata and converts colors to sRGB. Resizing changes pixel data as well. Preserve the original when those properties matter.",
         ],
       },
       {
         id: "webp",
         title: "WebP: compare it for browser delivery.",
         paragraphs: [
-          "WebP supports transparency and both lossy and lossless encoding. KeepSimp's canvas-based WebP export uses the browser's encoder and a quality setting. File sizes vary by image and browser; compare an actual output rather than assuming a fixed percentage saving.",
-          "Choose your image, select WebP, set the width and quality, then convert. WebP export is disabled when unavailable in your browser. KeepSimp also checks the actual output type before download, so an unexpected fallback will not produce a misleading file extension. JPEG and PNG are useful alternatives.",
+          "WebP supports transparency and both lossy and lossless encoding. KeepSimp encodes WebP with its own copy of the libwebp encoder, so the result does not depend on your browser. File sizes vary by image; compare an actual output rather than assuming a fixed percentage saving.",
+          "Add your images, select WebP and choose a quality. Compare formats encodes the selected image as JPEG, PNG, WebP, AVIF and JPEG XL and lists the real sizes, smallest first. You can also save several formats at once, with picture HTML that keeps JPEG or PNG as a fallback.",
         ],
       },
       {

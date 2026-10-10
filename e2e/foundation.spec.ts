@@ -4,7 +4,7 @@ import tokens from "../design-system/tokens.json" with { type: "json" }
 
 test("search, empty state, and validated category URLs", async ({ page }) => {
   await page.goto("/dashboard/")
-  await expect(page.getByTestId("tool-card")).toHaveCount(12)
+  await expect(page.getByTestId("tool-card")).toHaveCount(13)
   await page.getByRole("searchbox").fill("WEBP")
   await expect(page.getByTestId("tool-card")).toHaveCount(1)
   await expect(page.getByTestId("tool-card")).toContainText("Image converter")
@@ -16,11 +16,11 @@ test("search, empty state, and validated category URLs", async ({ page }) => {
     .getByRole("button", { name: "Clear search", exact: true })
     .first()
     .click()
-  await expect(page.getByTestId("tool-card")).toHaveCount(12)
+  await expect(page.getByTestId("tool-card")).toHaveCount(13)
   await page.goto("/dashboard/?category=video")
   await expect(page.getByTestId("tool-card")).toHaveCount(3)
   await page.goto("/dashboard/?category=invalid")
-  await expect(page.getByTestId("tool-card")).toHaveCount(12)
+  await expect(page.getByTestId("tool-card")).toHaveCount(13)
 })
 
 test("sidebar navigation works on desktop and mobile", async ({

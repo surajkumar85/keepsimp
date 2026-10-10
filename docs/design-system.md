@@ -1,6 +1,6 @@
 # KeepSimp design reference
 
-Version 3.2 · marketing, functional dashboard, chips, image comparison and batch tools · updated 10 October 2026 · applies to every future implementation. Tokens are unchanged from version 3.
+Version 3.3 · marketing, functional dashboard, chips, image comparison, batch tools and result tables · updated 10 October 2026 · applies to every future implementation. Tokens are unchanged from version 3.
 
 KeepSimp combines the requested shadcn preset with Airbnb-informed clarity, spacing, hierarchy, and human language. The exact numbers below are **KeepSimp decisions**, not an official Airbnb token export. Airbnb's public references reviewed here do not provide a complete numerical radius specification. We retain our own teal identity and fonts.
 
@@ -113,7 +113,9 @@ Position grids (`components/image-resizer/anchor-grid.tsx`) offer nine labelled 
 
 Frame previews draw the output to scale on the checkerboard, with pill tags for original and output size. When the picture is cropped or padded, the frame is focusable: dragging or arrow keys move the picture, and a line of helper text says so. Optional safe-area bands use a `foreground` veil with dashed edges.
 
-Batch lists are `rounded-xl` rows with a 48px thumbnail, the file name, facts and a status line with an icon for progress or errors. The selected row takes the `primary` border. Row actions are icon buttons with accessible names. A summary card above the list carries totals and the primary download action.
+Batch lists are `rounded-xl` rows with a 48px thumbnail, the file name, facts and a status line with an icon for progress or errors. The selected row takes the `primary` border. Row actions are icon buttons with accessible names. A summary card above the list carries totals and the primary download action. Reuse `components/image-batch/` (`queue-list`, `summary-bar`, `controls`) rather than rebuilding these per tool; an output in a row may carry a short label such as its format or width.
+
+Result tables compare measured outcomes, such as one image encoded in several formats (`components/image-converter/format-panel.tsx`). Use a real `<table>` with a caption and column headers inside a `rounded-lg` border, with horizontal scrolling inside the wrapper at narrow widths. Sort by the value being compared, mark the best row with a text badge, never colour alone, and give each row one compact action. Show only measured values, and show progress with a cancel action while they are produced.
 
 Crop overlays dim the excluded area with a `background` veil, show rule-of-thirds guides and eight handles with 44px/28px hit areas, and pair the box with exact pixel fields. The image compressor reference is `docs/image-compressor.md`.
 

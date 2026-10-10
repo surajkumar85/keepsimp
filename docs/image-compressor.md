@@ -1,6 +1,6 @@
 # Image compressor
 
-Updated 10 October 2026. Applies to `/dashboard/image-compressor/`. The image resizer shares this engine and is documented in `docs/image-resizer.md`. The image converter and landing demonstration still use the canvas engine in `lib/image-tools.ts`.
+Updated 10 October 2026. Applies to `/dashboard/image-compressor/`. The image resizer shares this engine and is documented in `docs/image-resizer.md`. The image converter also shares it and is documented in `docs/image-converter.md`. Only the landing demonstration still uses the canvas engine in `lib/image-tools.ts`.
 
 ## What it does
 

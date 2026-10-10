@@ -287,3 +287,81 @@ export async function resizePixels(
     linearRGB,
   })
 }
+
+/** JPEG XL, single-thread build (see the note at the top of this file). */
+export async function encodeJxl(
+  pixels: Pixels,
+  options: { quality: number; lossless: boolean; effort?: number }
+): Promise<ArrayBuffer> {
+  const codec = await once("jxl-enc", "JPEG XL encoder", async () => {
+    const { default: factory } =
+      await import("@jsquash/jxl/codec/enc/jxl_enc.js")
+    return factory({ noInitialRun: true })
+  })
+  const output = codec.encode(
+    new Uint8Array(
+      pixels.data.buffer,
+      pixels.data.byteOffset,
+      pixels.data.length
+    ),
+    pixels.width,
+    pixels.height,
+    {
+      effort: options.effort ?? 7,
+      quality: options.quality,
+      progressive: false,
+      epf: -1,
+      lossyPalette: false,
+      decodingSpeedTier: 0,
+      photonNoiseIso: 0,
+      lossyModular: false,
+      lossless: options.lossless,
+    }
+  )
+  if (!output)
+    throw new Error("The JPEG XL encoder could not write this image.")
+  return copyBuffer(output)
+}
+
+/** Reduce an image to a palette (libimagequant), for formats such as GIF. */
+export async function quantizeImage(
+  pixels: Pixels,
+  colours: number,
+  dithering: boolean
+) {
+  const { ImageQuantizer } = await quantizer()
+  const engine = new ImageQuantizer()
+  try {
+    engine.setMaxColors(Math.max(2, Math.min(256, colours)))
+    engine.setQuality(0, 100)
+    const result = engine.quantizeImage(
+      pixels.data,
+      pixels.width,
+      pixels.height
+    )
+    try {
+      result.setDithering(dithering ? 1 : 0)
+      const indices = result.getPaletteIndices(
+        pixels.data,
+        pixels.width,
+        pixels.height
+      )
+      return {
+        indices: Uint8Array.from(indices),
+        palette: result.getPalette() as [number, number, number, number][],
+      }
+    } finally {
+      result.free()
+    }
+  } finally {
+    engine.free()
+  }
+}
+
+/** zlib-compress bytes with the platform's own implementation. */
+export async function deflate(bytes: Uint8Array) {
+  const stream = new Blob([bytes as Uint8Array<ArrayBuffer>])
+    .stream()
+    .pipeThrough(new CompressionStream("deflate"))
+  return new Uint8Array(await new Response(stream).arrayBuffer())
+}

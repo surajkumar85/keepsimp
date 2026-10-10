@@ -1,6 +1,6 @@
 # Image resizer
 
-Updated 10 October 2026. Applies to `/dashboard/image-resizer/`. It shares the WebAssembly engine described in `docs/image-compressor.md`. The image converter and landing demonstration still use the canvas engine in `lib/image-tools.ts`.
+Updated 10 October 2026. Applies to `/dashboard/image-resizer/`. It shares the WebAssembly engine described in `docs/image-compressor.md`. The image converter (`docs/image-converter.md`) shares its batch code. Only the landing demonstration still uses the canvas engine in `lib/image-tools.ts`.
 
 ## What it does
 
@@ -61,6 +61,7 @@ Story presets draw shaded bands over the top 14% and bottom 20% of the frame. Th
 
 - **Pure logic** lives in `lib/image-resizer/` and has 100% unit coverage: `units`, `sizing`, `focus`, `smart-focus`, `canvas`, `sharpen`, `presets`, `naming`, `zip`, `metadata`, `srcset`, `settings`, `queue` and `pipeline`.
 - **Browser-only modules:** `resize.worker.ts`, `client.ts` and `protocol.ts`.
+- **Shared with the converter:** the queue reducer and worker pool (`lib/image-batch/`), and the queue list, summary bar and control rows (`components/image-batch/`).
 - **Shared with the compressor:** decoding (`lib/image-compressor/decode.ts`), the WASM resampler and encoders (`codecs.ts`), and the SSIM-guided quality search (`pipeline.ts`).
 
 Each output goes through these stages:

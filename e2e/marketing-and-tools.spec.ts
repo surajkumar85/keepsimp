@@ -21,13 +21,13 @@ test("landing CTA opens the working dashboard", async ({ page }) => {
     .first()
     .click()
   await expect(page).toHaveURL(/\/dashboard\/$/)
-  await expect(page.getByTestId("tool-card")).toHaveCount(12)
+  await expect(page.getByTestId("tool-card")).toHaveCount(13)
   await expect(
     page.getByTestId("tool-card").getByText("Ready to use", { exact: true })
   ).toHaveCount(4)
   await expect(
     page.getByTestId("tool-card").getByText("Coming soon", { exact: true })
-  ).toHaveCount(8)
+  ).toHaveCount(9)
   await page.getByRole("link", { name: "JSON formatter", exact: true }).click()
   await expect(page.getByLabel("Your JSON", { exact: true })).toBeVisible()
 })
@@ -62,109 +62,8 @@ test("landing demonstration creates a real smaller image download", async ({
   ).toBeVisible()
 })
 
-test("image tools export the requested dimensions and formats locally", async ({
-  page,
-}) => {
-  const source = await sharp({
-    create: {
-      width: 32,
-      height: 24,
-      channels: 4,
-      background: { r: 0, g: 120, b: 111, alpha: 0 },
-    },
-  })
-    .png()
-    .toBuffer()
-  const external: string[] = []
-  page.on("request", (request) => {
-    if (
-      ["http:", "https:"].includes(new URL(request.url()).protocol) &&
-      (!["GET", "HEAD"].includes(request.method()) ||
-        !request.url().startsWith("http://127.0.0.1:4173"))
-    )
-      external.push(request.url())
-  })
-  // The image compressor and resizer have their own engines and spec files.
-  for (const [id, action, format, extension] of [
-    ["image-converter", "Convert image", "image/jpeg", "jpg"],
-  ]) {
-    await page.goto(`/dashboard/${id}/`)
-    await page.getByLabel("Choose an image to get started").setInputFiles({
-      name: "test.png",
-      mimeType: "image/png",
-      buffer: source,
-    })
-    await expect(
-      page.getByRole("img", { name: "Your original image" })
-    ).toBeVisible()
-    await page.getByLabel("Width in pixels").fill("16")
-    let selectedFormat = format
-    let selectedExtension = extension
-    if (
-      format === "image/webp" &&
-      (await page.locator('option[value="image/webp"]').isDisabled())
-    ) {
-      selectedFormat = "image/jpeg"
-      selectedExtension = "jpg"
-    }
-    await page.getByLabel("Output format").selectOption(selectedFormat)
-    if (selectedFormat === "image/png")
-      await expect(page.getByLabel("Quality")).toBeDisabled()
-    await page.getByRole("button", { name: action, exact: true }).click()
-    await expect(
-      page.getByText("Your image is ready", { exact: true })
-    ).toBeVisible()
-    const downloading = page.waitForEvent("download")
-    await page.getByRole("link", { name: "Download image" }).click()
-    const download = await downloading
-    expect(download.suggestedFilename()).toBe(
-      `test-keepsimp.${selectedExtension}`
-    )
-    const output = await downloadedBytes(download)
-    const metadata = await sharp(output).metadata()
-    expect(metadata.width).toBe(16)
-    expect(metadata.height).toBe(12)
-    expect(metadata.format).toBe(
-      selectedExtension === "jpg" ? "jpeg" : selectedExtension
-    )
-    const { data, info } = await sharp(output)
-      .ensureAlpha()
-      .raw()
-      .toBuffer({ resolveWithObject: true })
-    if (selectedFormat === "image/jpeg")
-      expect([...data.subarray(0, 4)]).toEqual([255, 255, 255, 255])
-    else expect(data[info.channels - 1]).toBe(0)
-    await page.getByLabel("Width in pixels").fill("8")
-    await expect(
-      page.getByRole("link", { name: "Download image" })
-    ).toHaveCount(0)
-  }
-  expect(external).toEqual([])
-})
-
-test("unsupported and corrupt images show useful errors", async ({ page }) => {
-  await page.goto("/dashboard/image-converter/")
-  const input = page.getByLabel("Choose an image to get started")
-  await input.setInputFiles({
-    name: "test.svg",
-    mimeType: "image/svg+xml",
-    buffer: Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"/>'),
-  })
-  await expect(page.getByRole("main").getByRole("alert")).toContainText(
-    "JPEG, PNG or WebP"
-  )
-  await input.setInputFiles({
-    name: "bad.png",
-    mimeType: "image/png",
-    buffer: Buffer.from("not an image"),
-  })
-  await expect(page.getByRole("main").getByRole("alert")).toContainText(
-    "could not read"
-  )
-  await expect(page.getByRole("link", { name: "Download image" })).toHaveCount(
-    0
-  )
-})
+// Each image tool has its own engine and spec file: image-compressor,
+// image-resizer and image-converter.
 
 test("JSON formatting validates input and preserves precision in the download", async ({
   page,

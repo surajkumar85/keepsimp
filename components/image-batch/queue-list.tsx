@@ -10,7 +10,7 @@ import {
 import { Button, buttonVariants } from "@/components/ui/button"
 import { cn } from "cn"
 import { sizeLabel } from "@/lib/image-compressor/formats"
-import type { ItemState } from "@/lib/image-resizer/queue"
+import type { ItemState } from "@/lib/image-batch/queue"
 
 export interface QueueRow {
   id: string
@@ -26,6 +26,8 @@ export interface QueueRow {
     width: number
     height: number
     bytes: number
+    /** Shown on the download chip; defaults to the dimensions. */
+    label?: string
   }[]
 }
 
@@ -120,7 +122,7 @@ export function QueueList({
                         (row.state === "done"
                           ? row.outputs.length === 1
                             ? `${row.outputs[0].width} × ${row.outputs[0].height} · ${sizeLabel(total)}`
-                            : `${row.outputs.length} sizes · ${sizeLabel(total)}`
+                            : `${row.outputs.length} files · ${sizeLabel(total)}`
                           : row.state === "reading"
                             ? "Reading…"
                             : "Waiting…")}
@@ -152,7 +154,7 @@ export function QueueList({
             </div>
             {row.outputs.length > 1 && (
               <ul
-                aria-label={`Sizes for ${row.name}`}
+                aria-label={`Files for ${row.name}`}
                 className="mt-2 flex flex-wrap gap-1.5 pl-1"
               >
                 {row.outputs.map((output) => (
@@ -167,7 +169,7 @@ export function QueueList({
                       )}
                     >
                       <IconDownload aria-hidden="true" />
-                      {output.width} × {output.height}
+                      {output.label ?? `${output.width} × ${output.height}`}
                     </a>
                   </li>
                 ))}

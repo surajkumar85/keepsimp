@@ -4,9 +4,10 @@ import { IconArrowLeft } from "@tabler/icons-react"
 import { tools } from "@/lib/catalogue"
 import { pageMetadata, absoluteUrl } from "@/lib/site"
 import { StructuredData } from "@/components/structured-data"
-import { ImageTool } from "@/components/image-tool"
 import { ImageCompressor } from "@/components/image-compressor/image-compressor"
 import { ImageCompressorTutorial } from "@/components/image-compressor/tutorial"
+import { ImageConverter } from "@/components/image-converter/image-converter"
+import { ImageConverterTutorial } from "@/components/image-converter/tutorial"
 import { ImageResizer } from "@/components/image-resizer/image-resizer"
 import { ImageResizerTutorial } from "@/components/image-resizer/tutorial"
 import { JsonTool } from "@/components/json-tool"
@@ -69,8 +70,8 @@ export default async function ToolPage({
         <ImageCompressor />
       ) : id === "image-resizer" ? (
         <ImageResizer />
-      ) : tool.category === "image" ? (
-        <ImageTool mode={id} />
+      ) : id === "image-converter" ? (
+        <ImageConverter />
       ) : (
         <JsonTool />
       )}
@@ -78,20 +79,18 @@ export default async function ToolPage({
         <ImageCompressorTutorial />
       ) : id === "image-resizer" ? (
         <ImageResizerTutorial />
+      ) : id === "image-converter" ? (
+        <ImageConverterTutorial />
       ) : (
         <div className="mt-8 border-t pt-5">
           <h2 className="section-title">A little help along the way</h2>
           <p className="mt-2 text-sm text-muted-foreground">
-            {tool.category === "image"
-              ? "Choose a still image, adjust the format, width and quality, then download your result. Compare it with your original before replacing anything."
-              : "Paste valid JSON, choose Format JSON or Minify, then copy or download the result. Invalid JSON shows an error without changing your input."}
+            Paste valid JSON, choose Format JSON or Minify, then copy or
+            download the result. Invalid JSON shows an error without changing
+            your input.
           </p>
           <Link
-            href={
-              tool.category === "image"
-                ? "/blog/compress-images-without-uploading/"
-                : "/blog/format-json-without-losing-precision/"
-            }
+            href="/blog/format-json-without-losing-precision/"
             className="mt-3 inline-flex min-h-11 items-center text-sm text-primary underline underline-offset-4"
           >
             Read the step-by-step guide

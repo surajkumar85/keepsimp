@@ -11,22 +11,15 @@ import {
 import {
   IconAlertCircle,
   IconAspectRatio,
-  IconDownload,
-  IconFileZip,
   IconFocusCentered,
   IconInfoCircle,
   IconPhotoPlus,
   IconStack2,
-  IconTrash,
 } from "@tabler/icons-react"
 import {
   DropZone,
-  FileInput,
-  useDropTarget,
   type DropZoneCopy,
 } from "@/components/image-compressor/drop-zone"
-import { Button, buttonVariants } from "@/components/ui/button"
-import { cn } from "cn"
 import { inspectFile, rasteriseSvg } from "@/lib/image-compressor/client"
 import {
   inputFormats,
@@ -35,7 +28,6 @@ import {
   type InputFormat,
 } from "@/lib/image-compressor/formats"
 import { orientedSize } from "@/lib/image-compressor/geometry"
-import { savingsPercent } from "@/lib/image-compressor/quality"
 import { poolSize, ResizerPool } from "@/lib/image-resizer/client"
 import type { Focus } from "@/lib/image-resizer/focus"
 import { fileName, uniqueNames } from "@/lib/image-resizer/naming"
@@ -63,7 +55,8 @@ import { imgSnippet } from "@/lib/image-resizer/srcset"
 import { createZip } from "@/lib/image-resizer/zip"
 import { FramePreview } from "./frame-preview"
 import { OutputPanel } from "./output-panel"
-import { QueueList, type QueueRow } from "./queue-list"
+import { QueueList, type QueueRow } from "@/components/image-batch/queue-list"
+import { SummaryBar } from "@/components/image-batch/summary-bar"
 import { SettingsPanel } from "./settings-panel"
 
 const INPUT_ID = "resizer-file"
@@ -549,10 +542,6 @@ export function ImageResizer() {
     }
   }
 
-  const { over, handlers } = useDropTarget((files) => void addFiles(files))
-  const busyCount = totals.pending
-  const saved = savingsPercent(totals.originalBytes, totals.outputBytes)
-
   if (!items.length)
     return (
       <div className="grid gap-6 lg:grid-cols-5" data-testid="image-resizer">
@@ -684,86 +673,16 @@ export function ImageResizer() {
           </p>
         )}
 
-        <div
-          {...handlers}
-          data-testid="summary-bar"
-          className={cn(
-            "space-y-3 rounded-xl border bg-card p-4 transition-colors duration-150 motion-reduce:transition-none",
-            over && "border-primary bg-primary/5"
-          )}
-        >
-          <div
-            className="flex flex-wrap items-center gap-x-3 gap-y-1"
-            role="status"
-          >
-            <p className="font-heading text-lg font-medium">
-              {totals.done} of {totals.images} ready
-            </p>
-            {totals.done > 0 && (
-              <span className="text-sm text-muted-foreground">
-                {sizeLabel(totals.originalBytes)} →{" "}
-                {sizeLabel(totals.outputBytes)}
-                {saved > 0
-                  ? ` · ${saved}% smaller`
-                  : saved < 0
-                    ? ` · ${-saved}% larger`
-                    : ""}
-                {totals.files !== totals.done ? ` · ${totals.files} files` : ""}
-              </span>
-            )}
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {onlyFile ? (
-              <a
-                href={onlyFile.url}
-                download={onlyFile.name}
-                className={cn(
-                  buttonVariants({ size: "lg" }),
-                  "flex-1 sm:flex-none"
-                )}
-              >
-                <IconDownload aria-hidden="true" /> Download image
-              </a>
-            ) : (
-              <Button
-                size="lg"
-                className="flex-1 sm:flex-none"
-                disabled={!totals.settled || zipping}
-                onClick={() => void downloadZip()}
-              >
-                <IconFileZip aria-hidden="true" />
-                {zipping ? "Preparing ZIP…" : "Download all (ZIP)"}
-              </Button>
-            )}
-            <div>
-              <FileInput
-                onFiles={(files) => void addFiles(files)}
-                label="Add more images"
-                id={INPUT_ID}
-                multiple
-              />
-              <label
-                htmlFor={INPUT_ID}
-                className={cn(
-                  buttonVariants({ variant: "outline", size: "lg" }),
-                  "cursor-pointer peer-focus-visible:ring-3 peer-focus-visible:ring-ring/50"
-                )}
-              >
-                <IconPhotoPlus aria-hidden="true" /> Add images
-              </label>
-            </div>
-            <Button variant="ghost" size="lg" onClick={clearAll}>
-              <IconTrash aria-hidden="true" /> Clear all
-            </Button>
-          </div>
-          <p className="sr-only" aria-live="polite">
-            {busyCount > 0
-              ? `Resizing ${busyCount} image${busyCount === 1 ? "" : "s"}…`
-              : totals.done > 0
-                ? "All images are ready."
-                : ""}
-          </p>
-        </div>
+        <SummaryBar
+          totals={totals}
+          single={onlyFile}
+          zipping={zipping}
+          onZip={() => void downloadZip()}
+          onFiles={(files) => void addFiles(files)}
+          onClear={clearAll}
+          inputId={INPUT_ID}
+          verb="Resizing"
+        />
 
         <QueueList
           rows={rows}
@@ -773,7 +692,7 @@ export function ImageResizer() {
         />
       </div>
 
-      <div className="space-y-4 lg:col-span-2">
+      <div className="min-w-0 space-y-4 lg:col-span-2">
         <SettingsPanel
           settings={settings}
           update={update}

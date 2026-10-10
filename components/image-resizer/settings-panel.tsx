@@ -38,7 +38,7 @@ import {
   type Unit,
 } from "@/lib/image-resizer/units"
 import { AnchorGrid } from "./anchor-grid"
-import { Section, ToggleRow } from "./controls"
+import { Section, ToggleRow } from "@/components/image-batch/controls"
 
 export type Update = (
   change:

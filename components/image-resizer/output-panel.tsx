@@ -32,7 +32,7 @@ import {
 import type { Sharpen } from "@/lib/image-resizer/sharpen"
 import { MAX_SET, responsiveWidths } from "@/lib/image-resizer/srcset"
 import { dpiChoices, isPhysical } from "@/lib/image-resizer/units"
-import { Section, ToggleRow } from "./controls"
+import { Section, ToggleRow } from "@/components/image-batch/controls"
 import type { Update } from "./settings-panel"
 
 const qualityHints: Record<QualityChoice, string> = {
