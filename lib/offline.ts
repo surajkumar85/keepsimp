@@ -33,7 +33,10 @@ export function offlineFiles(
     ...new Set([
       ...pagePaths(),
       ...GENERATED,
-      ...buildFiles.map((file) => `/_next/static/${file}`),
+      ...buildFiles
+        // Source maps are for debugging, and the host refuses to serve them.
+        .filter((file) => !file.endsWith(".map"))
+        .map((file) => `/_next/static/${file}`),
       ...publicFiles.filter(shouldPrecache).map((file) => `/${file}`),
     ]),
   ].sort()

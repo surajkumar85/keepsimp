@@ -23,7 +23,12 @@ it("lists every page of the site, and only working tools", () => {
 
 it("gathers pages, build files and public files into one sorted list", () => {
   const files = offlineFiles(
-    ["chunks/app.js", "media/avif_enc.wasm", "build-id/_buildManifest.js"],
+    [
+      "chunks/app.js",
+      "chunks/app.js.map",
+      "media/avif_enc.wasm",
+      "build-id/_buildManifest.js",
+    ],
     [
       "icon.svg",
       "images/coastline.jpg",
@@ -50,6 +55,7 @@ it("gathers pages, build files and public files into one sorted list", () => {
   expect(files).not.toContain("/images/social/keepsimp.png")
   expect(files).not.toContain("/.gitkeep")
   expect(files).not.toContain("/sw.js")
+  expect(files).not.toContain("/_next/static/chunks/app.js.map")
   expect(files).toEqual([...files].sort())
 })
 
