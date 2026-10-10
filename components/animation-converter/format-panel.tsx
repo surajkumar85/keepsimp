@@ -6,10 +6,13 @@ import { Section, ToggleRow } from "@/components/image-batch/controls"
 import { ChoiceChips } from "@/components/ui/choice-chips"
 import { Input } from "@/components/ui/input"
 import {
+  customIsNumeric,
+  frameFormats,
   losslessApplies,
   targetOrder,
   targets,
   type AnimationSettings,
+  type FrameFormat,
   type QualityChoice,
   type Target,
 } from "@/lib/animation/settings"
@@ -33,21 +36,28 @@ export function FormatPanel({
   settings,
   update,
   problem,
+  video,
 }: {
   settings: AnimationSettings
   update: Update
   /** The first thing wrong with the settings, shown under the controls. */
   problem: string | null
+  /** Which video formats this browser can write; null while that is being checked. */
+  video: { mp4: boolean; webm: boolean } | null
 }) {
   const ids = useId()
   const gif = settings.target === "gif"
   const best = gif && settings.gifEngine === "best"
-  // WebP and gifski take a quality number; the palette formats take colours.
-  const numeric = settings.target === "webp" || best
+  const kind = targets[settings.target].kind
+  // WebP, video and gifski take a quality number; the palette formats take colours.
+  const numeric = customIsNumeric(settings)
   const palette =
     settings.quality !== "lossless" &&
     ((gif && !best) ||
       (settings.target === "apng" && settings.quality !== "high"))
+  const unavailable = (target: Target) =>
+    targets[target].kind === "video" &&
+    !(video && video[target as "mp4" | "webm"])
 
   return (
     <div className="space-y-5 rounded-xl border bg-card p-4 sm:p-5">
@@ -60,9 +70,38 @@ export function FormatPanel({
           options={targetOrder.map((target) => ({
             value: target,
             label: targets[target].label,
+            disabled: unavailable(target),
           }))}
           hint={targets[settings.target].hint}
         />
+        {video && !(video.mp4 && video.webm) && (
+          <p className="text-xs text-muted-foreground">
+            {video.mp4 || video.webm
+              ? `This browser cannot write ${video.mp4 ? "WebM" : "MP4"} video.`
+              : "This browser cannot write video, so MP4 and WebM are not offered."}
+          </p>
+        )}
+        {kind === "bundle" && (
+          <ChoiceChips
+            label={
+              settings.target === "sprite" ? "Sheet format" : "Frame format"
+            }
+            value={settings.frameFormat}
+            onValueChange={(frameFormat: FrameFormat) =>
+              update({ frameFormat })
+            }
+            options={(Object.keys(frameFormats) as FrameFormat[]).map(
+              (format) => ({ value: format, label: frameFormats[format].label })
+            )}
+            hint={
+              settings.frameFormat === "jpeg"
+                ? "JPEG has no transparency; see-through areas are filled."
+                : settings.frameFormat === "png"
+                  ? "PNG keeps every pixel exactly."
+                  : "WebP is smaller, and exact at High or Lossless quality."
+            }
+          />
+        )}
         {gif && (
           <ChoiceChips
             label="GIF encoder"
@@ -101,7 +140,9 @@ export function FormatPanel({
           hint={
             gif && settings.quality === "lossless"
               ? "GIF holds 256 colours at most, so it cannot be lossless. High is used."
-              : qualityHints[settings.quality]
+              : kind === "bundle" && settings.frameFormat === "png"
+                ? "PNG frames are always exact, whatever the quality."
+                : qualityHints[settings.quality]
           }
         />
         {settings.quality === "custom" && numeric && (

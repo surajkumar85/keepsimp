@@ -1,6 +1,14 @@
 /// <reference lib="webworker" />
-import { setCodecLoadListener } from "@/lib/image-compressor/codecs"
-import { previewBitmap, tooLarge } from "@/lib/image-compressor/decode"
+import {
+  resizePixels,
+  setCodecLoadListener,
+} from "@/lib/image-compressor/codecs"
+import {
+  decodeImageFile,
+  previewBitmap,
+  tooLarge,
+} from "@/lib/image-compressor/decode"
+import { sniffFormat } from "@/lib/image-compressor/formats"
 import { orientedSize } from "@/lib/image-compressor/geometry"
 import { extractOriented } from "@/lib/image-compressor/pixels"
 import type { Pixels } from "@/lib/image-compressor/ssim"
@@ -10,12 +18,20 @@ import type {
   AnimationRequest,
   AnimationResponse,
   ProcessRequest,
+  SourceInput,
   ViewRequest,
   ViewResponse,
 } from "./protocol"
 import { MAX_FRAMES, settingsProblem } from "./settings"
-import { openAnimation, type Source } from "./source"
+import {
+  allFrames,
+  isVideo,
+  openAnimation,
+  openStills,
+  type Source,
+} from "./source"
 import { frameAt } from "./timeline"
+import { encodeVideo, openVideo } from "./video"
 
 declare const self: DedicatedWorkerGlobalScope
 
@@ -24,8 +40,8 @@ const STRIP_HEIGHT = 96
 const UNREADABLE =
   "We could not read this animation. It may be damaged; try another file."
 
-/** The animation this worker last read; a batch reads one per worker at a time. */
-let cached: { id: string; bytes: Uint8Array } | null = null
+/** The animation this worker last opened; a batch reads one per worker at a time. */
+let cached: { id: string; inputKey: string; source: Source } | null = null
 let generation = 0
 
 class Abandoned extends Error {}
@@ -43,14 +59,52 @@ const readable = (error: unknown) => {
     : UNREADABLE
 }
 
-function open(bytes: Uint8Array) {
-  const source = openAnimation(bytes, createDeps())
-  if (tooLarge(source.width, source.height))
+/** One still image of a set, decoded with the image tools' own readers. */
+async function loadStill(file: Blob) {
+  const head = new Uint8Array(await file.slice(0, 1024 * 1024).arrayBuffer())
+  const format = sniffFormat(head)
+  if (!format)
+    throw new Error("One of these files is not an image we can read.")
+  // SVG needs the page to draw it, which a worker cannot ask for.
+  if (format === "svg")
+    throw new Error("SVG cannot be used as a frame. Convert it to PNG first.")
+  const pixels = await decodeImageFile(file, format)
+  if (tooLarge(pixels.width, pixels.height))
+    throw new Error("Use images with at most 50 megapixels.")
+  return pixels
+}
+
+/** Open whatever was added: a set of stills, a video, or an animated image. */
+async function open(input: SourceInput): Promise<Source> {
+  let source: Source
+  if (input.kind === "stills")
+    source = await openStills(input.durations, {
+      load: (index) => loadStill(input.files[index]),
+      resize: (pixels, size, kernel) => resizePixels(pixels, size, kernel),
+    })
+  else {
+    const head = new Uint8Array(await input.file.slice(0, 16).arrayBuffer())
+    if (isVideo(head)) {
+      if (typeof VideoDecoder === "undefined")
+        throw new Error(
+          "This browser cannot read video. Use a current version of Chrome, Edge, Firefox or Safari."
+        )
+      source = await openVideo(input.file)
+    } else {
+      source = openAnimation(
+        new Uint8Array(await input.file.arrayBuffer()),
+        createDeps()
+      )
+      if (source.durations.length > MAX_FRAMES)
+        throw new Error(
+          `Use an animation with at most ${MAX_FRAMES.toLocaleString("en")} frames.`
+        )
+    }
+  }
+  if (tooLarge(source.width, source.height)) {
+    source.close?.()
     throw new Error("Use an animation with at most 50 megapixels per frame.")
-  if (source.durations.length > MAX_FRAMES)
-    throw new Error(
-      `Use an animation with at most ${MAX_FRAMES.toLocaleString("en")} frames.`
-    )
+  }
   return source
 }
 
@@ -62,30 +116,27 @@ const copy = (pixels: Pixels): Pixels => ({
 /** The first frame as a thumbnail, and a strip of moments for the trim bar. */
 async function describe(source: Source) {
   const count = source.durations.length
-  const wanted = new Set(
-    Array.from({ length: Math.min(STRIP_FRAMES, count) }, (_, index) =>
-      Math.floor((index * count) / Math.min(STRIP_FRAMES, count))
-    )
-  )
   const tiles: ImageBitmap[] = []
   let thumbnail: ImageBitmap | null = null
   let transparent = false
-  let index = 0
-  for await (const frame of source.frames()) {
-    if (wanted.has(index)) {
-      const still = copy(frame)
-      if (index === 0) {
-        thumbnail = await previewBitmap(still, 640)
-        for (let i = 3; i < still.data.length; i += 4)
-          if (still.data[i] < 255) {
-            transparent = true
-            break
-          }
-      }
-      tiles.push(await previewBitmap(still, STRIP_HEIGHT * 2))
+  // Evenly spread moments, always starting with the first frame.
+  const moments = Array.from(
+    { length: Math.min(STRIP_FRAMES, count) },
+    (_, index) => Math.floor((index * count) / Math.min(STRIP_FRAMES, count))
+  )
+  for await (const frame of source.read(moments)) {
+    const still = copy(frame)
+    if (!thumbnail) {
+      thumbnail = await previewBitmap(still, 640)
+      for (let i = 3; i < still.data.length; i += 4)
+        if (still.data[i] < 255) {
+          transparent = true
+          break
+        }
     }
-    index++
+    tiles.push(await previewBitmap(still, STRIP_HEIGHT * 2))
   }
+  if (!thumbnail) throw new Error(UNREADABLE)
   let strip: ImageBitmap | null = null
   if (typeof OffscreenCanvas !== "undefined" && tiles.length) {
     const width = Math.max(
@@ -102,7 +153,7 @@ async function describe(source: Source) {
     }
   }
   for (const tile of tiles) tile.close()
-  return { thumbnail: thumbnail!, strip, transparent }
+  return { thumbnail, strip, transparent }
 }
 
 async function process(job: ProcessRequest) {
@@ -116,15 +167,17 @@ async function process(job: ProcessRequest) {
 
   let source: Source
   try {
-    if (cached?.id !== job.id) {
+    if (cached?.id !== job.id || cached.inputKey !== job.inputKey) {
+      cached?.source.close?.()
       cached = null
       progress("Reading…")
       cached = {
         id: job.id,
-        bytes: new Uint8Array(await job.file.arrayBuffer()),
+        inputKey: job.inputKey,
+        source: await open(job.input),
       }
     }
-    source = open(cached.bytes)
+    source = cached.source
     if (job.describe) {
       const { thumbnail, strip, transparent } = await describe(source)
       post(
@@ -144,6 +197,7 @@ async function process(job: ProcessRequest) {
       )
     }
   } catch (error) {
+    cached?.source.close?.()
     cached = null
     post({ type: "open-error", id: job.id, message: readable(error) })
     return
@@ -157,7 +211,7 @@ async function process(job: ProcessRequest) {
       source,
       job.settings,
       job.trim,
-      createDeps(checkpoint, progress)
+      createDeps(checkpoint, progress, encodeVideo)
     )
     await checkpoint()
     // Copy: the bytes may be a view of an encoder's own memory.
@@ -167,7 +221,7 @@ async function process(job: ProcessRequest) {
         type: "done",
         id: job.id,
         key: job.key,
-        output: { ...result, bytes },
+        output: { ...result, bytes, target: job.settings.target },
       },
       [bytes]
     )
@@ -182,7 +236,7 @@ async function process(job: ProcessRequest) {
 
 /** An opened file being stepped through for the paused preview. */
 interface Viewer {
-  file: Blob
+  inputKey: string
   source: Source
   frames: AsyncGenerator<Pixels>
   /** The frame the generator last produced, and its number. */
@@ -194,30 +248,37 @@ const viewers: Partial<Record<"original" | "result", Viewer>> = {}
 async function view(job: ViewRequest) {
   try {
     const frames: Partial<Record<"original" | "result", ImageBitmap>> = {}
-    for (const { slot, file, time, orientation } of job.views) {
+    for (const { slot, input, inputKey, time, orientation } of job.views) {
       let viewer = viewers[slot]
-      if (viewer?.file !== file) {
-        const source = open(new Uint8Array(await file.arrayBuffer()))
+      if (viewer?.inputKey !== inputKey) {
+        viewer?.source.close?.()
+        const source = await open(input)
         viewer = {
-          file,
+          inputKey,
           source,
-          frames: source.frames(),
+          frames: source.read(allFrames(source)),
           index: -1,
           frame: null,
         }
         viewers[slot] = viewer
       }
       const wanted = frameAt(viewer.source.durations, time)
-      // Frames build on the ones before, so going back means starting again.
-      if (wanted < viewer.index) {
-        viewer.frames = viewer.source.frames()
-        viewer.index = -1
-      }
-      while (viewer.index < wanted) {
-        const next = await viewer.frames.next()
-        if (next.done) break
-        viewer.frame = next.value
-        viewer.index++
+      if (viewer.source.seekable) {
+        for await (const frame of viewer.source.read([wanted]))
+          viewer.frame = frame
+        viewer.index = wanted
+      } else {
+        // Frames build on the ones before, so going back means starting again.
+        if (wanted < viewer.index) {
+          viewer.frames = viewer.source.read(allFrames(viewer.source))
+          viewer.index = -1
+        }
+        while (viewer.index < wanted) {
+          const next = await viewer.frames.next()
+          if (next.done) break
+          viewer.frame = next.value
+          viewer.index++
+        }
       }
       if (viewer.frame) {
         // Either way this copies the frame off the shared canvas.
@@ -256,7 +317,10 @@ self.onmessage = (event: MessageEvent<AnimationRequest>) => {
   const request = event.data
   if (request.type === "supersede") generation = request.generation
   else if (request.type === "forget") {
-    if (cached?.id === request.id) cached = null
+    if (cached?.id === request.id) {
+      cached.source.close?.()
+      cached = null
+    }
   } else if (request.type === "view")
     viewing = viewing.then(() => view(request))
   else {

@@ -4,8 +4,10 @@ import type { Pixels } from "@/lib/image-compressor/ssim"
 import {
   buildApng,
   buildApngIndexed,
+  buildFrames,
   buildGif,
   buildGifBest,
+  buildSprite,
   buildWebp,
   type BuildDeps,
 } from "./build"
@@ -67,7 +69,7 @@ export async function gatherFrames(
   const needed = new Set(steps.map((step) => step.source))
   const problem = budgetProblem(needed.size, size, settings)
   if (problem) throw new Error(problem)
-  const last = Math.max(...needed)
+  const order = [...needed].sort((a, b) => a - b)
   const oriented = orientedSize(source, settings.rotation)
   const background = matte(settings)
   const kernel =
@@ -75,31 +77,31 @@ export async function gatherFrames(
       ? "mitchell"
       : "lanczos3"
   const ready = new Map<number, Pixels>()
-  let index = 0
-  for await (const canvas of source.frames()) {
+  let position = 0
+  for await (const canvas of source.read(order)) {
     await deps.checkpoint()
-    deps.progress(`Reading frame ${index + 1} of ${last + 1}`)
-    if (needed.has(index)) {
-      // This also copies the frame off the shared canvas.
-      let pixels = extractOriented(
-        canvas,
-        settings.rotation,
-        settings.flipX,
-        settings.flipY,
-        { x: 0, y: 0, ...oriented }
-      )
-      if (background) pixels = flattenAlpha(pixels, background)
-      const sized = await deps.resize(pixels, size, kernel)
-      // A resampler may hand back an ImageData, whose fields do not copy with "...".
-      ready.set(index, {
-        data: sized.data,
-        width: sized.width,
-        height: sized.height,
-      })
-    }
-    if (index === last) break
-    index++
+    deps.progress(`Reading frame ${position + 1} of ${order.length}`)
+    // This also copies the frame off the shared canvas.
+    let pixels = extractOriented(
+      canvas,
+      settings.rotation,
+      settings.flipX,
+      settings.flipY,
+      { x: 0, y: 0, ...oriented }
+    )
+    if (background) pixels = flattenAlpha(pixels, background)
+    const sized = await deps.resize(pixels, size, kernel)
+    // A resampler may hand back an ImageData, whose fields do not copy with "...".
+    ready.set(order[position], {
+      data: sized.data,
+      width: sized.width,
+      height: sized.height,
+    })
+    position++
   }
+  // A damaged file can hold fewer frames than it claims.
+  if (position < order.length)
+    throw new Error("This file ended before its last frame. It may be damaged.")
   return steps.map((step) => ({
     ...ready.get(step.source)!,
     duration: step.duration,
@@ -123,6 +125,32 @@ export async function convertAnimation(
     if (frames.length > 1) note = BEST_TOO_LARGE
     plan = encodePlan({ ...settings, gifEngine: "fast" })
   }
+  const duration = sum(frames.map((frame) => frame.duration))
+  if (plan.kind === "frames") {
+    const bundle = await buildFrames(frames, plan, deps)
+    return { ...bundle, width, height, duration, plays, note }
+  }
+  if (plan.kind === "sprite") {
+    const sheet = await buildSprite(frames, plays, plan, deps)
+    return { ...sheet, duration, plays, note }
+  }
+  if (plan.kind === "video") {
+    deps.progress(`Encoding ${frames.length} frames as video…`)
+    const video = await deps.encodeVideo(frames, plan.container, plan.level)
+    return {
+      bytes: video.bytes,
+      width,
+      height,
+      frames: video.frames,
+      duration,
+      // A video file has no loop count; the player decides.
+      plays: 0,
+      note:
+        video.frames < frames.length
+          ? `This browser's video encoder kept ${video.frames} of ${frames.length} frames. The length is unchanged.`
+          : note,
+    }
+  }
   const bytes =
     plan.kind === "gif"
       ? await buildGif(frames, plays, plan, deps)
@@ -138,7 +166,7 @@ export async function convertAnimation(
     width,
     height,
     frames: frames.length,
-    duration: sum(frames.map((frame) => frame.duration)),
+    duration,
     plays,
     note,
   }

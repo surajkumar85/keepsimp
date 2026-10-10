@@ -1,16 +1,28 @@
 import type { Rotation } from "@/lib/image-compressor/geometry"
-import type { AnimationSettings, Trim } from "./settings"
+import type { AnimationSettings, Target, Trim } from "./settings"
 import type { SourceFormat } from "./source"
+
+/** What to open: one animated image or video file, or still images to play in order. */
+export type SourceInput =
+  | { kind: "file"; file: Blob }
+  | {
+      kind: "stills"
+      files: Blob[]
+      /** Milliseconds each image is shown. */
+      durations: number[]
+    }
 
 export interface ProcessRequest {
   type: "process"
   /** Increases whenever settings change; older work is abandoned. */
   generation: number
   id: string
-  file: Blob
+  input: SourceInput
   settings: AnimationSettings
   trim: Trim
   key: string
+  /** Changes when the input itself does, such as a reordered set of stills. */
+  inputKey: string
   /** Ask for the animation's facts and thumbnails the first time it is seen. */
   describe: boolean
 }
@@ -23,7 +35,9 @@ export interface ViewRequest {
   views: {
     /** "original" and "result" are kept open separately between requests. */
     slot: "original" | "result"
-    file: Blob
+    input: SourceInput
+    /** Changes when the input does; the worker keeps the file open until then. */
+    inputKey: string
     /** Milliseconds from the start of that file. */
     time: number
     /** Turn or mirror the frame, so an original lines up with its result. */
@@ -38,6 +52,8 @@ export type AnimationRequest =
   | { type: "forget"; id: string }
 
 export interface ConvertedOutput {
+  /** The format the bytes were written in. */
+  target: Target
   bytes: ArrayBuffer
   width: number
   height: number

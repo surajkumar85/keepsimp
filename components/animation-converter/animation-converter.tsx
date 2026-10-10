@@ -22,12 +22,15 @@ import {
   DropZone,
   type DropZoneCopy,
 } from "@/components/image-compressor/drop-zone"
+import { videoEncodeSupport } from "@/lib/animation/capability"
 import { AnimationPool, animationPoolSize } from "@/lib/animation/client"
-import type { AnimationResponse } from "@/lib/animation/protocol"
+import type { AnimationResponse, SourceInput } from "@/lib/animation/protocol"
 import {
   defaultSettings,
+  frameFormats,
   MAX_FILE_BYTES,
   MAX_FILES,
+  MAX_VIDEO_BYTES,
   noTrim,
   outputSize,
   processingKey,
@@ -37,7 +40,11 @@ import {
   type Target,
   type Trim,
 } from "@/lib/animation/settings"
-import { sourceFormats, type SourceFormat } from "@/lib/animation/source"
+import {
+  classify,
+  sourceFormats,
+  type SourceFormat,
+} from "@/lib/animation/source"
 import { describeTiming, planFrames, sum } from "@/lib/animation/timeline"
 import {
   itemState,
@@ -48,29 +55,39 @@ import {
   type QueueAction,
   type QueueItem,
 } from "@/lib/image-batch/queue"
-import { sizeLabel } from "@/lib/image-compressor/formats"
+import { MAX_INPUT_BYTES, sizeLabel } from "@/lib/image-compressor/formats"
 import { savingsPercent } from "@/lib/image-compressor/quality"
 import { fileName, uniqueNames } from "@/lib/image-resizer/naming"
 import { createZip } from "@/lib/image-resizer/zip"
 import { FormatPanel } from "./format-panel"
+import { FrameList, type StillFrame } from "./frame-list"
 import { OptionsPanel } from "./options-panel"
-import { Player } from "./player"
+import { Player, type Playable } from "./player"
 import { TimingPanel } from "./timing-panel"
 
 type Item = QueueItem<Target>
 
 const INPUT_ID = "animation-file"
 const DEBOUNCE_MS = 350
-const ACCEPT = "image/gif,image/png,image/apng,image/webp,.gif,.png,.apng,.webp"
-const megabytes = Math.round(MAX_FILE_BYTES / (1024 * 1024))
+const ACCEPT =
+  "image/*,video/mp4,video/webm,video/quicktime,.mp4,.m4v,.mov,.webm,.mkv,.apng,.heic,.heif,.jxl"
+const megabytes = (bytes: number) => Math.round(bytes / (1024 * 1024))
+/** Enough of a file to tell what it is; a GIF's second frame can sit well into it. */
+const HEAD_BYTES = 8 * 1024 * 1024
+/** How long each still shows when an animation is first built from images. */
+const STILL_MS = 200
+const STILLS_NAME = "animation"
+/** Where a video starts when no size or frame rate has been chosen. */
+const VIDEO_FPS = 15
+const VIDEO_EDGE = 640
 
 const copy: DropZoneCopy = {
-  heading: "Drop animations to convert",
-  dropping: "Drop to add these animations",
-  body: "Add one animated GIF, APNG or WebP, or a whole batch. You can also paste one with ⌘V or Ctrl+V.",
-  inputLabel: "Choose animations to convert",
-  action: "Choose animations",
-  limits: `Stays on your device · up to ${MAX_FILES} animations, ${megabytes} MB each`,
+  heading: "Drop animations, clips or images",
+  dropping: "Drop to add these files",
+  body: "Add animated GIF, APNG or WebP files, a short video, or several still images to build an animation. You can also paste with ⌘V or Ctrl+V.",
+  inputLabel: "Choose animations, videos or images",
+  action: "Choose files",
+  limits: `Stays on your device · up to ${MAX_FILES} at once, ${megabytes(MAX_FILE_BYTES)} MB each (video ${megabytes(MAX_VIDEO_BYTES)} MB)`,
 }
 
 /** What the worker found when it read an animation. */
@@ -83,6 +100,8 @@ interface Facts {
 
 /** Kept with each finished file. */
 interface Extra {
+  /** For exported frames: the image format inside the ZIP. */
+  frameFormat: string
   frames: number
   duration: number
   plays: number
@@ -98,6 +117,25 @@ const loops = (plays: number) =>
     : plays === 1
       ? "plays once"
       : `plays ${plays} times`
+
+/** What the worker should open for an item, and a key that changes when that does. */
+function inputOf(
+  item: Item,
+  stills: StillFrame[] | undefined
+): { input: SourceInput; inputKey: string } {
+  return stills
+    ? {
+        input: {
+          kind: "stills",
+          files: stills.map((frame) => frame.file),
+          durations: stills.map((frame) => frame.duration),
+        },
+        inputKey: JSON.stringify(
+          stills.map((frame) => [frame.key, frame.duration])
+        ),
+      }
+    : { input: { kind: "file", file: item.file }, inputKey: item.id }
+}
 
 function download(bytes: Uint8Array, name: string, type: string) {
   const url = URL.createObjectURL(
@@ -121,8 +159,15 @@ export function AnimationConverter() {
   const [trims, setTrims] = useState<Record<string, Trim>>({})
   /** An object URL for each original, so the browser can play it. */
   const [originals, setOriginals] = useState<Record<string, string>>({})
+  /** For animations built from stills: the images, in order. */
+  const [sequences, setSequences] = useState<Record<string, StillFrame[]>>({})
+  const [video, setVideo] = useState<{ mp4: boolean; webm: boolean } | null>(
+    null
+  )
   const [labels, setLabels] = useState<Record<string, string>>({})
   const [notice, setNotice] = useState("")
+  /** Something worth knowing that is not an error. */
+  const [tip, setTip] = useState("")
   const [paused, setPaused] = useState(false)
   const [zipping, setZipping] = useState(false)
 
@@ -130,6 +175,7 @@ export function AnimationConverter() {
     items: [] as Item[],
     settings: defaultSettings,
     trims: {} as Record<string, Trim>,
+    sequences: {} as Record<string, StillFrame[]>,
     selectedId: null as string | null,
     paused: false,
   })
@@ -194,10 +240,38 @@ export function AnimationConverter() {
           strip: message.strip,
         },
       }))
+      // Video frames are many and large. If nothing has been chosen yet, start
+      // from settings that suit an animated image, without enlarging anything.
+      const current = live.current.settings
+      if (
+        message.format === "video" &&
+        current.fps === null &&
+        current.resize === "original"
+      ) {
+        const rate = describeTiming(message.durations).fps
+        const large = Math.max(message.width, message.height) > VIDEO_EDGE
+        if (rate > VIDEO_FPS + 1 || large) {
+          update({
+            fps: rate > VIDEO_FPS + 1 ? VIDEO_FPS : null,
+            ...(large
+              ? { resize: "longEdge" as const, resizeValue: VIDEO_EDGE }
+              : {}),
+          })
+          setTip(
+            `For this video, ${[
+              rate > VIDEO_FPS + 1
+                ? `the frame rate is set to ${VIDEO_FPS}`
+                : "",
+              large ? `the longest side to ${VIDEO_EDGE} px` : "",
+            ]
+              .filter(Boolean)
+              .join(" and ")}. Change this under Speed and frames, or Size.`
+          )
+        }
+      }
       dispatch({
         type: "opened",
         id: message.id,
-        format: message.format === "apng" ? "png" : message.format,
         animated: true,
         size: { width: message.width, height: message.height },
         transparent: message.transparent,
@@ -225,9 +299,11 @@ export function AnimationConverter() {
         message: message.message,
       })
     else if (message.type === "done") {
-      const { bytes, width, height, ...extra } = message.output
-      // The key names the format the bytes were made for.
-      const target = (JSON.parse(message.key) as AnimationSettings).target
+      const { bytes, width, height, target, ...rest } = message.output
+      const extra: Extra = {
+        ...rest,
+        frameFormat: frameFormats[live.current.settings.frameFormat].label,
+      }
       const blob = new Blob([bytes], { type: targets[target].mime })
       dispatch({
         type: "done",
@@ -241,7 +317,7 @@ export function AnimationConverter() {
             width,
             height,
             similarity: null,
-            extra: extra satisfies Extra,
+            extra,
           },
         ],
       })
@@ -251,11 +327,14 @@ export function AnimationConverter() {
   const pickJob = useEffectEvent((cachedId: string | null) => {
     const state = live.current
     if (state.paused || settingsProblem(state.settings)) return null
-    const keyFor = (id: string) =>
-      processingKey(state.settings, state.trims[id] ?? noTrim)
+    const keyFor = (item: Item) =>
+      JSON.stringify([
+        processingKey(state.settings, state.trims[item.id] ?? noTrim),
+        inputOf(item, state.sequences[item.id]).inputKey,
+      ])
     const item = nextJob(
       state.items,
-      (entry) => (entry.status === "ready" ? keyFor(entry.id) : null),
+      (entry) => (entry.status === "ready" ? keyFor(entry) : null),
       pool.current?.inFlight() ?? new Set<string>(),
       state.selectedId,
       cachedId
@@ -263,10 +342,10 @@ export function AnimationConverter() {
     if (!item) return null
     return {
       id: item.id,
-      file: item.file,
+      ...inputOf(item, state.sequences[item.id]),
       settings: state.settings,
       trim: state.trims[item.id] ?? noTrim,
-      key: keyFor(item.id),
+      key: keyFor(item),
       describe: item.status === "reading",
     }
   })
@@ -284,11 +363,22 @@ export function AnimationConverter() {
     }
   }, [])
 
-  // Release bitmaps and object URLs when the tool unmounts.
-  const held = useRef({ thumbnails, facts, originals })
+  // Offer only the video formats this browser can write.
   useEffect(() => {
-    held.current = { thumbnails, facts, originals }
-  }, [thumbnails, facts, originals])
+    let alive = true
+    void videoEncodeSupport().then((support) => {
+      if (alive) setVideo(support)
+    })
+    return () => {
+      alive = false
+    }
+  }, [])
+
+  // Release bitmaps and object URLs when the tool unmounts.
+  const held = useRef({ thumbnails, facts, originals, sequences })
+  useEffect(() => {
+    held.current = { thumbnails, facts, originals, sequences }
+  }, [thumbnails, facts, originals, sequences])
   useEffect(
     () => () => {
       for (const bitmap of Object.values(held.current.thumbnails))
@@ -296,6 +386,8 @@ export function AnimationConverter() {
       for (const fact of Object.values(held.current.facts)) fact.strip?.close()
       for (const url of Object.values(held.current.originals))
         URL.revokeObjectURL(url)
+      for (const frames of Object.values(held.current.sequences))
+        for (const frame of frames) URL.revokeObjectURL(frame.url)
       for (const url of releasedUrls(live.current.items, []))
         URL.revokeObjectURL(url)
     },
@@ -306,6 +398,12 @@ export function AnimationConverter() {
   const problem = settingsProblem(settings)
   const settingsKey = processingKey(settings, noTrim)
   const trimsKey = JSON.stringify(trims)
+  const sequencesKey = JSON.stringify(
+    Object.entries(sequences).map(([id, frames]) => [
+      id,
+      frames.map((frame) => [frame.key, frame.duration]),
+    ])
+  )
   useEffect(() => {
     if (paused) return
     const timer = setTimeout(() => {
@@ -313,40 +411,133 @@ export function AnimationConverter() {
       pool.current?.kick()
     }, DEBOUNCE_MS)
     return () => clearTimeout(timer)
-  }, [settingsKey, trimsKey, paused])
+  }, [settingsKey, trimsKey, sequencesKey, paused])
+
+  /** Replace an animation's stills; the worker reads the new set. */
+  const setFrames = useCallback(
+    (id: string, frames: StillFrame[]) => {
+      const before = live.current.sequences[id] ?? []
+      const kept = new Set(frames.map((frame) => frame.url))
+      for (const frame of before)
+        if (!kept.has(frame.url)) URL.revokeObjectURL(frame.url)
+      const next = { ...live.current.sequences, [id]: frames }
+      live.current.sequences = next
+      setSequences(next)
+      // Times in the old order mean nothing in the new one.
+      const trims = { ...live.current.trims }
+      delete trims[id]
+      live.current.trims = trims
+      setTrims(trims)
+      dispatch({ type: "reread", id })
+      live.current.paused = false
+      setPaused(false)
+    },
+    [dispatch]
+  )
 
   const addFiles = useCallback(
-    (files: File[]) => {
-      const room = MAX_FILES - live.current.items.length
-      setNotice(
-        files.length > room
-          ? `Only ${Math.max(0, room)} more animation${room === 1 ? "" : "s"} fit in this batch of ${MAX_FILES}.`
-          : ""
+    async (files: File[]) => {
+      setNotice("")
+      setTip("")
+      const kinds = await Promise.all(
+        files.map(async (file) =>
+          classify(
+            new Uint8Array(await file.slice(0, HEAD_BYTES).arrayBuffer())
+          )
+        )
       )
-      const added = files
-        .slice(0, Math.max(0, room))
-        .map((file) => ({ id: `animation-${++counter.current}`, file }))
-      if (!added.length) return
-      dispatch({ type: "add", items: added })
-      if (!live.current.selectedId) select(added[0].id)
+      const stills = files
+        .filter(
+          (file, index) =>
+            kinds[index] === "still" && file.size <= MAX_INPUT_BYTES
+        )
+        .sort((a, b) =>
+          a.name.localeCompare(b.name, undefined, { numeric: true })
+        )
+        .map((file, index) => ({
+          key: `still-${++counter.current}-${index}`,
+          file,
+          duration: STILL_MS,
+          url: URL.createObjectURL(file),
+        }))
+      const selected = live.current.selectedId
+      // One image added to an animation that is being built joins it.
+      if (
+        stills.length &&
+        selected &&
+        live.current.sequences[selected] &&
+        files.length === stills.length
+      ) {
+        setFrames(selected, [...live.current.sequences[selected], ...stills])
+        return
+      }
+      const added: { id: string; file: File; problem?: string }[] = []
+      files.forEach((file, index) => {
+        const kind = kinds[index]
+        if (kind === "still") return
+        const limit = kind === "video" ? MAX_VIDEO_BYTES : MAX_FILE_BYTES
+        added.push({
+          id: `animation-${++counter.current}`,
+          file,
+          problem:
+            file.size === 0
+              ? "That file is empty."
+              : kind === "svg"
+                ? "SVG is a drawing, not an animation this tool can read."
+                : kind === "unknown"
+                  ? "Choose an animated GIF, APNG or WebP, a video, or still images."
+                  : file.size > limit
+                    ? `Choose a file smaller than ${megabytes(limit)} MB.`
+                    : undefined,
+        })
+      })
+      const sequenceId =
+        stills.length >= 2 ? `animation-${++counter.current}` : null
+      if (sequenceId)
+        added.push({
+          id: sequenceId,
+          file: new File([], `${stills.length} images`),
+        })
+      else if (stills.length === 1) {
+        // A single still cannot move on its own.
+        URL.revokeObjectURL(stills[0].url)
+        added.push({
+          id: `animation-${++counter.current}`,
+          file: stills[0].file,
+          problem:
+            "This picture does not move. Add two or more images together to build an animation, or use the image converter for a still image.",
+        })
+      }
+      const room = MAX_FILES - live.current.items.length
+      if (added.length > room)
+        setNotice(
+          `Only ${Math.max(0, room)} more fit in this batch of ${MAX_FILES}.`
+        )
+      const kept = added.slice(0, Math.max(0, room))
+      if (sequenceId && !kept.some((item) => item.id === sequenceId))
+        for (const frame of stills) URL.revokeObjectURL(frame.url)
+      if (!kept.length) return
+      if (sequenceId && kept.some((item) => item.id === sequenceId)) {
+        const next = { ...live.current.sequences, [sequenceId]: stills }
+        live.current.sequences = next
+        setSequences(next)
+      }
+      dispatch({ type: "add", items: kept })
+      if (!live.current.selectedId) select(kept[0].id)
       setOriginals((current) => ({
         ...current,
         ...Object.fromEntries(
-          added.map(({ id, file }) => [id, URL.createObjectURL(file)])
+          kept
+            .filter((item) => item.id !== sequenceId && !item.problem)
+            .map(({ id, file }) => [id, URL.createObjectURL(file)])
         ),
       }))
-      for (const { id, file } of added)
-        if (file.size === 0)
-          dispatch({ type: "failed", id, message: "That file is empty." })
-        else if (file.size > MAX_FILE_BYTES)
-          dispatch({
-            type: "failed",
-            id,
-            message: `Choose an animation smaller than ${megabytes} MB.`,
-          })
+      for (const item of kept)
+        if (item.problem)
+          dispatch({ type: "failed", id: item.id, message: item.problem })
       pool.current?.kick()
     },
-    [dispatch, select]
+    [dispatch, select, setFrames]
   )
 
   async function loadSamples() {
@@ -370,7 +561,7 @@ export function AnimationConverter() {
           return new File([await response.blob()], name, { type })
         })
       )
-      addFiles(samples)
+      void addFiles(samples)
     } catch {
       setNotice(
         "The samples could not load. Check your connection and try again."
@@ -404,6 +595,12 @@ export function AnimationConverter() {
       live.current.trims = rest
       return rest
     })
+    for (const frame of live.current.sequences[id] ?? [])
+      URL.revokeObjectURL(frame.url)
+    const rest = { ...live.current.sequences }
+    delete rest[id]
+    live.current.sequences = rest
+    setSequences(rest)
   }
 
   function remove(id: string) {
@@ -419,6 +616,7 @@ export function AnimationConverter() {
     select(null)
     setLabels({})
     setNotice("")
+    setTip("")
   }
 
   function cancel() {
@@ -441,11 +639,12 @@ export function AnimationConverter() {
       const target = event.target as HTMLElement | null
       if (target?.closest("input, textarea, [contenteditable='true']")) return
       const pasted = Array.from(event.clipboardData?.files ?? []).filter(
-        (file) => file.type.startsWith("image/")
+        (file) =>
+          file.type.startsWith("image/") || file.type.startsWith("video/")
       )
       if (!pasted.length) return
       event.preventDefault()
-      addFiles(pasted)
+      void addFiles(pasted)
     }
     document.addEventListener("paste", paste)
     return () => document.removeEventListener("paste", paste)
@@ -454,9 +653,23 @@ export function AnimationConverter() {
   const keyOf = useMemo(
     () => (item: Item) =>
       item.status === "ready" && !problem
-        ? processingKey(settings, trims[item.id] ?? noTrim)
+        ? JSON.stringify([
+            processingKey(settings, trims[item.id] ?? noTrim),
+            inputOf(item, sequences[item.id]).inputKey,
+          ])
         : null,
-    [settings, trims, problem]
+    [settings, trims, sequences, problem]
+  )
+  /** Bytes that went in: the file, or every still of a built animation. */
+  const sizeOf = useMemo(
+    () => (item: Item) =>
+      sequences[item.id]
+        ? sequences[item.id].reduce(
+            (total, frame) => total + frame.file.size,
+            0
+          )
+        : item.file.size,
+    [sequences]
   )
   const selected = items.find((item) => item.id === selectedId) ?? null
   const selectedState = selected ? itemState(selected, keyOf(selected)) : null
@@ -473,7 +686,14 @@ export function AnimationConverter() {
       items.map((item, index) =>
         done[index]
           ? fileName(settings.pattern, {
-              name: item.file.name,
+              // A ZIP of frames or a sprite sheet says so in its name.
+              name:
+                (sequences[item.id]
+                  ? STILLS_NAME
+                  : item.file.name.replace(/\.[^.]*$/, "")) +
+                (targets[done[index].format].kind === "bundle"
+                  ? `-${done[index].format}`
+                  : ""),
               width: done[index].width,
               height: done[index].height,
               format: targets[done[index].format].extension,
@@ -487,17 +707,20 @@ export function AnimationConverter() {
       const state = itemState(item, keyOf(item))
       const output = done[index]
       const fact = facts[item.id]
+      const extra = output?.extra as Extra | undefined
       return {
         id: item.id,
         name: item.file.name,
         thumbnail: thumbnails[item.id] ?? null,
         state,
         details: [
-          fact ? sourceFormats[fact.format] : null,
+          fact && fact.format !== "stills" ? sourceFormats[fact.format] : null,
           item.size ? `${item.size.width} × ${item.size.height}` : null,
-          fact ? `${fact.durations.length} frames` : null,
+          fact && fact.format !== "stills"
+            ? `${fact.durations.length} frames`
+            : null,
           fact ? seconds(sum(fact.durations)) : null,
-          sizeLabel(item.file.size),
+          sizeLabel(sizeOf(item)),
         ]
           .filter(Boolean)
           .join(" · "),
@@ -510,8 +733,14 @@ export function AnimationConverter() {
                 ? "Paused"
                 : state === "waiting" && problem
                   ? "Waiting for settings"
-                  : output
-                    ? `${targets[output.format].label} · ${output.width} × ${output.height} · ${sizeLabel(output.blob.size)}`
+                  : output && extra
+                    ? targets[output.format].kind === "bundle"
+                      ? `${targets[output.format].label} · ${
+                          output.format === "frames"
+                            ? `${extra.frames} ${extra.frameFormat} images`
+                            : `${extra.frames} frames on ${output.width} × ${output.height}`
+                        } · ${sizeLabel(output.blob.size)}`
+                      : `${targets[output.format].label} · ${output.width} × ${output.height} · ${sizeLabel(output.blob.size)}`
                     : (labels[item.id] ?? null),
         outputs: output
           ? [
@@ -540,12 +769,27 @@ export function AnimationConverter() {
     settings.pattern,
     thumbnails,
     facts,
+    sequences,
+    sizeOf,
     labels,
     paused,
     problem,
   ])
 
-  const totals = useMemo(() => queueTotals(items, keyOf), [items, keyOf])
+  const totals = useMemo(() => {
+    const base = queueTotals(items, keyOf)
+    // An animation built from stills weighs what its images weigh.
+    return {
+      ...base,
+      originalBytes: items.reduce(
+        (total, item) =>
+          itemState(item, keyOf(item)) === "done"
+            ? total + sizeOf(item)
+            : total,
+        0
+      ),
+    }
+  }, [items, keyOf, sizeOf])
 
   // Which original frame each moment of the selected result shows.
   const steps = useMemo(
@@ -599,12 +843,20 @@ export function AnimationConverter() {
       >
         <div className="min-w-0 space-y-4 lg:col-span-3">
           <DropZone
-            onFiles={addFiles}
+            onFiles={(added) => void addFiles(added)}
             onSample={() => void loadSamples()}
             busy={false}
             copy={copy}
             inputId={INPUT_ID}
-            formats={["GIF", "APNG", "WebP"]}
+            formats={[
+              "GIF",
+              "APNG",
+              "WebP",
+              "MP4",
+              "WebM",
+              "MOV",
+              "Still images",
+            ]}
             accept={ACCEPT}
           />
           {notice && (
@@ -620,8 +872,8 @@ export function AnimationConverter() {
               {[
                 {
                   icon: IconTransform,
-                  title: "GIF, WebP and APNG, both ways",
-                  text: "Turn a heavy GIF into a small WebP, or anything into a GIF that plays everywhere. Every frame is kept moving.",
+                  title: "Animations, video and frames",
+                  text: "Convert between GIF, WebP and APNG, turn a clip into a GIF or a GIF into a tiny MP4, or export every frame.",
                 },
                 {
                   icon: IconClockPlay,
@@ -635,8 +887,8 @@ export function AnimationConverter() {
                 },
                 {
                   icon: IconStack2,
-                  title: "Batches",
-                  text: `Up to ${MAX_FILES} animations with the same settings, downloaded one by one or as a ZIP.`,
+                  title: "Build from images, convert in batches",
+                  text: `Drop several still images to make an animation from them, or up to ${MAX_FILES} files to convert together.`,
                 },
               ].map((item) => (
                 <li key={item.title} className="flex gap-3">
@@ -663,9 +915,25 @@ export function AnimationConverter() {
   const originalTiming = selectedFacts
     ? describeTiming(selectedFacts.durations)
     : null
+  const selectedStills = selected ? (sequences[selected.id] ?? null) : null
+  const selectedBytes = selected ? sizeOf(selected) : 0
   const saved = selectedOutput
-    ? savingsPercent(selected!.file.size, selectedOutput.blob.size)
+    ? savingsPercent(selectedBytes, selectedOutput.blob.size)
     : 0
+  const selectedInput = selected
+    ? inputOf(selected, sequences[selected.id])
+    : null
+  const outputKind = selectedOutput ? targets[selectedOutput.format].kind : null
+  const originalKind: Playable = selectedStills
+    ? "none"
+    : selectedFacts?.format === "video"
+      ? "video"
+      : "image"
+  const baseName = selected
+    ? selectedStills
+      ? STILLS_NAME
+      : selected.file.name.replace(/\.[^.]*$/, "")
+    : ""
 
   return (
     <div
@@ -674,25 +942,34 @@ export function AnimationConverter() {
       data-settled={(totals.settled && !zipping) || undefined}
     >
       <div className="min-w-0 space-y-4 lg:col-span-3">
-        {selected?.size && selectedFacts && originals[selected.id] ? (
+        {selected?.status !== "error" &&
+        selected?.size &&
+        selectedFacts &&
+        selectedInput ? (
           <Player
             key={selected.id}
             original={{
-              url: originals[selected.id],
-              file: selected.file,
+              kind: originalKind,
+              url: originals[selected.id] ?? null,
+              ...selectedInput,
               size: selected.size,
               durations: selectedFacts.durations,
             }}
             result={
-              selectedOutput && extra
+              selectedOutput && outputKind
                 ? {
+                    kind:
+                      outputKind === "video"
+                        ? "video"
+                        : outputKind === "bundle"
+                          ? "none"
+                          : "image",
                     url: selectedOutput.url,
                     blob: selectedOutput.blob,
                     size: {
                       width: selectedOutput.width,
                       height: selectedOutput.height,
                     },
-                    duration: extra.duration,
                   }
                 : null
             }
@@ -702,18 +979,23 @@ export function AnimationConverter() {
               flipX: settings.flipX,
               flipY: settings.flipY,
             }}
-            originalLabel={`Original · ${sizeLabel(selected.file.size)}`}
+            originalLabel={`Original · ${sizeLabel(selectedBytes)}`}
             resultLabel={
               selectedOutput
                 ? `${targets[selectedOutput.format].label} · ${sizeLabel(selectedOutput.blob.size)}`
                 : null
             }
             status={
-              selectedState === "waiting" && !paused && !problem
+              (selectedState === "waiting" || selectedState === "reading") &&
+              !paused &&
+              !problem
                 ? (labels[selected.id] ?? "Waiting…")
                 : null
             }
             onCancel={cancel}
+            frameName={(frame) =>
+              `${baseName}-frame-${String(frame).padStart(3, "0")}.png`
+            }
           />
         ) : (
           <div
@@ -726,49 +1008,76 @@ export function AnimationConverter() {
               : "Reading your animation…"}
           </div>
         )}
-        {selected?.size && selectedFacts && originalTiming && (
-          <dl
-            className="grid gap-x-4 gap-y-1 text-sm sm:grid-cols-[auto_1fr]"
-            data-testid="facts"
-          >
-            <dt className="font-medium">Original</dt>
-            <dd className="text-muted-foreground">
-              {[
-                sourceFormats[selectedFacts.format],
-                `${selected.size.width} × ${selected.size.height}`,
-                `${originalTiming.frames} frames`,
-                seconds(originalTiming.duration),
-                `${Math.round(originalTiming.fps * 10) / 10} fps`,
-                loops(selectedFacts.plays),
-                sizeLabel(selected.file.size),
-              ].join(" · ")}
-            </dd>
-            <dt className="font-medium">Result</dt>
-            <dd className="text-muted-foreground">
-              {selectedOutput && extra
-                ? [
-                    targets[selectedOutput.format].label,
-                    `${selectedOutput.width} × ${selectedOutput.height}`,
-                    `${extra.frames} frames`,
-                    seconds(extra.duration),
-                    `${Math.round(((extra.frames * 1000) / extra.duration) * 10) / 10} fps`,
-                    loops(extra.plays),
-                    sizeLabel(selectedOutput.blob.size),
-                    saved > 0
-                      ? `${saved}% smaller`
-                      : saved < 0
-                        ? `${-saved}% larger`
-                        : "same size",
-                  ].join(" · ")
-                : selectedState === "failed"
-                  ? "Not made. See the message in the list below."
-                  : problem
-                    ? "Waiting for settings"
-                    : `About ${
-                        outputSize(selected.size, settings).width
-                      } × ${outputSize(selected.size, settings).height}, ${steps.length} frames`}
-            </dd>
-          </dl>
+        {selected?.status !== "error" &&
+          selected?.size &&
+          selectedFacts &&
+          originalTiming && (
+            <dl
+              className="grid gap-x-4 gap-y-1 text-sm sm:grid-cols-[auto_1fr]"
+              data-testid="facts"
+            >
+              <dt className="font-medium">Original</dt>
+              <dd className="text-muted-foreground">
+                {[
+                  selectedStills
+                    ? `${selectedStills.length} images`
+                    : sourceFormats[selectedFacts.format],
+                  `${selected.size.width} × ${selected.size.height}`,
+                  selectedStills ? null : `${originalTiming.frames} frames`,
+                  seconds(originalTiming.duration),
+                  `${Math.round(originalTiming.fps * 10) / 10} fps`,
+                  // Only animated images say how often they play.
+                  originalKind === "image" ? loops(selectedFacts.plays) : null,
+                  sizeLabel(selectedBytes),
+                ]
+                  .filter(Boolean)
+                  .join(" · ")}
+              </dd>
+              <dt className="font-medium">Result</dt>
+              <dd className="text-muted-foreground">
+                {selectedOutput && extra
+                  ? [
+                      targets[selectedOutput.format].label,
+                      selectedOutput.format === "frames"
+                        ? `${extra.frames} ${extra.frameFormat} images of ${selectedOutput.width} × ${selectedOutput.height}`
+                        : `${selectedOutput.width} × ${selectedOutput.height}`,
+                      selectedOutput.format === "frames"
+                        ? null
+                        : `${extra.frames} frames`,
+                      seconds(extra.duration),
+                      outputKind === "bundle"
+                        ? null
+                        : `${Math.round(((extra.frames * 1000) / extra.duration) * 10) / 10} fps`,
+                      outputKind === "animation" ||
+                      selectedOutput.format === "sprite"
+                        ? loops(extra.plays)
+                        : null,
+                      sizeLabel(selectedOutput.blob.size),
+                      saved > 0
+                        ? `${saved}% smaller`
+                        : saved < 0
+                          ? `${-saved}% larger`
+                          : "same size",
+                    ]
+                      .filter(Boolean)
+                      .join(" · ")
+                  : selectedState === "failed"
+                    ? "Not made. See the message in the list below."
+                    : problem
+                      ? "Waiting for settings"
+                      : `About ${
+                          outputSize(selected.size, settings).width
+                        } × ${outputSize(selected.size, settings).height}, ${steps.length} frames`}
+              </dd>
+            </dl>
+          )}
+        {selected && selectedStills && (
+          <FrameList
+            frames={selectedStills}
+            onChange={(frames) => setFrames(selected.id, frames)}
+            onAdd={(added) => void addFiles(added)}
+            accept="image/*,.heic,.heif,.jxl"
+          />
         )}
         {extra?.note && (
           <p className="flex items-start gap-2 text-sm text-muted-foreground">
@@ -777,6 +1086,19 @@ export function AnimationConverter() {
               aria-hidden="true"
             />
             {extra.note}
+          </p>
+        )}
+        {tip && (
+          <p
+            className="flex items-start gap-2 text-sm text-muted-foreground"
+            role="status"
+            data-testid="tip"
+          >
+            <IconInfoCircle
+              className="mt-0.5 size-4 shrink-0"
+              aria-hidden="true"
+            />
+            {tip}
           </p>
         )}
         {paused && (
@@ -800,14 +1122,22 @@ export function AnimationConverter() {
         <SummaryBar
           totals={totals}
           single={single}
-          singleLabel="Download animation"
+          singleLabel={
+            files.length === 1 &&
+            targets[files[0].output.format].kind === "bundle"
+              ? "Download ZIP"
+              : files.length === 1 &&
+                  targets[files[0].output.format].kind === "video"
+                ? "Download video"
+                : "Download animation"
+          }
           zipping={zipping}
           onZip={() => void downloadZip()}
-          onFiles={addFiles}
+          onFiles={(added) => void addFiles(added)}
           onClear={clearAll}
           inputId={INPUT_ID}
           verb="Converting"
-          noun="animation"
+          noun="file"
           accept={ACCEPT}
         />
 
@@ -821,12 +1151,17 @@ export function AnimationConverter() {
       </div>
 
       <div className="min-w-0 space-y-4 lg:col-span-2">
-        <FormatPanel settings={settings} update={update} problem={problem} />
+        <FormatPanel
+          settings={settings}
+          update={update}
+          problem={problem}
+          video={video}
+        />
         <TimingPanel
           settings={settings}
           update={update}
           selected={
-            selected && selectedFacts
+            selected && selectedFacts && selected.status === "ready"
               ? {
                   name: selected.file.name,
                   strip: selectedFacts.strip,

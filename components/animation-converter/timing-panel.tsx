@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input"
 import {
   fpsChoices,
   speedChoices,
+  targets,
   type AnimationSettings,
   type LoopChoice,
   type Trim,
@@ -33,6 +34,10 @@ export function TimingPanel({
   onTrim: (trim: Trim) => void
 }) {
   const ids = useId()
+  // Only animated images and sprite sheets carry a loop count.
+  const loops =
+    targets[settings.target].kind === "animation" ||
+    settings.target === "sprite"
   const speed = speedChoices.includes(
     settings.speed as (typeof speedChoices)[number]
   )
@@ -163,44 +168,56 @@ export function TimingPanel({
           checked={settings.boomerang}
           onCheckedChange={(boomerang) => update({ boomerang })}
         />
-        <ChoiceChips
-          label="Loop"
-          value={settings.loop}
-          onValueChange={(loop: LoopChoice) => update({ loop })}
-          options={[
-            { value: "forever", label: "Forever" },
-            { value: "once", label: "Play once" },
-            { value: "count", label: "A set number" },
-          ]}
-        />
-        {settings.loop === "count" && (
-          <div className="w-32">
-            <label
-              htmlFor={`${ids}-plays`}
-              className="mb-2 block text-sm font-medium"
-            >
-              Times to play
-            </label>
-            <Input
-              id={`${ids}-plays`}
-              type="number"
-              inputMode="numeric"
-              min={2}
-              max={1000}
-              value={Number.isNaN(settings.loopCount) ? "" : settings.loopCount}
-              onChange={(event) =>
-                update({ loopCount: event.target.valueAsNumber })
-              }
-              className="font-mono"
-              aria-describedby={`${ids}-plays-hint`}
+        {loops ? (
+          <>
+            <ChoiceChips
+              label="Loop"
+              value={settings.loop}
+              onValueChange={(loop: LoopChoice) => update({ loop })}
+              options={[
+                { value: "forever", label: "Forever" },
+                { value: "once", label: "Play once" },
+                { value: "count", label: "A set number" },
+              ]}
             />
-            <p
-              id={`${ids}-plays-hint`}
-              className="mt-1 w-64 text-xs text-muted-foreground"
-            >
-              A few GIF players count one more or one fewer.
-            </p>
-          </div>
+            {settings.loop === "count" && (
+              <div className="w-32">
+                <label
+                  htmlFor={`${ids}-plays`}
+                  className="mb-2 block text-sm font-medium"
+                >
+                  Times to play
+                </label>
+                <Input
+                  id={`${ids}-plays`}
+                  type="number"
+                  inputMode="numeric"
+                  min={2}
+                  max={1000}
+                  value={
+                    Number.isNaN(settings.loopCount) ? "" : settings.loopCount
+                  }
+                  onChange={(event) =>
+                    update({ loopCount: event.target.valueAsNumber })
+                  }
+                  className="font-mono"
+                  aria-describedby={`${ids}-plays-hint`}
+                />
+                <p
+                  id={`${ids}-plays-hint`}
+                  className="mt-1 w-64 text-xs text-muted-foreground"
+                >
+                  A few GIF players count one more or one fewer.
+                </p>
+              </div>
+            )}
+          </>
+        ) : (
+          <p className="text-xs text-muted-foreground">
+            {settings.target === "frames"
+              ? "Separate frames do not loop."
+              : "A video file has no loop count; the player decides."}
+          </p>
         )}
       </Section>
     </div>

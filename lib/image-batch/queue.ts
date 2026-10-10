@@ -39,12 +39,15 @@ export type QueueAction<F extends string = string> =
   | {
       type: "opened"
       id: string
-      format: InputFormat
+      /** Left out by tools whose inputs are not still-image formats. */
+      format?: InputFormat
       animated: boolean
       size: Size
       transparent: boolean
     }
   | { type: "failed"; id: string; message: string }
+  /** The input itself changed, so it must be read again; its last result stays until then. */
+  | { type: "reread"; id: string }
   | {
       type: "done"
       id: string
@@ -91,6 +94,12 @@ export function queueReducer<F extends string = string>(
         ...item,
         status: "error",
         error: action.message,
+      }))
+    case "reread":
+      return patch(items, action.id, (item) => ({
+        ...item,
+        status: "reading",
+        error: undefined,
       }))
     case "done":
       return patch(items, action.id, (item) => ({

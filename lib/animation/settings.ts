@@ -6,7 +6,10 @@ import {
 } from "@/lib/image-compressor/geometry"
 import { unknownTokens } from "@/lib/image-resizer/naming"
 
-export type Target = "gif" | "webp" | "apng"
+export type Target =
+  "gif" | "webp" | "apng" | "mp4" | "webm" | "frames" | "sprite"
+/** Still-image formats for exported frames and sprite sheets. */
+export type FrameFormat = "png" | "webp" | "jpeg"
 export type QualityChoice =
   "balanced" | "high" | "small" | "lossless" | "custom"
 export type ResizeChoice =
@@ -22,6 +25,8 @@ export const targets: Record<
     mime: string
     /** Whether a lossless result is possible. */
     lossless: boolean
+    /** An animated image, a video file, or a ZIP of still images. */
+    kind: "animation" | "video" | "bundle"
     hint: string
   }
 > = {
@@ -30,6 +35,7 @@ export const targets: Record<
     extension: "gif",
     mime: "image/gif",
     lossless: false,
+    kind: "animation",
     hint: "Plays everywhere, including chat apps and email. 256 colours, so files are large.",
   },
   webp: {
@@ -37,6 +43,7 @@ export const targets: Record<
     extension: "webp",
     mime: "image/webp",
     lossless: true,
+    kind: "animation",
     hint: "Much smaller than GIF with full colour and transparency. Plays in every current browser.",
   },
   apng: {
@@ -45,14 +52,69 @@ export const targets: Record<
     // The plain PNG type: with "image/apng" some browsers rename the download to .apng.
     mime: "image/png",
     lossless: true,
+    kind: "animation",
     hint: "Animated PNG: full colour and smooth transparency. Larger than WebP; shows its first frame where animation is not supported.",
   },
+  mp4: {
+    label: "MP4",
+    extension: "mp4",
+    mime: "video/mp4",
+    lossless: false,
+    kind: "video",
+    hint: "Video: far smaller than any animated image for photos and screen recordings. No transparency, and it needs a video player, not an image tag.",
+  },
+  webm: {
+    label: "WebM",
+    extension: "webm",
+    mime: "video/webm",
+    lossless: false,
+    kind: "video",
+    hint: "Open video format for the web. Small files, no transparency here; older Apple devices may not play it.",
+  },
+  frames: {
+    label: "Frames",
+    extension: "zip",
+    mime: "application/zip",
+    lossless: true,
+    kind: "bundle",
+    hint: "Every frame as its own image, in a ZIP. Lower the frame rate to export fewer.",
+  },
+  sprite: {
+    label: "Sprite sheet",
+    extension: "zip",
+    mime: "application/zip",
+    lossless: true,
+    kind: "bundle",
+    hint: "All frames on one image, with CSS and JSON to play it on a web page or in a game.",
+  },
 }
-export const targetOrder: Target[] = ["gif", "webp", "apng"]
+export const targetOrder: Target[] = [
+  "gif",
+  "webp",
+  "apng",
+  "mp4",
+  "webm",
+  "frames",
+  "sprite",
+]
+export const frameFormats: Record<
+  FrameFormat,
+  { label: string; extension: string; lossless: boolean }
+> = {
+  png: { label: "PNG", extension: "png", lossless: true },
+  webp: { label: "WebP", extension: "webp", lossless: true },
+  jpeg: { label: "JPEG", extension: "jpg", lossless: false },
+}
 
 export const MAX_FILES = 20
 export const MAX_FILE_BYTES = 100 * 1024 * 1024
+/** Video is read a piece at a time, so larger files are fine. */
+export const MAX_VIDEO_BYTES = 500 * 1024 * 1024
+/** Longest side of a sprite sheet; larger images fail to decode in some browsers. */
+export const MAX_SHEET_EDGE = 8192
 export const MAX_FRAMES = 3000
+/** A video's frame times are listed up front; ten minutes at 30 frames a second. */
+export const MAX_VIDEO_FRAMES = 18_000
 /** Longest side of a result, in pixels. */
 export const MAX_EDGE = 1920
 /** Most pixels held at once across the frames of one result (about 380 MB). */
@@ -71,6 +133,8 @@ export interface AnimationSettings {
   customQuality: number
   /** "best" uses gifski; "fast" uses KeepSimp's own GIF encoder. */
   gifEngine: "fast" | "best"
+  /** The image format of exported frames and sprite sheets. */
+  frameFormat: FrameFormat
   /** 2–256, for GIF and APNG when quality is Custom. */
   colours: number
   dithering: boolean
@@ -104,6 +168,7 @@ export const defaultSettings: AnimationSettings = {
   quality: "balanced",
   customQuality: 75,
   gifEngine: "fast",
+  frameFormat: "png",
   colours: 128,
   dithering: true,
   speed: 1,
@@ -137,7 +202,9 @@ export function playsFor(settings: AnimationSettings) {
 export function matte(
   settings: AnimationSettings
 ): [number, number, number] | null {
-  if (settings.background === "keep") return null
+  // A format without transparency is filled with white unless a colour is chosen.
+  if (settings.background === "keep")
+    return keepsTransparency(settings) ? null : [255, 255, 255]
   if (settings.background === "black") return [0, 0, 0]
   if (settings.background === "white") return [255, 255, 255]
   return parseHexColor(settings.backgroundColor) ?? [255, 255, 255]
@@ -162,9 +229,15 @@ export function outputSize(source: Size, settings: AnimationSettings): Size {
     scale,
     MAX_EDGE / Math.max(oriented.width, oriented.height)
   )
-  return {
+  const size = {
     width: Math.max(1, Math.round(oriented.width * limit)),
     height: Math.max(1, Math.round(oriented.height * limit)),
+  }
+  // Video encoders want even sides.
+  if (targets[settings.target].kind !== "video") return size
+  return {
+    width: Math.max(2, size.width - (size.width % 2)),
+    height: Math.max(2, size.height - (size.height % 2)),
   }
 }
 
@@ -191,10 +264,56 @@ export type EncodePlan =
       dithering: boolean
       tolerance: number
     }
+  | {
+      kind: "video"
+      container: "mp4" | "webm"
+      /** A named level, or bits per pixel per frame for Custom. */
+      level: "small" | "balanced" | "high" | number
+    }
+  | ({ kind: "frames" } & StillPlan)
+  | ({ kind: "sprite" } & StillPlan)
+
+interface StillPlan {
+  format: FrameFormat
+  quality: number
+  lossless: boolean
+}
 
 /** Turn the quality choice into what each encoder needs. */
 export function encodePlan(settings: AnimationSettings): EncodePlan {
   const { quality, target } = settings
+  if (target === "mp4" || target === "webm")
+    return {
+      kind: "video",
+      container: target,
+      level:
+        quality === "custom"
+          ? // 1–100 becomes 0.01–0.4 bits per pixel, a wide but sane range.
+            0.01 + ((settings.customQuality - 1) / 99) * 0.39
+          : quality === "lossless"
+            ? "high"
+            : quality,
+    }
+  if (target === "frames" || target === "sprite") {
+    const format = settings.frameFormat
+    const exact =
+      frameFormats[format].lossless &&
+      (format === "png" || quality === "lossless" || quality === "high")
+    return {
+      kind: target,
+      format,
+      lossless: exact,
+      quality: exact
+        ? 100
+        : quality === "small"
+          ? 60
+          : quality === "custom"
+            ? settings.customQuality
+            : quality === "balanced"
+              ? 80
+              : 92,
+    }
+  }
   if (target === "webp") {
     if (quality === "lossless")
       return {
@@ -265,7 +384,26 @@ export function encodePlan(settings: AnimationSettings): EncodePlan {
 
 /** Whether the Lossless choice means exactly that for the chosen format. */
 export function losslessApplies(settings: AnimationSettings) {
-  return targets[settings.target].lossless
+  const target = targets[settings.target]
+  return target.kind === "bundle"
+    ? frameFormats[settings.frameFormat].lossless
+    : target.lossless
+}
+
+/** Whether the result has an alpha channel; otherwise see-through areas are filled. */
+export function keepsTransparency(settings: AnimationSettings) {
+  const target = targets[settings.target]
+  if (target.kind === "video") return false
+  if (target.kind === "bundle") return settings.frameFormat !== "jpeg"
+  return true
+}
+
+/** Whether a quality number, rather than a colour count, is what Custom sets. */
+export function customIsNumeric(settings: AnimationSettings) {
+  const { target } = settings
+  if (target === "apng") return false
+  if (target === "gif") return settings.gifEngine === "best"
+  return true
 }
 
 /** The first thing wrong with the settings, in words for the page; null when they are fine. */
@@ -290,8 +428,7 @@ export function settingsProblem(settings: AnimationSettings): string | null {
       return `Enter a size up to ${MAX_EDGE.toLocaleString("en")} pixels.`
   }
   if (settings.quality === "custom") {
-    const numeric = settings.target === "webp" || settings.gifEngine === "best"
-    if (settings.target !== "apng" && numeric) {
+    if (customIsNumeric(settings)) {
       if (!(settings.customQuality >= 1 && settings.customQuality <= 100))
         return "Enter a quality from 1 to 100."
     } else if (

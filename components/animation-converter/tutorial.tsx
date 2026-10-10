@@ -3,16 +3,16 @@ import { ToolTutorial, type TutorialContent } from "@/components/tool-tutorial"
 const content: TutorialContent = {
   name: "How to use the KeepSimp animation converter",
   description:
-    "Convert animated GIF, WebP and APNG files in your browser, with trimming, speed, looping and a frame-by-frame comparison.",
+    "Convert animated GIF, WebP and APNG files and short videos in your browser, build animations from images, and export frames, with trimming, speed, looping and a frame-by-frame comparison.",
   intro: "Follow these steps. Every option is explained underneath.",
   steps: [
     {
       title: "Add your animations",
-      text: "Drop up to 20 animated GIF, APNG or WebP files, choose them, paste with ⌘V or Ctrl+V, or try the samples.",
+      text: "Drop up to 20 animated GIF, APNG or WebP files or short videos, or several still images to build an animation from. You can also paste, or try the samples.",
     },
     {
       title: "Pick a format",
-      text: "WebP for small files on the web, GIF to play everywhere, APNG for exact colour and soft transparency.",
+      text: "WebP for small files on the web, GIF to play everywhere, APNG for exact colour, MP4 or WebM for the smallest files, or the frames themselves.",
     },
     {
       title: "Keep the part you want",
@@ -36,6 +36,26 @@ const content: TutorialContent = {
       term: "Which format should I choose?",
       detail:
         "WebP is the best default for web pages: full colour, transparency and far smaller than GIF. GIF plays in every app, email client and chat, but holds only 256 colours. APNG keeps exact colour and smooth transparency, with larger files, and shows its first frame where animation is not supported.",
+    },
+    {
+      term: "MP4 and WebM",
+      detail:
+        "Video is far smaller than any animated image for photographs and screen recordings: often a twentieth of the GIF. It has no transparency or loop count, and needs a video player, not an image tag. These formats are offered when your browser can write them.",
+    },
+    {
+      term: "Video in",
+      detail:
+        "MP4, WebM and MOV clips become GIF, WebP or APNG. Trim to the part you want and lower the frame rate or size; a long clip at full size is too large to hold. Sound is not kept.",
+    },
+    {
+      term: "Animations from images",
+      detail:
+        "Add two or more still images together and they become the frames of one animation. Reorder them, set how long each shows, duplicate or remove them. The first image sets the size; the others are fitted inside it.",
+    },
+    {
+      term: "Frames and sprite sheets",
+      detail:
+        "Frames saves every frame as its own PNG, WebP or JPEG in a ZIP. Sprite sheet puts them on one image with CSS and JSON that say where each frame is and how long it shows. Save this frame, under the paused preview, saves just one.",
     },
     {
       term: "GIF encoder",
@@ -75,7 +95,7 @@ const content: TutorialContent = {
     {
       term: "Limits and privacy",
       detail:
-        "Up to 20 animations per batch, 100 MB each. Long animations at large sizes may need trimming or a lower frame rate. Everything runs in your browser; files are not uploaded.",
+        "Up to 20 files per batch: animations up to 100 MB, videos up to 500 MB and ten minutes. Long clips at large sizes need trimming or a lower frame rate. Everything runs in your browser; files are not uploaded.",
     },
   ],
   guideHref: "/blog/jpeg-png-webp-which-format/",

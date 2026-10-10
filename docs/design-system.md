@@ -123,6 +123,8 @@ Animation previews (`components/animation-converter/player.tsx`) have two states
 
 Trim bars (`components/animation-converter/trim-bar.tsx`) draw a strip of frames in a `rounded-lg` border with two `primary` handles built on Base UI `Slider`. What is cut away is dimmed with a `background` veil. Handles are 12px wide with a 44px/36px hit area, answer to the arrow keys, Home and End, and announce their time in seconds. Exact start and end fields sit below, with a status line saying how much is kept.
 
+Reorderable lists (`components/animation-converter/frame-list.tsx`) are ordered lists of `rounded-lg` rows with a position number, a 48px thumbnail, the name, the row's own field and icon buttons. Every row has "move earlier" and "move later" buttons with the position in their accessible names, so reordering never depends on dragging; dragging is an extra. The buttons at either end are disabled, not hidden. Long lists scroll inside a fixed maximum height.
+
 Crop overlays dim the excluded area with a `background` veil, show rule-of-thirds guides and eight handles with 44px/28px hit areas, and pair the box with exact pixel fields. The image compressor reference is `docs/image-compressor.md`.
 
 ## JSON workspace

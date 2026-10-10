@@ -5,6 +5,7 @@
  * our readers nor our writers are only checked against themselves.
  */
 import { describe, expect, it } from "vitest"
+import { unzipSync } from "fflate"
 import sharp from "sharp"
 import UPNG from "upng-js"
 import { installNodeCodecShims } from "@/tests/node-codecs"
@@ -18,7 +19,7 @@ import {
   type Target,
   type Trim,
 } from "./settings"
-import { identify, openAnimation, type SourceFormat } from "./source"
+import { allFrames, identify, openAnimation, type ImageFormat } from "./source"
 
 installNodeCodecShims()
 
@@ -59,7 +60,7 @@ const stacked = (frames: Uint8ClampedArray[]) => {
 }
 
 async function sourceFile(
-  format: SourceFormat,
+  format: ImageFormat,
   frames: Uint8ClampedArray[],
   delay = 80,
   loop = 0
@@ -144,7 +145,8 @@ const worst = (a: ArrayLike<number>, b: ArrayLike<number>) => {
 
 async function collect(file: Uint8Array) {
   const frames: Pixels[] = []
-  for await (const frame of openAnimation(file, deps).frames())
+  const source = openAnimation(file, deps)
+  for await (const frame of source.read(allFrames(source)))
     frames.push({ ...frame, data: frame.data.slice() })
   return frames
 }
@@ -422,5 +424,88 @@ describe("gifski", () => {
     expect(result.note).toBeNull()
     expect(result.note).not.toBe(BEST_TOO_LARGE)
     expect((await readBack("gif", result.bytes)).frames).toHaveLength(1)
+  })
+})
+
+describe("frames and sprite sheets", () => {
+  it("writes every frame as a real image in a ZIP", async () => {
+    const frames = scene(4)
+    const file = await sourceFile("apng", frames)
+    for (const [frameFormat, format] of [
+      ["png", "png"],
+      ["webp", "webp"],
+      ["jpeg", "jpeg"],
+    ] as const) {
+      const result = await convert(file, {
+        target: "frames",
+        frameFormat,
+        quality: "high",
+      })
+      const files = unzipSync(result.bytes)
+      const names = Object.keys(files)
+      expect(names, frameFormat).toHaveLength(4)
+      expect(names[0]).toMatch(/^frame-001\.(png|webp|jpg)$/)
+      for (const [index, name] of names.entries()) {
+        const image = sharp(Buffer.from(files[name]))
+        expect(await image.metadata(), name).toMatchObject({
+          format,
+          width: WIDTH,
+          height: HEIGHT,
+        })
+        const pixels = await image.ensureAlpha().raw().toBuffer()
+        // PNG and lossless WebP are exact; JPEG is close.
+        expect(worst(pixels, frames[index]), name).toBeLessThanOrEqual(
+          frameFormat === "jpeg" ? 60 : 0
+        )
+      }
+    }
+  })
+
+  it("writes a sprite sheet with matching CSS and JSON", async () => {
+    const frames = scene(5)
+    const file = await sourceFile("apng", frames, 120)
+    const result = await convert(file, { target: "sprite", loop: "once" })
+    const files = unzipSync(result.bytes)
+    expect(Object.keys(files)).toEqual([
+      "sprite.png",
+      "sprite.json",
+      "sprite.css",
+    ])
+    const sheet = sharp(Buffer.from(files["sprite.png"]))
+    const meta = await sheet.metadata()
+    const data = JSON.parse(Buffer.from(files["sprite.json"]).toString())
+    expect([meta.width, meta.height]).toEqual([
+      data.meta.size.w,
+      data.meta.size.h,
+    ])
+    expect([result.width, result.height]).toEqual([meta.width, meta.height])
+    expect(data.frames).toHaveLength(5)
+    expect(data.meta.plays).toBe(1)
+    const pixels = await sheet.ensureAlpha().raw().toBuffer()
+    // Each frame is where the JSON says it is.
+    data.frames.forEach(
+      (
+        entry: { frame: { x: number; y: number }; duration: number },
+        index: number
+      ) => {
+        expect(entry.duration).toBe(120)
+        for (const [x, y] of [
+          [0, 0],
+          [8 + index * 4, 20],
+          [WIDTH - 1, HEIGHT - 1],
+        ]) {
+          const at = ((entry.frame.y + y) * meta.width! + entry.frame.x + x) * 4
+          expect([...pixels.subarray(at, at + 4)]).toEqual([
+            ...frames[index].subarray(
+              (y * WIDTH + x) * 4,
+              (y * WIDTH + x) * 4 + 4
+            ),
+          ])
+        }
+      }
+    )
+    const css = Buffer.from(files["sprite.css"]).toString()
+    expect(css).toContain(`width: ${WIDTH}px;`)
+    expect(css).toContain("0.6s step-end 1;")
   })
 })

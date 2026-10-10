@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react"
 import {
+  IconCamera,
   IconLoader2,
   IconPlayerPauseFilled,
   IconPlayerPlayFilled,
@@ -12,6 +13,7 @@ import { CompareSlider } from "@/components/image-compressor/compare-slider"
 import { Button } from "@/components/ui/button"
 import { ChoiceChips } from "@/components/ui/choice-chips"
 import { FrameViewer, type ViewedFrames } from "@/lib/animation/client"
+import type { SourceInput } from "@/lib/animation/protocol"
 import { frameAt, sum, type Step } from "@/lib/animation/timeline"
 import type { Rotation, Size } from "@/lib/image-compressor/geometry"
 
@@ -19,12 +21,58 @@ const seconds = (milliseconds: number) => (milliseconds / 1000).toFixed(2)
 const tag =
   "pointer-events-none absolute top-3 rounded-full border bg-background/90 px-2.5 py-1 text-xs font-medium text-foreground shadow-sm backdrop-blur-sm"
 
+/** How a file is shown while playing: as a picture, in a video player, or not at all. */
+export type Playable = "image" | "video" | "none"
+
+export interface PlayerOriginal {
+  /** "none" for a set of stills, which has no single file to play. */
+  kind: Playable
+  url: string | null
+  input: SourceInput
+  inputKey: string
+  size: Size
+  /** Milliseconds each original frame is shown. */
+  durations: number[]
+}
+
 export interface PlayerResult {
+  /** "none" for a ZIP of frames or a sprite sheet. */
+  kind: Playable
   url: string
   blob: Blob
   size: Size
-  /** Milliseconds for one play. */
-  duration: number
+}
+
+function Moving({
+  kind,
+  url,
+  size,
+  label,
+}: {
+  kind: "image" | "video"
+  url: string
+  size: Size
+  label: string
+}) {
+  const style = {
+    aspectRatio: `${size.width} / ${size.height}`,
+    width: `min(100cqw, calc(100cqh * ${size.width / size.height}))`,
+  }
+  return kind === "video" ? (
+    <video
+      src={url}
+      aria-label={label}
+      autoPlay
+      loop
+      muted
+      playsInline
+      className="m-auto block"
+      style={style}
+    />
+  ) : (
+    // eslint-disable-next-line @next/next/no-img-element -- local object URL
+    <img src={url} alt={label} className="m-auto block" style={style} />
+  )
 }
 
 /**
@@ -40,8 +88,9 @@ export function Player({
   resultLabel,
   status,
   onCancel,
+  frameName,
 }: {
-  original: { url: string; file: File; size: Size; durations: number[] }
+  original: PlayerOriginal
   result: PlayerResult | null
   /** Which original frame each moment of the result shows. */
   steps: Step[]
@@ -50,6 +99,8 @@ export function Player({
   resultLabel: string | null
   status: string | null
   onCancel: () => void
+  /** File name for a saved frame, given its number. */
+  frameName: (frame: number) => string
 }) {
   const [playing, setPlaying] = useState(
     () =>
@@ -98,44 +149,65 @@ export function Player({
     []
   )
 
+  // What can be shown moving: the result if it plays, else the original if it does.
+  const playable =
+    result && result.kind !== "none" && (show === "result" || !original.url)
+      ? ("result" as const)
+      : original.kind !== "none" && original.url
+        ? ("original" as const)
+        : null
+  // With nothing to play, the preview stays on single frames.
+  const moving = playing && playable !== null
+
   // While playing, a clock follows the picture so the position bar can move.
   useEffect(() => {
-    if (!playing || duration <= 0) return
+    if (!moving || duration <= 0) return
     clock.current = { started: performance.now(), offset: clock.current.offset }
     let frame = requestAnimationFrame(function tick(now) {
       setTime((clock.current.offset + now - clock.current.started) % duration)
       frame = requestAnimationFrame(tick)
     })
     return () => cancelAnimationFrame(frame)
-  }, [playing, duration])
+  }, [moving, duration])
 
   // Paused: draw the moment under the position bar, before and after.
   const source = steps[stepIndex]?.source ?? 0
-  const resultBlob = result?.blob ?? null
+  const comparable = result && result.kind !== "none" ? result : null
+  const resultBlob = comparable?.blob ?? null
+  const resultUrl = comparable?.url ?? ""
   useEffect(() => {
-    if (playing) return
+    if (moving) return
     const timer = setTimeout(() => {
       setProblem("")
       viewer.current?.show([
         {
           slot: "original",
-          file: original.file,
+          input: original.input,
+          inputKey: original.inputKey,
           time: sum(original.durations.slice(0, source)),
           orientation,
         },
         ...(resultBlob
-          ? [{ slot: "result" as const, file: resultBlob, time: position }]
+          ? [
+              {
+                slot: "result" as const,
+                input: { kind: "file" as const, file: resultBlob },
+                inputKey: resultUrl,
+                time: position,
+              },
+            ]
           : []),
       ])
     }, 60)
     return () => clearTimeout(timer)
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- orientation is read when the frame is asked for
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- the input is named by its key; orientation by its parts
   }, [
-    playing,
-    original.file,
+    moving,
+    original.inputKey,
     original.durations,
     source,
     resultBlob,
+    resultUrl,
     position,
     orientation.rotation,
     orientation.flipX,
@@ -156,14 +228,33 @@ export function Player({
     pause(sum(stepDurations.slice(0, next)))
   }
 
-  const size = result?.size ?? original.size
-  const showing = result && show === "result" ? "result" : "original"
-  // A turned original has the result's shape only once it is redrawn; playing shows the file as it is.
-  const shown = showing === "result" ? size : original.size
+  /** Save the frame on screen as a PNG: the result's if there is one, else the original's. */
+  function saveFrame() {
+    const bitmap = frames.result ?? frames.original
+    if (!bitmap) return
+    const canvas = document.createElement("canvas")
+    canvas.width = bitmap.width
+    canvas.height = bitmap.height
+    canvas.getContext("2d")?.drawImage(bitmap, 0, 0)
+    canvas.toBlob((blob) => {
+      if (!blob) return
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement("a")
+      link.href = url
+      link.download = frameName(stepIndex + 1)
+      document.body.append(link)
+      link.click()
+      link.remove()
+      setTimeout(() => URL.revokeObjectURL(url), 60_000)
+    }, "image/png")
+  }
+
+  const size = comparable?.size ?? original.size
+  const bundle = result?.kind === "none"
 
   return (
-    <div className="space-y-3" data-testid="player" data-playing={playing}>
-      {playing ? (
+    <div className="space-y-3" data-testid="player" data-playing={moving}>
+      {moving ? (
         <div
           data-testid="player-stage"
           className="checkerboard relative h-80 overflow-hidden rounded-xl border sm:h-96 lg:h-[30rem]"
@@ -172,24 +263,27 @@ export function Player({
             className="absolute inset-0 flex"
             style={{ containerType: "size" }}
           >
-            {/* eslint-disable-next-line @next/next/no-img-element -- local object URL */}
-            <img
-              key={showing}
-              src={showing === "result" ? result!.url : original.url}
-              alt={
-                showing === "result"
-                  ? "The converted animation, playing"
-                  : "The original animation, playing"
-              }
-              className="m-auto block"
-              style={{
-                aspectRatio: `${shown.width} / ${shown.height}`,
-                width: `min(100cqw, calc(100cqh * ${shown.width / shown.height}))`,
-              }}
-            />
+            {playable === "result" ? (
+              <Moving
+                key={result!.url}
+                kind={result!.kind as "image" | "video"}
+                url={result!.url}
+                size={result!.size}
+                label="The converted animation, playing"
+              />
+            ) : (
+              <Moving
+                key={original.url}
+                kind={original.kind as "image" | "video"}
+                url={original.url!}
+                // A turned original has the result's shape only once it is redrawn; playing shows the file as it is.
+                size={original.size}
+                label="The original animation, playing"
+              />
+            )}
           </div>
           <span className={`${tag} left-3`}>
-            {showing === "result" ? resultLabel : originalLabel}
+            {playable === "result" ? resultLabel : originalLabel}
           </span>
           {status && (
             <div className="absolute bottom-3 left-1/2 flex max-w-[calc(100%-1.5rem)] -translate-x-1/2 items-center gap-2 rounded-full border bg-background/95 py-1 pr-1 pl-3 text-xs font-medium text-foreground shadow-sm backdrop-blur-sm">
@@ -215,10 +309,10 @@ export function Player({
         <CompareSlider
           reference={frames.original ?? null}
           resultUrl={null}
-          result={result ? (frames.result ?? null) : null}
+          result={comparable ? (frames.result ?? null) : null}
           size={size}
           originalLabel={originalLabel}
-          resultLabel={result ? resultLabel : null}
+          resultLabel={comparable ? resultLabel : null}
           status={status}
           onCancel={onCancel}
         />
@@ -244,10 +338,11 @@ export function Player({
           </Button>
           <Button
             size="icon"
-            aria-label={playing ? "Pause" : "Play"}
-            onClick={() => (playing ? pause(position) : play())}
+            aria-label={moving ? "Pause" : "Play"}
+            disabled={playable === null}
+            onClick={() => (moving ? pause(position) : play())}
           >
-            {playing ? (
+            {moving ? (
               <IconPlayerPauseFilled aria-hidden="true" />
             ) : (
               <IconPlayerPlayFilled aria-hidden="true" />
@@ -282,7 +377,7 @@ export function Player({
         </p>
       </div>
       <div className="flex flex-wrap items-center justify-between gap-3">
-        {playing && result ? (
+        {moving && result && result.kind !== "none" && original.url ? (
           <ChoiceChips
             label="Show"
             hideLabel
@@ -293,13 +388,25 @@ export function Player({
               { value: "original", label: "Original" },
             ]}
           />
+        ) : !moving ? (
+          <Button
+            variant="outline"
+            disabled={!frames.result && !frames.original}
+            onClick={saveFrame}
+          >
+            <IconCamera aria-hidden="true" /> Save this frame
+          </Button>
         ) : (
           <span />
         )}
         <p className="text-xs text-muted-foreground">
-          {playing
-            ? "Pause to compare a single frame before and after."
-            : "Drag the handle on the picture to compare this frame."}
+          {bundle
+            ? "The result is a ZIP of pictures, so the preview shows the original."
+            : playable === null
+              ? "Step through the frames, or drag the handle on the picture to compare."
+              : moving
+                ? "Pause to compare a single frame before and after."
+                : "Drag the handle on the picture to compare this frame."}
         </p>
       </div>
     </div>

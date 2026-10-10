@@ -3,10 +3,13 @@ import { lzw } from "@/lib/image-converter/encoders/gif"
 import type { Pixels } from "@/lib/image-compressor/ssim"
 import {
   buildApngIndexed,
+  buildFrames,
   buildGif,
+  buildSprite,
   buildWebp,
   hasClearPixels,
   sampleFrames,
+  SHEET_TOO_LARGE,
   type Palette,
 } from "./build"
 import { ByteWriter } from "./bytes"
@@ -18,9 +21,13 @@ import { retimeGif, writeGif } from "./encoders/gif"
 import { convertAnimation, gatherFrames, type ConvertDeps } from "./pipeline"
 import { defaultSettings, noTrim } from "./settings"
 import {
+  allFrames,
+  classify,
   identify,
+  isVideo,
   NOT_ANIMATED,
   openAnimation,
+  openStills,
   UNSUPPORTED,
   type Source,
 } from "./source"
@@ -40,7 +47,24 @@ function fakeDeps(colours: Colour[] = GREY) {
     remap: [] as boolean[],
     webp: [] as { lossless: boolean; quality: number; pixels: number }[],
     resize: [] as string[],
+    still: [] as {
+      format: string
+      quality: number
+      lossless: boolean
+      width: number
+      height: number
+    }[],
+    video: [] as {
+      container: string
+      level: string | number
+      sizes: number[][]
+      durations: number[]
+      solid: boolean
+      first: number[]
+    }[],
     gifski: 0,
+    /** Frames the stand-in video encoder pretends to drop. */
+    dropped: 0,
     progress: [] as string[],
     freed: 0,
   }
@@ -76,6 +100,31 @@ function fakeDeps(colours: Colour[] = GREY) {
       return webpFile(body.finish())
     },
     deflate: async (bytes) => bytes,
+    encodeStill: async (pixels, format, options) => {
+      calls.still.push({
+        format,
+        quality: options.quality,
+        lossless: options.lossless,
+        width: pixels.width,
+        height: pixels.height,
+      })
+      // The first byte carries the picture's first red value, so tests can tell frames apart.
+      return Uint8Array.of(pixels.data[0], pixels.width, pixels.height)
+    },
+    encodeVideo: async (frames, container, level) => {
+      calls.video.push({
+        container,
+        level,
+        sizes: frames.map((frame) => [frame.width, frame.height]),
+        durations: frames.map((frame) => frame.duration),
+        solid: frames.every((frame) => frame.data[3] === 255),
+        first: [...frames[0].data.subarray(0, 3)],
+      })
+      return {
+        bytes: Uint8Array.of(1, 2, 3),
+        frames: frames.length - calls.dropped,
+      }
+    },
     gifski: async (frames) => {
       calls.gifski++
       return writeGif({
@@ -138,9 +187,11 @@ function source(levels: number[], size = { width: 4, height: 2 }): Source {
     ...size,
     plays: 0,
     durations: levels.map(() => 100),
-    async *frames() {
+    seekable: false,
+    async *read(indices) {
       const canvas = solid(size.width, size.height, 0)
-      for (const level of levels) {
+      for (const index of indices) {
+        const level = levels[index]
         for (let i = 0; i < canvas.data.length; i += 4)
           canvas.data.set([level, level, level, 255], i)
         yield canvas
@@ -225,7 +276,8 @@ describe("identify and openAnimation", () => {
     })
     expect(opened.durations).toEqual([100, 100])
     const seen: number[][] = []
-    for await (const canvas of opened.frames()) seen.push([...canvas.data])
+    for await (const canvas of opened.read(allFrames(opened)))
+      seen.push([...canvas.data])
     // The first frame was cleared, not "put back", so the second shows nothing.
     expect(seen).toEqual([
       [255, 0, 0, 128],
@@ -250,7 +302,8 @@ describe("identify and openAnimation", () => {
     })
     expect(opened.format).toBe("webp")
     const seen: number[] = []
-    for await (const canvas of opened.frames()) seen.push(canvas.data[0])
+    for await (const canvas of opened.read(allFrames(opened)))
+      seen.push(canvas.data[0])
     expect(seen).toEqual([10, 20])
   })
 })
@@ -268,17 +321,30 @@ describe("gatherFrames", () => {
     expect(frames.map((item) => item.duration)).toEqual([100, 100])
     expect(calls.resize).toEqual(["lanczos3", "lanczos3"])
     expect(calls.progress).toEqual([
-      "Reading frame 1 of 3",
-      "Reading frame 2 of 3",
-      "Reading frame 3 of 3",
+      "Reading frame 1 of 2",
+      "Reading frame 2 of 2",
     ])
+  })
+
+  it("says so when a file holds fewer frames than it claims", async () => {
+    const short: Source = {
+      ...source([0, 85, 170]),
+      async *read() {
+        yield solid(4, 2, 0)
+      },
+    }
+    await expect(
+      gatherFrames(short, defaultSettings, noTrim, fakeDeps().deps)
+    ).rejects.toThrow(
+      "This file ended before its last frame. It may be damaged."
+    )
   })
 
   it("turns, fills the background and enlarges with a smooth filter", async () => {
     const { deps, calls } = fakeDeps()
     const clear: Source = {
       ...source([0]),
-      async *frames() {
+      async *read() {
         yield solid(4, 2, 0, 0)
       },
     }
@@ -408,6 +474,258 @@ describe("convertAnimation", () => {
   })
 })
 
+describe("video, frames and sprite sheets", () => {
+  it("hands solid, even-sized frames to the video encoder", async () => {
+    const { deps, calls } = fakeDeps()
+    const clear: Source = {
+      ...source([0, 0], { width: 5, height: 3 }),
+      async *read(indices) {
+        for (const index of indices) yield solid(5, 3, index * 85, 0)
+      },
+    }
+    const result = await convertAnimation(
+      clear,
+      { ...defaultSettings, target: "mp4", quality: "small", loop: "once" },
+      noTrim,
+      deps
+    )
+    expect(calls.video).toEqual([
+      {
+        container: "mp4",
+        level: "small",
+        sizes: [
+          [4, 2],
+          [4, 2],
+        ],
+        durations: [100, 100],
+        // See-through pixels were filled with white.
+        solid: true,
+        first: [255, 255, 255],
+      },
+    ])
+    expect(result).toMatchObject({
+      width: 4,
+      height: 2,
+      frames: 2,
+      duration: 200,
+      // A video file carries no loop count.
+      plays: 0,
+    })
+    expect([...result.bytes]).toEqual([1, 2, 3])
+    expect(calls.progress).toContain("Encoding 2 frames as video…")
+    expect(result.note).toBeNull()
+  })
+
+  it("says so when the browser's encoder drops frames", async () => {
+    const { deps, calls } = fakeDeps()
+    calls.dropped = 1
+    const result = await convertAnimation(
+      source([0, 85, 170]),
+      { ...defaultSettings, target: "webm" },
+      noTrim,
+      deps
+    )
+    expect(result.frames).toBe(2)
+    expect(result.note).toBe(
+      "This browser's video encoder kept 2 of 3 frames. The length is unchanged."
+    )
+    expect(result.duration).toBe(300)
+  })
+
+  it("zips every frame as its own numbered image", async () => {
+    const { deps, calls } = fakeDeps()
+    const result = await convertAnimation(
+      source([0, 85, 170]),
+      {
+        ...defaultSettings,
+        target: "frames",
+        frameFormat: "jpeg",
+        quality: "small",
+      },
+      noTrim,
+      deps
+    )
+    const text = Buffer.from(result.bytes).toString("latin1")
+    expect(text.slice(0, 2)).toBe("PK")
+    for (const name of ["frame-001.jpg", "frame-002.jpg", "frame-003.jpg"])
+      expect(text).toContain(name)
+    expect(calls.still).toEqual(
+      [0, 1, 2].map(() => ({
+        format: "jpeg",
+        quality: 60,
+        lossless: false,
+        width: 4,
+        height: 2,
+      }))
+    )
+    expect(result).toMatchObject({
+      frames: 3,
+      width: 4,
+      height: 2,
+      duration: 300,
+    })
+  })
+
+  it("stores a frame once when it is shown twice in a row", async () => {
+    const { deps, calls } = fakeDeps()
+    const still = frame(solid(2, 2, 85), 100)
+    const bundle = await buildFrames(
+      [still, { ...still, duration: 50 }, frame(solid(2, 2, 170), 100), still],
+      { format: "png", quality: 100, lossless: true },
+      deps
+    )
+    // The repeat at the end is a different moment, so it is kept.
+    expect(bundle.frames).toBe(3)
+    expect(calls.still).toHaveLength(3)
+    expect(Buffer.from(bundle.bytes).toString("latin1")).toContain(
+      "frame-003.png"
+    )
+  })
+
+  it("puts frames on one sheet with CSS and JSON", async () => {
+    const { deps, calls } = fakeDeps()
+    const result = await convertAnimation(
+      source([0, 85, 170, 255]),
+      { ...defaultSettings, target: "sprite", loop: "count", loopCount: 2 },
+      noTrim,
+      deps
+    )
+    const text = Buffer.from(result.bytes).toString("latin1")
+    for (const name of ["sprite.png", "sprite.json", "sprite.css"])
+      expect(text).toContain(name)
+    // Four 4 × 2 frames sit two across and two down.
+    expect(calls.still).toEqual([
+      { format: "png", quality: 100, lossless: true, width: 8, height: 4 },
+    ])
+    expect(result).toMatchObject({ width: 8, height: 4, frames: 4, plays: 2 })
+    expect(text).toContain("sprite-play 0.4s step-end 2;")
+    expect(text).toContain('"plays": 2')
+    expect(calls.progress).toContain("Drawing the sprite sheet…")
+  })
+
+  it("says when the frames cannot fit on one sheet", async () => {
+    const { deps } = fakeDeps()
+    const huge = frame({
+      data: new Uint8ClampedArray(4),
+      width: 9000,
+      height: 1,
+    })
+    await expect(
+      buildSprite(
+        [huge],
+        0,
+        { format: "png", quality: 100, lossless: true },
+        deps
+      )
+    ).rejects.toThrow(SHEET_TOO_LARGE)
+  })
+})
+
+describe("stills as a source", () => {
+  const picture = (width: number, height: number, level: number) =>
+    solid(width, height, level)
+
+  it("plays images in order at the first one's size", async () => {
+    const { deps, calls } = fakeDeps()
+    const images = [
+      picture(4, 2, 10),
+      picture(4, 2, 20),
+      picture(8, 8, 30),
+      picture(1, 1, 40),
+    ]
+    const opened = await openStills([100, 200, 300, 400], {
+      load: async (index) => images[index],
+      resize: deps.resize,
+    })
+    expect(opened).toMatchObject({
+      format: "stills",
+      width: 4,
+      height: 2,
+      plays: 0,
+      durations: [100, 200, 300, 400],
+      seekable: true,
+    })
+    const seen: Pixels[] = []
+    for await (const pixels of opened.read([0, 1, 2, 3]))
+      seen.push({ ...pixels, data: pixels.data.slice() })
+    expect(seen.map((pixels) => [pixels.width, pixels.height])).toEqual([
+      [4, 2],
+      [4, 2],
+      [4, 2],
+      [4, 2],
+    ])
+    expect(seen[0].data[0]).toBe(10)
+    expect(seen[1].data[0]).toBe(20)
+    // A square image is shrunk to fit and centred, with clear space either side.
+    expect([...seen[2].data.subarray(0, 4)]).toEqual([0, 0, 0, 0])
+    expect([...seen[2].data.subarray(4, 8)]).toEqual([30, 30, 30, 255])
+    expect([...seen[2].data.subarray(12, 16)]).toEqual([0, 0, 0, 0])
+    // A small image is enlarged to fit, with a smoother filter.
+    expect([...seen[3].data.subarray(4, 8)]).toEqual([40, 40, 40, 255])
+    expect(calls.resize).toEqual(["lanczos3", "mitchell"])
+  })
+
+  it("reads any frame on its own, and needs at least one image", async () => {
+    const { deps } = fakeDeps()
+    const opened = await openStills([50, 50], {
+      load: async (index) => picture(2, 2, index === 0 ? 1 : 2),
+      resize: deps.resize,
+    })
+    const seen: number[] = []
+    for await (const pixels of opened.read([1])) seen.push(pixels.data[0])
+    expect(seen).toEqual([2])
+    await expect(
+      openStills([], {
+        load: async () => picture(1, 1, 0),
+        resize: deps.resize,
+      })
+    ).rejects.toThrow("Add at least one image.")
+  })
+})
+
+describe("telling files apart", () => {
+  const bytes = (text: string) => Uint8Array.from(text, (c) => c.charCodeAt(0))
+
+  it("recognises video by its first bytes", () => {
+    expect(isVideo(bytes("\0\0\0\u0018ftypisom"))).toBe(true)
+    expect(isVideo(bytes("\0\0\0\u0008wide\0\0\0\0mdat"))).toBe(true)
+    expect(isVideo(Uint8Array.of(0x1a, 0x45, 0xdf, 0xa3, 1, 0, 0, 0))).toBe(
+      true
+    )
+    expect(isVideo(bytes("GIF89a\0\0"))).toBe(false)
+    expect(isVideo(Uint8Array.of(0x1a, 0x45, 0xdf, 0xa4, 0, 0, 0, 0))).toBe(
+      false
+    )
+    expect(isVideo(new Uint8Array(0))).toBe(false)
+  })
+
+  it("sorts dropped files into videos, animations, stills and the rest", () => {
+    expect(classify(bytes("\0\0\0\u0018ftypmp42"))).toBe("video")
+    expect(classify(Uint8Array.of(0xff, 0xd8, 0xff, 0xe0, 0, 16))).toBe("still")
+    expect(
+      classify(bytes("<svg xmlns='http://www.w3.org/2000/svg'></svg>"))
+    ).toBe("svg")
+    expect(classify(bytes("just some text"))).toBe("unknown")
+    const moving = writeGif({
+      width: 1,
+      height: 1,
+      palette: GREY,
+      plays: 0,
+      images: [0, 1].map(() => ({
+        x: 0,
+        y: 0,
+        width: 1,
+        height: 1,
+        indices: Uint8Array.of(1),
+        delay: 5,
+        dispose: "none" as const,
+        transparent: null,
+      })),
+    })
+    expect(classify(moving)).toBe("animation")
+  })
+})
+
 describe("buildGif", () => {
   const options = { colours: 256, dithering: true, tolerance: 0 }
 
@@ -492,6 +810,25 @@ describe("buildGif", () => {
     ])
     // A faint pixel becomes clear: GIF pixels are there or not.
     expect(decodeGifFrame(bytes, file.frames[1])[3]).toBe(0)
+  })
+
+  it("holds a see-through frame longer when the next one is the same", async () => {
+    const { deps } = fakeDeps([...GREY.slice(0, 3), [0, 0, 0, 0]])
+    const first = solid(2, 1, 85)
+    first.data[7] = 0
+    const bytes = await buildGif(
+      [
+        frame(first, 100),
+        frame({ ...first, data: first.data.slice() }, 60),
+        frame(solid(2, 1, 170, 0), 40),
+      ],
+      0,
+      options,
+      deps
+    )
+    expect(readGif(bytes).frames.map((item) => item.duration)).toEqual([
+      160, 40,
+    ])
   })
 
   it("turns faint palette colours into the clear one", async () => {

@@ -5,6 +5,9 @@ import { retimeGif, writeGif, type GifImage } from "./encoders/gif"
 import { writeWebp, type WebpImage } from "./encoders/webp"
 import { readGif } from "./decoders/gif"
 import { wholeUnits } from "./timeline"
+import { createZip } from "@/lib/image-resizer/zip"
+import { frameFormats, MAX_SHEET_EDGE, type FrameFormat } from "./settings"
+import { composeSheet, sheetLayout, spriteCss, spriteJson } from "./sprite"
 import type { Colour, Frame, Rect } from "./types"
 
 /** A set of colours and a way to redraw any picture with them. */
@@ -27,6 +30,18 @@ export interface BuildDeps {
   deflate(bytes: Uint8Array): Promise<Uint8Array>
   /** gifski: every frame at once, durations in milliseconds. */
   gifski(frames: Frame[], quality: number): Promise<Uint8Array>
+  /** Encode a still image, for exported frames and sprite sheets. */
+  encodeStill(
+    pixels: Pixels,
+    format: FrameFormat,
+    options: { quality: number; lossless: boolean }
+  ): Promise<Uint8Array>
+  /** Encode solid frames as a silent video with the browser's own encoder. */
+  encodeVideo(
+    frames: Frame[],
+    container: "mp4" | "webm",
+    level: "small" | "balanced" | "high" | number
+  ): Promise<{ bytes: Uint8Array; frames: number }>
   /** Called between frames; rejects when the work has been cancelled. */
   checkpoint(): Promise<void>
   progress(label: string): void
@@ -144,7 +159,14 @@ export async function buildGif(
       const frame = frames[index]
       const delay = delays[index]
       if (seeThrough) {
-        // Without a way to erase single pixels, every frame is drawn in full.
+        // Without a way to erase single pixels, every frame is drawn in full,
+        // unless it is the same picture again, which just stays up longer.
+        if (reference && !changedRect(reference, frame)) {
+          const last = images[images.length - 1]
+          last.delay = Math.min(65535, last.delay + delay)
+          continue
+        }
+        reference = frame
         images.push({
           ...whole(frame),
           indices: indicesFor(frame),
@@ -406,5 +428,91 @@ export async function buildApngIndexed(
     })
   } finally {
     palette.free()
+  }
+}
+
+interface StillOptions {
+  format: FrameFormat
+  quality: number
+  lossless: boolean
+}
+
+/** Frames that are shown, in order, each once however long it lasts. */
+function distinct(frames: readonly Frame[]) {
+  const kept: Frame[] = []
+  for (const frame of frames) {
+    const last = kept[kept.length - 1]
+    // The same picture twice in a row is one image shown for longer.
+    if (last && last.data === frame.data)
+      kept[kept.length - 1] = {
+        ...last,
+        duration: last.duration + frame.duration,
+      }
+    else kept.push(frame)
+  }
+  return kept
+}
+
+/** Every frame as its own image, numbered, in a ZIP. */
+export async function buildFrames(
+  frames: readonly Frame[],
+  options: StillOptions,
+  deps: BuildDeps
+) {
+  const stills = distinct(frames)
+  const digits = Math.max(3, String(stills.length).length)
+  const extension = frameFormats[options.format].extension
+  const entries = []
+  for (let index = 0; index < stills.length; index++) {
+    await deps.checkpoint()
+    deps.progress(`Writing frame ${index + 1} of ${stills.length}`)
+    entries.push({
+      name: `frame-${String(index + 1).padStart(digits, "0")}.${extension}`,
+      data: await deps.encodeStill(stills[index], options.format, options),
+    })
+  }
+  return { bytes: createZip(entries), frames: stills.length }
+}
+
+export const SHEET_TOO_LARGE =
+  "These frames do not fit on one sprite sheet. Make them smaller, trim the animation or lower the frame rate."
+
+/** All frames on one image, with CSS and JSON that describe where each one is. */
+export async function buildSprite(
+  frames: readonly Frame[],
+  plays: number,
+  options: StillOptions,
+  deps: BuildDeps
+) {
+  const stills = distinct(frames)
+  const { width, height } = stills[0]
+  const layout = sheetLayout(stills.length, width, height, MAX_SHEET_EDGE)
+  if (!layout) throw new Error(SHEET_TOO_LARGE)
+  deps.progress("Drawing the sprite sheet…")
+  await deps.checkpoint()
+  const image = `sprite.${frameFormats[options.format].extension}`
+  const text = new TextEncoder()
+  return {
+    bytes: createZip([
+      {
+        name: image,
+        data: await deps.encodeStill(
+          composeSheet(stills, layout),
+          options.format,
+          options
+        ),
+      },
+      {
+        name: "sprite.json",
+        data: text.encode(spriteJson(stills, layout, image, plays)),
+      },
+      {
+        name: "sprite.css",
+        data: text.encode(spriteCss(stills, layout, image, plays)),
+      },
+    ]),
+    frames: stills.length,
+    width: layout.sheetWidth,
+    height: layout.sheetHeight,
   }
 }

@@ -39,6 +39,21 @@ const add = (...ids: string[]): QueueAction => ({
 })
 
 describe("queue reducer", () => {
+  it("reads an input again when it changes, keeping its last result meanwhile", () => {
+    const items = run([
+      add("a", "b"),
+      opened("a"),
+      { type: "done", id: "a", key: "k1", outputs: [output("u1")] },
+      { type: "failed", id: "b", message: "Bad file." },
+      { type: "reread", id: "a" },
+      { type: "reread", id: "b" },
+    ])
+    expect(items[0]).toMatchObject({ status: "reading", resultKey: "k1" })
+    expect(items[0].outputs).toHaveLength(1)
+    expect(itemState(items[0], "k1")).toBe("reading")
+    expect(items[1]).toMatchObject({ status: "reading", error: undefined })
+  })
+
   it("adds, opens and finishes images", () => {
     const items = run([
       add("a", "b"),

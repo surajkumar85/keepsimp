@@ -31,6 +31,7 @@ export default defineConfig({
         "lib/animation/pipeline.ts",
         "lib/animation/settings.ts",
         "lib/animation/source.ts",
+        "lib/animation/sprite.ts",
         "lib/animation/timeline.ts",
         "lib/animation/decoders/apng.ts",
         "lib/animation/decoders/gif.ts",

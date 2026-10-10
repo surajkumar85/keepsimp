@@ -14,6 +14,7 @@ import { ChoiceChips } from "@/components/ui/choice-chips"
 import { Input } from "@/components/ui/input"
 import {
   DEFAULT_PATTERN,
+  keepsTransparency,
   MAX_EDGE,
   type AnimationSettings,
   type BackgroundChoice,
@@ -177,9 +178,11 @@ export function OptionsPanel({
           hint={
             settings.background !== "keep"
               ? "See-through areas are filled with this colour."
-              : settings.target === "gif" && transparent
-                ? "GIF pixels are either solid or clear, so soft edges become hard. A background colour avoids that."
-                : "See-through areas stay see-through."
+              : !keepsTransparency(settings)
+                ? "This format has no transparency, so see-through areas are filled with white unless you choose a colour."
+                : settings.target === "gif" && transparent
+                  ? "GIF pixels are either solid or clear, so soft edges become hard. A background colour avoids that."
+                  : "See-through areas stay see-through."
           }
         />
         {settings.background === "custom" && (

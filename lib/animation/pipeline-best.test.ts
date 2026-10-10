@@ -28,6 +28,8 @@ const deps: ConvertDeps = {
   gifski: async () => {
     throw new Error("gifski must not be asked")
   },
+  encodeStill: async () => new Uint8Array(0),
+  encodeVideo: async () => ({ bytes: new Uint8Array(0), frames: 0 }),
   resize: async (pixels) => pixels,
   checkpoint: async () => {},
   progress: () => {},
@@ -40,11 +42,12 @@ function source(levels: number[]): Source {
     height: 2,
     plays: 0,
     durations: levels.map(() => 100),
-    async *frames() {
-      for (const level of levels)
+    seekable: false,
+    async *read(indices) {
+      for (const index of indices)
         yield {
-          data: new Uint8ClampedArray(16).map((_, index) =>
-            index % 4 === 3 ? 255 : level
+          data: new Uint8ClampedArray(16).map((_, at) =>
+            at % 4 === 3 ? 255 : levels[index]
           ),
           width: 2,
           height: 2,

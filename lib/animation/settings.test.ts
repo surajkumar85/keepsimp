@@ -3,7 +3,10 @@ import {
   BEST_BUDGET,
   bestFits,
   budgetProblem,
+  customIsNumeric,
   defaultSettings,
+  frameFormats,
+  keepsTransparency,
   encodePlan,
   FRAME_BUDGET,
   losslessApplies,
@@ -26,7 +29,25 @@ const make = (change: Partial<AnimationSettings> = {}): AnimationSettings => ({
 
 describe("targets", () => {
   it("lists each format once, with what the page needs", () => {
-    expect(targetOrder).toEqual(["gif", "webp", "apng"])
+    expect(targetOrder).toEqual([
+      "gif",
+      "webp",
+      "apng",
+      "mp4",
+      "webm",
+      "frames",
+      "sprite",
+    ])
+    expect(targetOrder.map((target) => targets[target].kind)).toEqual([
+      "animation",
+      "animation",
+      "animation",
+      "video",
+      "video",
+      "bundle",
+      "bundle",
+    ])
+    expect(Object.keys(frameFormats)).toEqual(["png", "webp", "jpeg"])
     expect(Object.keys(targets).sort()).toEqual([...targetOrder].sort())
     expect(targets.apng).toMatchObject({ extension: "png", mime: "image/png" })
     for (const target of targetOrder)
@@ -37,6 +58,38 @@ describe("targets", () => {
     expect(losslessApplies(make({ target: "gif" }))).toBe(false)
     expect(losslessApplies(make({ target: "webp" }))).toBe(true)
     expect(losslessApplies(make({ target: "apng" }))).toBe(true)
+    expect(losslessApplies(make({ target: "mp4" }))).toBe(false)
+    // A ZIP of frames is as exact as the images in it.
+    expect(
+      losslessApplies(make({ target: "frames", frameFormat: "png" }))
+    ).toBe(true)
+    expect(
+      losslessApplies(make({ target: "sprite", frameFormat: "jpeg" }))
+    ).toBe(false)
+  })
+
+  it("knows which results can be see-through", () => {
+    expect(keepsTransparency(make({ target: "gif" }))).toBe(true)
+    expect(keepsTransparency(make({ target: "webm" }))).toBe(false)
+    expect(
+      keepsTransparency(make({ target: "frames", frameFormat: "webp" }))
+    ).toBe(true)
+    expect(
+      keepsTransparency(make({ target: "sprite", frameFormat: "jpeg" }))
+    ).toBe(false)
+  })
+
+  it("knows whether Custom sets a quality or a number of colours", () => {
+    expect(customIsNumeric(make({ target: "webp" }))).toBe(true)
+    expect(customIsNumeric(make({ target: "mp4" }))).toBe(true)
+    expect(customIsNumeric(make({ target: "frames" }))).toBe(true)
+    expect(customIsNumeric(make({ target: "apng", gifEngine: "best" }))).toBe(
+      false
+    )
+    expect(customIsNumeric(make({ target: "gif" }))).toBe(false)
+    expect(customIsNumeric(make({ target: "gif", gifEngine: "best" }))).toBe(
+      true
+    )
   })
 })
 
@@ -49,6 +102,17 @@ describe("playsFor", () => {
 })
 
 describe("matte", () => {
+  it("fills formats without transparency with white unless a colour is chosen", () => {
+    expect(matte(make({ target: "mp4" }))).toEqual([255, 255, 255])
+    expect(matte(make({ target: "frames", frameFormat: "jpeg" }))).toEqual([
+      255, 255, 255,
+    ])
+    expect(matte(make({ target: "frames", frameFormat: "png" }))).toBeNull()
+    expect(matte(make({ target: "webm", background: "black" }))).toEqual([
+      0, 0, 0,
+    ])
+  })
+
   it("keeps transparency unless a colour is chosen", () => {
     expect(matte(make())).toBeNull()
     expect(matte(make({ background: "white" }))).toEqual([255, 255, 255])
@@ -106,6 +170,34 @@ describe("outputSize", () => {
         make({ resize: "width", resizeValue: 100, rotation: 270 })
       )
     ).toEqual({ width: 100, height: 200 })
+  })
+
+  it("gives video even sides", () => {
+    expect(
+      outputSize({ width: 225, height: 151 }, make({ target: "mp4" }))
+    ).toEqual({
+      width: 224,
+      height: 150,
+    })
+    expect(
+      outputSize({ width: 224, height: 150 }, make({ target: "webm" }))
+    ).toEqual({
+      width: 224,
+      height: 150,
+    })
+    expect(
+      outputSize(
+        { width: 400, height: 200 },
+        make({ target: "mp4", resize: "width", resizeValue: 1 })
+      )
+    ).toEqual({ width: 2, height: 2 })
+    // Animated images keep odd sides.
+    expect(
+      outputSize({ width: 225, height: 151 }, make({ target: "gif" }))
+    ).toEqual({
+      width: 225,
+      height: 151,
+    })
   })
 
   it("never goes below one pixel or above the largest side", () => {
@@ -214,6 +306,75 @@ describe("encodePlan", () => {
     })
   })
 
+  it("maps quality to video", () => {
+    const plan = (change: Partial<AnimationSettings>) =>
+      encodePlan(make({ target: "mp4", ...change }))
+    expect(plan({ quality: "balanced" })).toEqual({
+      kind: "video",
+      container: "mp4",
+      level: "balanced",
+    })
+    expect(plan({ quality: "small" })).toMatchObject({ level: "small" })
+    expect(plan({ quality: "high" })).toMatchObject({ level: "high" })
+    // Video here is never lossless, so Lossless means its best.
+    expect(plan({ quality: "lossless" })).toMatchObject({ level: "high" })
+    expect(
+      encodePlan(make({ target: "webm", quality: "custom", customQuality: 1 }))
+    ).toEqual({
+      kind: "video",
+      container: "webm",
+      level: 0.01,
+    })
+    expect(plan({ quality: "custom", customQuality: 100 })).toMatchObject({
+      level: 0.4,
+    })
+  })
+
+  it("maps quality to frames and sprite sheets", () => {
+    const plan = (change: Partial<AnimationSettings>) =>
+      encodePlan(make({ target: "frames", ...change }))
+    // PNG is always exact.
+    expect(plan({ frameFormat: "png", quality: "small" })).toEqual({
+      kind: "frames",
+      format: "png",
+      lossless: true,
+      quality: 100,
+    })
+    expect(plan({ frameFormat: "webp", quality: "high" })).toMatchObject({
+      lossless: true,
+    })
+    expect(plan({ frameFormat: "webp", quality: "lossless" })).toMatchObject({
+      lossless: true,
+    })
+    expect(plan({ frameFormat: "webp", quality: "balanced" })).toMatchObject({
+      lossless: false,
+      quality: 80,
+    })
+    expect(plan({ frameFormat: "webp", quality: "small" })).toMatchObject({
+      quality: 60,
+    })
+    expect(plan({ frameFormat: "jpeg", quality: "high" })).toMatchObject({
+      lossless: false,
+      quality: 92,
+    })
+    expect(plan({ frameFormat: "jpeg", quality: "lossless" })).toMatchObject({
+      quality: 92,
+    })
+    expect(
+      plan({ frameFormat: "jpeg", quality: "custom", customQuality: 41 })
+    ).toMatchObject({
+      quality: 41,
+    })
+    expect(encodePlan(make({ target: "sprite", frameFormat: "webp" }))).toEqual(
+      {
+        kind: "sprite",
+        format: "webp",
+        lossless: false,
+        quality: 80,
+      }
+    )
+  })
+
   it("maps quality to gifski", () => {
     const plan = (change: Partial<AnimationSettings>) =>
       encodePlan(make({ target: "gif", gifEngine: "best", ...change }))
@@ -307,6 +468,8 @@ describe("settingsProblem", () => {
     expect(
       custom({ target: "apng", gifEngine: "best", customQuality: 999 })
     ).toBeNull()
+    expect(custom({ target: "mp4", customQuality: 0 })).toMatch(/1 to 100/)
+    expect(custom({ target: "sprite", customQuality: 101 })).toMatch(/1 to 100/)
     // Outside Custom neither number matters.
     expect(
       problem({ quality: "high", colours: 1, customQuality: 0 })

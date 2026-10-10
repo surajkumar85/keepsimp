@@ -37,7 +37,7 @@ After one visit to the tools, the whole site works without a connection: every t
 
 Both files in `service-worker/` are plain JavaScript with JSDoc types, because their text is copied into the worker as it is. There is no bundler and no step after the build, so any host that serves the export serves the worker. An earlier version wrote `out/sw.js` after `next build`; Vercel did not publish that file.
 
-- **Saved:** every page, the build files in `.next/static` (scripts, styles, fonts, WebAssembly codecs), and the files in `public/` (images, icons, tutorial posters and captions). This is about 16 MB on disk and about 6 MB to download with Brotli compression.
+- **Saved:** every page, the build files in `.next/static` (scripts, styles, fonts, WebAssembly codecs), and the files in `public/` (images, icons, tutorial posters and captions). This is about 17 MB on disk and about 6 MB to download with Brotli compression.
 - **Not saved:**
   - tutorial videos (29 MB), which stream on demand
   - link-preview images, which only other sites read
