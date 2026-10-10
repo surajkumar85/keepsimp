@@ -199,6 +199,18 @@ test("every tool works offline after one visit", async ({ page }) => {
   expect(
     await sharp(await bytesOf(await pending), { animated: true }).metadata()
   ).toMatchObject({ format: "gif", width: 192, pages: 20 })
+  // Text needs the caption font, which is part of the saved copy too.
+  await page.getByLabel("Top text").fill("Offline")
+  await expect(page.getByTestId("animation-converter")).not.toHaveAttribute(
+    "data-settled",
+    "true"
+  )
+  await expect(page.getByTestId("animation-converter")).toHaveAttribute(
+    "data-settled",
+    "true",
+    { timeout: 150_000 }
+  )
+  await expect(page.getByRole("main").getByRole("alert")).toBeHidden()
 
   await page.goto(`${site.origin}/dashboard/json-formatter/`)
   await replaceEditor(

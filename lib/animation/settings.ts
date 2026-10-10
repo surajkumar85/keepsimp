@@ -6,6 +6,7 @@ import {
   type Size,
 } from "@/lib/image-compressor/geometry"
 import { unknownTokens } from "@/lib/image-resizer/naming"
+import type { CaptionSize, Corner, Filter } from "./effects"
 
 export type Target =
   "gif" | "webp" | "apng" | "mp4" | "webm" | "frames" | "sprite"
@@ -168,6 +169,29 @@ export interface AnimationSettings {
   flipY: boolean
   background: BackgroundChoice
   backgroundColor: string
+  /** A colour filter, and brightness, contrast and saturation from -100 to 100. */
+  filter: Filter
+  brightness: number
+  contrast: number
+  saturation: number
+  /** Seconds of fade at the start and the end; 0 for none. */
+  fadeIn: number
+  fadeOut: number
+  /** Text written across the top and the bottom of every frame; empty for none. */
+  captionTop: string
+  captionBottom: string
+  captionSize: CaptionSize
+  captionColour: "white" | "black" | "custom"
+  captionCustomColour: string
+  captionOutline: boolean
+  captionUppercase: boolean
+  /** Seconds into the result at which the captions appear and disappear; null for the start and the end. */
+  captionFrom: number | null
+  captionUntil: number | null
+  /** Where an added logo or watermark sits, how wide it is (percent of the frame) and how solid (percent). */
+  overlayCorner: Corner
+  overlaySize: number
+  overlayOpacity: number
   pattern: string
 }
 
@@ -205,6 +229,24 @@ export const defaultSettings: AnimationSettings = {
   flipY: false,
   background: "keep",
   backgroundColor: DEFAULT_BACKGROUND,
+  filter: "none",
+  brightness: 0,
+  contrast: 0,
+  saturation: 0,
+  fadeIn: 0,
+  fadeOut: 0,
+  captionTop: "",
+  captionBottom: "",
+  captionSize: "medium",
+  captionColour: "white",
+  captionCustomColour: DEFAULT_BACKGROUND,
+  captionOutline: true,
+  captionUppercase: false,
+  captionFrom: null,
+  captionUntil: null,
+  overlayCorner: "bottom-right",
+  overlaySize: 20,
+  overlayOpacity: 80,
   pattern: DEFAULT_PATTERN,
 }
 
@@ -535,6 +577,37 @@ export function settingsProblem(settings: AnimationSettings): string | null {
     !parseHexColor(settings.backgroundColor)
   )
     return "Enter the background as a hex colour, such as #ffffff."
+  if (
+    [settings.brightness, settings.contrast, settings.saturation].some(
+      (value) => !(value >= -100 && value <= 100)
+    )
+  )
+    return "Set brightness, contrast and saturation from -100 to 100."
+  if (
+    [settings.fadeIn, settings.fadeOut].some(
+      (value) => !(value >= 0 && value <= 10)
+    )
+  )
+    return "Enter a fade from 0 to 10 seconds."
+  if (settings.captionTop.length > 200 || settings.captionBottom.length > 200)
+    return "Keep each caption under 200 characters."
+  if (
+    hasCaption(settings) &&
+    settings.captionColour === "custom" &&
+    !parseHexColor(settings.captionCustomColour)
+  )
+    return "Enter the caption colour as a hex colour, such as #ffffff."
+  const { captionFrom: from, captionUntil: until } = settings
+  if (
+    (from !== null && !(from >= 0)) ||
+    (until !== null && !(until > 0)) ||
+    (from !== null && until !== null && from >= until)
+  )
+    return "Enter caption times in seconds, with the start before the end."
+  if (!(settings.overlaySize >= 5 && settings.overlaySize <= 100))
+    return "Set the overlay's width from 5% to 100%."
+  if (!(settings.overlayOpacity >= 10 && settings.overlayOpacity <= 100))
+    return "Set the overlay's opacity from 10% to 100%."
   const unknown = unknownTokens(settings.pattern)
   if (unknown.length)
     return `The file name has a part we do not know: {${unknown[0]}}.`
@@ -562,10 +635,60 @@ export function bestFits(frames: number, size: Size) {
 }
 
 /** Everything that changes the bytes of a result. File names are applied afterwards. */
-export function processingKey(settings: AnimationSettings, trim: Trim) {
+/**
+ * @param overlay Something that names the added logo or watermark; empty when there is none.
+ */
+export function processingKey(
+  settings: AnimationSettings,
+  trim: Trim,
+  overlay = ""
+) {
   // The file name is applied afterwards, and "shrink" is the tool's own, set while it works.
   const { pattern, shrink, ...rest } = settings
   void pattern
   void shrink
-  return JSON.stringify({ ...rest, trim })
+  // Options for text or an overlay that is not there change nothing.
+  const written = hasCaption(settings)
+  const unwritten = {
+    captionSize: null,
+    captionColour: null,
+    captionOutline: null,
+    captionUppercase: null,
+    captionFrom: null,
+    captionUntil: null,
+  }
+  return JSON.stringify({
+    ...rest,
+    ...(written ? null : unwritten),
+    captionCustomColour:
+      written && settings.captionColour === "custom"
+        ? settings.captionCustomColour
+        : null,
+    ...(overlay
+      ? null
+      : { overlayCorner: null, overlaySize: null, overlayOpacity: null }),
+    trim,
+    overlay,
+  })
+}
+
+/** True when there is caption text to write. */
+export function hasCaption(settings: AnimationSettings) {
+  return Boolean(settings.captionTop.trim() || settings.captionBottom.trim())
+}
+
+/** The colour fades go to and come from: the chosen background, or black. */
+export function fadeColour(
+  settings: AnimationSettings
+): [number, number, number] {
+  return settings.background === "keep" ? [0, 0, 0] : matte(settings)!
+}
+
+/** The colour captions are written in. */
+export function captionColour(
+  settings: AnimationSettings
+): [number, number, number] {
+  if (settings.captionColour === "black") return [0, 0, 0]
+  if (settings.captionColour === "white") return [255, 255, 255]
+  return parseHexColor(settings.captionCustomColour) ?? [255, 255, 255]
 }

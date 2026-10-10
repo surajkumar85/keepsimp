@@ -1,6 +1,6 @@
 # Animation converter
 
-Updated 10 October 2026. Applies to `/dashboard/animation-converter/`. Phases 1 to 3 of four are built; the plan for the last is at the end. It shares codecs with the image tools (`docs/image-compressor.md`) and the batch code with the resizer and converter.
+Updated 10 October 2026. Applies to `/dashboard/animation-converter/`. All four planned phases are built. Animated AVIF was tried and does not ship; the reason is at the end. It shares codecs with the image tools (`docs/image-compressor.md`) and the batch code with the resizer and converter.
 
 ## What it does
 
@@ -43,6 +43,14 @@ Updated 10 October 2026. Applies to `/dashboard/animation-converter/`. Phases 1 
 - **Exact size:** a width and height the picture is fitted inside and centred in, and a switch for whether smaller animations are enlarged.
 - **Length limit:** cuts every animation to a number of seconds, counted from the start of its trim.
 - **Compare formats:** converts the selected animation to every format the browser can write, at the current settings, and lists the real sizes, smallest first, with a "Use" action.
+- **Text:** top text and bottom text, written across every frame.
+  - Small, medium or large; white, black or a custom colour; a contrasting outline; capital letters.
+  - "Show from" and "Until" set the seconds of the result between which the text shows.
+  - Long text wraps. A word wider than the picture is made smaller, down to 8 px.
+  - The face is Outfit at weight 800, the site's own heading font, loaded inside the worker. If it cannot be loaded the system's sans-serif is used.
+- **Colour:** greyscale, sepia and invert filters; brightness, contrast and saturation from -100 to +100, with a reset.
+- **Fade:** in and out, 0.5, 1 or 2 seconds, to black or to the background colour when one is chosen.
+- **Logo or watermark:** one picture painted on every frame of every animation, in a corner or the centre, with a width (5% to 100% of the frame) and an opacity (10% to 100%). It sits a small margin in from its corner, and the margin gives way when the logo is nearly as wide as the frame. SVG is refused with a reason.
 - **Privacy:** everything runs in Web Workers in the browser. Nothing is uploaded.
 
 ## Quality settings
@@ -129,14 +137,16 @@ A preset is shown as selected only while every setting it applies still holds. "
 
 1. The file is opened and its frames are rebuilt in order on one canvas.
 2. Only the frames the result needs are kept, each turned, filled and resized to the output size.
-3. The writer for the chosen format stores the first frame whole. For each later frame it finds the rectangle that changed and stores only that. A frame identical to the one before is not stored; the earlier frame is shown for longer.
-4. GIF and palette APNG mark unchanged pixels inside the rectangle as "show what is already there". A pixel is compared with what it was when last written, so slow fades cannot drift.
+3. Text and effects are applied in a fixed order: colour changes, then the logo, then the text, then fades. Text and logo therefore keep their own colours under a filter, and fade with the picture. Frames that end up identical share one picture, so a held frame is still stored once.
+4. The writer for the chosen format stores the first frame whole. For each later frame it finds the rectangle that changed and stores only that. A frame identical to the one before is not stored; the earlier frame is shown for longer.
+5. GIF and palette APNG mark unchanged pixels inside the rectangle as "show what is already there". A pixel is compared with what it was when last written, so slow fades cannot drift.
 
 See-through GIFs are the exception: GIF cannot erase single pixels, so every frame is stored whole and the canvas is cleared between frames.
 
 ### Limits
 
 - Results hold all their frames in memory at the output size, up to 96 megapixels in total (for example 300 frames at 640 × 480). Beyond that the page asks for a trim, a lower frame rate or a smaller size.
+- Text and effects make a new picture for every frame they change. The work goes one original picture at a time and lets each original go once its frames are done, so originals and results are never all held together.
 - gifski copies every frame, so it takes up to 32 megapixels. Larger results use the fast encoder and the page says so.
 - Animated images can have up to 3,000 frames and 50 megapixels per frame, and files up to 100 MB. Video can be up to 500 MB and 18,000 frames (ten minutes at 30 frames a second).
 - A sprite sheet can be up to 8,192 px on a side.
@@ -151,6 +161,9 @@ Settings and results count plays: 0 is forever, 1 is once. WebP and APNG store t
 - **ImageData and spread.** In a browser an `ImageData`'s `width`, `height` and `data` are getters on the prototype, so `{ ...imageData }` copies nothing. The Node test shim in `tests/node-codecs.ts` now behaves the same way, so unit tests catch code that relies on a spread.
 - **Workers starting together.** When several workers start at the same moment, Safari and sometimes Firefox load some of their scripts past the service worker, which fails offline. `WorkerPool` now starts workers one after another and restarts one that fails to load. This applies to the resizer and converter too.
 - **APNG downloads.** Blobs use the plain `image/png` type. With `image/apng`, Firefox renames the download to `.apng`.
+- **Text in a worker.** Captions are drawn with `OffscreenCanvas` in the worker (`lib/animation/caption.ts`), so they are drawn again at the right size on every try at a file size limit. A worker does not see the page's fonts: the font file is loaded there with `FontFace` and added to the worker's own font set. This works in Chromium, Firefox and WebKit. The build therefore carries the Outfit file twice (32 KB each), once for the page and once for the worker.
+- **Fades and file size.** A fade makes every frame in it different from its neighbours, so the writers can no longer store just a small changed rectangle. Fade amounts are rounded to 32 steps so that slow fades over held frames still share pictures.
+- **Brightness.** The slider adds or removes up to half the range (±127), which leaves detail at both ends; a full ±255 turned most pictures flat white or black well before the end of the slider.
 
 ## Tutorial video
 
@@ -172,9 +185,9 @@ The journal article "GIF, WebP, APNG or video?" (`lib/blog.ts`) is the written g
 
 ## Tests
 
-- **Unit:** one file per area (`timeline`, `compose` with bytes and frame differences, `containers` for the three formats, `settings`, `pipeline` with stand-in codecs).
-- **Real codecs** (`animation.node.test.ts`). Sources are written by other software and results are read back by it: sharp for GIF and WebP, UPNG for APNG. Covers every reader and writer, exact frames, see-through pixels, trim, speed, frame rate, reverse, boomerang, loop counts, resize, rotation, background and gifski.
-- **Browser** (`e2e/animation-converter.spec.ts`), 15 journeys on all five profiles, checking downloaded bytes:
+- **Unit:** one file per area (`timeline`, `compose` with bytes and frame differences, `containers` for the three formats, `settings`, `pipeline` with stand-in codecs, `effects` for colour, fades, painting and text layout, `decorate` for the order and sharing of effects).
+- **Real codecs** (`animation.node.test.ts`). Sources are written by other software and results are read back by it: sharp for GIF and WebP, UPNG for APNG. Covers every reader and writer, exact frames, see-through pixels, trim, speed, frame rate, reverse, boomerang, loop counts, resize, rotation, background and gifski. Text and effects are written into all three formats and read back; a band stands in for the letters, since Node cannot draw text.
+- **Browser** (`e2e/animation-converter.spec.ts`), 17 journeys on all five profiles, checking downloaded bytes:
   - every format, with each frame's content compared with the original
   - trim, speed, reverse, boomerang, frame rate and loop count
   - resize, rotation and background; see-through GIF
@@ -189,15 +202,33 @@ The journal article "GIF, WebP, APNG or video?" (`lib/blog.ts`) is the written g
   - a size limit met with real bytes, a custom limit, and no limit
   - destination presets: exact canvas, no enlarging, sources shown, leaving a preset by hand
   - length limit, crop (shape, keyboard, rotation, reset) and the comparison table
+  - filters, brightness and its reset, fades to black and to a background colour, and a logo: its place, size, opacity, removal and a refused SVG
+  - captions: where they are drawn, their colours and outline, size, capitals, a custom colour, start and end times, a word too long for the picture, video output, axe and 320 px with the options open
   - the tutorial section
-- **Offline:** the tool, its samples and gifski are part of the offline journey in `e2e/offline.spec.ts`.
+- **Offline:** the tool, its samples, gifski and a caption are part of the offline journey in `e2e/offline.spec.ts`.
 
 ## Licences
 
 - `gifski-wasm` 2.2.0 (AGPL-3.0-or-later) and `mediabunny` (MPL-2.0, previously used only to record the tutorials) are the runtime dependencies this tool adds. KeepSimp is AGPL-3.0-only, so the licences are compatible. It is listed in `public/licenses/image-codecs.txt`.
 - `upng-js` (MIT) is a development dependency used only to check APNG output in tests.
 - gifsicle is not used: it is GPL version 2 only.
+- Captions use Outfit (SIL Open Font License 1.1, `public/licenses/outfit.txt`), which the site already ships. The licence allows text set in the font to be used in any picture.
 
-## Later phases
+## Animated AVIF
 
-**Phase 4 — text and effects:** captions, filters, an overlay image, and animated AVIF. Animated AVIF input was planned for phase 2 and moved here: no tool at hand writes an animated AVIF to test against, so it will be built together with AVIF output, which can then serve as the fixture.
+Animated AVIF does not ship, in either direction. The plan allowed it only if it worked in at least two engines, and the test in October 2026 found:
+
+| Step                                                                                                                          | Chromium                                 | Firefox | WebKit |
+| ----------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------- | ------- | ------ |
+| Encode AV1 frames with WebCodecs                                                                                              | yes                                      | yes     | no     |
+| Show our file (an AV1 MP4 rewritten as an `avis` image sequence with a `pict` handler and a primary item) in an image element | no ("Failed to retrieve track metadata") | yes     | yes    |
+
+- Only Firefox can both write the file and show it. Chromium writes a file it cannot read itself, and WebKit cannot encode AV1 at all.
+- There is nothing to check the output against: sharp reads only the first frame of an animated AVIF and cannot write one.
+- Reading animated AVIF needs `ImageDecoder`, and no file from other software was at hand to test with. An animated AVIF that is added is treated as the still picture it also is.
+
+The page does not mention AVIF. WebP is the small animated image format it recommends, and MP4 or WebM where a video will do.
+
+## Not planned
+
+Lottie, cursor (ANI) and other legacy formats, screen recording and sound. Video output is silent.

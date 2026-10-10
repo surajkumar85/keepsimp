@@ -25,6 +25,14 @@ export interface ProcessRequest {
   inputKey: string
   /** Ask for the animation's facts and thumbnails the first time it is seen. */
   describe: boolean
+  overlay: OverlayInput | null
+}
+
+/** A logo or watermark to paint on every frame. */
+export interface OverlayInput {
+  file: Blob
+  /** Changes when the image does; the worker keeps it decoded until then. */
+  key: string
 }
 
 /** Draw one moment of an animation, for the paused preview. */
@@ -60,6 +68,7 @@ export interface CompareRequest {
   settings: AnimationSettings
   trim: Trim
   targets: Target[]
+  overlay: OverlayInput | null
 }
 
 export type CompareResponse =

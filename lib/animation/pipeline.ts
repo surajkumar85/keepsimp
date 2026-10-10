@@ -12,9 +12,22 @@ import {
   type BuildDeps,
 } from "./build"
 import {
+  adjustPixels,
+  adjusts,
+  captionLayout,
+  captionShows,
+  fadeAmount,
+  fadePixels,
+  overlayRect,
+  paintOver,
+  type CaptionLayout,
+} from "./effects"
+import {
   bestFits,
   budgetProblem,
+  captionColour,
   encodePlan,
+  fadeColour,
   layoutFor,
   matte,
   playsFor,
@@ -27,6 +40,8 @@ import { planFrames, sum } from "./timeline"
 import type { Frame } from "./types"
 
 export interface ConvertDeps extends BuildDeps {
+  /** Draw captions on a clear picture the size of a frame. */
+  renderCaption(layout: CaptionLayout): Promise<Pixels>
   resize(
     pixels: Pixels,
     size: { width: number; height: number },
@@ -131,14 +146,125 @@ export async function gatherFrames(
   }))
 }
 
+/**
+ * Apply colour changes, an overlay image, captions and fades to gathered
+ * frames, in that order. Steps that end up looking the same share one picture.
+ *
+ * The list handed in is changed in place: each original picture is let go as
+ * soon as its steps are done, so the originals and the results are never all
+ * held at once.
+ */
+export async function decorate(
+  frames: Frame[],
+  settings: AnimationSettings,
+  overlay: Pixels | null,
+  deps: ConvertDeps
+): Promise<Frame[]> {
+  const size = { width: frames[0].width, height: frames[0].height }
+  const layout = captionLayout(size, {
+    top: settings.captionTop,
+    bottom: settings.captionBottom,
+    size: settings.captionSize,
+    colour: captionColour(settings),
+    outline: settings.captionOutline,
+    uppercase: settings.captionUppercase,
+  })
+  const fading = settings.fadeIn > 0 || settings.fadeOut > 0
+  const adjusting = adjusts(settings)
+  if (!adjusting && !overlay && !layout && !fading) return frames
+
+  deps.progress("Adding text and effects…")
+  const caption = layout ? await deps.renderCaption(layout) : null
+  const place = overlay
+    ? overlayRect(size, overlay, settings.overlayCorner, settings.overlaySize)
+    : null
+  const stamp =
+    overlay && place
+      ? await deps.resize(
+          overlay,
+          place,
+          place.width > overlay.width ? "mitchell" : "lanczos3"
+        )
+      : null
+  const total = sum(frames.map((frame) => frame.duration))
+  const colour = fadeColour(settings)
+
+  // What each step needs, and which steps show the same original picture.
+  const steps: { shown: boolean; amount: number }[] = []
+  const groups = new Map<Uint8ClampedArray, number[]>()
+  let start = 0
+  frames.forEach((frame, index) => {
+    const end = start + frame.duration
+    steps.push({
+      shown:
+        caption !== null &&
+        captionShows(start, end, settings.captionFrom, settings.captionUntil),
+      // Fades are stepped finely enough to look smooth, coarsely enough to share pictures.
+      amount:
+        Math.round(
+          fadeAmount(
+            start,
+            end,
+            total,
+            settings.fadeIn * 1000,
+            settings.fadeOut * 1000
+          ) * 32
+        ) / 32,
+    })
+    const group = groups.get(frame.data)
+    if (group) group.push(index)
+    else groups.set(frame.data, [index])
+    start = end
+  })
+
+  for (const indices of groups.values()) {
+    await deps.checkpoint()
+    const original: Pixels = frames[indices[0]]
+    const finished = new Map<string, Pixels>()
+    for (const index of indices) {
+      const { shown, amount } = steps[index]
+      const key = `${shown}|${amount}`
+      let pixels = finished.get(key)
+      if (!pixels) {
+        pixels = adjusting ? adjustPixels(original, settings) : original
+        if (stamp && place)
+          pixels = paintOver(
+            pixels,
+            // A resampler may hand back an ImageData; only these fields are read.
+            { data: stamp.data, width: stamp.width, height: stamp.height },
+            place.x,
+            place.y,
+            settings.overlayOpacity / 100
+          )
+        if (shown) pixels = paintOver(pixels, caption!)
+        if (amount < 1) pixels = fadePixels(pixels, colour, amount)
+        finished.set(key, pixels)
+      }
+      frames[index] = {
+        data: pixels.data,
+        width: pixels.width,
+        height: pixels.height,
+        duration: frames[index].duration,
+      }
+    }
+  }
+  return frames
+}
+
 /** Convert one opened animation with the settings exactly as given. */
 async function convertOnce(
   source: Source,
   settings: AnimationSettings,
   trim: Trim,
-  deps: ConvertDeps
+  deps: ConvertDeps,
+  overlay: Pixels | null
 ): Promise<Converted> {
-  const frames = await gatherFrames(source, settings, trim, deps)
+  const frames = await decorate(
+    await gatherFrames(source, settings, trim, deps),
+    settings,
+    overlay,
+    deps
+  )
   const { width, height } = frames[0]
   const plays = playsFor(settings)
   let plan = encodePlan(settings)
@@ -215,10 +341,12 @@ export async function convertAnimation(
   source: Source,
   settings: AnimationSettings,
   trim: Trim,
-  deps: ConvertDeps
+  deps: ConvertDeps,
+  /** A logo or watermark to paint on every frame. */
+  overlay: Pixels | null = null
 ): Promise<Converted> {
   const limit = settings.sizeLimit
-  if (limit === null) return convertOnce(source, settings, trim, deps)
+  if (limit === null) return convertOnce(source, settings, trim, deps, overlay)
   const fitted = await fitLadder(LADDER.length, limit, async (index, tries) => {
     const label = `Fitting under ${sizeText(limit)} · try ${tries}`
     deps.progress(label)
@@ -226,7 +354,8 @@ export async function convertAnimation(
       source,
       applyLevel(settings, LADDER[index]),
       trim,
-      { ...deps, progress: (step) => deps.progress(`${label} · ${step}`) }
+      { ...deps, progress: (step) => deps.progress(`${label} · ${step}`) },
+      overlay
     )
     return { result, bytes: result.bytes.length }
   })

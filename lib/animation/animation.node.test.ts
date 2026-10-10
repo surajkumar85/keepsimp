@@ -394,6 +394,80 @@ describe("timing and shape", () => {
   })
 })
 
+describe("text and effects", () => {
+  // Node has no text drawing; a band stands in for the letters.
+  const withText = createDeps(
+    undefined,
+    undefined,
+    undefined,
+    async (layout) => {
+      const data = new Uint8ClampedArray(layout.width * layout.height * 4)
+      for (let y = layout.margin; y < layout.margin + layout.fontSize; y++)
+        for (let x = layout.margin; x < layout.width - layout.margin; x++)
+          data.set([...layout.colour, 255], (y * layout.width + x) * 4)
+      return { data, width: layout.width, height: layout.height }
+    }
+  )
+  const pixel = (frame: ArrayLike<number>, x: number, y: number) =>
+    Array.from(
+      { length: 4 },
+      (_, channel) => frame[(y * WIDTH + x) * 4 + channel]
+    )
+
+  it("writes adjusted colours, a logo, text and fades into every format", async () => {
+    const file = await sourceFile("apng", scene(4))
+    const logo = {
+      data: new Uint8ClampedArray(4 * 4 * 4).map((_, index) =>
+        index % 4 === 1 ? 0 : 255
+      ),
+      width: 4,
+      height: 4,
+    }
+    for (const target of ["apng", "webp", "gif"] as const) {
+      const result = await convertAnimation(
+        openAnimation(file, withText),
+        {
+          ...defaultSettings,
+          target,
+          quality: "lossless",
+          filter: "invert",
+          captionTop: "Hello",
+          captionColour: "black",
+          captionUntil: 0.16,
+          fadeOut: 0.08,
+          overlayCorner: "bottom-left",
+          overlaySize: 25,
+          overlayOpacity: 100,
+        },
+        noTrim,
+        withText,
+        logo
+      )
+      const back = await readBack(target, result.bytes)
+      expect(back.delays, target).toEqual([80, 80, 80, 80])
+      // Enlarging the logo moves a flat colour by a step; GIF picks from 255 colours.
+      const slack = target === "gif" ? 6 : 1
+      const near = (found: number[], wanted: number[], label: string) =>
+        expect(worst(found, wanted), `${target} ${label}`).toBeLessThanOrEqual(
+          slack
+        )
+      // The backdrop, [20, 76, 120] on this row, inverted.
+      near(pixel(back.frames[0], 40, 12), [235, 179, 135, 255], "backdrop")
+      // The magenta logo, a 16 px square 2 px in from the bottom left.
+      near(pixel(back.frames[0], 2, 30), [255, 0, 255, 255], "logo")
+      near(pixel(back.frames[2], 17, 45), [255, 0, 255, 255], "logo corner")
+      near(pixel(back.frames[0], 18, 46), [235, 115, 135, 255], "beside it")
+      // Text for the first two frames only: a black band 8 px tall.
+      near(pixel(back.frames[0], 30, 4), [0, 0, 0, 255], "text")
+      near(pixel(back.frames[1], 30, 4), [0, 0, 0, 255], "text")
+      near(pixel(back.frames[2], 30, 4), [235, 195, 135, 255], "no text")
+      // The last frame has faded to black, logo and all.
+      near(pixel(back.frames[3], 40, 12), [0, 0, 0, 255], "faded")
+      near(pixel(back.frames[3], 2, 30), [0, 0, 0, 255], "faded logo")
+    }
+  })
+})
+
 describe("gifski", () => {
   it("writes a GIF with our timing and loop count", async () => {
     const frames = scene(5)

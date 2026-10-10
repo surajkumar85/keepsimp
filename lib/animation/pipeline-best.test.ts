@@ -31,6 +31,9 @@ const deps: ConvertDeps = {
   encodeStill: async () => new Uint8Array(0),
   encodeVideo: async () => ({ bytes: new Uint8Array(0), frames: 0 }),
   resize: async (pixels) => pixels,
+  renderCaption: async () => {
+    throw new Error("no text must be drawn")
+  },
   checkpoint: async () => {},
   progress: () => {},
 }

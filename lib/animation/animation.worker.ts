@@ -12,6 +12,7 @@ import { sniffFormat } from "@/lib/image-compressor/formats"
 import { clampCrop, orientedSize } from "@/lib/image-compressor/geometry"
 import { extractOriented } from "@/lib/image-compressor/pixels"
 import type { Pixels } from "@/lib/image-compressor/ssim"
+import { renderCaption } from "./caption"
 import { createDeps } from "./deps"
 import { convertAnimation } from "./pipeline"
 import type {
@@ -19,6 +20,7 @@ import type {
   AnimationResponse,
   CompareRequest,
   CompareResponse,
+  OverlayInput,
   ProcessRequest,
   SourceInput,
   ViewRequest,
@@ -61,15 +63,19 @@ const readable = (error: unknown) => {
     : UNREADABLE
 }
 
-/** One still image of a set, decoded with the image tools' own readers. */
-async function loadStill(file: Blob) {
+/** One still image, decoded with the image tools' own readers. */
+async function loadStill(file: Blob, use: "a frame" | "a logo" = "a frame") {
   const head = new Uint8Array(await file.slice(0, 1024 * 1024).arrayBuffer())
   const format = sniffFormat(head)
   if (!format)
-    throw new Error("One of these files is not an image we can read.")
+    throw new Error(
+      use === "a frame"
+        ? "One of these files is not an image we can read."
+        : "The logo is not an image we can read."
+    )
   // SVG needs the page to draw it, which a worker cannot ask for.
   if (format === "svg")
-    throw new Error("SVG cannot be used as a frame. Convert it to PNG first.")
+    throw new Error(`SVG cannot be used as ${use}. Convert it to PNG first.`)
   const pixels = await decodeImageFile(file, format)
   if (tooLarge(pixels.width, pixels.height))
     throw new Error("Use images with at most 50 megapixels.")
@@ -108,6 +114,21 @@ async function open(input: SourceInput): Promise<Source> {
     throw new Error("Use an animation with at most 50 megapixels per frame.")
   }
   return source
+}
+
+/** The logo or watermark this worker last decoded. */
+let stamp: { key: string; pixels: Pixels } | null = null
+
+async function overlayPixels(overlay: OverlayInput | null) {
+  if (!overlay) return null
+  if (stamp?.key !== overlay.key) {
+    const pixels = await loadStill(overlay.file, "a logo")
+    stamp = {
+      key: overlay.key,
+      pixels: { data: pixels.data, width: pixels.width, height: pixels.height },
+    }
+  }
+  return stamp.pixels
 }
 
 const copy = (pixels: Pixels): Pixels => ({
@@ -213,7 +234,8 @@ async function process(job: ProcessRequest) {
       source,
       job.settings,
       job.trim,
-      createDeps(checkpoint, progress, encodeVideo)
+      createDeps(checkpoint, progress, encodeVideo, renderCaption),
+      await overlayPixels(job.overlay)
     )
     await checkpoint()
     // Copy: the bytes may be a view of an encoder's own memory.
@@ -243,6 +265,7 @@ async function compare(job: CompareRequest) {
   let source: Source | null = null
   try {
     source = await open(job.input)
+    const overlay = await overlayPixels(job.overlay)
     const results = []
     for (const target of job.targets) {
       progress(`Trying ${targets[target].label}…`)
@@ -255,8 +278,10 @@ async function compare(job: CompareRequest) {
           createDeps(
             async () => {},
             () => {},
-            encodeVideo
-          )
+            encodeVideo,
+            renderCaption
+          ),
+          overlay
         )
         results.push({ target, bytes: result.bytes.length })
       } catch (error) {

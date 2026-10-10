@@ -3,6 +3,7 @@ import {
   BEST_BUDGET,
   bestFits,
   budgetProblem,
+  captionColour,
   customIsNumeric,
   defaultSettings,
   frameFormats,
@@ -11,7 +12,9 @@ import {
   MAX_SIZE_LIMIT,
   MIN_SIZE_LIMIT,
   encodePlan,
+  fadeColour,
   FRAME_BUDGET,
+  hasCaption,
   losslessApplies,
   matte,
   MAX_EDGE,
@@ -676,6 +679,167 @@ describe("budgets", () => {
       false
     )
     expect(bestFits(BEST_BUDGET / 100, { width: 10, height: 10 })).toBe(true)
+  })
+})
+
+describe("text, effects and overlay settings", () => {
+  const problem = (change: Partial<AnimationSettings>) =>
+    settingsProblem(make(change))
+
+  it("checks the colour adjustments and fades", () => {
+    expect(
+      problem({ brightness: -100, contrast: 100, saturation: 0 })
+    ).toBeNull()
+    expect(problem({ brightness: 101 })).toMatch(/-100 to 100/)
+    expect(problem({ contrast: -101 })).toMatch(/-100 to 100/)
+    expect(problem({ saturation: NaN })).toMatch(/-100 to 100/)
+    expect(problem({ fadeIn: 10, fadeOut: 0.5 })).toBeNull()
+    expect(problem({ fadeIn: -1 })).toMatch(/0 to 10 seconds/)
+    expect(problem({ fadeOut: 11 })).toMatch(/0 to 10 seconds/)
+    expect(problem({ fadeOut: NaN })).toMatch(/0 to 10 seconds/)
+  })
+
+  it("checks captions: their length, colour and times", () => {
+    expect(problem({ captionTop: "x".repeat(200) })).toBeNull()
+    expect(problem({ captionTop: "x".repeat(201) })).toMatch(/200 characters/)
+    expect(problem({ captionBottom: "x".repeat(201) })).toMatch(
+      /200 characters/
+    )
+    const custom = {
+      captionColour: "custom",
+      captionCustomColour: "teal",
+    } as const
+    // The colour only matters when there is something to write.
+    expect(problem(custom)).toBeNull()
+    expect(problem({ ...custom, captionTop: " " })).toBeNull()
+    expect(problem({ ...custom, captionTop: "Hi" })).toMatch(/hex colour/)
+    expect(problem({ ...custom, captionBottom: "Hi" })).toMatch(/hex colour/)
+    expect(
+      problem({ ...custom, captionCustomColour: "#008080", captionTop: "Hi" })
+    ).toBeNull()
+
+    expect(problem({ captionFrom: 0, captionUntil: 0.5 })).toBeNull()
+    expect(problem({ captionFrom: 1 })).toBeNull()
+    expect(problem({ captionUntil: 2 })).toBeNull()
+    expect(problem({ captionFrom: -1 })).toMatch(/start before the end/)
+    expect(problem({ captionFrom: NaN })).toMatch(/start before the end/)
+    expect(problem({ captionUntil: 0 })).toMatch(/start before the end/)
+    expect(problem({ captionUntil: NaN })).toMatch(/start before the end/)
+    expect(problem({ captionFrom: 2, captionUntil: 2 })).toMatch(
+      /start before the end/
+    )
+  })
+
+  it("checks the overlay's size and opacity", () => {
+    expect(problem({ overlaySize: 5, overlayOpacity: 10 })).toBeNull()
+    expect(problem({ overlaySize: 100, overlayOpacity: 100 })).toBeNull()
+    expect(problem({ overlaySize: 4 })).toMatch(/5% to 100%/)
+    expect(problem({ overlaySize: 101 })).toMatch(/5% to 100%/)
+    expect(problem({ overlaySize: NaN })).toMatch(/5% to 100%/)
+    expect(problem({ overlayOpacity: 9 })).toMatch(/10% to 100%/)
+    expect(problem({ overlayOpacity: 101 })).toMatch(/10% to 100%/)
+    expect(problem({ overlayOpacity: NaN })).toMatch(/10% to 100%/)
+  })
+
+  it("knows when there is text, and its colour", () => {
+    expect(hasCaption(make())).toBe(false)
+    expect(hasCaption(make({ captionTop: "  " }))).toBe(false)
+    expect(hasCaption(make({ captionTop: "a" }))).toBe(true)
+    expect(hasCaption(make({ captionBottom: "b" }))).toBe(true)
+    expect(captionColour(make())).toEqual([255, 255, 255])
+    expect(captionColour(make({ captionColour: "black" }))).toEqual([0, 0, 0])
+    expect(
+      captionColour(
+        make({ captionColour: "custom", captionCustomColour: "#102030" })
+      )
+    ).toEqual([16, 32, 48])
+    // The page refuses a colour it cannot read; white is only a guard.
+    expect(
+      captionColour(
+        make({ captionColour: "custom", captionCustomColour: "nope" })
+      )
+    ).toEqual([255, 255, 255])
+  })
+
+  it("fades to black unless a background colour is chosen", () => {
+    expect(fadeColour(make())).toEqual([0, 0, 0])
+    // A video is filled with white, but still fades to black.
+    expect(fadeColour(make({ target: "mp4" }))).toEqual([0, 0, 0])
+    expect(fadeColour(make({ background: "white" }))).toEqual([255, 255, 255])
+    expect(
+      fadeColour(make({ background: "custom", backgroundColor: "#ff0000" }))
+    ).toEqual([255, 0, 0])
+  })
+
+  it("converts again only when an option that is in use changes", () => {
+    const base = processingKey(make(), noTrim)
+    // Options for text that is not written.
+    for (const change of [
+      { captionSize: "large" },
+      { captionColour: "black" },
+      { captionColour: "custom", captionCustomColour: "#123456" },
+      { captionOutline: false },
+      { captionUppercase: true },
+      { captionFrom: 1 },
+      { captionUntil: 2 },
+      // Options for an overlay that is not there.
+      { overlayCorner: "centre" },
+      { overlaySize: 50 },
+      { overlayOpacity: 30 },
+    ] as Partial<AnimationSettings>[])
+      expect(processingKey(make(change), noTrim), JSON.stringify(change)).toBe(
+        base
+      )
+    for (const change of [
+      { filter: "sepia" },
+      { brightness: 10 },
+      { contrast: 10 },
+      { saturation: 10 },
+      { fadeIn: 1 },
+      { fadeOut: 1 },
+      { captionTop: "Hi" },
+      { captionBottom: "Hi" },
+    ] as Partial<AnimationSettings>[])
+      expect(
+        processingKey(make(change), noTrim),
+        JSON.stringify(change)
+      ).not.toBe(base)
+
+    const written = make({ captionTop: "Hi" })
+    const withText = processingKey(written, noTrim)
+    for (const change of [
+      { captionSize: "large" },
+      { captionColour: "black" },
+      { captionOutline: false },
+      { captionUppercase: true },
+      { captionFrom: 1 },
+      { captionUntil: 2 },
+    ] as Partial<AnimationSettings>[])
+      expect(
+        processingKey({ ...written, ...change }, noTrim),
+        JSON.stringify(change)
+      ).not.toBe(withText)
+    // The custom colour counts only while "Custom" is chosen.
+    expect(
+      processingKey({ ...written, captionCustomColour: "#123456" }, noTrim)
+    ).toBe(withText)
+    const custom = { ...written, captionColour: "custom" as const }
+    expect(
+      processingKey({ ...custom, captionCustomColour: "#123456" }, noTrim)
+    ).not.toBe(processingKey(custom, noTrim))
+
+    const stamped = processingKey(make(), noTrim, "logo-1")
+    expect(stamped).not.toBe(base)
+    expect(processingKey(make(), noTrim, "logo-2")).not.toBe(stamped)
+    for (const change of [
+      { overlayCorner: "centre" },
+      { overlaySize: 50 },
+      { overlayOpacity: 30 },
+    ] as Partial<AnimationSettings>[])
+      expect(
+        processingKey(make(change), noTrim, "logo-1"),
+        JSON.stringify(change)
+      ).not.toBe(stamped)
   })
 })
 

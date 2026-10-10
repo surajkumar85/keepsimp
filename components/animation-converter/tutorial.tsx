@@ -8,7 +8,7 @@ const content: TutorialContent = {
   },
   name: "How to use the KeepSimp animation converter",
   description:
-    "Convert animated GIF, WebP and APNG files and short videos in your browser, build animations from images, and export frames, with trimming, speed, looping and a frame-by-frame comparison.",
+    "Convert animated GIF, WebP and APNG files and short videos in your browser, build animations from images, and export frames, with trimming, speed, looping, captions, filters, a watermark and a frame-by-frame comparison.",
   intro:
     "Watch the tour, or follow the same steps below. Every option is explained underneath.",
   steps: [
@@ -117,6 +117,21 @@ const content: TutorialContent = {
       term: "Background",
       detail:
         "See-through areas are kept by default. GIF pixels are either solid or clear, so soft edges turn hard; filling the background with a colour avoids that.",
+    },
+    {
+      term: "Text",
+      detail:
+        "Top text and bottom text are written across every frame, centred, in a bold face with a contrasting outline so they read on any picture. Choose the size and colour, capitals, and the seconds between which the text shows. Long text wraps, and a word wider than the picture is made smaller.",
+    },
+    {
+      term: "Colour and fades",
+      detail:
+        "Greyscale, sepia and invert are filters; brightness, contrast and saturation run from -100 to +100. Fade in and fade out blend the start and the end with black, or with the background colour when one is chosen. A fade makes every frame in it different, so the file grows.",
+    },
+    {
+      term: "Logo or watermark",
+      detail:
+        "Add a picture, such as a PNG with a see-through background, and it is painted on every frame of every animation in a corner or the centre, at a width and opacity you set. Text is drawn over it. SVG is not accepted; convert it to PNG first.",
     },
     {
       term: "Limits and privacy",

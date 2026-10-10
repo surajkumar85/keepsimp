@@ -14,16 +14,21 @@ import type { SourceDeps } from "./source"
 
 /**
  * @param encodeVideo The browser's video encoder; left out in Node, where there is none.
+ * @param renderCaption The browser's text drawing; a stand-in is passed in Node.
  */
 export function createDeps(
   checkpoint: () => Promise<void> = async () => {},
   progress: (label: string) => void = () => {},
   encodeVideo: ConvertDeps["encodeVideo"] = async () => {
     throw new Error("Video cannot be written here.")
+  },
+  renderCaption: ConvertDeps["renderCaption"] = async () => {
+    throw new Error("Text cannot be drawn here.")
   }
 ): ConvertDeps & SourceDeps {
   return {
     encodeVideo,
+    renderCaption,
     encodeStill: async (pixels, format, options) =>
       format === "webp"
         ? encodeWebpStill(pixels, options)

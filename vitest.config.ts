@@ -28,6 +28,7 @@ export default defineConfig({
         "lib/animation/build.ts",
         "lib/animation/compose.ts",
         "lib/animation/delta.ts",
+        "lib/animation/effects.ts",
         "lib/animation/pipeline.ts",
         "lib/animation/settings.ts",
         "lib/animation/source.ts",

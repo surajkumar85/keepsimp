@@ -527,6 +527,289 @@ test("plays, pauses on a frame and compares it before and after", async ({
   await expect(player).toHaveAttribute("data-playing", "true")
 })
 
+test("changes colour, fades in and out and paints a logo on every frame", async ({
+  page,
+}) => {
+  await page.goto(ROUTE)
+  await upload(page, await animation("gif", "walk.gif"))
+  await chip(page, "Format", "APNG").click()
+  await chip(page, "Quality", "Lossless").click()
+  const plain = await result(page, "apng")
+  const pixel = (frame: Buffer, x: number, y: number) => [
+    ...frame.subarray((y * WIDTH + x) * 4, (y * WIDTH + x) * 4 + 4),
+  ]
+  const near = (found: number[], wanted: number[], label: string) =>
+    found.forEach((value, index) =>
+      expect(Math.abs(value - wanted[index]), label).toBeLessThanOrEqual(3)
+    )
+
+  // Greyscale: no pixel has any colour left, and the square still moves.
+  let file = await choose(page, "Filter", "Greyscale").then(() =>
+    result(page, "apng")
+  )
+  expect(file.frames).toHaveLength(6)
+  for (const frame of file.frames)
+    for (let at = 0; at < frame.length; at += 4)
+      if (frame[at] !== frame[at + 1] || frame[at] !== frame[at + 2])
+        throw new Error(`a coloured pixel at byte ${at}`)
+  // The red square is a darker grey than the backdrop beside it.
+  near(pixel(file.frames[0], 8, 24), [78, 78, 78, 255], "grey square")
+  expect(pixel(file.frames[0], 8, 24)).not.toEqual(pixel(file.frames[5], 8, 24))
+
+  await choose(page, "Filter", "Invert")
+  file = await result(page, "apng")
+  near(pixel(file.frames[0], 0, 0), [235, 195, 135, 255], "inverted backdrop")
+  near(pixel(file.frames[0], 8, 24), [35, 215, 215, 255], "inverted square")
+
+  // Brightness is a slider that answers to the keyboard; "Reset colour" undoes it all.
+  const brightness = page.getByRole("slider", { name: /^Brightness/ })
+  await brightness.focus()
+  await page.keyboard.press("End")
+  await expect(page.getByText("+100", { exact: true })).toBeVisible()
+  await page.getByRole("button", { name: "Reset colour" }).click()
+  await expect(chip(page, "Filter", "None")).toBeChecked()
+  await expect(brightness).toHaveValue("0")
+  await expect(page.getByRole("button", { name: "Reset colour" })).toBeHidden()
+  file = await result(page, "apng")
+  expect(file.frames.map((frame) => pixel(frame, 0, 0))).toEqual(
+    plain.frames.map((frame) => pixel(frame, 0, 0))
+  )
+
+  // A fade in starts from black and gets lighter; a fade out ends in black.
+  await choose(page, "Fade in", "0.5 s")
+  file = await result(page, "apng")
+  expect(file.delays).toEqual([80, 80, 80, 80, 80, 80])
+  expect(pixel(file.frames[0], 0, 0)).toEqual([0, 0, 0, 255])
+  expect(pixel(file.frames[0], 8, 24)).toEqual([0, 0, 0, 255])
+  const blues = file.frames.map((frame) => pixel(frame, 0, 0)[2])
+  for (let index = 1; index < blues.length; index++)
+    expect(blues[index], `frame ${index}`).toBeGreaterThan(blues[index - 1])
+  expect(blues[5]).toBeLessThan(pixel(plain.frames[5], 0, 0)[2])
+
+  await choose(page, "Fade in", "Off")
+  await choose(page, "Fade out", "1 s")
+  // With a background colour chosen, that is what the picture fades to.
+  await choose(page, "Background", "White")
+  file = await result(page, "apng")
+  expect(pixel(file.frames[5], 0, 0)).toEqual([255, 255, 255, 255])
+  expect(pixel(file.frames[0], 0, 0)[2]).toBeGreaterThan(
+    pixel(plain.frames[0], 0, 0)[2]
+  )
+  await choose(page, "Fade out", "Off")
+  await choose(page, "Background", "Keep transparency")
+
+  // A logo: an SVG is refused with a reason, a PNG is painted on every frame.
+  const logoInput = page.getByLabel("Choose a logo or watermark image")
+  await logoInput.setInputFiles({
+    name: "mark.svg",
+    mimeType: "image/svg+xml",
+    buffer: Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"/>'),
+  })
+  await expect(page.getByRole("main").getByRole("alert")).toContainText(
+    "SVG cannot be used as a logo"
+  )
+  await expect(page.getByRole("radiogroup", { name: "Position" })).toBeHidden()
+  await logoInput.setInputFiles({
+    name: "mark.png",
+    mimeType: "image/png",
+    buffer: await sharp({
+      create: {
+        width: 8,
+        height: 8,
+        channels: 4,
+        background: { r: 255, g: 0, b: 255, alpha: 1 },
+      },
+    })
+      .png()
+      .toBuffer(),
+  })
+  await expect(page.getByRole("main").getByRole("alert")).toBeHidden()
+  await expect(page.getByText("mark.png")).toBeVisible()
+  await expect(chip(page, "Position", "Bottom right")).toBeChecked()
+  await settled(page)
+  await choose(page, "Position", "Top left")
+  await page.getByLabel("Width (%)").fill("50")
+  await page.getByLabel("Opacity (%)").fill("100")
+  file = await result(page, "apng")
+  // Half of 64 px is a 32 px square, 2 px in from the corner.
+  for (const frame of file.frames) {
+    // Enlarging the logo may move a flat colour by a step.
+    near(pixel(frame, 2, 2), [255, 0, 255, 255], "logo corner")
+    near(pixel(frame, 33, 33), [255, 0, 255, 255], "logo far corner")
+    expect(pixel(frame, 1, 1)).toEqual(pixel(plain.frames[0], 1, 1))
+    expect(pixel(frame, 34, 34)).toEqual(pixel(plain.frames[0], 34, 34))
+  }
+  await page.getByLabel("Opacity (%)").fill("50")
+  file = await result(page, "apng")
+  const under = pixel(plain.frames[0], 2, 2)
+  near(
+    pixel(file.frames[0], 2, 2),
+    [(255 + under[0]) / 2, under[1] / 2, (255 + under[2]) / 2, 255],
+    "half-solid logo"
+  )
+  await page.getByLabel("Opacity (%)").fill("5")
+  await expect(page.getByRole("main").getByRole("alert")).toContainText(
+    "10% to 100%"
+  )
+  await page.getByLabel("Opacity (%)").fill("50")
+
+  await page.getByRole("button", { name: "Remove the logo" }).click()
+  await expect(page.getByText("mark.png")).toBeHidden()
+  file = await result(page, "apng")
+  expect(pixel(file.frames[0], 2, 2)).toEqual(pixel(plain.frames[0], 2, 2))
+})
+
+test("writes captions at the top and bottom, for the times asked", async ({
+  page,
+}) => {
+  const errors: string[] = []
+  page.on("pageerror", (error) => errors.push(error.message))
+  const [width, height] = [WIDTH * 3, HEIGHT * 3]
+  await page.goto(ROUTE)
+  await upload(page, await animation("gif", "walk.gif", { scale: 3 }))
+  await chip(page, "Format", "APNG").click()
+  await chip(page, "Quality", "Lossless").click()
+  const plain = await result(page, "apng")
+  /** Rows that differ from the plain result, and how light and dark the changed pixels get. */
+  const written = (frame: Buffer, index: number) => {
+    const rows = new Set<number>()
+    let lightest = 0
+    let darkest = 255
+    let count = 0
+    for (let at = 0; at < frame.length; at += 4) {
+      if (
+        frame[at] === plain.frames[index][at] &&
+        frame[at + 1] === plain.frames[index][at + 1] &&
+        frame[at + 2] === plain.frames[index][at + 2]
+      )
+        continue
+      count++
+      rows.add(Math.floor(at / 4 / width))
+      const level = Math.max(frame[at], frame[at + 1], frame[at + 2])
+      lightest = Math.max(lightest, level)
+      darkest = Math.min(darkest, level)
+    }
+    const list = [...rows]
+    return {
+      count,
+      top: Math.min(height, ...list),
+      bottom: Math.max(-1, ...list),
+      lightest,
+      darkest,
+    }
+  }
+
+  // Options for the text appear once there is some.
+  await expect(page.getByRole("radiogroup", { name: "Text size" })).toBeHidden()
+  await page.getByLabel("Top text").fill("Hello")
+  await expect(
+    page.getByRole("radiogroup", { name: "Text size" })
+  ).toBeVisible()
+  let file = await result(page, "apng")
+  expect([file.width, file.height]).toEqual([width, height])
+  const top = file.frames.map(written)
+  for (const [index, frame] of top.entries()) {
+    // White letters with a black line around them, in the top quarter only.
+    expect(frame.count, `frame ${index}`).toBeGreaterThan(150)
+    expect(frame.top, `frame ${index}`).toBeGreaterThanOrEqual(2)
+    expect(frame.bottom, `frame ${index}`).toBeLessThan(height / 4)
+    expect(frame.lightest, `frame ${index}`).toBe(255)
+    expect(frame.darkest, `frame ${index}`).toBe(0)
+  }
+
+  await page.getByLabel("Bottom text").fill("the end")
+  file = await result(page, "apng")
+  const both = written(file.frames[0], 0)
+  expect(both.top).toBe(top[0].top)
+  expect(both.bottom).toBeGreaterThan((height * 3) / 4)
+  expect(both.bottom).toBeLessThan(height - 2)
+
+  // Capitals and a larger size cover more of the picture.
+  await page.getByRole("switch", { name: "Capital letters" }).click()
+  const capitals = written((await result(page, "apng")).frames[0], 0)
+  expect(capitals.count).toBeGreaterThan(both.count)
+  await choose(page, "Text size", "Large")
+  const large = written((await result(page, "apng")).frames[0], 0)
+  expect(large.count).toBeGreaterThan(capitals.count)
+  await choose(page, "Text size", "Small")
+  const small = written((await result(page, "apng")).frames[0], 0)
+  expect(small.count).toBeLessThan(capitals.count)
+
+  // Black letters get a white line; without the outline nothing light is drawn.
+  await page.getByLabel("Bottom text").fill("")
+  await choose(page, "Text colour", "Black")
+  let black = written((await result(page, "apng")).frames[0], 0)
+  expect([black.darkest, black.lightest]).toEqual([0, 255])
+  await page.getByRole("switch", { name: "Outline" }).click()
+  black = written((await result(page, "apng")).frames[0], 0)
+  expect(black.darkest).toBe(0)
+  expect(black.lightest).toBeLessThan(200)
+  expect(black.count).toBeGreaterThan(20)
+
+  // A custom colour is used as chosen.
+  await choose(page, "Text colour", "Custom")
+  await page.getByLabel("Custom text colour").fill("#ff00ff")
+  file = await result(page, "apng")
+  let magenta = 0
+  for (let at = 0; at < file.frames[0].length; at += 4)
+    if (
+      file.frames[0][at] === 255 &&
+      file.frames[0][at + 1] === 0 &&
+      file.frames[0][at + 2] === 255
+    )
+      magenta++
+  expect(magenta).toBeGreaterThan(10)
+
+  // Shown from 0.2 s until 0.3 s: of six 80 ms frames, the third and fourth.
+  await page.getByLabel("Show from (s)").fill("0.2")
+  await page.getByLabel("Until (s)").fill("0.3")
+  file = await result(page, "apng")
+  expect(
+    file.frames.map((frame, index) => written(frame, index).count > 0)
+  ).toEqual([false, false, true, true, false, false])
+  await page.getByLabel("Until (s)").fill("0.1")
+  await expect(page.getByRole("main").getByRole("alert")).toContainText(
+    "start before the end"
+  )
+  await page.getByLabel("Until (s)").fill("")
+  file = await result(page, "apng")
+  expect(
+    file.frames.map((frame, index) => written(frame, index).count > 0)
+  ).toEqual([false, false, true, true, true, true])
+
+  // A very long word is made smaller instead of running off the picture.
+  await page.getByLabel("Show from (s)").fill("")
+  await page.getByLabel("Top text").fill("Supercalifragilisticexpialidocious")
+  const long = written((await result(page, "apng")).frames[0], 0)
+  expect(long.count).toBeGreaterThan(20)
+  expect(long.bottom).toBeLessThan(height / 4)
+  for (let row = 0; row < height; row++)
+    for (const column of [0, width - 1]) {
+      const at = (row * width + column) * 4
+      expect(file.frames[0][at + 3]).toBe(255)
+    }
+
+  // The open options are accessible and fit a narrow screen.
+  const results = await new AxeBuilder({ page })
+    .withTags(["wcag2a", "wcag2aa", "wcag21aa"])
+    .analyze()
+  expect(results.violations).toEqual([])
+  await page.setViewportSize({ width: 320, height: 740 })
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth
+    )
+  ).toBe(true)
+
+  // Text also goes onto video, where the browser can write it.
+  if (await chip(page, "Format", "MP4").isVisible()) {
+    await chip(page, "Format", "MP4").click()
+    await settled(page)
+    await expect(page.getByTestId("facts")).toContainText("MP4 · 192 × 144")
+  }
+  expect(errors).toEqual([])
+})
+
 test("stays accessible, keyboard-friendly, local and responsive", async ({
   page,
 }) => {

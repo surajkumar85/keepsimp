@@ -78,6 +78,7 @@ import { savingsPercent } from "@/lib/image-compressor/quality"
 import { fileName, uniqueNames } from "@/lib/image-resizer/naming"
 import { createZip } from "@/lib/image-resizer/zip"
 import { DestinationPanel } from "./destination-panel"
+import { EffectsPanel } from "./effects-panel"
 import { FormatPanel, type ComparisonState } from "./format-panel"
 import { FrameList, type StillFrame } from "./frame-list"
 import { OptionsPanel } from "./options-panel"
@@ -115,6 +116,14 @@ interface Facts {
   durations: number[]
   plays: number
   strip: ImageBitmap | null
+}
+
+/** An image painted on every frame. */
+interface Overlay {
+  file: File
+  /** Names this choice, so results made with another are out of date. */
+  key: string
+  url: string
 }
 
 /** Kept with each finished file. */
@@ -194,6 +203,9 @@ export function AnimationConverter() {
     state: ComparisonState
   } | null>(null)
   const comparing = useRef<(() => void) | null>(null)
+  /** A logo or watermark painted on every animation. */
+  const [overlay, setOverlay] = useState<Overlay | null>(null)
+  const [overlayProblem, setOverlayProblem] = useState("")
   const [paused, setPaused] = useState(false)
   const [zipping, setZipping] = useState(false)
 
@@ -204,6 +216,7 @@ export function AnimationConverter() {
     sequences: {} as Record<string, StillFrame[]>,
     selectedId: null as string | null,
     paused: false,
+    overlay: null as Overlay | null,
   })
   const pool = useRef<AnimationPool | null>(null)
   const counter = useRef(0)
@@ -382,7 +395,11 @@ export function AnimationConverter() {
     if (state.paused || settingsProblem(state.settings)) return null
     const keyFor = (item: Item) =>
       JSON.stringify([
-        processingKey(state.settings, state.trims[item.id] ?? noTrim),
+        processingKey(
+          state.settings,
+          state.trims[item.id] ?? noTrim,
+          state.overlay?.key
+        ),
         inputOf(item, state.sequences[item.id]).inputKey,
       ])
     const item = nextJob(
@@ -400,6 +417,10 @@ export function AnimationConverter() {
       trim: state.trims[item.id] ?? noTrim,
       key: keyFor(item),
       describe: item.status === "reading",
+      overlay: state.overlay && {
+        file: state.overlay.file,
+        key: state.overlay.key,
+      },
     }
   })
 
@@ -444,13 +465,14 @@ export function AnimationConverter() {
         for (const frame of frames) URL.revokeObjectURL(frame.url)
       for (const url of releasedUrls(live.current.items, []))
         URL.revokeObjectURL(url)
+      if (live.current.overlay) URL.revokeObjectURL(live.current.overlay.url)
     },
     []
   )
 
   // Convert again shortly after the settings or a trim settle.
   const problem = settingsProblem(settings)
-  const settingsKey = processingKey(settings, noTrim)
+  const settingsKey = processingKey(settings, noTrim, overlay?.key)
   const trimsKey = JSON.stringify(trims)
   const sequencesKey = JSON.stringify(
     Object.entries(sequences).map(([id, frames]) => [
@@ -712,11 +734,11 @@ export function AnimationConverter() {
     () => (item: Item) =>
       item.status === "ready" && !problem
         ? JSON.stringify([
-            processingKey(settings, trims[item.id] ?? noTrim),
+            processingKey(settings, trims[item.id] ?? noTrim, overlay?.key),
             inputOf(item, sequences[item.id]).inputKey,
           ])
         : null,
-    [settings, trims, sequences, problem]
+    [settings, trims, sequences, problem, overlay]
   )
   /** Bytes that went in: the file, or every still of a built animation. */
   const sizeOf = useMemo(
@@ -885,7 +907,8 @@ export function AnimationConverter() {
         selected.id,
         processingKey(
           { ...settings, target: "gif", sizeLimit: null },
-          selectedTrim
+          selectedTrim,
+          overlay?.key
         ),
       ])
     : ""
@@ -904,6 +927,7 @@ export function AnimationConverter() {
         input: inputOf(selected, sequences[selected.id]).input,
         settings,
         trim: selectedTrim,
+        overlay: overlay && { file: overlay.file, key: overlay.key },
         targets: (["gif", "webp", "apng", "mp4", "webm"] as const).filter(
           (target) =>
             targets[target].kind !== "video" ||
@@ -935,6 +959,34 @@ export function AnimationConverter() {
             : current
         )
       )
+  }
+
+  /** Add, replace or remove the logo; files that cannot be one are refused here. */
+  async function chooseOverlay(file: File | null) {
+    let next: Overlay | null = null
+    if (file) {
+      const kind = classify(
+        new Uint8Array(await file.slice(0, HEAD_BYTES).arrayBuffer())
+      )
+      const refusal =
+        kind === "svg"
+          ? "SVG cannot be used as a logo here. Convert it to PNG first."
+          : kind === "video" || kind === "unknown"
+            ? "Choose a picture, such as a PNG, for the logo."
+            : file.size > MAX_INPUT_BYTES
+              ? `Use a logo of at most ${sizeLabel(MAX_INPUT_BYTES)}.`
+              : ""
+      setOverlayProblem(refusal)
+      if (refusal) return
+      next = {
+        file,
+        key: `overlay-${++counter.current}`,
+        url: URL.createObjectURL(file),
+      }
+    } else setOverlayProblem("")
+    if (live.current.overlay) URL.revokeObjectURL(live.current.overlay.url)
+    live.current.overlay = next
+    setOverlay(next)
   }
 
   function cancelComparison() {
@@ -1384,6 +1436,13 @@ export function AnimationConverter() {
           exampleName={
             files.find((file) => file.id === selected?.id)?.name ?? null
           }
+        />
+        <EffectsPanel
+          settings={settings}
+          update={update}
+          overlay={overlay && { name: overlay.file.name, url: overlay.url }}
+          overlayProblem={overlayProblem}
+          onOverlay={(file) => void chooseOverlay(file)}
         />
       </div>
     </div>

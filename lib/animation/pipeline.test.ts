@@ -63,6 +63,7 @@ function fakeDeps(colours: Colour[] = GREY) {
       first: number[]
     }[],
     gifski: 0,
+    captions: [] as string[],
     /** Frames the stand-in video encoder pretends to drop. */
     dropped: 0,
     progress: [] as string[],
@@ -143,6 +144,14 @@ function fakeDeps(colours: Colour[] = GREY) {
           transparent: null,
         })),
       })
+    },
+    renderCaption: async (layout) => {
+      calls.captions.push(`${layout.top}|${layout.bottom}`)
+      // The whole frame is written over in the caption's colour.
+      const data = new Uint8ClampedArray(layout.width * layout.height * 4)
+      for (let i = 0; i < data.length; i += 4)
+        data.set([...layout.colour, 255], i)
+      return { data, width: layout.width, height: layout.height }
     },
     resize: async (pixels, size, kernel) => {
       calls.resize.push(kernel)
@@ -713,6 +722,55 @@ describe("video, frames and sprite sheets", () => {
     expect([...result.bytes]).toEqual([1, 2, 3])
     expect(calls.progress).toContain("Encoding 2 frames as video…")
     expect(result.note).toBeNull()
+  })
+
+  it("adds text and a logo before encoding, on every try at a size limit", async () => {
+    const { deps, calls } = fakeDeps()
+    const settings = {
+      ...defaultSettings,
+      target: "mp4" as const,
+      captionTop: "Hello",
+      captionColour: "black" as const,
+    }
+    await convertAnimation(source([85, 170]), settings, noTrim, deps)
+    expect(calls.captions).toEqual(["Hello|"])
+    expect(calls.video[0].first).toEqual([0, 0, 0])
+    expect(calls.progress).toContain("Adding text and effects…")
+
+    // A logo is painted on, under the text; here there is no text.
+    const logo = solid(1, 1, 255)
+    const stamped = fakeDeps()
+    await convertAnimation(
+      source([85, 170]),
+      {
+        ...defaultSettings,
+        target: "mp4",
+        overlayCorner: "top-left",
+        overlaySize: 100,
+        overlayOpacity: 100,
+      },
+      noTrim,
+      stamped.deps,
+      logo
+    )
+    // The 4 × 2 frame has no margin to speak of, so the logo covers its corner.
+    expect(stamped.calls.video[0].first).toEqual([255, 255, 255])
+
+    const limited = fakeDeps()
+    await convertAnimation(
+      source([85, 170]),
+      { ...settings, sizeLimit: 2000 },
+      noTrim,
+      limited.deps,
+      logo
+    )
+    expect(limited.calls.captions.length).toBeGreaterThan(0)
+    expect(limited.calls.video.at(-1)!.first).toEqual([0, 0, 0])
+    expect(
+      limited.calls.progress.some((label) =>
+        /^Fitting under 2 KB · try \d+ · Adding text and effects…$/.test(label)
+      )
+    ).toBe(true)
   })
 
   it("says so when the browser's encoder drops frames", async () => {
