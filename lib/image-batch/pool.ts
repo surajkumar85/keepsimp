@@ -6,7 +6,14 @@ interface Slot {
   busy: string | null
   /** Image the worker still has decoded. */
   cached: string | null
+  /** Whether the worker has loaded and answered at least once. */
+  started: boolean
+  /** Times this slot's worker has been started again after failing to load. */
+  restarts: number
 }
+
+/** How often a worker that fails to load is started again before its image is given up. */
+const RESTARTS = 2
 
 /** Messages every batch worker sends; each tool adds its own payloads. */
 export interface PoolMessage {
@@ -42,10 +49,17 @@ export class WorkerPool<
     private readonly next: (cachedId: string | null) => Job | null
   ) {}
 
-  private spawn(): Slot {
+  private spawn(restarts = 0): Slot {
     const worker = this.create()
-    const slot: Slot = { worker, busy: null, cached: null }
+    const slot: Slot = {
+      worker,
+      busy: null,
+      cached: null,
+      started: false,
+      restarts,
+    }
     worker.onmessage = (event: MessageEvent<Message>) => {
+      slot.started = true
       const message = event.data
       if (FINISHED.includes(message.type)) {
         if (message.type === "open-error") slot.cached = null
@@ -55,6 +69,15 @@ export class WorkerPool<
       this.kick()
     }
     worker.onerror = () => {
+      // A worker that never answered could not load its own scripts. Start it
+      // again; its image is still waiting and is handed to the new worker.
+      const index = this.slots.indexOf(slot)
+      if (!slot.started && slot.restarts < RESTARTS && index >= 0) {
+        worker.terminate()
+        this.slots[index] = this.spawn(slot.restarts + 1)
+        this.kick()
+        return
+      }
       const id = slot.busy
       slot.busy = null
       slot.cached = null
@@ -78,10 +101,17 @@ export class WorkerPool<
   /** Hand work to every idle worker. */
   kick() {
     for (let index = 0; index < this.size; index++) {
-      const slot = (this.slots[index] ??= this.spawn())
-      if (slot.busy) continue
-      const job = this.next(slot.cached)
+      let slot = this.slots[index]
+      if (slot?.busy) continue
+      const job = this.next(slot?.cached ?? null)
       if (!job) return
+      if (!slot) {
+        // Workers start one after another. When several start at the same
+        // moment, Safari and sometimes Firefox load some of their scripts past
+        // the service worker, which fails offline.
+        if (this.slots.some((other) => !other.started)) return
+        slot = this.slots[index] = this.spawn()
+      }
       slot.busy = job.id
       slot.cached = job.id
       slot.worker.postMessage({

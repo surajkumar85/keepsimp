@@ -37,6 +37,8 @@ export function SummaryBar({
   onClear,
   inputId,
   verb,
+  noun = "image",
+  accept,
 }: {
   totals: BatchTotals
   /** Set when the batch is exactly one file, which downloads directly. */
@@ -51,6 +53,10 @@ export function SummaryBar({
   inputId: string
   /** Present participle for screen readers, e.g. "Resizing". */
   verb: string
+  /** What one item of the batch is called. */
+  noun?: string
+  /** File types offered by the picker; images by default. */
+  accept?: string
 }) {
   const { over, handlers } = useDropTarget(onFiles)
   const saved = savingsPercent(totals.originalBytes, totals.outputBytes)
@@ -117,9 +123,10 @@ export function SummaryBar({
         <div>
           <FileInput
             onFiles={onFiles}
-            label="Add more images"
+            label={`Add more ${noun}s`}
             id={inputId}
             multiple
+            accept={accept}
           />
           <label
             htmlFor={inputId}
@@ -128,7 +135,7 @@ export function SummaryBar({
               "cursor-pointer peer-focus-visible:ring-3 peer-focus-visible:ring-ring/50"
             )}
           >
-            <IconPhotoPlus aria-hidden="true" /> Add images
+            <IconPhotoPlus aria-hidden="true" /> Add {noun}s
           </label>
         </div>
         <Button variant="ghost" size="lg" onClick={onClear}>
@@ -137,7 +144,7 @@ export function SummaryBar({
       </div>
       <p className="sr-only" aria-live="polite">
         {totals.pending > 0
-          ? `${verb} ${totals.pending} image${totals.pending === 1 ? "" : "s"}…`
+          ? `${verb} ${totals.pending} ${noun}${totals.pending === 1 ? "" : "s"}…`
           : totals.done > 0
             ? "All images are ready."
             : ""}

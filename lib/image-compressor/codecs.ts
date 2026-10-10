@@ -358,6 +358,83 @@ export async function quantizeImage(
   }
 }
 
+/**
+ * Choose a palette from one picture, then redraw any number of others with it.
+ * Used for animations, where every frame shares the colours. Call `free` when done.
+ */
+export async function createPalette(sample: Pixels, colours: number) {
+  const { ImageQuantizer } = await quantizer()
+  const engine = new ImageQuantizer()
+  engine.setMaxColors(Math.max(2, Math.min(256, colours)))
+  engine.setQuality(0, 100)
+  const result = engine.quantizeImage(sample.data, sample.width, sample.height)
+  return {
+    colours: result.getPalette() as [number, number, number, number][],
+    remap(pixels: Pixels, dithering: boolean) {
+      result.setDithering(dithering ? 1 : 0)
+      return Uint8Array.from(
+        result.getPaletteIndices(pixels.data, pixels.width, pixels.height)
+      )
+    },
+    free() {
+      result.free()
+      engine.free()
+    },
+  }
+}
+
+/** A still WebP at a plain quality, for the frames of an animation. */
+export async function encodeWebpStill(
+  pixels: Pixels,
+  options: { quality: number; lossless: boolean }
+) {
+  const { default: encode } = await webpEncoder()
+  return new Uint8Array(
+    await encode(toImageData(pixels), {
+      ...webpOptions({
+        quality: options.quality,
+        lossless: options.lossless,
+        effort: "balanced",
+        chroma444: false,
+        progressive: false,
+      }),
+      // Frames are patches of one picture, so hidden colour must stay as it is.
+      exact: 1,
+    })
+  )
+}
+
+/** gifski: the highest-quality GIF encoder, single-thread build. Durations are in milliseconds. */
+export async function encodeGifski(
+  frames: { data: Uint8ClampedArray; duration: number }[],
+  width: number,
+  height: number,
+  quality: number
+): Promise<Uint8Array> {
+  const { default: encode } = await once(
+    "gifski",
+    "gifski GIF encoder",
+    () => import("gifski-wasm")
+  )
+  return encode({
+    frames: frames.map(
+      (frame) =>
+        new Uint8Array(
+          frame.data.buffer,
+          frame.data.byteOffset,
+          frame.data.length
+        )
+    ),
+    width,
+    height,
+    frameDurations: frames.map((frame) =>
+      Math.max(20, Math.round(frame.duration))
+    ),
+    quality,
+    repeat: 0,
+  })
+}
+
 /** zlib-compress bytes with the platform's own implementation. */
 export async function deflate(bytes: Uint8Array) {
   const stream = new Blob([bytes as Uint8Array<ArrayBuffer>])

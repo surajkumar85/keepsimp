@@ -126,6 +126,11 @@ test("every tool works offline after one visit", async ({ page }) => {
     .getByRole("link", { name: "Image compressor" })
     .click()
   await expect(page).toHaveURL(/\/dashboard\/image-compressor\/$/)
+  // Offline, a link loads its page in full; wait for it as a direct visit would.
+  await page.waitForLoadState("load")
+  await expect(
+    page.getByRole("heading", { name: "Drop an image to compress" })
+  ).toBeVisible()
   await page.locator("#compressor-file").setInputFiles(await photo())
   await expect(page.getByTestId("image-compressor")).toHaveAttribute(
     "data-settled",
@@ -170,6 +175,30 @@ test("every tool works offline after one visit", async ({ page }) => {
     "true",
     { timeout: 150_000 }
   )
+
+  // The animation converter, its samples and gifski all come from the saved copy.
+  await page.goto(`${site.origin}/dashboard/animation-converter/`)
+  await page.getByRole("button", { name: "Try a sample" }).click()
+  await page
+    .getByRole("radiogroup", { name: "Format", exact: true })
+    .getByRole("radio", { name: "GIF", exact: true })
+    .click()
+  await page
+    .getByRole("radiogroup", { name: "GIF encoder", exact: true })
+    .getByRole("radio", { name: "Best (gifski)", exact: true })
+    .click()
+  await expect(page.getByTestId("animation-converter")).toHaveAttribute(
+    "data-settled",
+    "true",
+    { timeout: 150_000 }
+  )
+  pending = page.waitForEvent("download")
+  await page
+    .getByRole("link", { name: "Download keepsimp-pulse.gif", exact: true })
+    .click()
+  expect(
+    await sharp(await bytesOf(await pending), { animated: true }).metadata()
+  ).toMatchObject({ format: "gif", width: 192, pages: 20 })
 
   await page.goto(`${site.origin}/dashboard/json-formatter/`)
   await replaceEditor(

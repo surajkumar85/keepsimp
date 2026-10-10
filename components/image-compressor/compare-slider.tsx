@@ -24,9 +24,12 @@ export function CompareSlider({
   resultLabel,
   status,
   onCancel,
+  result = null,
 }: {
   reference: ImageBitmap | null
   resultUrl: string | null
+  /** The result as pixels, for tools that have a frame rather than a file to show. */
+  result?: ImageBitmap | null
   size: Size
   originalLabel: string
   resultLabel: string | null
@@ -36,6 +39,7 @@ export function CompareSlider({
   const [position, setPosition] = useState(50)
   const [zoom, setZoom] = useState<Zoom>("fit")
   const canvas = useRef<HTMLCanvasElement>(null)
+  const after = useRef<HTMLCanvasElement>(null)
   const frame = useRef<HTMLDivElement>(null)
   const dragging = useRef(false)
   const inputId = useId()
@@ -48,6 +52,14 @@ export function CompareSlider({
     element.getContext("2d")?.drawImage(reference, 0, 0)
   }, [reference])
 
+  useEffect(() => {
+    const element = after.current
+    if (!element || !result) return
+    element.width = result.width
+    element.height = result.height
+    element.getContext("2d")?.drawImage(result, 0, 0)
+  }, [result])
+
   function moveTo(clientX: number) {
     const rect = frame.current?.getBoundingClientRect()
     if (!rect || rect.width === 0) return
@@ -57,7 +69,7 @@ export function CompareSlider({
 
   const zoomed = zoom !== "fit"
   const scale = zoom === "200" ? 2 : 1
-  const showResult = Boolean(resultUrl)
+  const showResult = Boolean(resultUrl || result)
 
   return (
     <div className="space-y-3">
@@ -116,6 +128,18 @@ export function CompareSlider({
                 src={resultUrl}
                 alt="Compressed result"
                 draggable={false}
+                className={cn(
+                  "pointer-events-none absolute inset-0 size-full",
+                  zoom === "200" && "[image-rendering:pixelated]"
+                )}
+                style={{ clipPath: `inset(0 0 0 ${position}%)` }}
+              />
+            )}
+            {result && !resultUrl && (
+              <canvas
+                ref={after}
+                role="img"
+                aria-label="Compressed result"
                 className={cn(
                   "pointer-events-none absolute inset-0 size-full",
                   zoom === "200" && "[image-rendering:pixelated]"

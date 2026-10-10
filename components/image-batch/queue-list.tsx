@@ -60,14 +60,17 @@ export function QueueList({
   selectedId,
   onSelect,
   onRemove,
+  label = "Images",
 }: {
   rows: QueueRow[]
   selectedId: string | null
   onSelect: (id: string) => void
   onRemove: (id: string) => void
+  /** Names the list for screen readers. */
+  label?: string
 }) {
   return (
-    <ul aria-label="Images" data-testid="queue" className="space-y-2">
+    <ul aria-label={label} data-testid="queue" className="space-y-2">
       {rows.map((row) => {
         const selected = row.id === selectedId
         const total = row.outputs.reduce((sum, output) => sum + output.bytes, 0)

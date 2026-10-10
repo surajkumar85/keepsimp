@@ -4,6 +4,8 @@ import { IconArrowLeft } from "@tabler/icons-react"
 import { tools } from "@/lib/catalogue"
 import { pageMetadata, absoluteUrl } from "@/lib/site"
 import { StructuredData } from "@/components/structured-data"
+import { AnimationConverter } from "@/components/animation-converter/animation-converter"
+import { AnimationConverterTutorial } from "@/components/animation-converter/tutorial"
 import { ImageCompressor } from "@/components/image-compressor/image-compressor"
 import { ImageCompressorTutorial } from "@/components/image-compressor/tutorial"
 import { ImageConverter } from "@/components/image-converter/image-converter"
@@ -96,6 +98,8 @@ export default async function ToolPage({
         <ImageResizer />
       ) : id === "image-converter" ? (
         <ImageConverter />
+      ) : id === "animation-converter" ? (
+        <AnimationConverter />
       ) : (
         <JsonTool />
       )}
@@ -105,6 +109,8 @@ export default async function ToolPage({
         <ImageResizerTutorial />
       ) : id === "image-converter" ? (
         <ImageConverterTutorial />
+      ) : id === "animation-converter" ? (
+        <AnimationConverterTutorial />
       ) : (
         <JsonTutorial />
       )}

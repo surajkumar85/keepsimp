@@ -17,8 +17,9 @@ Animations are finite and honor reduced motion. Entry motion keeps text fully op
 - The image converter is now a batch tool on the same WebAssembly engine, with ten output formats (JPEG, PNG, WebP, AVIF, JPEG XL, GIF, BMP, TIFF, ICO and PDF), several formats at once with `<picture>` HTML, a measured format comparison and ZIP download. See `docs/image-converter.md`.
 - The landing demonstration uses a local canvas engine (`lib/image-tools.ts`). Supported still-image inputs are JPEG, PNG and WebP, up to 20 MB and 16 million pixels. Outputs fit within 4096 pixels on each side. JPEG receives a white matte for transparency; PNG ignores lossy quality settings. Invalid files, unsupported export formats and oversized outputs produce useful errors. Bitmap, canvas and object URL resources are released when no longer needed.
 - JSON formatter validates syntax with the native parser, then formats original tokens. This preserves large-number spelling, escaped strings, duplicate keys and order without a parse/stringify round trip. It provides pretty printing, minification, copying, downloads, a sample and error handling. The limit is one million characters, with formatted depth capped at 100 levels.
-- The catalogue has 13 entries: four working tools and nine marked as coming soon. The newest planned entry is an animation converter, because the image converter uses only the first frame of an animated file.
-- Remaining image, video, audio and document catalogue entries stay marked as coming soon. They have no processing route or sitemap entry.
+- The animation converter keeps GIF, WebP and APNG animations moving: it converts between the three with trimming, speed, frame rate, reverse, looping, resizing, a batch queue and a frame-by-frame comparison. Video, frames, target sizes and text follow in later phases. See `docs/animation-converter.md`.
+- The catalogue has 13 entries: five working tools and eight marked as coming soon.
+- Remaining video, audio and document catalogue entries stay marked as coming soon. They have no processing route or sitemap entry.
 
 These are initial tools, not a finished library. Canvas exports can remove metadata, color profiles and animation. Users should keep original files; physical-device media testing and specialist archival/print workflows remain later work.
 

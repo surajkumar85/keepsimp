@@ -37,7 +37,7 @@ After one visit to the tools, the whole site works without a connection: every t
 
 Both files in `service-worker/` are plain JavaScript with JSDoc types, because their text is copied into the worker as it is. There is no bundler and no step after the build, so any host that serves the export serves the worker. An earlier version wrote `out/sw.js` after `next build`; Vercel did not publish that file.
 
-- **Saved:** every page, the build files in `.next/static` (scripts, styles, fonts, WebAssembly codecs), and the files in `public/` (images, icons, tutorial posters and captions). This is about 14 MB on disk and about 5 MB to download with Brotli compression.
+- **Saved:** every page, the build files in `.next/static` (scripts, styles, fonts, WebAssembly codecs), and the files in `public/` (images, icons, tutorial posters and captions). This is about 16 MB on disk and about 6 MB to download with Brotli compression.
 - **Not saved:**
   - tutorial videos (29 MB), which stream on demand
   - link-preview images, which only other sites read
@@ -59,6 +59,8 @@ Because page data is not saved, following a link offline loads the page in full 
 | Videos, range requests, anything not saved | Left to the browser, as if there were no worker.                                         |
 
 Online visitors therefore always get the latest pages. The saved copy is a fallback, and nothing is written to it after install, so it stays one complete release.
+
+Batch tools start their workers one after another (`lib/image-batch/pool.ts`). Started at the same moment, Safari and sometimes Firefox load some worker scripts past the service worker, and those loads fail offline. A worker that fails to load is started again.
 
 A worker script served from the saved copy is rebuilt as a new `Response`. Otherwise the worker takes the saved response's address and loses the `#params` that Turbopack passes to its worker loader, and the image engines fail to start.
 

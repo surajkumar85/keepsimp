@@ -1,9 +1,11 @@
 import { ToolTutorial, type TutorialContent } from "@/components/tool-tutorial"
 
 const content: TutorialContent = {
-  video: "image-resizer-tutorial",
-  duration: { iso: "PT1M30S", label: "1 min 30 s" },
-  uploadDate: "2026-10-10",
+  video: {
+    file: "image-resizer-tutorial",
+    duration: { iso: "PT1M30S", label: "1 min 30 s" },
+    uploadDate: "2026-10-10",
+  },
   name: "How to use the KeepSimp image resizer",
   description:
     "A short tour of resizing a batch of images with presets, smart cropping, print sizes and responsive sets in your browser.",

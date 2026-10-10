@@ -1,6 +1,6 @@
 # KeepSimp design reference
 
-Version 3.4 · marketing, functional dashboard, chips, image comparison, batch tools, result tables and JSON workspace · updated 10 October 2026 · applies to every future implementation. Tokens are unchanged from version 3.
+Version 3.5 · marketing, functional dashboard, chips, image comparison, batch tools, result tables, JSON workspace and animation player · updated 10 October 2026 · applies to every future implementation. Tokens are unchanged from version 3.
 
 KeepSimp combines the requested shadcn preset with Airbnb-informed clarity, spacing, hierarchy, and human language. The exact numbers below are **KeepSimp decisions**, not an official Airbnb token export. Airbnb's public references reviewed here do not provide a complete numerical radius specification. We retain our own teal identity and fonts.
 
@@ -118,6 +118,10 @@ Frame previews draw the output to scale on the checkerboard, with pill tags for 
 Batch lists are `rounded-xl` rows with a 48px thumbnail, the file name, facts and a status line with an icon for progress or errors. The selected row takes the `primary` border. Row actions are icon buttons with accessible names. A summary card above the list carries totals and the primary download action. Reuse `components/image-batch/` (`queue-list`, `summary-bar`, `controls`) rather than rebuilding these per tool; an output in a row may carry a short label such as its format or width.
 
 Result tables compare measured outcomes, such as one image encoded in several formats (`components/image-converter/format-panel.tsx`). Use a real `<table>` with a caption and column headers inside a `rounded-lg` border, with horizontal scrolling inside the wrapper at narrow widths. Sort by the value being compared, mark the best row with a text badge, never colour alone, and give each row one compact action. Show only measured values, and show progress with a cancel action while they are produced.
+
+Animation previews (`components/animation-converter/player.tsx`) have two states. Playing shows the file itself in the checkerboard stage, as the browser plays it. Paused shows one frame under the before/after slider. Below the stage sit three icon buttons (previous frame, play or pause as the `primary` button, next frame) at 44px/36px, a position bar and a monospace readout of time and frame. Previews start paused when the visitor asks for reduced motion.
+
+Trim bars (`components/animation-converter/trim-bar.tsx`) draw a strip of frames in a `rounded-lg` border with two `primary` handles built on Base UI `Slider`. What is cut away is dimmed with a `background` veil. Handles are 12px wide with a 44px/36px hit area, answer to the arrow keys, Home and End, and announce their time in seconds. Exact start and end fields sit below, with a status line saying how much is kept.
 
 Crop overlays dim the excluded area with a `background` veil, show rule-of-thirds guides and eight handles with 44px/28px hit areas, and pair the box with exact pixel fields. The image compressor reference is `docs/image-compressor.md`.
 

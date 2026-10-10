@@ -89,9 +89,11 @@ const options: { term: string; detail: string }[] = [
 ]
 
 const content: TutorialContent = {
-  video: "image-compressor-tutorial",
-  duration: { iso: "PT1M44S", label: "1 min 44 s" },
-  uploadDate: "2026-10-10",
+  video: {
+    file: "image-compressor-tutorial",
+    duration: { iso: "PT1M44S", label: "1 min 44 s" },
+    uploadDate: "2026-10-10",
+  },
   name: "How to use the KeepSimp image compressor",
   description:
     "A short tour of compressing, comparing, converting, resizing, cropping and downloading an image in your browser.",

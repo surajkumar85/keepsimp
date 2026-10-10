@@ -5,9 +5,14 @@ import tokens from "../design-system/tokens.json" with { type: "json" }
 test("search, empty state, and validated category URLs", async ({ page }) => {
   await page.goto("/dashboard/")
   await expect(page.getByTestId("tool-card")).toHaveCount(13)
+  // Both converters write WebP; only one of them makes boomerangs.
   await page.getByRole("searchbox").fill("WEBP")
+  await expect(page.getByTestId("tool-card")).toHaveCount(2)
+  await page.getByRole("searchbox").fill("boomerang")
   await expect(page.getByTestId("tool-card")).toHaveCount(1)
-  await expect(page.getByTestId("tool-card")).toContainText("Image converter")
+  await expect(page.getByTestId("tool-card")).toContainText(
+    "Animation converter"
+  )
   await page.getByRole("searchbox").fill("nonexistent")
   await expect(
     page.getByRole("heading", { name: "No tools found" })

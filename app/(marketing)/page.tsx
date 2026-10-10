@@ -76,7 +76,7 @@ const faqs = [
   ],
   [
     "Which tools can I use today?",
-    "Image compressor, image resizer, image converter and JSON formatter are ready. The dashboard clearly labels the remaining video, audio and document tools as coming soon.",
+    "Image compressor, image resizer, image converter, animation converter and JSON formatter are ready. The dashboard clearly labels the remaining video, audio and document tools as coming soon.",
   ],
 ]
 

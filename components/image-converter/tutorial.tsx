@@ -1,9 +1,11 @@
 import { ToolTutorial, type TutorialContent } from "@/components/tool-tutorial"
 
 const content: TutorialContent = {
-  video: "image-converter-tutorial",
-  duration: { iso: "PT1M20S", label: "1 min 20 s" },
-  uploadDate: "2026-10-10",
+  video: {
+    file: "image-converter-tutorial",
+    duration: { iso: "PT1M20S", label: "1 min 20 s" },
+    uploadDate: "2026-10-10",
+  },
   name: "How to use the KeepSimp image converter",
   description:
     "A short tour of converting images between ten formats, comparing file sizes, exporting several formats at once, and making favicons and PDFs in your browser.",

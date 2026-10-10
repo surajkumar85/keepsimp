@@ -33,18 +33,21 @@ export function FileInput({
   label,
   id = INPUT_ID,
   multiple,
+  accept = acceptedInput,
 }: {
   onFiles: (files: File[]) => void
   disabled?: boolean
   label: string
   id?: string
   multiple?: boolean
+  /** File types offered by the picker; images by default. */
+  accept?: string
 }) {
   return (
     <input
       id={id}
       type="file"
-      accept={acceptedInput}
+      accept={accept}
       aria-label={label}
       disabled={disabled}
       multiple={multiple}
@@ -113,6 +116,8 @@ export function DropZone({
   busy,
   copy = compressorCopy,
   inputId = INPUT_ID,
+  formats = listedFormats,
+  accept,
 }: {
   /** Receives the first file; use `onFiles` to accept several at once. */
   onFile?: (file: File) => void
@@ -121,6 +126,9 @@ export function DropZone({
   busy: boolean
   copy?: DropZoneCopy
   inputId?: string
+  /** Format names listed under the buttons. */
+  formats?: string[]
+  accept?: string
 }) {
   const emit = (files: File[]) =>
     onFiles ? onFiles(files) : onFile?.(files[0])
@@ -151,6 +159,7 @@ export function DropZone({
             label={copy.inputLabel}
             id={inputId}
             multiple={Boolean(onFiles)}
+            accept={accept}
           />
           <label
             htmlFor={inputId}
@@ -170,7 +179,7 @@ export function DropZone({
         aria-label="Supported formats"
         className="mt-6 flex max-w-lg flex-wrap justify-center gap-1.5"
       >
-        {listedFormats.map((format) => (
+        {formats.map((format) => (
           <li
             key={format}
             className="rounded-full border bg-background px-2 py-0.5 text-xs text-muted-foreground"

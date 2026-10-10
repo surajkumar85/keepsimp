@@ -5,11 +5,17 @@ import { TutorialVideo } from "@/components/tutorial-video"
 import { absoluteUrl } from "@/lib/site"
 
 export interface TutorialContent {
-  /** Base name of the files in /public/videos, e.g. "image-compressor-tutorial". */
-  video: string
-  /** Keep in step with the file written by `npm run tutorial:video`. */
-  duration: { iso: string; label: string }
-  uploadDate: string
+  /**
+   * The tutorial video, once one has been recorded; without it the written
+   * steps stand alone.
+   */
+  video?: {
+    /** Base name of the files in /public/videos, e.g. "image-compressor-tutorial". */
+    file: string
+    /** Keep in step with the file written by `npm run tutorial:video`. */
+    duration: { iso: string; label: string }
+    uploadDate: string
+  }
   name: string
   description: string
   /** Sentence under the heading. */
@@ -21,37 +27,49 @@ export interface TutorialContent {
 
 /** Help section for a tool: tutorial video with captions, written steps and an options reference. */
 export function ToolTutorial({ content }: { content: TutorialContent }) {
-  const video = `/videos/${content.video}.mp4`
-  const poster = `/videos/${content.video}-poster.webp`
-  const captions = `/videos/${content.video}.vtt`
+  const film = content.video
+  const video = `/videos/${film?.file}.mp4`
+  const poster = `/videos/${film?.file}-poster.webp`
+  const captions = `/videos/${film?.file}.vtt`
   const { steps, options } = content
   return (
     <section aria-labelledby="tutorial-title" className="mt-8 border-t pt-5">
-      <StructuredData
-        data={{
-          "@context": "https://schema.org",
-          "@type": "VideoObject",
-          name: content.name,
-          description: content.description,
-          thumbnailUrl: absoluteUrl(poster),
-          contentUrl: absoluteUrl(video),
-          uploadDate: content.uploadDate,
-          duration: content.duration.iso,
-        }}
-      />
+      {film && (
+        <StructuredData
+          data={{
+            "@context": "https://schema.org",
+            "@type": "VideoObject",
+            name: content.name,
+            description: content.description,
+            thumbnailUrl: absoluteUrl(poster),
+            contentUrl: absoluteUrl(video),
+            uploadDate: film.uploadDate,
+            duration: film.duration.iso,
+          }}
+        />
+      )}
       <h2 id="tutorial-title" className="section-title">
         A little help along the way
       </h2>
       <p className="mt-2 text-sm text-muted-foreground">{content.intro}</p>
       <div className="mt-5 grid gap-6 lg:grid-cols-5">
-        <figure className="min-w-0 lg:col-span-3">
-          <TutorialVideo video={video} poster={poster} captions={captions} />
-          <figcaption className="mt-2 text-xs text-muted-foreground">
-            {content.duration.label}, no sound. On-screen captions describe each
-            step; the same steps are written out here.
-          </figcaption>
-        </figure>
-        <ol id="tutorial-steps" className="space-y-4 lg:col-span-2">
+        {film && (
+          <figure className="min-w-0 lg:col-span-3">
+            <TutorialVideo video={video} poster={poster} captions={captions} />
+            <figcaption className="mt-2 text-xs text-muted-foreground">
+              {film.duration.label}, no sound. On-screen captions describe each
+              step; the same steps are written out here.
+            </figcaption>
+          </figure>
+        )}
+        <ol
+          id="tutorial-steps"
+          className={
+            film
+              ? "space-y-4 lg:col-span-2"
+              : "grid gap-4 sm:grid-cols-2 lg:col-span-5"
+          }
+        >
           {steps.map((step, index) => (
             <li key={step.title} className="flex gap-3">
               <span

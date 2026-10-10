@@ -8,6 +8,7 @@ import {
   useRef,
   useState,
 } from "react"
+import Link from "next/link"
 import {
   IconAlertCircle,
   IconFileTypePdf,
@@ -822,9 +823,21 @@ export function ImageConverter() {
                 className="mt-0.5 size-4 shrink-0"
                 aria-hidden="true"
               />
-              {selected.animated
-                ? "This image is animated. Only the first frame is converted."
-                : `SVG is vector art, so it is drawn at ${selected.size.width} × ${selected.size.height} px before converting.`}
+              {selected.animated ? (
+                <span>
+                  This image is animated. Only the first frame is converted. To
+                  keep it moving, use the{" "}
+                  <Link
+                    href="/dashboard/animation-converter/"
+                    className="font-medium text-primary underline underline-offset-4"
+                  >
+                    animation converter
+                  </Link>
+                  .
+                </span>
+              ) : (
+                `SVG is vector art, so it is drawn at ${selected.size.width} × ${selected.size.height} px before converting.`
+              )}
             </p>
           )}
         {paused && (
