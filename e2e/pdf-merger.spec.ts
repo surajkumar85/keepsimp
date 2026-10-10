@@ -112,7 +112,9 @@ test("merges files in order and keeps pages, links and bookmarks", async ({
   await expect(page.getByTestId("file-thumbnail")).toHaveCount(2)
   await expect(page.getByTestId("plan")).toContainText("5 pages from 2 files")
 
-  await page.getByLabel("File name").fill("Board pack / October")
+  await page
+    .getByLabel("File name", { exact: true })
+    .fill("Board pack / October")
   await expect(page.getByText("Board-pack-October.pdf")).toBeVisible()
   const result = await merged(page)
   expect(result.name).toBe("Board-pack-October.pdf")
@@ -439,7 +441,9 @@ test("repairs a damaged file and leaves out what cannot be read", async ({
   await ready(page)
   // Files that are not PDFs at all never join the list.
   const notice = page.getByRole("main").getByRole("alert").first()
-  await expect(notice).toContainText("notes.txt is not a PDF or a picture.")
+  await expect(notice).toContainText(
+    "notes.txt is not a PDF. Save or export it as a PDF first, then add that."
+  )
   await expect(notice).toContainText("empty.pdf: This file is empty.")
   const rows = page.getByTestId("file-row")
   await expect(rows).toHaveCount(4)
@@ -507,10 +511,11 @@ test("shows progress for a long merge and stops when asked", async ({
   page,
 }) => {
   await page.goto(ROUTE)
-  await upload(page, await pdf("long.pdf", "A", { pages: 1500 }))
+  // Long enough that the merge is still copying pages when Cancel is pressed.
+  await upload(page, await pdf("long.pdf", "A", { pages: 4000 }))
   await ready(page)
   await expect(page.getByTestId("plan")).toContainText(
-    "1,500 pages from 1 file"
+    "4,000 pages from 1 file"
   )
   await page.getByRole("button", { name: "Merge PDF" }).click()
   await expect(page.getByRole("progressbar", { name: "Merging" })).toBeVisible()
@@ -521,11 +526,11 @@ test("shows progress for a long merge and stops when asked", async ({
     "data-merged",
     "true"
   )
-  await page.getByLabel("Pages from long.pdf").fill("1499-")
+  await page.getByLabel("Pages from long.pdf").fill("3999-")
   const result = await merged(page)
   expect(result.pages.map((entry) => entry.text)).toEqual([
-    "A-P1499",
-    "A-P1500",
+    "A-P3999",
+    "A-P4000",
   ])
 })
 
@@ -1186,6 +1191,103 @@ test("locks the merged PDF with a password and limits", async ({ page }) => {
   expect((await merged(page)).encrypted).toBe(false)
 })
 
+test("gets the result ready for paper: one page size, footers and blank backs", async ({
+  page,
+}) => {
+  await page.goto(ROUTE)
+  await upload(
+    page,
+    await pdf("Report.pdf", "A", {
+      pages: 3,
+      size: (number) => (number === 2 ? [800, 600] : [300, 400]),
+      links: [{ from: 1, to: 3 }],
+    }),
+    await pdf("Annex.pdf", "B")
+  )
+  await ready(page)
+  const options = page.getByTestId("print-options")
+  const shape = (result: Awaited<ReturnType<typeof merged>>) =>
+    result.pages.map((entry) => [
+      Math.round(entry.width),
+      Math.round(entry.height),
+    ])
+
+  // One size for every page; the wide page gets the sheet on its side.
+  await expect(
+    options.getByRole("switch", { name: "Enlarge smaller pages" })
+  ).toBeHidden()
+  await chipIn(options, "Page size", "A4").click()
+  let result = await merged(page)
+  expect(shape(result)).toEqual([
+    [595, 842],
+    [842, 595],
+    [595, 842],
+    [595, 842],
+  ])
+  expect(result.pages[0].links).toEqual([3])
+  await chipIn(options, "Page size", "Like the largest").click()
+  expect(shape(await merged(page))[0]).toEqual([600, 800])
+  await chipIn(options, "Page size", "As they are").click()
+
+  // File names and page numbers at the foot of every page.
+  await options.getByRole("switch", { name: "File name on every page" }).click()
+  await chipIn(options, "Page numbers", "3 of 12").click()
+  await chipIn(options, "Number position", "Right").click()
+  result = await merged(page)
+  expect(result.pages.map((entry) => entry.text)).toEqual([
+    "A-P1 1 of 4 Report",
+    "A-P2 2 of 4 Report",
+    "A-P3 3 of 4 Report",
+    "B-P1 4 of 4 Annex",
+  ])
+  await options.getByLabel("Start at").fill("10")
+  await chipIn(options, "Page numbers", "3").click()
+  result = await merged(page)
+  expect(result.pages.map((entry) => entry.text.split(" ")[1])).toEqual([
+    "10",
+    "11",
+    "12",
+    "13",
+  ])
+  await options.getByLabel("Start at").fill("")
+  await expect(page.getByTestId("result").getByRole("alert")).toContainText(
+    "Start page numbers at a whole number from 0 to 99,999."
+  )
+  await chipIn(options, "Page numbers", "None").click()
+  await options.getByRole("switch", { name: "File name on every page" }).click()
+
+  // Double-sided: a blank page after the three-page file, so the next starts on a new sheet.
+  await options
+    .getByRole("switch", {
+      name: "Double-sided: start every file on a new sheet",
+    })
+    .click()
+  await expect(page.getByTestId("plan")).toContainText("5 pages from 2 files")
+  result = await merged(page)
+  expect(result.pages.map((entry) => entry.text)).toEqual([
+    "A-P1",
+    "A-P2",
+    "A-P3",
+    "",
+    "B-P1",
+  ])
+  // The blank page shows in the Pages view; once pages are arranged by hand, the switch gives way to a note.
+  await page.getByRole("radio", { name: /^Pages/ }).click()
+  expect(await tiles(page)).toEqual([
+    "Report1",
+    "Report2",
+    "Report3",
+    "blank",
+    "Annex1",
+  ])
+  await tile(page, 0).click()
+  await page.getByRole("button", { name: "Turn clockwise" }).click()
+  await expect(
+    options.getByRole("switch", { name: /^Double-sided/ })
+  ).toBeHidden()
+  await expect(options).toContainText("add blank pages where you need them")
+})
+
 test("stays accessible, keyboard-friendly, local and responsive", async ({
   page,
 }) => {
@@ -1201,6 +1303,8 @@ test("stays accessible, keyboard-friendly, local and responsive", async ({
     )
       external.push(request.url())
   })
+  // Colours are checked as they settle, not half-way through a transition.
+  await page.emulateMedia({ reducedMotion: "reduce" })
   await page.goto(ROUTE)
   await upload(
     page,
@@ -1281,10 +1385,53 @@ test("stays accessible, keyboard-friendly, local and responsive", async ({
   expect(errors).toEqual([])
 })
 
-test("the written help covers every option", async ({ page }) => {
+test("the tutorial video, captions, written help and guide are available", async ({
+  page,
+  request,
+  browserName,
+}) => {
   await page.goto(ROUTE)
   const help = page.getByRole("region", { name: "A little help along the way" })
-  await expect(help.getByRole("listitem")).toHaveCount(5)
+  const video = help.locator("video")
+  await expect(video).toHaveAttribute(
+    "poster",
+    "/videos/pdf-merger-tutorial-poster.webp"
+  )
+  await expect(video).toHaveAttribute("preload", "none")
+  for (const [path, type] of [
+    ["/videos/pdf-merger-tutorial.mp4", "video/mp4"],
+    ["/videos/pdf-merger-tutorial-poster.webp", "image/webp"],
+    ["/videos/pdf-merger-tutorial.vtt", "text/vtt"],
+  ]) {
+    const response = await request.get(path)
+    expect(response.ok()).toBe(true)
+    expect(response.headers()["content-type"]).toContain(type)
+  }
+  const captions = await (
+    await request.get("/videos/pdf-merger-tutorial.vtt")
+  ).text()
+  expect(captions.startsWith("WEBVTT")).toBe(true)
+  expect(captions).toContain("Step 3 of 6: Arrange single pages")
+  expect(captions).toContain("Step 6 of 6: Download")
+
+  // Playwright's Firefox build has no H.264 decoder; real Firefox uses the system one.
+  if (browserName !== "firefox") {
+    const metadata = await video.evaluate(
+      (element: HTMLVideoElement) =>
+        new Promise<{ duration: number; width: number }>((resolve, reject) => {
+          element.addEventListener("loadedmetadata", () =>
+            resolve({ duration: element.duration, width: element.videoWidth })
+          )
+          element.addEventListener("error", () => reject(new Error("decode")))
+          element.preload = "metadata"
+          element.load()
+        })
+    )
+    expect(metadata.width).toBe(1920)
+    expect(Math.round(metadata.duration)).toBe(71)
+  }
+
+  await expect(help.locator("#tutorial-steps > li")).toHaveCount(6)
   await help.getByText("Every option explained").click()
   for (const term of [
     "Pages",
@@ -1295,6 +1442,10 @@ test("the written help covers every option", async ({ page }) => {
     "Contents page",
     "Fillable fields",
     "Password",
+    "Double-sided printing",
+    "Page size",
+    "Footer",
+    "Other documents",
     "Locked files",
     "Damaged files",
     "What is kept",
@@ -1302,15 +1453,22 @@ test("the written help covers every option", async ({ page }) => {
     "Limits and privacy",
   ])
     await expect(help.getByText(term, { exact: true })).toBeVisible()
-  const data = JSON.parse(
-    (await page
-      .locator('script[type="application/ld+json"]')
-      .first()
-      .textContent())!
+  await expect(
+    help.getByRole("link", { name: "Read the step-by-step guide" })
+  ).toHaveAttribute("href", "/blog/merge-pdfs-without-uploading/")
+  const data = await page
+    .locator('script[type="application/ld+json"]')
+    .evaluateAll((scripts) =>
+      scripts.map((script) => JSON.parse(script.textContent ?? "{}"))
+    )
+  expect(data).toContainEqual(
+    expect.objectContaining({
+      "@type": "WebApplication",
+      name: "PDF merger",
+      applicationCategory: "BusinessApplication",
+    })
   )
-  expect(data).toMatchObject({
-    "@type": "WebApplication",
-    name: "PDF merger",
-    applicationCategory: "BusinessApplication",
-  })
+  expect(data).toContainEqual(
+    expect.objectContaining({ "@type": "VideoObject", duration: "PT1M11S" })
+  )
 })

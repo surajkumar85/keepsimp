@@ -959,6 +959,270 @@ describe("details, page numbers, attachments and a password", () => {
   })
 })
 
+describe("getting ready for paper", () => {
+  type Options = Parameters<typeof mergePdfs>[2]
+  const plain = {
+    duplex: false,
+    sheet: "keep",
+    enlarge: true,
+    footerName: false,
+    numbers: "none",
+    numbersAt: "centre",
+    numbersFrom: 1,
+  } as const
+  const printed = async (
+    inputs: MergeInput[],
+    print: Partial<NonNullable<Options["print"]>>,
+    more: Partial<Options> = {}
+  ) =>
+    (
+      await mergePdfs(mupdf, inputs, {
+        bookmarks: "none",
+        ...more,
+        print: { ...plain, ...print },
+      })
+    ).bytes
+  const sizes = async (bytes: Uint8Array) =>
+    (await readPdf(bytes)).pages.map((page) => [
+      Math.round(page.width),
+      Math.round(page.height),
+      page.rotate,
+    ])
+
+  it("changes nothing when nothing is asked for", async () => {
+    const a = await source("A", { pages: 2, notes: [{ page: 1, text: "n" }] })
+    const before = await merge([part(a, "A")], "none")
+    const after = await printed([part(a, "A")], {})
+    expect(after.length).toBe(before.length)
+  })
+
+  it("makes every page one size, turning the sheet for wide pages", async () => {
+    const a = await source("A", {
+      pages: 4,
+      size: (page) =>
+        page === 1 ? [300, 400] : page === 2 ? [800, 600] : [1200, 1600],
+      rotate: { 4: 90 },
+    })
+    expect(await sizes(await printed([part(a, "A")], { sheet: "a4" }))).toEqual(
+      [
+        [595, 842, 0],
+        [842, 595, 0],
+        [595, 842, 0],
+        // Stored upright and shown on its side: its sheet lies on its side too.
+        [595, 842, 90],
+      ]
+    )
+    expect(
+      await sizes(await printed([part(a, "A")], { sheet: "letter" }))
+    ).toEqual([
+      [612, 792, 0],
+      [792, 612, 0],
+      [612, 792, 0],
+      [612, 792, 90],
+    ])
+    // Like the first page, or like the largest.
+    expect(
+      (await sizes(await printed([part(a, "A")], { sheet: "first" }))).map(
+        ([width, height]) => [width, height]
+      )
+    ).toEqual([
+      [300, 400],
+      [400, 300],
+      [300, 400],
+      [300, 400],
+    ])
+    expect(
+      (await sizes(await printed([part(a, "A")], { sheet: "largest" })))[0]
+    ).toEqual([1200, 1600, 0])
+  })
+
+  it("scales a page's content, links, notes and fields with it", async () => {
+    const small = await source("A", {
+      pages: 2,
+      size: () => [300, 400],
+      links: [{ from: 1, to: 2 }],
+      notes: [{ page: 1, text: "kept" }],
+      fields: [{ name: "who", value: "Ada", page: 1 }],
+    })
+    const large = await source("B", { size: () => [600, 800] })
+    const bytes = await printed([part(large, "B"), part(small, "A")], {
+      sheet: "first",
+    })
+    const result = await readPdf(bytes)
+    expect(result.pages.map((page) => [page.width, page.height])).toEqual([
+      [600, 800],
+      [600, 800],
+      [600, 800],
+    ])
+    expect(result.pages[1]).toMatchObject({
+      text: "A-P1",
+      links: [3],
+      notes: ["kept"],
+      fields: ["who=Ada"],
+    })
+    // Exactly twice the size: drawn at the same number of pixels, it is the same picture.
+    const fitted = open(bytes)
+    for (const index of [0, 1]) {
+      const before = renderPage(mupdf, small, index, 400)
+      const after = renderPage(mupdf, fitted, index + 1, 400)
+      expect([after.width, after.height]).toEqual([before.width, before.height])
+      let different = 0
+      for (let at = 0; at < before.data.length; at += 4)
+        if (Math.abs(before.data[at] - after.data[at]) > 40) different++
+      // Only the thin edges of letters and boxes may differ.
+      expect(different / (before.data.length / 4)).toBeLessThan(0.002)
+    }
+  })
+
+  it("only shrinks when asked not to enlarge", async () => {
+    const a = await source("A", {
+      pages: 2,
+      size: (page) => (page === 1 ? [300, 400] : [1200, 1600]),
+    })
+    const bytes = await printed([part(a, "A")], { sheet: "a4", enlarge: false })
+    expect(
+      (await sizes(bytes)).map(([width, height]) => [width, height])
+    ).toEqual([
+      [595, 842],
+      [595, 842],
+    ])
+    // The small page keeps its size in the middle of the sheet: its corner is paper.
+    const drawn = renderPage(mupdf, open(bytes), 0, 421)
+    const text = renderPage(mupdf, a, 0, 200)
+    const dark = (image: typeof drawn) =>
+      image.data.filter((value, at) => at % 4 === 0 && value < 100).length
+    // The letters cover as many pixels as they did at their own size.
+    expect(Math.abs(dark(drawn) - dark(text))).toBeLessThan(dark(text) * 0.25)
+  })
+
+  it("prints file names and page numbers at the foot of every page", async () => {
+    const a = await source("A", { pages: 2 })
+    const b = await source("B")
+    const inputs = [part(a, "Annual report"), part(b, "Résumé – Обзор")]
+    const named = await readPdf(
+      await printed(inputs, { footerName: true, numbers: "of" })
+    )
+    expect(named.pages.map((page) => page.text)).toEqual([
+      "A-P1 1 of 3 Annual report",
+      "A-P2 2 of 3 Annual report",
+      "B-P1 3 of 3 Résumé – Обзор",
+    ])
+    const numbered = await readPdf(
+      await printed(inputs, { numbers: "number", numbersFrom: 10 })
+    )
+    expect(numbered.pages.map((page) => page.text)).toEqual([
+      "A-P1 10",
+      "A-P2 11",
+      "B-P1 12",
+    ])
+    const only = await readPdf(await printed(inputs, { footerName: true }))
+    expect(only.pages[2].text).toBe("B-P1 Résumé – Обзор")
+  })
+
+  it("puts the footer at the bottom the reader sees, whatever the page's turn", async () => {
+    const a = await source("A", { pages: 4, rotate: { 2: 90, 3: 180, 4: 270 } })
+    const bytes = await printed([part(a, "A")], {
+      numbers: "of",
+      numbersAt: "right",
+    })
+    const pdf = open(bytes)
+    for (let index = 0; index < 4; index++) {
+      const drawn = renderPage(mupdf, pdf, index, 300)
+      const without = renderPage(mupdf, a, index, 300)
+      /** Pixels that the footer changed, by the tenth of the page they are in. */
+      const changed = { bottomRight: 0, elsewhere: 0 }
+      for (let y = 0; y < drawn.height; y++)
+        for (let x = 0; x < drawn.width; x++) {
+          const at = (y * drawn.width + x) * 4
+          if (Math.abs(drawn.data[at] - without.data[at]) < 60) continue
+          if (y > drawn.height * 0.88 && x > drawn.width * 0.5)
+            changed.bottomRight++
+          else changed.elsewhere++
+        }
+      expect(changed.bottomRight, `page ${index + 1}`).toBeGreaterThan(8)
+      expect(changed.elsewhere, `page ${index + 1}`).toBe(0)
+    }
+  })
+
+  it("numbers contents and blank pages too, and names only pages that have a file", async () => {
+    const a = await source("A")
+    const result = await readPdf(
+      (
+        await mergePages(
+          mupdf,
+          new Map([["a", { pdf: a, name: "A file" }]]),
+          [
+            { blank: { width: 298, height: 420 } },
+            { source: "a", index: 0, rotation: 0 },
+          ],
+          {
+            bookmarks: "none",
+            contents: "files",
+            print: { ...plain, footerName: true, numbers: "number" },
+          }
+        )
+      ).bytes
+    )
+    expect(result.pages.map((page) => page.text)).toEqual([
+      "Contents A file 3 1",
+      "2",
+      "A-P1 3 A file",
+    ])
+  })
+
+  it("keeps contents pages to a whole sheet for double-sided printing", async () => {
+    const a = await source("A", { pages: 2 })
+    const b = await source("B")
+    const inputs = [part(a, "First"), part(b, "Second")]
+    const result = await readPdf(
+      await printed(
+        inputs,
+        { duplex: true },
+        { contents: "files", bookmarks: "files" }
+      )
+    )
+    // One contents page and a blank back, so the first file starts on a front.
+    expect(result.pages.map((page) => page.text)).toEqual([
+      "Contents First 3 Second 5",
+      "",
+      "A-P1",
+      "A-P2",
+      "B-P1",
+    ])
+    expect(result.pages[0].links).toEqual([3, 5])
+    expect(result.bookmarks.map((item) => `${item.title}>${item.to}`)).toEqual([
+      "Contents>1",
+      "First>3",
+      "Second>5",
+    ])
+    // Without it, the contents take one page.
+    const single = await readPdf(
+      await printed(inputs, {}, { contents: "files" })
+    )
+    expect(single.pages).toHaveLength(4)
+  })
+
+  it("draws footers in other scripts as pictures when it can", async () => {
+    const a = await source("A")
+    const bytes = await printed(
+      [part(a, "概要")],
+      { footerName: true },
+      {
+        textPicture: () => ({
+          data: new Uint8ClampedArray(60 * 20 * 4).fill(255),
+          width: 60,
+          height: 20,
+        }),
+      }
+    )
+    expect((await readPdf(bytes)).pages[0].pictures).toBe(1)
+    const plainText = await readPdf(
+      await printed([part(a, "概要")], { footerName: true })
+    )
+    expect(plainText.pages[0].text).toBe("A-P1 ??")
+  })
+})
+
 describe("arranging single pages", () => {
   const arrange = async (
     sources: Record<string, OpenedPdf>,

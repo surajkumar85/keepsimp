@@ -29,23 +29,38 @@ export const DEFAULT_PAGE = { width: 595.28, height: 841.89 }
  * The pages the file list stands for: every ready file's chosen pages, in
  * order, with the file's turn. Keys say where a page came from, so the same
  * list always gives the same keys.
+ * @param duplex For double-sided printing: a blank page after every file but the last that gives an odd number of pages, so each file starts on a new sheet.
  */
-export function derivePages(files: readonly PdfFile[]): PageEntry[] {
-  const pages: PageEntry[] = []
+export function derivePages(
+  files: readonly PdfFile[],
+  duplex = false
+): PageEntry[] {
+  const groups: PageEntry[][] = []
   for (const file of files) {
     const chosen = chosenPages(file)
     if (!chosen || "problem" in chosen) continue
-    chosen.pages.forEach((page, position) =>
-      pages.push({
-        key: `${file.id}/${position}`,
-        kind: "page",
-        file: file.id,
-        page,
-        rotation: file.rotation,
+    const group: PageEntry[] = chosen.pages.map((page, position) => ({
+      key: `${file.id}/${position}`,
+      kind: "page",
+      file: file.id,
+      page,
+      rotation: file.rotation,
+    }))
+    if (duplex && group.length % 2)
+      group.push({
+        key: `${file.id}/blank`,
+        kind: "blank",
+        // The file's first page, turned as the file is turned.
+        ...(file.rotation % 180
+          ? { width: file.facts!.height, height: file.facts!.width }
+          : { width: file.facts!.width, height: file.facts!.height }),
       })
-    )
+    groups.push(group)
   }
-  return pages
+  // Nothing follows the last file, so it needs no blank page.
+  const last = groups[groups.length - 1]
+  if (duplex && last?.[last.length - 1].kind === "blank") last.pop()
+  return groups.flat()
 }
 
 const selected = (

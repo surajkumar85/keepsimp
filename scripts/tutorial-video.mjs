@@ -13,6 +13,7 @@ const tools = [
   "image-resizer",
   "image-converter",
   "animation-converter",
+  "pdf-merger",
 ]
 const tool = process.argv[2] ?? tools[0]
 if (!tools.includes(tool)) {

@@ -74,6 +74,59 @@ describe("derivePages", () => {
 
   it("has nothing for an empty list", () => {
     expect(derivePages([])).toEqual([])
+    expect(derivePages([], true)).toEqual([])
+  })
+
+  it("adds a blank page after an odd file for double-sided printing, but not after the last", () => {
+    const sized = (pages: number) =>
+      ({ pages, width: 300, height: 400 }) as FileFacts
+    const list = (
+      [
+        { type: "add", items: [file("a"), file("b"), file("c"), file("d")] },
+        { type: "opened", id: "a", facts: sized(3) },
+        { type: "opened", id: "b", facts: sized(2) },
+        { type: "opened", id: "c", facts: sized(1) },
+        { type: "opened", id: "d", facts: sized(1) },
+        { type: "rotate", id: "c", direction: "right" },
+      ] as FilesAction[]
+    ).reduce(filesReducer, noFiles).files
+    const shape = (entries: PageEntry[]) =>
+      entries.map((entry) =>
+        entry.kind === "blank"
+          ? `blank ${entry.width}x${entry.height}`
+          : entry.key
+      )
+    expect(shape(derivePages(list, true))).toEqual([
+      "a/0",
+      "a/1",
+      "a/2",
+      "blank 300x400",
+      "b/0",
+      "b/1",
+      "c/0",
+      // The third file is turned on its side, and so is its blank page.
+      "blank 400x300",
+      "d/0",
+    ])
+    expect(derivePages(list, true)[3].key).toBe("a/blank")
+    expect(shape(derivePages(list))).toEqual([
+      "a/0",
+      "a/1",
+      "a/2",
+      "b/0",
+      "b/1",
+      "c/0",
+      "d/0",
+    ])
+    // An even last file leaves nothing to take away.
+    expect(shape(derivePages(list.slice(0, 2), true))).toEqual([
+      "a/0",
+      "a/1",
+      "a/2",
+      "blank 300x400",
+      "b/0",
+      "b/1",
+    ])
   })
 })
 

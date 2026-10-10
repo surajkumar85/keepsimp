@@ -24,6 +24,22 @@ import {
   type OutlineSource,
 } from "./outline"
 import { pictureLayout, type PictureMargin, type PicturePage } from "./picture"
+import {
+  applyMatrix,
+  fitToSheet,
+  FOOTER_SIZE,
+  footerLayout,
+  numberText,
+  quarter,
+  shownSize as shownSizeOf,
+  targetSheet,
+  visualMatrix,
+  type Box,
+  type FooterPlace,
+  type Matrix,
+  type NumberStyle,
+  type SheetChoice,
+} from "./print"
 import type { ContentsChoice, FormsChoice, LabelsChoice } from "./settings"
 
 type Engine = typeof MuPDF
@@ -397,6 +413,19 @@ export interface MergeOptions {
   details?: { title: string; author: string; subject: string; keywords: string }
   /** Lock the result: the password to open it, a second one that lifts the limits, and the limits. */
   lock?: { password: string; ownerPassword: string; permissions: number }
+  /** Getting the result ready for paper. */
+  print?: {
+    /** Keep contents pages to a whole sheet, so the first file starts on a front. */
+    duplex: boolean
+    sheet: SheetChoice
+    /** Whether pages smaller than the sheet are made larger. */
+    enlarge: boolean
+    /** Write each page's file name at its foot. */
+    footerName: boolean
+    numbers: NumberStyle
+    numbersAt: FooterPlace
+    numbersFrom: number
+  }
   /**
    * Draw text the built-in font has no letters for, as a picture `height`
    * points tall. Without it, such letters are written as "?".
@@ -730,34 +759,23 @@ interface TakenFile {
   first: number
 }
 
+/** A drawn line stands a little taller than the letters, to hold their tails. */
+const TALL = 1.4
+
 /**
- * Add contents pages: one line per file, with the page it starts on, each a
- * link to that page. They go at the front, or after the first file when it is
- * a cover, which then has no line of its own.
- * @returns Where the contents pages start and how many there are.
+ * Writes text onto pages of the result, for contents pages and footers.
+ * Western text uses the Helvetica every reader has, named and not carried.
+ * Greek and Cyrillic use the engine's own, which travels with the file and
+ * is only added when needed. Anything else is drawn as a picture where a way
+ * to draw one was given, and written as "?" where not.
  */
-function addContents(
+function createWriter(
   mupdf: Engine,
   out: Doc,
-  pages: readonly Obj[],
-  files: readonly TakenFile[],
-  options: MergeOptions
+  textPicture: MergeOptions["textPicture"]
 ) {
-  const choice = options.contents ?? "none"
-  const listed = options.cover ? files.slice(1) : files
-  if (choice === "none" || !listed.length) return { at: 0, count: 0 }
-  // A cover is the first file's pages for as long as they come first.
-  const at = options.cover && files.length ? listed[0].first : 0
-  const size = shownSize(pages[0])
-  const count = contentsPageCount(listed.length, size)
-
   // Measuring uses the engine's Helvetica, which has the standard one's widths.
   const font = new mupdf.Font("Helvetica")
-  /**
-   * Text in Western letters is written with the Helvetica every reader has,
-   * named and not carried (F0). Greek and Cyrillic need the engine's own
-   * font to travel with the file (F1), which is only added when used.
-   */
   const standard = out.addObject(out.newDictionary())
   standard.put("Type", out.newName("Font"))
   standard.put("Subtype", out.newName("Type1"))
@@ -770,10 +788,10 @@ function addContents(
   /** Pictures of lines the font cannot write, by their text. */
   const drawn = new Map<string, { name: string; object: Obj; ratio: number }>()
   const pictureOf = (text: string) => {
-    if (writable(text) || !options.textPicture) return null
+    if (writable(text) || !textPicture) return null
     let picture = drawn.get(text)
     if (!picture) {
-      const pixels = options.textPicture(text, 64)
+      const pixels = textPicture(text, 64)
       if (!pixels) return null
       const pixmap = new mupdf.Pixmap(
         mupdf.ColorSpace.DeviceRGB,
@@ -793,7 +811,7 @@ function addContents(
       const image = new mupdf.Image(pixmap)
       pixmap.destroy()
       picture = {
-        name: `T${drawn.size}`,
+        name: `KsT${drawn.size}`,
         object: out.addImage(image),
         ratio: pixels.width / pixels.height,
       }
@@ -802,62 +820,102 @@ function addContents(
     }
     return picture
   }
-  /** A drawn line stands a little taller than the letters, to hold their tails. */
-  const TALL = 1.4
-  const measure = (text: string, textSize: number) => {
-    const picture = pictureOf(text)
-    if (picture) return picture.ratio * textSize * TALL
-    return (
-      glyphs(text).reduce((sum, glyph) => sum + font.advanceGlyph(glyph), 0) *
-      textSize
-    )
-  }
   const question = font.encodeCharacter(63)
-  const show = (text: string, textSize: number, x: number, y: number) => {
-    const picture = pictureOf(text)
-    if (picture) {
-      const height = textSize * TALL
-      return `q ${picture.ratio * height} 0 0 ${height} ${x} ${y - textSize * 0.3} cm /${picture.name} Do Q`
-    }
-    const western = winAnsiHex(text)
-    if (western !== null) return showGlyphs("F0", western, textSize, x, y)
-    carried ??= out.addFont(font)
-    return showGlyphs(
-      "F1",
-      glyphs(text)
-        .map((glyph) => (glyph || question).toString(16).padStart(4, "0"))
-        .join(""),
-      textSize,
-      x,
-      y
-    )
+  return {
+    /** The width of some text at a size, in points. */
+    measure(text: string, textSize: number) {
+      const picture = pictureOf(text)
+      if (picture) return picture.ratio * textSize * TALL
+      return (
+        glyphs(text).reduce((sum, glyph) => sum + font.advanceGlyph(glyph), 0) *
+        textSize
+      )
+    },
+    /** The command that draws some text with its foot at a point. */
+    show(text: string, textSize: number, x: number, y: number) {
+      const picture = pictureOf(text)
+      if (picture) {
+        const height = textSize * TALL
+        return `q ${picture.ratio * height} 0 0 ${height} ${x} ${y - textSize * 0.3} cm /${picture.name} Do Q`
+      }
+      const western = winAnsiHex(text)
+      if (western !== null) return showGlyphs("KsF0", western, textSize, x, y)
+      carried ??= out.addFont(font)
+      return showGlyphs(
+        "KsF1",
+        glyphs(text)
+          .map((glyph) => (glyph || question).toString(16).padStart(4, "0"))
+          .join(""),
+        textSize,
+        x,
+        y
+      )
+    },
+    /** Give a page what the commands written so far need: the fonts and any pictures. */
+    attach(page: Obj) {
+      const ensure = (holder: Obj, key: string) => {
+        if (!holder.get(key).isDictionary())
+          holder.put(key, out.newDictionary())
+        return holder.get(key)
+      }
+      const resources = ensure(page, "Resources")
+      const fonts = ensure(resources, "Font")
+      fonts.put("KsF0", standard)
+      if (carried) fonts.put("KsF1", carried)
+      if (drawn.size) {
+        const pictures = ensure(resources, "XObject")
+        for (const picture of drawn.values())
+          pictures.put(picture.name, picture.object)
+      }
+    },
+    destroy: () => font.destroy(),
   }
+}
 
+type Writer = ReturnType<typeof createWriter>
+
+/**
+ * Add contents pages: one line per file, with the page it starts on, each a
+ * link to that page. They go at the front, or after the first file when it is
+ * a cover, which then has no line of its own. For double-sided printing an
+ * odd number of contents pages is followed by a blank one.
+ * @returns Where the added pages start, how many there are, and how many of them are contents.
+ */
+function addContents(
+  out: Doc,
+  writer: Writer,
+  pages: readonly Obj[],
+  files: readonly TakenFile[],
+  options: MergeOptions
+) {
+  const choice = options.contents ?? "none"
+  const listed = options.cover ? files.slice(1) : files
+  if (choice === "none" || !listed.length) return { at: 0, count: 0, own: 0 }
+  // A cover is the first file's pages for as long as they come first.
+  const at = options.cover && files.length ? listed[0].first : 0
+  const size = shownSize(pages[0])
+  const own = contentsPageCount(listed.length, size)
+  const count = own + (options.print?.duplex && own % 2 ? 1 : 0)
   const entries = listed.map((file) => ({
     title:
       (choice === "titles" && file.source.pdf.facts.title.trim()) ||
       file.source.name,
     page: file.first + (file.first >= at ? count : 0) + 1,
   }))
-  const layouts = layoutContents(entries, size, measure)
-  layouts.forEach((layout, index) => {
-    const content = drawContents(layout, show)
-    const fonts = out.newDictionary()
-    fonts.put("F0", standard)
-    if (carried) fonts.put("F1", carried)
-    const resources = out.newDictionary()
-    resources.put("Font", fonts)
-    if (drawn.size) {
-      const pictures = out.newDictionary()
-      for (const picture of drawn.values())
-        pictures.put(picture.name, picture.object)
-      resources.put("XObject", pictures)
-    }
-    out.insertPage(
-      at + index,
-      out.addPage([0, 0, size.width, size.height], 0, resources, content)
+  const layouts = layoutContents(entries, size, writer.measure)
+  const sheet = (content: string) =>
+    out.addPage(
+      [0, 0, size.width, size.height],
+      0,
+      out.newDictionary(),
+      content
     )
+  layouts.forEach((layout, index) => {
+    const page = sheet(drawContents(layout, writer.show))
+    writer.attach(page)
+    out.insertPage(at + index, page)
   })
+  if (count > own) out.insertPage(at + own, sheet(""))
   // Links are made once every contents page is in, so page numbers are final.
   layouts.forEach((layout, index) => {
     const page = out.loadPage(at + index)
@@ -871,8 +929,123 @@ function addContents(
     }
     page.destroy()
   })
-  font.destroy()
-  return { at, count }
+  return { at, count, own }
+}
+
+/** A page's box as the file stores it: the part that is shown, or the whole sheet. */
+function boxOf(page: Obj): Box {
+  let box = page.get("CropBox")
+  if (!box.isArray()) box = page.get("MediaBox")
+  return [0, 1, 2, 3].map((at) =>
+    box.isArray() && box.get(at).isNumber() ? box.get(at).asNumber() : 0
+  ) as Box
+}
+
+const turnOf = (page: Obj) => {
+  const turn = page.get("Rotate")
+  return turn.isNumber() ? turn.asNumber() : 0
+}
+
+/**
+ * Put commands around a page's own content: `before` first, then the page
+ * inside a saved state, then `after`. The page's content is not changed, so
+ * pages that share it are not affected.
+ */
+function wrapContent(out: Doc, page: Obj, before: string, after: string) {
+  const stream = (text: string) => out.addStream(text, out.newDictionary())
+  const wrapped = out.newArray()
+  wrapped.push(stream(`${before}\nq\n`))
+  const own = page.get("Contents")
+  if (own.isArray()) own.forEach((part) => void wrapped.push(part))
+  else if (!own.isNull()) wrapped.push(own)
+  wrapped.push(stream(`\nQ\n${after}\n`))
+  page.put("Contents", wrapped)
+}
+
+/** Keys of an annotation that hold points on the page, as flat lists of x and y. */
+const POINT_LISTS = ["QuadPoints", "Vertices", "L", "CL"]
+
+/** Move a flat list of x, y pairs through a matrix, in place. */
+function movePoints(out: Doc, list: Obj, matrix: Matrix) {
+  for (let at = 0; at + 1 < list.length; at += 2) {
+    const [x, y] = applyMatrix(
+      matrix,
+      list.get(at).asNumber(),
+      list.get(at + 1).asNumber()
+    )
+    list.put(at, out.newReal(x))
+    list.put(at + 1, out.newReal(y))
+  }
+}
+
+/** Make a page the size of the sheet: its content, links, notes and fields move and scale with it. */
+function fitPage(out: Doc, page: Obj, sheet: Size, enlarge: boolean) {
+  const fit = fitToSheet(boxOf(page), turnOf(page), sheet, enlarge)
+  if (!fit) return
+  wrapContent(out, page, `q ${fit.matrix.join(" ")} cm`, "Q")
+  const box = out.newArray()
+  for (const value of fit.box) box.push(out.newReal(value))
+  page.put("MediaBox", box)
+  for (const key of ["CropBox", "BleedBox", "TrimBox", "ArtBox"])
+    page.delete(key)
+  eachAnnotation([page], (annotation) => {
+    const rect = annotation.get("Rect")
+    if (rect.isArray() && rect.length === 4) {
+      const [x0, y0] = applyMatrix(
+        fit.matrix,
+        rect.get(0).asNumber(),
+        rect.get(1).asNumber()
+      )
+      const [x1, y1] = applyMatrix(
+        fit.matrix,
+        rect.get(2).asNumber(),
+        rect.get(3).asNumber()
+      )
+      const moved = out.newArray()
+      for (const value of [x0, y0, x1, y1]) moved.push(out.newReal(value))
+      annotation.put("Rect", moved)
+    }
+    for (const key of POINT_LISTS) {
+      const list = annotation.get(key)
+      if (list.isArray()) movePoints(out, list, fit.matrix)
+    }
+    const strokes = annotation.get("InkList")
+    if (strokes.isArray())
+      strokes.forEach((stroke) => {
+        if (stroke.isArray()) movePoints(out, stroke, fit.matrix)
+      })
+  })
+}
+
+/** Write a file name, a page number, or both at the foot of a page, the right way up for its reader. */
+function addFooter(
+  out: Doc,
+  writer: Writer,
+  page: Obj,
+  name: string,
+  number: string,
+  place: FooterPlace
+) {
+  const box = boxOf(page)
+  const turn = turnOf(page)
+  const texts = footerLayout(
+    shownSizeOf(box, turn),
+    name,
+    number,
+    place,
+    (text) => writer.measure(text, FOOTER_SIZE)
+  )
+  if (!texts.length) return
+  const commands = texts.map((text) =>
+    writer.show(text.text, FOOTER_SIZE, text.x, text.y)
+  )
+  wrapContent(
+    out,
+    page,
+    "",
+    `q ${visualMatrix(box, turn).join(" ")} cm 0.3 g\n${commands.join("\n")}\nQ`
+  )
+  writer.attach(page)
 }
 
 function writeBookmarks(out: Doc, bookmarks: readonly MergedBookmark[]) {
@@ -894,8 +1067,6 @@ function writeBookmarks(out: Doc, bookmarks: readonly MergedBookmark[]) {
 
 const pdfDate = (date: Date) =>
   `D:${date.toISOString().replace(/[-:T]/g, "").slice(0, 14)}Z`
-
-const quarter = (degrees: number) => (((degrees % 360) + 360) % 360) as number
 
 /** The size a page of the result is shown at, in points. */
 function shownSize(page: Obj): Size {
@@ -1029,7 +1200,8 @@ export async function mergePages(
     if (options.attachments !== false) carryAttachments(out, grafts)
 
     // A contents page shifts every page behind it; from here on, places are final.
-    const contents = addContents(mupdf, out, pages, files, options)
+    const writer = createWriter(mupdf, out, options.textPicture)
+    const contents = addContents(out, writer, pages, files, options)
     const shifted = (index: number) =>
       index >= contents.at ? index + contents.count : index
     const bookmarks = mergeBookmarks(
@@ -1067,13 +1239,46 @@ export async function mergePages(
       const total = pages.length + contents.count
       for (let index = 0; index < total; index++) {
         const inContents =
-          index >= contents.at && index < contents.at + contents.count
+          index >= contents.at && index < contents.at + contents.own
         if (inContents)
           // Contents pages count in small Roman numerals, as front matter does.
           out.setPageLabels(index, "r", "", index - contents.at + 1)
         else out.setPageLabels(index, "\0", own.get(index) ?? "", 1)
       }
     }
+
+    const print = options.print
+    if (print) {
+      const total = pages.length + contents.count
+      const final = Array.from({ length: total }, (_, index) =>
+        out.findPage(index)
+      )
+      const sheet = targetSheet(
+        print.sheet,
+        final.map((page) => shownSizeOf(boxOf(page), turnOf(page)))
+      )
+      if (sheet)
+        for (const page of final) fitPage(out, page, sheet, print.enlarge)
+      if (print.footerName || print.numbers !== "none") {
+        /** The file each page of the result came from; none for added pages. */
+        const names = new Map<number, string>()
+        wanted.forEach((want, index) => {
+          if (!("blank" in want))
+            names.set(shifted(index), sources.get(want.source)!.name)
+        })
+        final.forEach((page, index) =>
+          addFooter(
+            out,
+            writer,
+            page,
+            print.footerName ? (names.get(index) ?? "") : "",
+            numberText(print.numbers, index, total, print.numbersFrom),
+            print.numbersAt
+          )
+        )
+      }
+    }
+    writer.destroy()
 
     const stamp = pdfDate(options.now ?? new Date())
     out.setMetaData("info:Producer", PRODUCER)

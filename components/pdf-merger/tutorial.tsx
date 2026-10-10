@@ -1,10 +1,16 @@
 import { ToolTutorial, type TutorialContent } from "@/components/tool-tutorial"
 
 const content: TutorialContent = {
+  video: {
+    file: "pdf-merger-tutorial",
+    duration: { iso: "PT1M11S", label: "1 min 11 s" },
+    uploadDate: "2026-10-11",
+  },
   name: "How to use the KeepSimp PDF merger",
   description:
     "Merge PDF files and pictures in your browser: put them in order, arrange single pages, unlock password-protected files and download one PDF with links, bookmarks and form fields kept.",
-  intro: "Follow the steps below. Every option is explained underneath.",
+  intro:
+    "Watch the tour, or follow the same steps below. Every option is explained underneath.",
   steps: [
     {
       title: "Add your PDFs",
@@ -12,19 +18,23 @@ const content: TutorialContent = {
     },
     {
       title: "Put them in order",
-      text: "Drag a file, use its arrow buttons, or sort the list by name or date.",
+      text: "Drag a file, use its arrow buttons, or sort the list by name or date. Type the pages you want from a file, such as 1-3, 7.",
     },
     {
-      title: "Choose and arrange pages",
-      text: "Type the pages you want from a file, such as 1-3, 7, or open the Pages view to drag, turn, copy and remove single pages.",
+      title: "Arrange single pages",
+      text: "Open the Pages view to select pages and drag, turn, copy or remove them. Every change can be undone.",
     },
     {
-      title: "Unlock locked files",
-      text: "A password-protected file asks for its password on its own row. It is used on your device and is not kept.",
+      title: "Organise the result",
+      text: "Choose how bookmarks are kept, add a contents page, set a password, or get the pages ready for printing.",
     },
     {
       title: "Merge and check",
-      text: "Press Merge PDF. Open the result in a new tab to look through it, then download it under the name you choose.",
+      text: "Press Merge PDF. Open the result in a new tab to look through it before you keep it.",
+    },
+    {
+      title: "Download",
+      text: "Download the merged PDF under the name you choose. Nothing is uploaded: everything runs in your browser.",
     },
   ],
   options: [
@@ -114,6 +124,26 @@ const content: TutorialContent = {
         "Files attached inside the PDFs are carried into the result unless you turn that off. When two share a name, the later one gets a number added.",
     },
     {
+      term: "Double-sided printing",
+      detail:
+        "Adds a blank page after every file that has an odd number of pages, so each file starts on a new sheet when the result is printed on both sides. An odd number of contents pages gets a blank page too. In your own page order, add blank pages yourself in the Pages view.",
+    },
+    {
+      term: "Page size",
+      detail:
+        "Fits every page onto one size: A4, Letter, the first page's size or the largest page's. Pages are scaled and centred, and a wide page gets the sheet on its side. Links, notes and fields move with the page. Turn off Enlarge smaller pages to keep small pages at their own size in the middle of the sheet.",
+    },
+    {
+      term: "Footer",
+      detail:
+        "Prints the file name, a page number, or both at the foot of every page: the number alone or as 3 of 12, at the left, centre or right, starting at the number you choose. The text is written over the bottom edge as it is, so check that nothing important sits there.",
+    },
+    {
+      term: "Other documents",
+      detail:
+        "Word, Excel, PowerPoint, EPUB and text files cannot be merged directly. Save or export them as PDF in the program that made them, then add the PDF.",
+    },
+    {
       term: "Details",
       detail:
         "The title, author, subject and keywords that viewers and search tools show. Nothing is copied from your files unless you ask: Take them from the first file fills the fields, and you can change them.",
@@ -139,6 +169,7 @@ const content: TutorialContent = {
         "Up to 100 files and 5,000 pages in the result. On a computer, files can be 300 MB each and 500 MB together; on a phone, 100 MB each and 200 MB together, because phones close pages that use more memory. Everything runs in your browser: the files, their contents and any passwords stay on your device.",
     },
   ],
+  guideHref: "/blog/merge-pdfs-without-uploading/",
 }
 
 export function PdfMergerTutorial() {

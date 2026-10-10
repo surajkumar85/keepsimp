@@ -2,6 +2,7 @@ import type { Rotation, Size } from "@/lib/image-compressor/geometry"
 import type { FileFacts } from "./files"
 import type { BookmarkPolicy } from "./outline"
 import type { PictureMargin, PicturePage } from "./picture"
+import type { FooterPlace, NumberStyle, SheetChoice } from "./print"
 import type { ContentsChoice, FormsChoice, LabelsChoice } from "./settings"
 
 /** One page of the result, as the worker is asked for it. */
@@ -48,6 +49,16 @@ export type PdfRequest =
         author: string
         subject: string
         keywords: string
+      }
+      /** Getting the result ready for paper: one page size, and what is printed at the foot of pages. */
+      print: {
+        duplex: boolean
+        sheet: SheetChoice
+        enlarge: boolean
+        footerName: boolean
+        numbers: NumberStyle
+        numbersAt: FooterPlace
+        numbersFrom: number
       }
       /** A password for the result, a second one that lifts its limits, and the limits; null for no lock. */
       lock: {

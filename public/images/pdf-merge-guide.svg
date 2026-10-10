@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 600" role="img" aria-labelledby="title desc">
+  <title id="title">Merge PDFs into one</title><desc id="desc">Pages from two files, a report and an appendix, are joined in a chosen order into one merged PDF.</desc>
+  <rect width="900" height="600" rx="24" fill="#f5f5f0"/>
+  <g fill="#fff" stroke="#d4d4d4"><rect x="60" y="80" width="330" height="200" rx="16"/><rect x="60" y="320" width="330" height="200" rx="16"/><rect x="510" y="80" width="330" height="440" rx="16"/></g>
+  <g font-family="sans-serif" font-size="17" fill="#525252"><text x="87" y="120">REPORT.PDF</text><text x="87" y="360">APPENDIX.PDF</text><text x="537" y="120">MERGED.PDF</text></g>
+  <g fill="#fff" stroke="#a3a3a3" stroke-width="2"><rect x="87" y="145" width="72" height="100" rx="4"/><rect x="177" y="145" width="72" height="100" rx="4"/><rect x="267" y="145" width="72" height="100" rx="4"/><rect x="87" y="385" width="72" height="100" rx="4"/><rect x="177" y="385" width="72" height="100" rx="4"/></g>
+  <g fill="#fff" stroke="#00786f" stroke-width="2"><rect x="537" y="150" width="72" height="100" rx="4"/><rect x="627" y="150" width="72" height="100" rx="4"/><rect x="717" y="150" width="72" height="100" rx="4"/><rect x="537" y="275" width="72" height="100" rx="4"/><rect x="627" y="275" width="72" height="100" rx="4"/></g>
+  <g font-family="monospace" font-size="22" fill="#0a0a0a" text-anchor="middle"><text x="123" y="203">1</text><text x="213" y="203">2</text><text x="303" y="203">3</text><text x="123" y="443">A</text><text x="213" y="443">B</text></g>
+  <g font-family="monospace" font-size="22" fill="#00786f" text-anchor="middle"><text x="573" y="208">1</text><text x="663" y="208">A</text><text x="753" y="208">2</text><text x="573" y="333">B</text><text x="663" y="333">3</text></g>
+  <path d="M405 180h88m-10-10 10 10-10 10M405 420h88m-10-10 10 10-10 10" fill="none" stroke="#00786f" stroke-width="3"/>
+  <g font-family="sans-serif" font-size="17" fill="#525252"><text x="537" y="430">5 pages · in your order</text><text x="537" y="462">links and bookmarks kept</text><text x="537" y="494">nothing uploaded</text></g>
+</svg>

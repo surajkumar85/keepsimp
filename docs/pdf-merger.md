@@ -1,6 +1,6 @@
 # PDF merger
 
-Updated 11 October 2026. Applies to `/dashboard/pdf-merger/`. Phases 1 to 3 of four are built: merging files and chosen pages; the page organiser and pictures as pages; and bookmark, contents, field, detail and password choices. The plan for the last is at the end.
+Updated 11 October 2026. Applies to `/dashboard/pdf-merger/`. All four planned phases are built: merging files and chosen pages; the page organiser and pictures as pages; bookmark, contents, field, detail and password choices; and print preparation, with the tutorial video and the written guide.
 
 ## What it does
 
@@ -32,6 +32,11 @@ Updated 11 October 2026. Applies to `/dashboard/pdf-merger/`. Phases 1 to 3 of f
 - **Attachments** (offered when a file has any): carried over unless turned off.
 - **Details:** title, author, subject and keywords, empty unless filled in; one press takes them from the first file that has any.
 - **Password:** AES-256, with switches for printing, copying and changes, and an optional second password that lifts those limits. Without one, limits get a random second password that is thrown away. "Clear all" also clears the password.
+- **Printing:**
+  - Double-sided: a blank page after every file but the last that gives an odd number of pages, and after an odd number of contents pages, so each file starts on a new sheet. In the person's own page order the switch gives way to a note: blank pages are added by hand there.
+  - Page size: as they are, A4, Letter, like the first page or like the largest. Pages are scaled and centred, and a wide page gets the sheet on its side. "Enlarge smaller pages" can be turned off, which only centres them.
+- **Footer:** the file name, a page number ("3" or "3 of 12"), or both, at the foot of every page. The number goes left, centre or right and starts where asked; the name takes the other side. It is written the right way up for the reader on turned pages, and over whatever is at the bottom edge.
+- **Other documents:** a Word, Excel, PowerPoint, EPUB, text or HTML file is refused with the advice to save it as a PDF first.
 - **Merge** is an explicit button, with progress and a cancel. Any later change marks the result as out of date.
 - **Result:** pages, size, how the size compares with the files together (only when every file went in whole), bookmarks, a file name field, "Download PDF" and "Open in a new tab".
 - **Privacy:** everything runs in a Web Worker in the browser. Files, their contents and passwords are not uploaded or stored.
@@ -40,7 +45,7 @@ Updated 11 October 2026. Applies to `/dashboard/pdf-merger/`. Phases 1 to 3 of f
 
 | Part of a PDF                             | What happens                                                                                                                                                                                                                                                                                                                                                                                                                                        |
 | ----------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Page content, fonts, pictures, page sizes | Copied as they are. Nothing is re-compressed.                                                                                                                                                                                                                                                                                                                                                                                                       |
+| Page content, fonts, pictures, page sizes | Copied as they are. Nothing is re-compressed. With one page size chosen, a page's content, links, notes and fields are scaled and moved together.                                                                                                                                                                                                                                                                                                   |
 | A page's own turn                         | Kept; the turn chosen for the file is added to it.                                                                                                                                                                                                                                                                                                                                                                                                  |
 | Links inside a file                       | Follow their page to its new place, whether written as a place, a name or an action. A link to a page that was left out is removed.                                                                                                                                                                                                                                                                                                                 |
 | Links to addresses outside                | Unchanged.                                                                                                                                                                                                                                                                                                                                                                                                                                          |
@@ -83,6 +88,8 @@ Set from measurements with the real engine (Node, Apple silicon):
 - The engine merges page by page (`mergePages`): each page names its file, its page there and a turn, or is a blank page of a size. Pages of one file share one copy map wherever they end up, so a file's links find its pages even when another file's pages sit between them. `mergePdfs` remains for callers that think in whole files.
 - A picture is opened as a one-page file (`openPicture`) for its thumbnail; when merging, its page is laid out afresh for the chosen page size, and the picture itself is stored once however many pages show it.
 - `contents.ts` (pure) lays out contents pages and writes their drawing commands; the engine supplies the widths of letters and turns text into glyph numbers.
+- `print.ts` (pure) works out the sheet every page should become, the matrix that fits a page onto it, where a footer's texts go, and the matrix that lets a footer be drawn the way the reader sees the page, whatever its turn.
+- One writer puts text on pages for both contents and footers. To fit or stamp a page, its own content is wrapped, never changed: a new first part sets the matrix and saves the state, a new last part restores it. Pages that share content are therefore not affected by each other.
 - **`pdf.worker.ts`**, `protocol.ts` and `client.ts`: one worker holds every opened file and does everything, one request at a time. The plan had a second worker for thumbnails; with one, a file is held in memory once, not twice. A merge pauses every 16 ms to let a cancel through.
 
 ### How pages are copied
@@ -111,7 +118,7 @@ A page that appears twice is not copied twice: the second is a new page that sha
 
 ## Tests
 
-- **Unit:** `ranges`, `files`, `outline`, `settings`, `pages`, `picture` and `contents`, each with its edge cases.
+- **Unit:** `ranges`, `files`, `outline`, `settings`, `pages`, `picture`, `contents` and `print`, each with its edge cases.
 - **Real engine in Node** (`pdf.node.test.ts`). Files are written by pdf-lib (`tests/pdf-fixtures.ts`) and results are read back by pdf.js, with form fields read by pdf-lib (`tests/pdf-reader.ts`), so the engine is never only checked against itself. Covers:
   - what a file is found to hold; passwords (missing, wrong, user, owner, restrictions only); damage of three kinds; files that are not PDFs
   - page order with chosen, repeated and reordered pages; sizes and turns; settings inherited from the page tree
@@ -126,8 +133,9 @@ A page that appears twice is not copied twice: the second is a new page that sha
   - contents pages: lines, links and page numbers, document titles, a cover, several contents pages, and names drawn as pictures
   - form choices: joining two and three fields of a name, kinds that cannot be joined, flattening and removing
   - details read and written; each file's own page numbers; attachments with a shared name; a password with commas, quotes and accents, either password opening the file, and the permission flags
+  - print preparation: every page-size choice with turned and wide pages; a fitted page drawn and compared with its source at twice the size; links, notes and fields after fitting; footers with names and numbers, drawn at the reader's bottom edge for all four turns; contents pages kept to a whole sheet
   - files from two other producers, committed in `e2e/fixtures/pdf/` and made by `scripts/pdf-test-files.mjs`: a tagged document printed by Chromium (Skia) and a picture page written by macOS (Quartz)
-- **Browser** (`e2e/pdf-merger.spec.ts`), 19 journeys on all five profiles, reading downloaded bytes with pdf.js:
+- **Browser** (`e2e/pdf-merger.spec.ts`), 20 journeys on all five profiles, reading downloaded bytes with pdf.js:
   - merging in order with links, notes, bookmarks, the file name and the result line
   - reordering with buttons, dragging and sorting
   - pages fields, mistakes in them, turning and using a file twice
@@ -145,6 +153,8 @@ A page that appears twice is not copied twice: the second is a new page that sha
   - keeping, joining, flattening and removing fields
   - details, each file's own page numbers and attachments
   - a password with awkward characters, limits, the second password, and "Clear all" clearing it
+  - one page size, footers with names and numbers, and blank backs for double-sided printing
+  - the tutorial video, its captions, the written steps and options, the guide link and structured data
   - keyboard use, axe in both themes, 320 px and no external requests
   - the written help and structured data
 - **Offline:** the merger, its samples and the engine are part of the offline journey in `e2e/offline.spec.ts`.
@@ -154,8 +164,24 @@ A page that appears twice is not copied twice: the second is a new page that sha
 - `mupdf` 1.28.1 is AGPL-3.0-or-later; KeepSimp is AGPL-3.0-only, so the licences are compatible. It is listed, with its source, in `public/licenses/pdf-engine.txt`.
 - `@cantoo/pdf-lib` (MIT) is a development dependency that writes test files and the samples. `pdfjs-dist` (Apache-2.0) was already one.
 
-## Later phases
+## Tutorial video
 
-- **Phase 4 — print preparation and polish:** blank pages for double-sided printing, one page size, file names and page numbers in the footer, other documents as pages where the engine converts them faithfully, the tutorial video and the written guide.
+`public/videos/pdf-merger-tutorial.mp4` (1 min 11 s, 5.3 MB, with poster and captions) is recorded from the real app by the shared recorder and `scripts/tutorial/pdf-merger.mjs`:
 
-Not planned: lossy recompression of pictures, OCR, text editing, signing and splitting (the PDF splitter is its own tool, still marked as coming soon).
+```bash
+npm run build
+npx serve out --listen tcp://127.0.0.1:4180
+KEEPSIMP_PREVIEW_URL=http://127.0.0.1:4180 npm run tutorial:video -- pdf-merger
+```
+
+The page sets `data-settled` on its root when nothing is being read or merged; the recorder waits on it. If the length changes, update `video.duration` in `components/pdf-merger/tutorial.tsx` and the tutorial test. The journal article "One PDF from many, without the upload." (`lib/blog.ts`) is the written guide the help section links to; its artwork is `public/images/pdf-merge-guide.svg`.
+
+## Other documents as pages
+
+Tried in October 2026 and left out. The engine can open EPUB, FictionBook, HTML and plain text and write them as PDF pages, and it pages through comic archives (CBZ). Text came through, including Chinese. But what it writes for a book is a new layout on a small default page, not a copy of anything, and a short EPUB with Chinese text grew to 3.7 MB because a whole font was embedded. Doing that well needs its own choices (page size, type size, margins) and belongs in a converter. XPS could not be tested for want of a file made by other software. The engine has no reader for SVG. Office documents cannot be read at all.
+
+So the merger takes PDFs and pictures, and says how to bring anything else: save it as a PDF first.
+
+## Not planned
+
+Lossy recompression of pictures (a future PDF compressor), OCR, text editing, signing and splitting (the PDF splitter is its own tool, still marked as coming soon).

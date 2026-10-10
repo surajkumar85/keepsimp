@@ -1,5 +1,6 @@
 import { safeSegment } from "@/lib/image-resizer/naming"
 import type { BookmarkPolicy } from "./outline"
+import type { FooterPlace, NumberStyle, SheetChoice } from "./print"
 
 const MB = 1024 * 1024
 
@@ -82,6 +83,18 @@ export interface MergeSettings {
   allowPrint: boolean
   allowCopy: boolean
   allowChanges: boolean
+  /** For double-sided printing: a blank page after every file with an odd number of pages. */
+  duplex: boolean
+  /** One size for every page. */
+  sheet: SheetChoice
+  /** Whether pages smaller than that size are made larger. */
+  enlarge: boolean
+  /** Print each page's file name at its foot. */
+  footerName: boolean
+  /** Print page numbers at the foot of every page. */
+  numbers: NumberStyle
+  numbersAt: FooterPlace
+  numbersFrom: number
 }
 
 export const defaultSettings: MergeSettings = {
@@ -102,6 +115,13 @@ export const defaultSettings: MergeSettings = {
   allowPrint: true,
   allowCopy: true,
   allowChanges: true,
+  duplex: false,
+  sheet: "keep",
+  enlarge: true,
+  footerName: false,
+  numbers: "none",
+  numbersAt: "centre",
+  numbersFrom: 1,
 }
 
 const DETAIL_LIMIT = 500
@@ -119,6 +139,15 @@ export function settingsProblem(settings: MergeSettings) {
   ])
     if (value.length > DETAIL_LIMIT)
       return `Keep the ${label} under ${DETAIL_LIMIT} characters.`
+  if (
+    settings.numbers !== "none" &&
+    !(
+      Number.isInteger(settings.numbersFrom) &&
+      settings.numbersFrom >= 0 &&
+      settings.numbersFrom <= 99_999
+    )
+  )
+    return "Start page numbers at a whole number from 0 to 99,999."
   if (!settings.protect) return null
   if (!settings.password)
     return "Enter a password for the merged PDF, or turn the password off."
@@ -165,6 +194,10 @@ export function settingsKey(settings: MergeSettings) {
   return JSON.stringify({
     ...rest,
     cover: settings.contents === "none" ? null : settings.cover,
+    enlarge: settings.sheet === "keep" ? null : settings.enlarge,
+    ...(settings.numbers === "none"
+      ? { numbersAt: null, numbersFrom: null }
+      : null),
     // What the lock would be does not matter while there is none.
     ...(settings.protect
       ? null
@@ -200,6 +233,17 @@ export function looksLikePdf(head: Uint8Array) {
     if (marker.every((byte, offset) => head[start + offset] === byte))
       return true
   return false
+}
+
+/** Documents that are not PDFs but could be saved as one by the program that made them. */
+const OFFICE =
+  /\.(docx?|xlsx?|pptx?|od[tsp]|rtf|pages|numbers|key|epub|mobi|txt|md|html?|xps)$/i
+
+/** Why a file that is neither a PDF nor a picture is refused, in words that say what to do. */
+export function refusal(name: string) {
+  return OFFICE.test(name)
+    ? `${name} is not a PDF. Save or export it as a PDF first, then add that.`
+    : `${name} is not a PDF or a picture.`
 }
 
 export const megabytes = (bytes: number) =>

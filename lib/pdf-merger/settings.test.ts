@@ -12,6 +12,7 @@ import {
   outputName,
   permissionBits,
   phoneLimits,
+  refusal,
   settingsKey,
   settingsProblem,
   type MergeSettings,
@@ -187,6 +188,16 @@ describe("settingsProblem", () => {
     expect(problem({ password: "x".repeat(300) })).toBeNull()
   })
 
+  it("checks where page numbers start, when there are any", () => {
+    expect(problem({ numbersFrom: NaN })).toBeNull()
+    expect(problem({ numbers: "number", numbersFrom: 0 })).toBeNull()
+    expect(problem({ numbers: "of", numbersFrom: 99_999 })).toBeNull()
+    for (const from of [-1, 1.5, NaN, 100_000])
+      expect(problem({ numbers: "number", numbersFrom: from }), `${from}`).toBe(
+        "Start page numbers at a whole number from 0 to 99,999."
+      )
+  })
+
   it("wants the second password to be a different one", () => {
     expect(
       problem({ protect: true, password: "same", ownerPassword: "same" })
@@ -247,6 +258,10 @@ describe("settingsKey", () => {
       { subject: "S" },
       { keywords: "K" },
       { protect: true },
+      { duplex: true },
+      { sheet: "a4" },
+      { footerName: true },
+      { numbers: "of" },
     ] as Partial<MergeSettings>[])
       expect(key(change), JSON.stringify(change)).not.toBe(base)
   })
@@ -256,6 +271,17 @@ describe("settingsKey", () => {
     expect(key({ cover: true })).toBe(base)
     expect(key({ contents: "files", cover: true })).not.toBe(
       key({ contents: "files" })
+    )
+    // Enlarging only matters with one page size, and number options with numbers.
+    expect(key({ enlarge: false })).toBe(base)
+    expect(key({ sheet: "a4", enlarge: false })).not.toBe(key({ sheet: "a4" }))
+    expect(key({ numbersAt: "left" })).toBe(base)
+    expect(key({ numbersFrom: 7 })).toBe(base)
+    expect(key({ numbers: "number", numbersAt: "left" })).not.toBe(
+      key({ numbers: "number" })
+    )
+    expect(key({ numbers: "number", numbersFrom: 7 })).not.toBe(
+      key({ numbers: "number" })
     )
     // The lock's details only matter with a lock.
     for (const change of [
@@ -271,5 +297,29 @@ describe("settingsKey", () => {
         JSON.stringify(change)
       ).not.toBe(key({ protect: true }))
     }
+  })
+})
+
+describe("refusal", () => {
+  it("says how to get a document in: as a PDF", () => {
+    for (const name of [
+      "letter.docx",
+      "old.DOC",
+      "sums.xlsx",
+      "slides.pptx",
+      "notes.odt",
+      "book.epub",
+      "readme.txt",
+      "page.html",
+      "plan.pages",
+    ])
+      expect(refusal(name), name).toBe(
+        `${name} is not a PDF. Save or export it as a PDF first, then add that.`
+      )
+  })
+
+  it("says plainly that anything else is not accepted", () => {
+    for (const name of ["archive.zip", "song.mp3", "noextension", "docx"])
+      expect(refusal(name), name).toBe(`${name} is not a PDF or a picture.`)
   })
 })

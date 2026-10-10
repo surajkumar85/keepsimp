@@ -70,6 +70,7 @@ import {
   megabytes,
   outputName,
   permissionBits,
+  refusal,
   settingsKey,
   settingsProblem,
   type Limits,
@@ -79,6 +80,7 @@ import { FileList } from "./file-list"
 import { OutputPanel } from "./output-panel"
 import { PageGrid, type GridFile } from "./page-grid"
 import { PagePreview } from "./page-preview"
+import { PrintPanel } from "./print-panel"
 import { StructurePanel } from "./structure-panel"
 
 const INPUT_ID = "pdf-file"
@@ -264,7 +266,7 @@ export function PdfMerger() {
         else if (sniffFormat(head)) {
           pdfs.push(file)
           pictures.add(file)
-        } else refused.push(`${file.name} is not a PDF or a picture.`)
+        } else refused.push(refusal(file.name))
       }
       const verdicts = admit(live.current.files, pdfs, limits)
       const items = pdfs.flatMap((file, index) => {
@@ -382,7 +384,10 @@ export function PdfMerger() {
       if (file.status === "ready") needThumbnail(file.id, 0)
   }, [state.files, needThumbnail])
 
-  const derived = useMemo(() => derivePages(state.files), [state.files])
+  const derived = useMemo(
+    () => derivePages(state.files, settings.duplex),
+    [state.files, settings.duplex]
+  )
   const usable = useMemo(
     () =>
       new Set(
@@ -466,6 +471,15 @@ export function PdfMerger() {
           author: settings.author,
           subject: settings.subject,
           keywords: settings.keywords,
+        },
+        print: {
+          duplex: settings.duplex,
+          sheet: settings.sheet,
+          enlarge: settings.enlarge,
+          footerName: settings.footerName,
+          numbers: settings.numbers,
+          numbersAt: settings.numbersAt,
+          numbersFrom: settings.numbersFrom,
         },
         lock: locked
           ? {
@@ -693,6 +707,7 @@ export function PdfMerger() {
       data-testid="pdf-merger"
       data-ready={!status.reading || undefined}
       data-merged={current ? "true" : undefined}
+      data-settled={!status.reading && !merging ? "true" : undefined}
       data-view={view}
     >
       <div
@@ -1133,6 +1148,12 @@ export function PdfMerger() {
             </Section>
           </div>
         )}
+
+        <PrintPanel
+          settings={settings}
+          update={update}
+          arranged={arranged !== null}
+        />
 
         <OutputPanel settings={settings} update={update} first={firstDetails} />
 

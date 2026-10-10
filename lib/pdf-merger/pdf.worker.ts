@@ -193,6 +193,7 @@ async function merge(request: Extract<PdfRequest, { type: "merge" }>) {
       attachments: request.attachments,
       details: request.details,
       lock: request.lock ?? undefined,
+      print: request.print,
       textPicture,
       checkpoint: async () => {
         // Let a cancel message in now and then; a pause after every page

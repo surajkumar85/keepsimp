@@ -61,6 +61,12 @@ const cards = [
     "/images/json-query-guide.svg",
   ],
   [
+    "merge-pdfs-without-uploading",
+    "One PDF from many.",
+    "Merge and arrange pages, without the upload.",
+    "/images/pdf-merge-guide.svg",
+  ],
+  [
     "repair-compare-json-patch",
     "Preview every JSON change.",
     "Repair, compare and apply JSON Patch locally.",
