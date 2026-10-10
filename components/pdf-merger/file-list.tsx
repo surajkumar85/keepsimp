@@ -117,6 +117,7 @@ function PasswordRow({
 export function FileList({
   files,
   thumbnails,
+  arranged,
   onMove,
   onRange,
   onRotate,
@@ -125,7 +126,10 @@ export function FileList({
   onUnlock,
 }: {
   files: PdfFile[]
+  /** Pictures of pages, by "file/page". */
   thumbnails: Record<string, ImageBitmap>
+  /** Pages were arranged by hand, so the order and pages of files no longer set the result. */
+  arranged: boolean
   onMove: (id: string, to: number) => void
   onRange: (id: string, text: string) => void
   onRotate: (id: string) => void
@@ -151,7 +155,7 @@ export function FileList({
             key={file.id}
             data-testid="file-row"
             data-status={file.status}
-            draggable
+            draggable={!arranged}
             onDragStart={(event) => {
               setDragged(file.id)
               event.dataTransfer.effectAllowed = "move"
@@ -175,14 +179,19 @@ export function FileList({
             <span className="w-5 pt-1 text-center font-mono text-xs text-muted-foreground">
               {index + 1}
             </span>
-            <Thumbnail bitmap={thumbnails[file.id]} rotation={file.rotation} />
+            <Thumbnail
+              bitmap={thumbnails[`${file.id}/0`]}
+              rotation={file.rotation}
+            />
             <div className="min-w-0 flex-1 basis-48">
               <p className="truncate text-sm font-medium">{file.name}</p>
               <p className="text-xs text-muted-foreground">
                 {file.status === "reading" && "Reading…"}
                 {file.status === "ready" &&
                   file.facts &&
-                  `${file.facts.pages.toLocaleString("en")} ${file.facts.pages === 1 ? "page" : "pages"} · ${sizeLabel(file.size)}`}
+                  (file.facts.picture
+                    ? `Picture · ${file.facts.picture.width.toLocaleString("en")} × ${file.facts.picture.height.toLocaleString("en")} px · ${sizeLabel(file.size)}`
+                    : `${file.facts.pages.toLocaleString("en")} ${file.facts.pages === 1 ? "page" : "pages"} · ${sizeLabel(file.size)}`)}
                 {file.status === "locked" && (
                   <span className="inline-flex items-center gap-1">
                     <IconLock className="size-3.5" aria-hidden="true" />
@@ -205,44 +214,47 @@ export function FileList({
                   onUnlock={(password) => onUnlock(file.id, password)}
                 />
               )}
-              {file.status === "ready" && file.facts && (
-                <div className="mt-2">
-                  <label
-                    htmlFor={`${ids}-range-${file.id}`}
-                    className="mb-1 block text-xs font-medium"
-                  >
-                    Pages<span className="sr-only"> from {file.name}</span>
-                  </label>
-                  <Input
-                    id={`${ids}-range-${file.id}`}
-                    value={file.range}
-                    onChange={(event) => onRange(file.id, event.target.value)}
-                    placeholder={
-                      file.facts.pages === 1
-                        ? "The one page"
-                        : `All ${file.facts.pages.toLocaleString("en")} pages`
-                    }
-                    spellCheck={false}
-                    autoComplete="off"
-                    aria-invalid={problem ? true : undefined}
-                    aria-describedby={`${ids}-range-hint-${file.id}`}
-                    className="w-56 max-w-full font-mono"
-                  />
-                  <p
-                    id={`${ids}-range-hint-${file.id}`}
-                    role={problem ? "alert" : undefined}
-                    className={cn(
-                      "mt-1 text-xs",
-                      problem ? "text-destructive" : "text-muted-foreground"
-                    )}
-                  >
-                    {problem ??
-                      (file.range.trim()
-                        ? `Using ${used.toLocaleString("en")} ${used === 1 ? "page" : "pages"}${file.rotation ? `, turned ${file.rotation}°` : ""}.`
-                        : `For example 1-3, 7 or odd${file.rotation ? `. Turned ${file.rotation}°` : ""}.`)}
-                  </p>
-                </div>
-              )}
+              {file.status === "ready" &&
+                file.facts &&
+                !file.facts.picture &&
+                !arranged && (
+                  <div className="mt-2">
+                    <label
+                      htmlFor={`${ids}-range-${file.id}`}
+                      className="mb-1 block text-xs font-medium"
+                    >
+                      Pages<span className="sr-only"> from {file.name}</span>
+                    </label>
+                    <Input
+                      id={`${ids}-range-${file.id}`}
+                      value={file.range}
+                      onChange={(event) => onRange(file.id, event.target.value)}
+                      placeholder={
+                        file.facts.pages === 1
+                          ? "The one page"
+                          : `All ${file.facts.pages.toLocaleString("en")} pages`
+                      }
+                      spellCheck={false}
+                      autoComplete="off"
+                      aria-invalid={problem ? true : undefined}
+                      aria-describedby={`${ids}-range-hint-${file.id}`}
+                      className="w-56 max-w-full font-mono"
+                    />
+                    <p
+                      id={`${ids}-range-hint-${file.id}`}
+                      role={problem ? "alert" : undefined}
+                      className={cn(
+                        "mt-1 text-xs",
+                        problem ? "text-destructive" : "text-muted-foreground"
+                      )}
+                    >
+                      {problem ??
+                        (file.range.trim()
+                          ? `Using ${used.toLocaleString("en")} ${used === 1 ? "page" : "pages"}${file.rotation ? `, turned ${file.rotation}°` : ""}.`
+                          : `For example 1-3, 7 or odd${file.rotation ? `. Turned ${file.rotation}°` : ""}.`)}
+                    </p>
+                  </div>
+                )}
               {notes.map((note) => (
                 <p
                   key={note}
@@ -265,7 +277,7 @@ export function FileList({
                 variant="ghost"
                 size="icon"
                 aria-label={`Move ${file.name} earlier`}
-                disabled={index === 0}
+                disabled={arranged || index === 0}
                 onClick={() => onMove(file.id, index - 1)}
               >
                 <IconArrowUp aria-hidden="true" />
@@ -274,7 +286,7 @@ export function FileList({
                 variant="ghost"
                 size="icon"
                 aria-label={`Move ${file.name} later`}
-                disabled={index === files.length - 1}
+                disabled={arranged || index === files.length - 1}
                 onClick={() => onMove(file.id, index + 1)}
               >
                 <IconArrowDown aria-hidden="true" />
@@ -283,7 +295,7 @@ export function FileList({
                 variant="ghost"
                 size="icon"
                 aria-label={`Turn the pages of ${file.name}`}
-                disabled={file.status !== "ready"}
+                disabled={arranged || file.status !== "ready"}
                 onClick={() => onRotate(file.id)}
               >
                 <IconRotateClockwise2 aria-hidden="true" />

@@ -1,8 +1,12 @@
 "use client"
 
-import type { MergePart } from "./files"
-import type { BookmarkPolicy } from "./outline"
 import type { PdfRequest, PdfResponse } from "./protocol"
+
+/** Everything a merge is asked for. */
+export type MergeOrder = Omit<
+  Extract<PdfRequest, { type: "merge" }>,
+  "type" | "job"
+>
 
 export const ENGINE_FAILED =
   "The PDF engine could not start. Reload the page and try again."
@@ -35,7 +39,7 @@ export class PdfClient {
    * again. Passwords are not remembered: one is only ever sent to a worker
    * that has already answered, and such a worker is never started again.
    */
-  private readonly sent = new Map<string, Blob>()
+  private readonly sent = new Map<string, { file: Blob; picture: boolean }>()
   private readonly thumbnails = new Map<
     number,
     (bitmap: ImageBitmap | null) => void
@@ -101,7 +105,8 @@ export class PdfClient {
     // Offline, some browsers fail to load a worker's scripts the first time (see WorkerPool).
     if (!this.answered && this.restarts < 2) {
       this.restarts++
-      for (const [id, file] of this.sent) this.send({ type: "open", id, file })
+      for (const [id, { file, picture }] of this.sent)
+        this.send({ type: "open", id, file, picture })
       return
     }
     for (const id of this.sent.keys())
@@ -109,9 +114,14 @@ export class PdfClient {
     this.sent.clear()
   }
 
-  open(id: string, file: Blob, password?: string) {
-    this.sent.set(id, file)
-    this.send({ type: "open", id, file, password })
+  open(
+    id: string,
+    file: Blob,
+    options: { password?: string; picture?: boolean } = {}
+  ) {
+    const picture = Boolean(options.picture)
+    this.sent.set(id, { file, picture })
+    this.send({ type: "open", id, file, password: options.password, picture })
   }
 
   close(id: string) {
@@ -129,18 +139,17 @@ export class PdfClient {
   }
 
   /**
-   * Merge parts of the open files. The promise gives null when the merge was
+   * Merge pages of the open files. The promise gives null when the merge was
    * cancelled. `onProgress` is given a null total once the file is being written.
    */
   merge(
-    parts: (MergePart & { name: string })[],
-    bookmarks: BookmarkPolicy,
+    order: MergeOrder,
     onProgress: (done: number, total: number | null) => void
   ) {
     const job = ++this.jobs
     const promise = new Promise<MergeResult | null>((resolve, reject) => {
       this.merges.set(job, { resolve, reject, onProgress })
-      this.send({ type: "merge", job, parts, bookmarks })
+      this.send({ type: "merge", job, ...order })
     })
     return {
       promise,

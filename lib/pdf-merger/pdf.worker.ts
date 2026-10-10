@@ -1,12 +1,18 @@
 /// <reference lib="webworker" />
+import { decodeImageFile, TOO_MANY_PIXELS } from "@/lib/image-compressor/decode"
+import { sniffFormat } from "@/lib/image-compressor/formats"
 import {
   closePdf,
-  mergePdfs,
+  mergePages,
   openPdf,
+  openPicture,
   PasswordNeeded,
   renderPage,
+  UNREADABLE,
+  type MergeSource,
   type OpenedPdf,
 } from "./mupdf-engine"
+import { jpegOrientation, quarterTurns } from "./picture"
 import type { PdfRequest, PdfResponse } from "./protocol"
 
 declare const self: DedicatedWorkerGlobalScope
@@ -27,6 +33,8 @@ const FAILED =
 
 const TOO_LARGE =
   "This is more than this device can handle at once. Remove some files, reload the page and try again."
+
+const UNREADABLE_PICTURE = "This picture could not be read. It may be damaged."
 
 class Cancelled extends Error {}
 
@@ -49,13 +57,57 @@ const readable = (error: unknown, fallback: string) => {
     : fallback
 }
 
-async function open(request: Extract<PdfRequest, { type: "open" }>) {
+/** A picture as a one-page file. A JPEG is kept as it is where its orientation allows. */
+async function picture(mupdf: Awaited<typeof engine>, file: Blob) {
+  const head = new Uint8Array(await file.slice(0, 1024 * 1024).arrayBuffer())
+  const format = sniffFormat(head)
+  if (!format) throw new Error("This picture could not be read.")
+  // SVG needs the page to draw it, which a worker cannot ask for.
+  if (format === "svg")
+    throw new Error("SVG cannot be added as a page. Convert it to PNG first.")
+  if (format === "jpeg") {
+    const turn = quarterTurns(jpegOrientation(head))
+    // A mirrored photograph has to be redrawn; a turned one does not.
+    if (turn !== null)
+      return openPicture(mupdf, {
+        jpeg: new Uint8Array(await file.arrayBuffer()),
+        turn,
+      })
+  }
+  let pixels
   try {
-    const mupdf = await engine
-    const bytes = new Uint8Array(await request.file.arrayBuffer())
+    pixels = await decodeImageFile(file, format)
+  } catch (error) {
+    // Each browser words a failed decode its own way; the page says one thing.
+    throw new Error(
+      (error as Error).message === TOO_MANY_PIXELS
+        ? TOO_MANY_PIXELS
+        : UNREADABLE_PICTURE
+    )
+  }
+  return openPicture(mupdf, {
+    pixels: { data: pixels.data, width: pixels.width, height: pixels.height },
+  })
+}
+
+async function open(request: Extract<PdfRequest, { type: "open" }>) {
+  let mupdf: Awaited<typeof engine>
+  try {
+    mupdf = await engine
+  } catch {
+    post({ type: "open-error", id: request.id, message: ENGINE_FAILED })
+    return
+  }
+  try {
     const previous = files.get(request.id)
     if (previous) closePdf(previous)
-    const pdf = openPdf(mupdf, bytes, request.password)
+    const pdf = request.picture
+      ? await picture(mupdf, request.file)
+      : openPdf(
+          mupdf,
+          new Uint8Array(await request.file.arrayBuffer()),
+          request.password
+        )
     files.set(request.id, pdf)
     post({ type: "opened", id: request.id, facts: pdf.facts })
   } catch (error) {
@@ -65,7 +117,10 @@ async function open(request: Extract<PdfRequest, { type: "open" }>) {
       post({
         type: "open-error",
         id: request.id,
-        message: readable(error, ENGINE_FAILED),
+        message: readable(
+          error,
+          request.picture ? UNREADABLE_PICTURE : UNREADABLE
+        ),
       })
   }
 }
@@ -92,20 +147,20 @@ async function thumbnail(request: Extract<PdfRequest, { type: "thumbnail" }>) {
 async function merge(request: Extract<PdfRequest, { type: "merge" }>) {
   const { job } = request
   try {
-    const inputs = request.parts.map((part) => {
-      const pdf = files.get(part.id)
+    const sources = new Map<string, MergeSource>()
+    const wanted = request.pages.map((page) => {
+      if ("blank" in page) return page
+      const pdf = files.get(page.file)
       if (!pdf) throw new Error(FAILED)
-      return {
-        pdf,
-        name: part.name,
-        pages: part.pages,
-        rotation: part.rotation,
-      }
+      sources.set(page.file, { pdf, name: request.names[page.file] ?? "" })
+      return { source: page.file, index: page.page, rotation: page.rotation }
     })
     let last = 0
     let paused = performance.now()
-    const result = await mergePdfs(await engine, inputs, {
+    const result = await mergePages(await engine, sources, wanted, {
       bookmarks: request.bookmarks,
+      picturePage: request.picturePage,
+      pictureMargin: request.pictureMargin,
       checkpoint: async () => {
         // Let a cancel message in now and then; a pause after every page
         // would cost more time than the pages themselves.

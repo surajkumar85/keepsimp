@@ -1,6 +1,6 @@
 # PDF merger
 
-Updated 11 October 2026. Applies to `/dashboard/pdf-merger/`. Phase 1 of four is built: merging whole files and chosen pages. The plan for the rest is at the end.
+Updated 11 October 2026. Applies to `/dashboard/pdf-merger/`. Phases 1 and 2 of four are built: merging files and chosen pages, the page organiser, and pictures as pages. The plan for the rest is at the end.
 
 ## What it does
 
@@ -12,6 +12,18 @@ Updated 11 October 2026. Applies to `/dashboard/pdf-merger/`. Phase 1 of four is
 - **Pages field:** `1-3, 7`, open ends (`10-`, `-3`), backwards ranges (`5-1`), `odd`, `even`, repeats. Empty means the whole file. A mistake is explained under the field and stops the merge.
 - **Locked files:** a row asks for the password. A wrong one is said to be wrong; the right one opens the file. The merged PDF has no password. A file that only restricts changes opens by itself, with a reminder to have the right to change it.
 - **Damaged files:** a broken index or a missing end is repaired, and the row says so. A file that cannot be read is listed with the reason and left out; the rest still merge.
+- **Pages view:** every page of the result as a tile with its picture, its position and where it came from.
+  - Click to select, Shift-click for everything between, "Select all" and "Clear".
+  - Drag one page or the whole selection to a new place. On a touch screen, where there is nothing to drag with, the toolbar does the same.
+  - Toolbar: turn either way, copy, remove, move earlier or later or to either end, reverse the order, add a blank page, look closely, undo and redo.
+  - Keyboard: arrows, Home and End move; Space selects; Shift with an arrow selects on; Alt with ← or → moves; R and Shift+R turn; Delete removes; Ctrl/Cmd+A, Ctrl/Cmd+Z and Ctrl/Cmd+Shift+Z; Escape lets go of the selection. Every change is announced to screen readers.
+  - Pictures are drawn only for tiles near the screen, and at most 300 are kept, so a 5,000-page list stays light.
+  - **Look closely** opens one page large in a side sheet, with Previous and Next.
+- **Your own page order:** the first change in the Pages view makes the arrangement the person's own. From then on the file list shows where pages come from but no longer sets the result: its move buttons, pages fields and turn buttons are off, and a note says why. Files added later join at the end; a removed file takes its pages with it. "Start again from the files" goes back, after asking.
+- **Alternate pages:** with two or more files, deals their pages out in turn (first of each, second of each, and so on), with a switch for a last file that is in reverse order. It is one step in the undo history.
+- **Pictures as pages:** JPG, PNG, WebP, AVIF, HEIC, GIF, TIFF, BMP and JPEG XL. SVG is refused with a reason.
+  - Page size: like the page before (the default; A4 when nothing comes before), fit the picture at 150 pixels to the inch, A4 or Letter. The sheet is turned to suit the picture. Margin: none, small or normal.
+  - A JPEG goes in as it is, byte for byte, and is shown upright by the turn its EXIF data asks for. A mirrored JPEG and every other format are decoded and stored without loss; see-through parts become white.
 - **Merge** is an explicit button, with progress and a cancel. Any later change marks the result as out of date.
 - **Result:** pages, size, how the size compares with the files together (only when every file went in whole), bookmarks, a file name field, "Download PDF" and "Open in a new tab".
 - **Privacy:** everything runs in a Web Worker in the browser. Files, their contents and passwords are not uploaded or stored.
@@ -26,6 +38,7 @@ Updated 11 October 2026. Applies to `/dashboard/pdf-merger/`. Phase 1 of four is
 | Links to addresses outside                | Unchanged.                                                                                                                                                                                                                   |
 | Notes, highlights and other annotations   | Kept. A page used twice gets its own copies.                                                                                                                                                                                 |
 | Bookmarks                                 | Kept and pointed at the new pages. With several files they sit under an entry named after each file. One for a page that was left out is dropped, unless something beneath it is kept.                                       |
+| Blank pages                               | Take the size of the first page of the file beside them, or A4.                                                                                                                                                              |
 | Fillable fields                           | Kept and still fillable. A field whose name an earlier file already uses gets the file's number added (`name_2`). Fields on pages that were left out are dropped. A page used twice keeps its fields on the first copy only. |
 | Layers                                    | Kept, each shown or hidden as its own file had it. With several files, each file's layers are listed under its name.                                                                                                         |
 | Digital signatures                        | Cannot stay valid. The signature's picture is kept as a stamp; the field behind it is removed, so no viewer reports a broken signature. The row says so.                                                                     |
@@ -58,6 +71,9 @@ Set from measurements with the real engine (Node, Apple silicon):
 
 - **Pure logic** (`lib/pdf-merger/`, 100% covered): `ranges.ts` (the pages field), `files.ts` (the list, its order and what a merge would do), `outline.ts` (bookmarks of the result), `settings.ts` (limits, names, the PDF sniffer).
 - **`mupdf-engine.ts`** is the only code that touches MuPDF. The engine module is handed in, so the same code runs in the worker and in Node, where the real-engine tests live.
+- More pure logic since phase 2: `pages.ts` (the page list and everything done to it, with undo and redo) and `picture.ts` (a JPEG's orientation, and where a picture sits on its page).
+- The engine merges page by page (`mergePages`): each page names its file, its page there and a turn, or is a blank page of a size. Pages of one file share one copy map wherever they end up, so a file's links find its pages even when another file's pages sit between them. `mergePdfs` remains for callers that think in whole files.
+- A picture is opened as a one-page file (`openPicture`) for its thumbnail; when merging, its page is laid out afresh for the chosen page size, and the picture itself is stored once however many pages show it.
 - **`pdf.worker.ts`**, `protocol.ts` and `client.ts`: one worker holds every opened file and does everything, one request at a time. The plan had a second worker for thumbnails; with one, a file is held in memory once, not twice. A merge pauses every 16 ms to let a cancel through.
 
 ### How pages are copied
@@ -83,7 +99,7 @@ A page that appears twice is not copied twice: the second is a new page that sha
 
 ## Tests
 
-- **Unit:** `ranges`, `files`, `outline` and `settings`, each with its edge cases.
+- **Unit:** `ranges`, `files`, `outline`, `settings`, `pages` and `picture`, each with its edge cases.
 - **Real engine in Node** (`pdf.node.test.ts`). Files are written by pdf-lib (`tests/pdf-fixtures.ts`) and results are read back by pdf.js, with form fields read by pdf-lib (`tests/pdf-reader.ts`), so the engine is never only checked against itself. Covers:
   - what a file is found to hold; passwords (missing, wrong, user, owner, restrictions only); damage of three kinds; files that are not PDFs
   - page order with chosen, repeated and reordered pages; sizes and turns; settings inherited from the page tree
@@ -93,8 +109,10 @@ A page that appears twice is not copied twice: the second is a new page that sha
   - shared parts stored once; the result's own details; progress, pauses and stopping
   - a hundred seeded random page plans, each checked page by page
   - every merged page drawn and compared, pixel for pixel, with the page it came from
+  - single pages woven together from two files, with links and bookmarks; each page turned by itself; blank pages
+  - pictures: a JPEG kept byte for byte, one stored on its side, pixels with see-through parts, every page-size choice, and a picture used twice stored once
   - files from two other producers, committed in `e2e/fixtures/pdf/` and made by `scripts/pdf-test-files.mjs`: a tagged document printed by Chromium (Skia) and a picture page written by macOS (Quartz)
-- **Browser** (`e2e/pdf-merger.spec.ts`), 10 journeys on all five profiles, reading downloaded bytes with pdf.js:
+- **Browser** (`e2e/pdf-merger.spec.ts`), 15 journeys on all five profiles, reading downloaded bytes with pdf.js:
   - merging in order with links, notes, bookmarks, the file name and the result line
   - reordering with buttons, dragging and sorting
   - pages fields, mistakes in them, turning and using a file twice
@@ -103,6 +121,11 @@ A page that appears twice is not copied twice: the second is a new page that sha
   - form fields, layers and a signature
   - progress and cancelling a 1,500-page merge
   - dropped files and the samples
+  - the Pages view: selecting, turning, moving, copying, removing, blank pages, undo and redo, then the file list beside an arrangement and going back to it
+  - the Pages view from the keyboard, and dragging one page and several
+  - the large preview
+  - alternating two files, one in reverse
+  - pictures as pages: a turned JPEG, a PNG, an HEIC and a refused SVG, with each page size
   - keyboard use, axe in both themes, 320 px and no external requests
   - the written help and structured data
 - **Offline:** the merger, its samples and the engine are part of the offline journey in `e2e/offline.spec.ts`.
@@ -114,7 +137,6 @@ A page that appears twice is not copied twice: the second is a new page that sha
 
 ## Later phases
 
-- **Phase 2 — page organiser and images:** a Pages view with a thumbnail of every page; select, drag, rotate, duplicate, delete, blank pages, undo and redo, all from the keyboard too; a large preview; alternating the pages of two files; images as pages.
 - **Phase 3 — bookmarks, contents, forms and protection:** the four bookmark choices (`mergeBookmarks` already has them), a table of contents page, form choices (keep, join, flatten, remove), document details, page labels, attachments and a password on the result.
 - **Phase 4 — print preparation and polish:** blank pages for double-sided printing, one page size, file names and page numbers in the footer, other documents as pages where the engine converts them faithfully, the tutorial video and the written guide.
 

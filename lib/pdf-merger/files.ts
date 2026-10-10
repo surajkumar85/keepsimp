@@ -21,6 +21,8 @@ export interface FileFacts {
   /** It has accessibility tags, which are not carried over. */
   tagged: boolean
   forms: boolean
+  /** Set for a picture added as a page: its size in pixels, as it is shown. */
+  picture?: { width: number; height: number }
 }
 
 export type SortOrder = "added" | "name" | "name-desc" | "oldest" | "newest"
@@ -43,6 +45,8 @@ export interface PdfFile {
   range: string
   /** A turn applied to every page taken from this file. */
   rotation: Rotation
+  /** The file is a picture, which becomes a page. */
+  picture?: boolean
 }
 
 export interface FilesState {
@@ -64,6 +68,7 @@ export type FilesAction =
         name: string
         size: number
         modified: number
+        picture?: boolean
       }[]
     }
   | { type: "opened"; id: string; facts: FileFacts }
@@ -183,7 +188,7 @@ export function filesReducer(
     case "again": {
       const at = state.files.findIndex((file) => file.id === action.id)
       if (at < 0) return state
-      const { file, name, size, modified } = state.files[at]
+      const { file, name, size, modified, picture } = state.files[at]
       const files = [...state.files]
       files.splice(at + 1, 0, {
         id: action.newId,
@@ -191,6 +196,7 @@ export function filesReducer(
         name,
         size,
         modified,
+        picture,
         added: state.arrivals,
         // It is read afresh, so a locked file asks for its password again.
         status: "reading",
@@ -231,6 +237,22 @@ export interface MergeStatus {
   problem: string | null
 }
 
+/** What to say while locked files wait for their passwords; null when none do. */
+export function lockedProblem(files: readonly PdfFile[]) {
+  const locked = files.filter((file) => file.status === "locked")
+  if (!locked.length) return null
+  return locked.length === 1
+    ? `Enter the password for ${locked[0].name}, or remove it.`
+    : `Enter the passwords for the ${locked.length} locked files, or remove them.`
+}
+
+/** What to say when a result would have too many pages; null when it would not. */
+export function pagesProblem(pages: number, maxPages: number) {
+  return pages > maxPages
+    ? `The result would have ${pages.toLocaleString("en")} pages. Up to ${maxPages.toLocaleString("en")} can be merged at once.`
+    : null
+}
+
 /** What a merge would do with the list as it stands, and what stands in its way. */
 export function mergeStatus(
   files: readonly PdfFile[],
@@ -239,13 +261,7 @@ export function mergeStatus(
   const parts: MergePart[] = []
   let pages = 0
   let bytes = 0
-  let problem: string | null = null
-  const locked = files.filter((file) => file.status === "locked")
-  if (locked.length)
-    problem =
-      locked.length === 1
-        ? `Enter the password for ${locked[0].name}, or remove it.`
-        : `Enter the passwords for the ${locked.length} locked files, or remove them.`
+  let problem = lockedProblem(files)
   for (const file of files) {
     const chosen = chosenPages(file)
     if (!chosen) continue
@@ -257,8 +273,7 @@ export function mergeStatus(
     pages += chosen.pages.length
     bytes += file.size
   }
-  if (pages > maxPages)
-    problem ??= `The result would have ${pages.toLocaleString("en")} pages. Up to ${maxPages.toLocaleString("en")} can be merged at once.`
+  problem ??= pagesProblem(pages, maxPages)
   return {
     parts,
     pages,

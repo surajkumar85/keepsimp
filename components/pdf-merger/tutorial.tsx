@@ -3,20 +3,20 @@ import { ToolTutorial, type TutorialContent } from "@/components/tool-tutorial"
 const content: TutorialContent = {
   name: "How to use the KeepSimp PDF merger",
   description:
-    "Merge PDF files in your browser: put them in order, choose pages, unlock password-protected files and download one PDF with links, bookmarks and form fields kept.",
+    "Merge PDF files and pictures in your browser: put them in order, arrange single pages, unlock password-protected files and download one PDF with links, bookmarks and form fields kept.",
   intro: "Follow the steps below. Every option is explained underneath.",
   steps: [
     {
       title: "Add your PDFs",
-      text: "Drop PDF files, choose them from your device or paste them. You can add more at any time, or try the samples.",
+      text: "Drop PDF files and pictures, choose them from your device or paste them. You can add more at any time, or try the samples.",
     },
     {
       title: "Put them in order",
       text: "Drag a file, use its arrow buttons, or sort the list by name or date.",
     },
     {
-      title: "Choose pages",
-      text: "Leave the pages field empty to take the whole file, or type the pages you want, such as 1-3, 7. Turn a file's pages with the turn button.",
+      title: "Choose and arrange pages",
+      text: "Type the pages you want from a file, such as 1-3, 7, or open the Pages view to drag, turn, copy and remove single pages.",
     },
     {
       title: "Unlock locked files",
@@ -47,6 +47,31 @@ const content: TutorialContent = {
       term: "The same file twice",
       detail:
         "Add again puts a second copy of a file straight after the first, with its own pages field. Use it to place different parts of one file in different places.",
+    },
+    {
+      term: "Pages view",
+      detail:
+        "Shows every page of the result as a small picture. Click pages to select them, and Shift-click to select everything between two. Drag them to a new place, or use the toolbar to turn, copy, remove or move them, to reverse their order, or to add a blank page. Undo and redo cover every change. Look closely opens one page large, with the pages beside it a press away.",
+    },
+    {
+      term: "Keyboard in the Pages view",
+      detail:
+        "Arrow keys move between pages, with Home and End for the first and last. Space selects, and Shift with an arrow selects on from there. Alt with the left or right arrow moves the selected pages, R turns them, and Delete removes them. Ctrl or Cmd with A selects all, with Z undoes and with Shift and Z does again. Escape lets go of the selection.",
+    },
+    {
+      term: "Your own page order",
+      detail:
+        "After the first change in the Pages view, the result follows your arrangement, not the file list. Files you add then join at the end, and removing a file takes its pages away. Start again from the files puts every file's pages back together and asks before it does.",
+    },
+    {
+      term: "Alternate pages",
+      detail:
+        "Takes the first page of each file, then the second of each, and so on. This joins a document that was scanned as two files, fronts and backs. Turn on the switch when the backs were scanned with the stack turned over, so that the last file is read from its end.",
+    },
+    {
+      term: "Pictures as pages",
+      detail:
+        "JPG, PNG, WebP, AVIF, HEIC, GIF, TIFF, BMP and JPEG XL pictures become pages. A picture takes the size of the page before it, or fits its own size, or goes on an A4 or Letter sheet, with a margin you choose. JPEG photographs go in as they are, without being compressed again, and are shown the right way up. See-through parts of other pictures become white. SVG is not accepted.",
     },
     {
       term: "Locked files",

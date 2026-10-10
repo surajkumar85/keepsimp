@@ -4,7 +4,8 @@
  * read its results back with other software.
  */
 import type * as MuPDF from "mupdf"
-import type { Rotation } from "@/lib/image-compressor/geometry"
+import type { Rotation, Size } from "@/lib/image-compressor/geometry"
+import type { Pixels } from "@/lib/image-compressor/ssim"
 import type { FileFacts } from "./files"
 import {
   countBookmarks,
@@ -14,6 +15,7 @@ import {
   type MergedBookmark,
   type OutlineSource,
 } from "./outline"
+import { pictureLayout, type PictureMargin, type PicturePage } from "./picture"
 
 type Engine = typeof MuPDF
 type Doc = MuPDF.PDFDocument
@@ -42,6 +44,8 @@ export interface OpenedPdf {
   pages: Obj[]
   facts: FileFacts
   bookmarks: Bookmark[]
+  /** Set for a picture added as a page: the picture itself, to be laid out when merging. */
+  picture?: { image: Obj; width: number; height: number; turn: Rotation }
 }
 
 const nameOf = (object: Obj) => (object.isName() ? object.asName() : "")
@@ -195,6 +199,97 @@ export function closePdf(opened: OpenedPdf) {
   opened.doc.destroy()
 }
 
+const drawPicture = (matrix: readonly number[]) =>
+  `q ${matrix.join(" ")} cm /Im0 Do Q`
+
+/** A page that shows one picture, which is already an object of `doc`. */
+function picturePage(
+  doc: Doc,
+  image: Obj,
+  layout: ReturnType<typeof pictureLayout>
+) {
+  const pictures = doc.newDictionary()
+  pictures.put("Im0", image)
+  const resources = doc.newDictionary()
+  resources.put("XObject", pictures)
+  return doc.addPage(
+    [0, 0, layout.page.width, layout.page.height],
+    0,
+    resources,
+    drawPicture(layout.matrix)
+  )
+}
+
+/**
+ * Open a picture as a one-page file. A JPEG is kept as it is, without being
+ * compressed again; anything else arrives as pixels, and see-through parts
+ * are filled with white, as paper is.
+ * @param input A JPEG's bytes with the turn its EXIF data asks for, or decoded pixels.
+ */
+export function openPicture(
+  mupdf: Engine,
+  input: { jpeg: Uint8Array; turn: Rotation } | { pixels: Pixels }
+): OpenedPdf {
+  const doc = new mupdf.PDFDocument()
+  try {
+    let image: MuPDF.Image
+    if ("jpeg" in input) image = new mupdf.Image(input.jpeg)
+    else {
+      const { data, width, height } = input.pixels
+      const pixmap = new mupdf.Pixmap(
+        mupdf.ColorSpace.DeviceRGB,
+        [0, 0, width, height],
+        false
+      )
+      const stride = pixmap.getStride()
+      const target = pixmap.getPixels()
+      for (let y = 0; y < height; y++)
+        for (let x = 0; x < width; x++) {
+          const from = (y * width + x) * 4
+          const to = y * stride + x * 3
+          const alpha = data[from + 3] / 255
+          target[to] = data[from] * alpha + 255 * (1 - alpha)
+          target[to + 1] = data[from + 1] * alpha + 255 * (1 - alpha)
+          target[to + 2] = data[from + 2] * alpha + 255 * (1 - alpha)
+        }
+      image = new mupdf.Image(pixmap)
+      pixmap.destroy()
+    }
+    const size = { width: image.getWidth(), height: image.getHeight() }
+    const turn = "jpeg" in input ? input.turn : 0
+    const stored = doc.addImage(image)
+    image.destroy()
+    // The file's one page shows the picture at its own size, for thumbnails.
+    const layout = pictureLayout(size, turn, "fit", "none", null)
+    doc.insertPage(-1, picturePage(doc, stored, layout))
+    return {
+      doc,
+      pages: prepare(doc, 1),
+      facts: {
+        pages: 1,
+        ...layout.page,
+        title: "",
+        bookmarks: 0,
+        repaired: false,
+        unlocked: false,
+        restricted: false,
+        signed: false,
+        tagged: false,
+        forms: false,
+        picture:
+          turn === 90 || turn === 270
+            ? { width: size.height, height: size.width }
+            : size,
+      },
+      bookmarks: [],
+      picture: { image: stored, ...size, turn },
+    }
+  } catch {
+    doc.destroy()
+    throw new Error("This picture could not be read. It may be damaged.")
+  }
+}
+
 /** One page as a picture, at most `maxEdge` pixels on its longer side. */
 export function renderPage(
   mupdf: Engine,
@@ -236,11 +331,27 @@ export function renderPage(
   }
 }
 
-/** What to take from one opened file. */
-export interface MergeInput {
+/** A file that pages are taken from. */
+export interface MergeSource {
   pdf: OpenedPdf
   /** What the file is called in the result's bookmarks. */
   name: string
+}
+
+/** One page of the result. */
+export type MergePage =
+  | {
+      /** Which source it comes from, by its key. */
+      source: string
+      /** Its page there, counted from 0. */
+      index: number
+      /** A turn added to the page's own. */
+      rotation: Rotation
+    }
+  | { blank: Size }
+
+/** What to take from one opened file, for callers that think in files. */
+export interface MergeInput extends MergeSource {
   /** Pages counted from 0, in order; a page may repeat. */
   pages: readonly number[]
   rotation: Rotation
@@ -248,6 +359,9 @@ export interface MergeInput {
 
 export interface MergeOptions {
   bookmarks: BookmarkPolicy
+  /** How large a page a picture gets, and the space around it. */
+  picturePage?: PicturePage
+  pictureMargin?: PictureMargin
   /** Called between pages; it may pause, or throw to stop the merge. */
   checkpoint?: () => Promise<void>
   progress?: (done: number, total: number) => void
@@ -350,7 +464,7 @@ function signaturesToStamps(out: Doc, pages: readonly Obj[]) {
  */
 function buildForm(
   out: Doc,
-  grafts: { map: MuPDF.PDFGraftMap; input: MergeInput }[],
+  grafts: { map: MuPDF.PDFGraftMap; input: MergeSource }[],
   pages: readonly Obj[]
 ) {
   const live = new Set<number>()
@@ -427,7 +541,7 @@ function buildForm(
  */
 function buildLayers(
   out: Doc,
-  grafts: { map: MuPDF.PDFGraftMap; input: MergeInput }[]
+  grafts: { map: MuPDF.PDFGraftMap; input: MergeSource }[]
 ) {
   const layers = out.newArray()
   const hidden = out.newArray()
@@ -512,58 +626,134 @@ function writeBookmarks(out: Doc, bookmarks: readonly MergedBookmark[]) {
 const pdfDate = (date: Date) =>
   `D:${date.toISOString().replace(/[-:T]/g, "").slice(0, 14)}Z`
 
-/** Join pages from opened files into one new PDF. The files are left as they were. */
-export async function mergePdfs(
+const quarter = (degrees: number) => (((degrees % 360) + 360) % 360) as number
+
+/** The size a page of the result is shown at, in points. */
+function shownSize(page: Obj): Size {
+  let box = page.get("CropBox")
+  if (!box.isArray()) box = page.get("MediaBox")
+  const [left, bottom, right, top] = [0, 1, 2, 3].map((at) =>
+    box.isArray() && box.get(at).isNumber() ? box.get(at).asNumber() : 0
+  )
+  const size = { width: Math.abs(right - left), height: Math.abs(top - bottom) }
+  const turn = page.get("Rotate")
+  const sideways = turn.isNumber() && quarter(turn.asNumber()) % 180 === 90
+  return sideways ? { width: size.height, height: size.width } : size
+}
+
+/**
+ * Build one new PDF from pages of opened files, in the order given. The
+ * files are left as they were. Pages of one file share what the file shares,
+ * wherever they end up, and its links find them there.
+ */
+export async function mergePages(
   mupdf: Engine,
-  inputs: readonly MergeInput[],
+  sources: ReadonlyMap<string, MergeSource>,
+  wanted: readonly MergePage[],
   options: MergeOptions
 ): Promise<Merged> {
-  const used = inputs.filter((input) => input.pages.length > 0)
-  const total = used.reduce((sum, input) => sum + input.pages.length, 0)
+  const total = wanted.length
   if (!total) throw new Error("Choose at least one page to merge.")
   const out = new mupdf.PDFDocument()
   try {
     const pages: Obj[] = []
-    const grafts: { map: MuPDF.PDFGraftMap; input: MergeInput }[] = []
-    const sources: OutlineSource[] = []
-    for (const input of used) {
-      const map = out.newGraftMap()
-      const copies = new Map<number, Obj>()
-      const placed = new Map<number, number>()
-      const first = pages.length
-      for (const index of input.pages) {
-        await options.checkpoint?.()
-        const earlier = copies.get(index)
-        let page: Obj
-        if (earlier) page = duplicatePage(out, earlier)
-        else {
-          page = map.graftObject(input.pdf.pages[index])
-          if (input.rotation) {
-            const own = page.get("Rotate")
-            const turned =
-              (own.isNumber() ? own.asNumber() : 0) + input.rotation
-            page.put("Rotate", ((turned % 360) + 360) % 360)
-          }
-          copies.set(index, page)
-          placed.set(index, pages.length)
-        }
-        out.insertPage(-1, page)
-        pages.push(page)
-        options.progress?.(pages.length, total)
+    /** What has been taken from each file so far, in order of first use. */
+    const taken = new Map<
+      string,
+      {
+        source: MergeSource
+        map: MuPDF.PDFGraftMap
+        /** The first copy of each page, and the turn the page itself had. */
+        copies: Map<number, { page: Obj; own: number }>
+        placed: Map<number, number>
+        first: number
+        picture: Obj | null
       }
-      grafts.push({ map, input })
-      sources.push({
-        name: input.name,
-        bookmarks: input.pdf.bookmarks,
-        placed,
-        first,
-      })
+    >()
+    /** The size of the last page that is not a picture, for pictures to take. */
+    let previous: Size | null = null
+    for (const want of wanted) {
+      await options.checkpoint?.()
+      let page: Obj
+      if ("blank" in want)
+        page = out.addPage(
+          [0, 0, want.blank.width, want.blank.height],
+          0,
+          out.newDictionary(),
+          ""
+        )
+      else {
+        const source = sources.get(want.source)
+        if (!source) throw new Error("A file to merge is no longer open.")
+        let file = taken.get(want.source)
+        if (!file) {
+          file = {
+            source,
+            map: out.newGraftMap(),
+            copies: new Map(),
+            placed: new Map(),
+            first: pages.length,
+            picture: null,
+          }
+          taken.set(want.source, file)
+        }
+        const { picture } = source.pdf
+        if (picture) {
+          // The picture is stored once, however many pages show it.
+          file.picture ??= file.map.graftObject(picture.image)
+          page = picturePage(
+            out,
+            file.picture,
+            pictureLayout(
+              picture,
+              picture.turn,
+              options.picturePage ?? "previous",
+              options.pictureMargin ?? "small",
+              previous
+            )
+          )
+          if (want.rotation) page.put("Rotate", want.rotation)
+        } else {
+          const earlier = file.copies.get(want.index)
+          let own: number
+          if (earlier) {
+            page = duplicatePage(out, earlier.page)
+            own = earlier.own
+          } else {
+            page = file.map.graftObject(source.pdf.pages[want.index])
+            const turn = page.get("Rotate")
+            own = turn.isNumber() ? turn.asNumber() : 0
+            file.copies.set(want.index, { page, own })
+          }
+          page.put("Rotate", quarter(own + want.rotation))
+        }
+        if (!file.placed.has(want.index))
+          file.placed.set(want.index, pages.length)
+      }
+      out.insertPage(-1, page)
+      if (!("blank" in want) && !sources.get(want.source)?.pdf.picture)
+        previous = shownSize(page)
+      pages.push(page)
+      options.progress?.(pages.length, total)
     }
+    const files = [...taken.values()]
+    const grafts = files.map((file) => ({
+      map: file.map,
+      input: file.source,
+    }))
     dropDeadLinks(pages)
     signaturesToStamps(out, pages)
     buildForm(out, grafts, pages)
     buildLayers(out, grafts)
-    const bookmarks = mergeBookmarks(sources, options.bookmarks)
+    const bookmarks = mergeBookmarks(
+      files.map((file): OutlineSource => ({
+        name: file.source.name,
+        bookmarks: file.source.pdf.bookmarks,
+        placed: file.placed,
+        first: file.first,
+      })),
+      options.bookmarks
+    )
     writeBookmarks(out, bookmarks)
     const stamp = pdfDate(options.now ?? new Date())
     out.setMetaData("info:Producer", PRODUCER)
@@ -586,4 +776,21 @@ export async function mergePdfs(
   } finally {
     out.destroy()
   }
+}
+
+/** Join whole runs of pages from opened files, file after file. */
+export function mergePdfs(
+  mupdf: Engine,
+  inputs: readonly MergeInput[],
+  options: MergeOptions
+): Promise<Merged> {
+  const sources = new Map<string, MergeSource>()
+  const wanted: MergePage[] = []
+  inputs.forEach((input, at) => {
+    if (!input.pages.length) return
+    sources.set(String(at), input)
+    for (const index of input.pages)
+      wanted.push({ source: String(at), index, rotation: input.rotation })
+  })
+  return mergePages(mupdf, sources, wanted, options)
 }

@@ -4,6 +4,7 @@ import {
   useCallback,
   useEffect,
   useId,
+  useMemo,
   useReducer,
   useRef,
   useState,
@@ -11,6 +12,7 @@ import {
 } from "react"
 import {
   IconAlertCircle,
+  IconArrowsShuffle,
   IconArrowsSort,
   IconBookmarks,
   IconDownload,
@@ -18,25 +20,44 @@ import {
   IconFilePlus,
   IconFiles,
   IconFileTypePdf,
+  IconInfoCircle,
+  IconLayoutGrid,
   IconLock,
   IconLockOpen,
   IconPlayerStop,
   IconTrash,
 } from "@tabler/icons-react"
 import { DropZone, FileInput } from "@/components/image-compressor/drop-zone"
+import { Section, ToggleRow } from "@/components/image-batch/controls"
 import { Button, buttonVariants } from "@/components/ui/button"
 import { ChoiceChips } from "@/components/ui/choice-chips"
 import { Input } from "@/components/ui/input"
 import { cn } from "cn"
-import { sizeLabel } from "@/lib/image-compressor/formats"
+import { sizeLabel, sniffFormat } from "@/lib/image-compressor/formats"
 import { PdfClient } from "@/lib/pdf-merger/client"
 import {
   filesReducer,
+  lockedProblem,
   mergeStatus,
   noFiles,
+  pagesProblem,
   type FilesAction,
   type SortOrder,
 } from "@/lib/pdf-merger/files"
+import {
+  alternatePages,
+  appendFile,
+  derivePages,
+  dropFile,
+  record,
+  redo,
+  rewrite,
+  startHistory,
+  undo,
+  type History,
+  type PageEntry,
+} from "@/lib/pdf-merger/pages"
+import type { PictureMargin, PicturePage } from "@/lib/pdf-merger/picture"
 import {
   admit,
   defaultSettings,
@@ -50,16 +71,20 @@ import {
   type Limits,
 } from "@/lib/pdf-merger/settings"
 import { FileList } from "./file-list"
+import { PageGrid, type GridFile } from "./page-grid"
+import { PagePreview } from "./page-preview"
 
 const INPUT_ID = "pdf-file"
-const ACCEPT = "application/pdf,.pdf"
+const ACCEPT = "application/pdf,.pdf,image/*,.heic,.heif,.jxl"
 const THUMBNAIL_EDGE = 192
+/** Pictures of pages kept at once; older ones are let go and drawn again when needed. */
+const MAX_THUMBNAILS = 300
 const SAMPLES = ["keepsimp-report.pdf", "keepsimp-appendix.pdf"]
 
 const copy = (limits: Limits) => ({
   heading: "Drop PDFs to merge",
   dropping: "Drop to add these files",
-  body: "Add two or more PDF files, put them in order and choose the pages you want. You can also paste with ⌘V or Ctrl+V.",
+  body: "Add PDF files and pictures, put them in order and choose the pages you want. You can also paste with ⌘V or Ctrl+V.",
   inputLabel: "Choose PDF files",
   action: "Choose files",
   limits: `Stays on your device · up to ${limits.files} files, ${megabytes(limits.totalBytes)} together`,
@@ -84,6 +109,16 @@ export function PdfMerger() {
   const [state, dispatchState] = useReducer(filesReducer, noFiles)
   const [name, setName] = useState(defaultSettings.name)
   const [thumbnails, setThumbnails] = useState<Record<string, ImageBitmap>>({})
+  const [view, setView] = useState<"files" | "pages">("files")
+  /** The pages as arranged by hand; null while they follow the file list. */
+  const [arranged, setArranged] = useState<History<PageEntry[]> | null>(null)
+  const [selection, setSelection] = useState<ReadonlySet<string>>(new Set())
+  const [preview, setPreview] = useState<string | null>(null)
+  const [picturePage, setPicturePage] = useState<PicturePage>("previous")
+  const [pictureMargin, setPictureMargin] = useState<PictureMargin>("small")
+  const [alternating, setAlternating] = useState(false)
+  const [reverseLast, setReverseLast] = useState(false)
+  const [resetting, setResetting] = useState(false)
   const [notice, setNotice] = useState("")
   const [progress, setProgress] = useState<{
     done: number
@@ -108,6 +143,8 @@ export function PdfMerger() {
   const live = useRef(state)
   const counter = useRef(0)
   const cancel = useRef<(() => void) | null>(null)
+  /** Pictures of pages asked for, oldest first. */
+  const asked = useRef<string[]>([])
   const held = useRef({ thumbnails, result })
   useEffect(() => {
     live.current = state
@@ -122,18 +159,18 @@ export function PdfMerger() {
     const instance = new PdfClient((event) => {
       if (event.type === "opened") {
         dispatch({ type: "opened", id: event.id, facts: event.facts })
-        void instance.thumbnail(event.id, 0, THUMBNAIL_EDGE).then((bitmap) => {
-          if (!bitmap) return
-          // The file may have been removed while its first page was drawn.
-          if (!live.current.files.some((file) => file.id === event.id)) {
-            bitmap.close()
-            return
-          }
-          setThumbnails((current) => {
-            current[event.id]?.close()
-            return { ...current, [event.id]: bitmap }
-          })
-        })
+        // While pages are arranged by hand, a new file's pages join at the end.
+        setArranged(
+          (current) =>
+            current &&
+            rewrite(current, (list) =>
+              list.some(
+                (entry) => entry.kind === "page" && entry.file === event.id
+              )
+                ? list
+                : appendFile(list, { id: event.id, pages: event.facts.pages })
+            )
+        )
       } else if (event.type === "locked")
         dispatch({ type: "locked", id: event.id, wrong: event.wrong })
       else dispatch({ type: "failed", id: event.id, message: event.message })
@@ -148,15 +185,72 @@ export function PdfMerger() {
     }
   }, [dispatch])
 
+  /** Ask for the picture of a page, unless it is already there or on its way. */
+  const needThumbnail = useCallback((file: string, page: number) => {
+    const key = `${file}/${page}`
+    if (asked.current.includes(key)) return
+    asked.current.push(key)
+    // The oldest picture goes first, but never a file's first page: the file list shows those.
+    const oldest =
+      asked.current.length > MAX_THUMBNAILS
+        ? asked.current.findIndex((entry) => !entry.endsWith("/0"))
+        : -1
+    const evicted = oldest >= 0 ? asked.current.splice(oldest, 1)[0] : undefined
+    if (evicted)
+      setThumbnails((current) => {
+        const { [evicted]: gone, ...rest } = current
+        gone?.close()
+        return rest
+      })
+    void client.current
+      ?.thumbnail(file, page, THUMBNAIL_EDGE)
+      .then((bitmap) => {
+        if (!bitmap) return
+        // The file may have been removed, or the picture let go, meanwhile.
+        if (
+          !asked.current.includes(key) ||
+          !live.current.files.some((entry) => entry.id === file)
+        ) {
+          bitmap.close()
+          return
+        }
+        setThumbnails((current) => {
+          current[key]?.close()
+          return { ...current, [key]: bitmap }
+        })
+      })
+  }, [])
+
+  const forgetThumbnails = useCallback((file?: string) => {
+    const mine = (key: string) =>
+      file === undefined || key.startsWith(`${file}/`)
+    asked.current = asked.current.filter((key) => !mine(key))
+    setThumbnails((current) => {
+      const rest: Record<string, ImageBitmap> = {}
+      for (const [key, bitmap] of Object.entries(current))
+        if (mine(key)) bitmap.close()
+        else rest[key] = bitmap
+      return rest
+    })
+  }, [])
+
   const addFiles = useCallback(
     async (incoming: File[]) => {
       const refused: string[] = []
       const pdfs: File[] = []
+      const pictures = new Set<File>()
       for (const file of incoming) {
         const head = new Uint8Array(await file.slice(0, 2048).arrayBuffer())
         // An empty file gets its own message below.
         if (file.size === 0 || looksLikePdf(head)) pdfs.push(file)
-        else refused.push(`${file.name} is not a PDF.`)
+        else if (sniffFormat(head) === "svg")
+          refused.push(
+            `${file.name}: SVG cannot be added as a page. Convert it to PNG first.`
+          )
+        else if (sniffFormat(head)) {
+          pdfs.push(file)
+          pictures.add(file)
+        } else refused.push(`${file.name} is not a PDF or a picture.`)
       }
       const verdicts = admit(live.current.files, pdfs, limits)
       const items = pdfs.flatMap((file, index) => {
@@ -172,17 +266,19 @@ export function PdfMerger() {
             name: file.name,
             size: file.size,
             modified: file.lastModified,
+            picture: pictures.has(file),
           },
         ]
       })
       setNotice(
         refused.length > 3
-          ? `${refused.length} files were left out: they are not PDFs, or are too large.`
+          ? `${refused.length} files were left out: they are not PDFs or pictures, or are too large.`
           : refused.join(" ")
       )
       if (!items.length) return
       dispatch({ type: "add", items })
-      for (const item of items) client.current?.open(item.id, item.file)
+      for (const item of items)
+        client.current?.open(item.id, item.file, { picture: item.picture })
     },
     [dispatch, limits]
   )
@@ -218,21 +314,27 @@ export function PdfMerger() {
   function remove(id: string) {
     dispatch({ type: "remove", id })
     client.current?.close(id)
-    setThumbnails((current) => {
-      const { [id]: gone, ...rest } = current
-      gone?.close()
-      return rest
-    })
+    forgetThumbnails(id)
+    setArranged(
+      (current) => current && rewrite(current, (list) => dropFile(list, id))
+    )
+    setSelection(new Set())
+  }
+
+  function backToFiles() {
+    setArranged(null)
+    setSelection(new Set())
+    setResetting(false)
+    setView("files")
   }
 
   function clearAll() {
     cancel.current?.()
     for (const file of state.files) client.current?.close(file.id)
     dispatch({ type: "clear" })
-    setThumbnails((current) => {
-      for (const bitmap of Object.values(current)) bitmap.close()
-      return {}
-    })
+    forgetThumbnails()
+    backToFiles()
+    setAlternating(false)
     setResult((current) => {
       if (current) URL.revokeObjectURL(current.url)
       return null
@@ -251,33 +353,85 @@ export function PdfMerger() {
   }
 
   const status = mergeStatus(state.files, limits.pages)
-  const names = Object.fromEntries(
-    state.files.map((file) => [file.id, entryName(file.name)])
+  const names = useMemo(
+    () =>
+      Object.fromEntries(
+        state.files.map((file) => [file.id, entryName(file.name)])
+      ),
+    [state.files]
   )
+  // The first page of every file that has been read is drawn for the list.
+  useEffect(() => {
+    for (const file of state.files)
+      if (file.status === "ready") needThumbnail(file.id, 0)
+  }, [state.files, needThumbnail])
+
+  const derived = useMemo(() => derivePages(state.files), [state.files])
+  const usable = useMemo(
+    () =>
+      new Set(
+        state.files
+          .filter((file) => file.status === "ready")
+          .map((file) => file.id)
+      ),
+    [state.files]
+  )
+  /** The pages of the result: as arranged by hand, or as the file list gives them. */
+  const entries = useMemo(
+    () =>
+      arranged
+        ? arranged.present.filter(
+            (entry) => entry.kind === "blank" || usable.has(entry.file)
+          )
+        : derived,
+    [arranged, derived, usable]
+  )
+  const problem = arranged
+    ? (lockedProblem(state.files) ?? pagesProblem(entries.length, limits.pages))
+    : status.problem
+  const usedFiles = new Set(
+    entries.flatMap((entry) => (entry.kind === "page" ? [entry.file] : []))
+  )
+  const hasPictures = state.files.some((file) => file.picture)
   const key = JSON.stringify([
-    status.parts,
-    status.parts.map((part) => names[part.id]),
+    entries.map((entry) =>
+      entry.kind === "blank"
+        ? [entry.width, entry.height]
+        : [entry.file, entry.page, entry.rotation]
+    ),
+    [...usedFiles].map((id) => names[id]),
     defaultSettings.bookmarks,
+    hasPictures && [picturePage, pictureMargin],
   ])
   const current = result?.key === key ? result : null
   const merging = progress !== null
-  const canMerge =
-    !merging && !status.reading && !status.problem && status.pages > 0
+  const canMerge = !merging && !status.reading && !problem && entries.length > 0
 
   function startMerge() {
     if (!client.current || !canMerge) return
     setFailure("")
-    setProgress({ done: 0, total: status.pages })
+    setProgress({ done: 0, total: entries.length })
     const forKey = key
     // The sizes can only be compared when every file went in whole.
-    const whole = status.parts.every((part) => {
-      const file = state.files.find((entry) => entry.id === part.id)
-      return file?.facts?.pages === part.pages.length && !file.range.trim()
-    })
+    const whole =
+      !arranged &&
+      status.parts.every((part) => {
+        const file = state.files.find((entry) => entry.id === part.id)
+        return file?.facts?.pages === part.pages.length && !file.range.trim()
+      })
     const input = whole ? status.bytes : null
     const job = client.current.merge(
-      status.parts.map((part) => ({ ...part, name: names[part.id] })),
-      defaultSettings.bookmarks,
+      {
+        pages: entries.map((entry) =>
+          entry.kind === "blank"
+            ? { blank: { width: entry.width, height: entry.height } }
+            : { file: entry.file, page: entry.page, rotation: entry.rotation }
+        ),
+        names,
+        bookmarks: defaultSettings.bookmarks,
+        picturePage,
+        pictureMargin,
+      },
       (done, total) => setProgress({ done, total })
     )
     cancel.current = job.cancel
@@ -306,6 +460,72 @@ export function PdfMerger() {
         setProgress(null)
       })
   }
+
+  /** A change made in the Pages view; from the first one, pages are arranged by hand. */
+  function changePages(next: PageEntry[], announce: string) {
+    setArranged((history) => record(history ?? startHistory(derived), next))
+    setSelection(
+      (chosen) =>
+        new Set(
+          next.flatMap((entry) => (chosen.has(entry.key) ? [entry.key] : []))
+        )
+    )
+    setAnnouncement(announce)
+  }
+
+  function alternate() {
+    const groups = [...usable]
+      .map((id) =>
+        derived.filter((entry) => entry.kind === "page" && entry.file === id)
+      )
+      .filter((group) => group.length)
+    // Files keep the order of the list, not of the set.
+    groups.sort((a, b) => derived.indexOf(a[0]) - derived.indexOf(b[0]))
+    setArranged(
+      record(startHistory(derived), alternatePages(groups, reverseLast))
+    )
+    setAlternating(false)
+    setView("pages")
+    setAnnouncement(
+      `The pages of ${plural(groups.length, "file")} now take turns. Check them in the Pages view.`
+    )
+  }
+
+  const gridFiles = useMemo(
+    () =>
+      Object.fromEntries(
+        state.files.flatMap((file) =>
+          file.facts
+            ? [
+                [
+                  file.id,
+                  {
+                    name: file.name,
+                    picture: Boolean(file.facts.picture),
+                    width: file.facts.width,
+                    height: file.facts.height,
+                  } satisfies GridFile,
+                ],
+              ]
+            : []
+        )
+      ),
+    [state.files]
+  )
+  const describe = (entry: PageEntry) =>
+    entry.kind === "blank"
+      ? "Blank page"
+      : gridFiles[entry.file]?.picture
+        ? gridFiles[entry.file].name
+        : `${gridFiles[entry.file]?.name ?? "A file"}, page ${entry.page + 1}`
+  const renderPage = useCallback(
+    (file: string, page: number, edge: number) =>
+      client.current?.thumbnail(file, page, edge) ?? Promise.resolve(null),
+    []
+  )
+  const previewAt = preview
+    ? entries.findIndex((entry) => entry.key === preview)
+    : -1
 
   const dropHandlers = {
     // Only files from outside count; dragging a row to reorder it does not.
@@ -337,7 +557,16 @@ export function PdfMerger() {
             busy={false}
             copy={copy(limits)}
             inputId={INPUT_ID}
-            formats={["PDF", "Locked PDF", "Damaged PDF"]}
+            formats={[
+              "PDF",
+              "Locked PDF",
+              "JPG",
+              "PNG",
+              "WebP",
+              "HEIC",
+              "AVIF",
+              "TIFF",
+            ]}
             accept={ACCEPT}
             icon={IconFileTypePdf}
           />
@@ -359,13 +588,13 @@ export function PdfMerger() {
                 },
                 {
                   icon: IconArrowsSort,
-                  title: "Take only the pages you need",
-                  text: "Type pages such as 1-3, 7 for each file, turn them, or use the same file twice.",
+                  title: "Arrange single pages",
+                  text: "Type pages such as 1-3, 7 for each file, or open the Pages view to drag, turn, copy and remove single pages.",
                 },
                 {
                   icon: IconLockOpen,
-                  title: "Locked and damaged files",
-                  text: "Enter a locked file's password to merge it. Damaged files are repaired where possible.",
+                  title: "Locked files, damaged files and pictures",
+                  text: "Enter a locked file's password to merge it. Damaged files are repaired where possible, and pictures become pages.",
                 },
                 {
                   icon: IconBookmarks,
@@ -389,7 +618,7 @@ export function PdfMerger() {
       </div>
     )
 
-  const used = status.parts.length
+  const used = usedFiles.size
   const percent =
     progress && progress.total
       ? Math.round((progress.done / progress.total) * 100)
@@ -401,6 +630,7 @@ export function PdfMerger() {
       data-testid="pdf-merger"
       data-ready={!status.reading || undefined}
       data-merged={current ? "true" : undefined}
+      data-view={view}
     >
       <div
         {...dropHandlers}
@@ -438,7 +668,78 @@ export function PdfMerger() {
           </div>
         </div>
 
-        {state.files.length > 1 && (
+        <ChoiceChips
+          label="View"
+          hideLabel
+          value={view}
+          onValueChange={(next: "files" | "pages") => {
+            setView(next)
+            setAlternating(false)
+            setResetting(false)
+          }}
+          options={[
+            {
+              value: "files",
+              label: "Files",
+              icon: <IconFiles aria-hidden="true" />,
+            },
+            {
+              value: "pages",
+              label: `Pages${entries.length ? ` (${entries.length.toLocaleString("en")})` : ""}`,
+              icon: <IconLayoutGrid aria-hidden="true" />,
+              disabled: entries.length === 0,
+            },
+          ]}
+        />
+
+        {notice && (
+          <p
+            role="alert"
+            className="flex items-start gap-2 rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive"
+          >
+            <IconAlertCircle
+              className="mt-0.5 size-4 shrink-0"
+              aria-hidden="true"
+            />
+            {notice}
+          </p>
+        )}
+
+        {arranged && (
+          <div
+            className="space-y-3 rounded-lg border bg-muted/40 p-3 text-sm"
+            data-testid="arranged-note"
+          >
+            <p className="flex items-start gap-2">
+              <IconInfoCircle
+                className="mt-0.5 size-4 shrink-0 text-muted-foreground"
+                aria-hidden="true"
+              />
+              <span>
+                Pages are in your own order, set in the Pages view.
+                {view === "files" &&
+                  " The files below show where they come from; their order and page fields no longer change the result."}
+              </span>
+            </p>
+            {resetting ? (
+              <div className="flex flex-wrap items-center gap-2">
+                <span>This puts every file&apos;s pages back together.</span>
+                <Button variant="outline" onClick={backToFiles}>
+                  Discard my page order
+                </Button>
+                <Button variant="ghost" onClick={() => setResetting(false)}>
+                  Keep it
+                </Button>
+              </div>
+            ) : (
+              <Button variant="outline" onClick={() => setResetting(true)}>
+                Start again from the files
+              </Button>
+            )}
+          </div>
+        )}
+
+        {view === "files" && !arranged && state.files.length > 1 && (
           <ChoiceChips
             label="Sort"
             value={state.order}
@@ -460,46 +761,104 @@ export function PdfMerger() {
           />
         )}
 
-        {notice && (
-          <p
-            role="alert"
-            className="flex items-start gap-2 rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive"
-          >
-            <IconAlertCircle
-              className="mt-0.5 size-4 shrink-0"
-              aria-hidden="true"
-            />
-            {notice}
-          </p>
+        {view === "files" && !arranged && usable.size > 1 && (
+          <div className="space-y-3">
+            {alternating ? (
+              <div
+                className="space-y-3 rounded-lg border bg-card p-3"
+                data-testid="alternate"
+              >
+                <p className="text-sm">
+                  Takes the first page of each file, then the second of each,
+                  and so on. Use it to join the fronts and backs of pages that
+                  were scanned as two files.
+                </p>
+                <ToggleRow
+                  label="The last file is in reverse order"
+                  hint="As it is when a stack is turned over to scan the backs."
+                  checked={reverseLast}
+                  onCheckedChange={setReverseLast}
+                />
+                <div className="flex flex-wrap gap-2">
+                  <Button onClick={alternate}>Alternate the pages</Button>
+                  <Button variant="ghost" onClick={() => setAlternating(false)}>
+                    Cancel
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <Button variant="outline" onClick={() => setAlternating(true)}>
+                <IconArrowsShuffle aria-hidden="true" /> Alternate pages
+              </Button>
+            )}
+          </div>
         )}
 
-        <FileList
-          files={state.files}
-          thumbnails={thumbnails}
-          onMove={move}
-          onRange={(id, text) => dispatch({ type: "range", id, text })}
-          onRotate={(id) =>
-            dispatch({ type: "rotate", id, direction: "right" })
-          }
-          onAgain={(id) => {
-            const file = state.files.find((entry) => entry.id === id)
-            if (!file) return
-            const reason = admit(state.files, [file], limits)[0]
-            if (reason) {
-              setNotice(`${file.name}: ${reason}`)
-              return
+        {view === "files" ? (
+          <FileList
+            files={state.files}
+            thumbnails={thumbnails}
+            arranged={arranged !== null}
+            onMove={move}
+            onRange={(id, text) => dispatch({ type: "range", id, text })}
+            onRotate={(id) =>
+              dispatch({ type: "rotate", id, direction: "right" })
             }
-            const newId = `pdf-${++counter.current}`
-            dispatch({ type: "again", id, newId })
-            client.current?.open(newId, file.file)
-          }}
-          onRemove={remove}
-          onUnlock={(id, password) => {
-            const file = state.files.find((entry) => entry.id === id)
-            if (!file) return
-            dispatch({ type: "unlocking", id })
-            client.current?.open(id, file.file, password)
-          }}
+            onAgain={(id) => {
+              const file = state.files.find((entry) => entry.id === id)
+              if (!file) return
+              const reason = admit(state.files, [file], limits)[0]
+              if (reason) {
+                setNotice(`${file.name}: ${reason}`)
+                return
+              }
+              const newId = `pdf-${++counter.current}`
+              dispatch({ type: "again", id, newId })
+              client.current?.open(newId, file.file, { picture: file.picture })
+            }}
+            onRemove={remove}
+            onUnlock={(id, password) => {
+              const file = state.files.find((entry) => entry.id === id)
+              if (!file) return
+              dispatch({ type: "unlocking", id })
+              client.current?.open(id, file.file, { password })
+            }}
+          />
+        ) : (
+          <PageGrid
+            entries={entries}
+            files={gridFiles}
+            thumbs={thumbnails}
+            onNeed={needThumbnail}
+            selection={selection}
+            onSelection={setSelection}
+            onChange={changePages}
+            onPreview={setPreview}
+            onUndo={() => {
+              // Undoing the first change leaves the pages as the files give
+              // them, so the file list sets the result again.
+              setArranged((history) => {
+                const back = history && undo(history)
+                return back?.past.length ? back : null
+              })
+              setAnnouncement("Undone.")
+            }}
+            onRedo={() => {
+              setArranged((history) => history && redo(history))
+              setAnnouncement("Done again.")
+            }}
+            canUndo={Boolean(arranged?.past.length)}
+            canRedo={Boolean(arranged?.future.length)}
+            newKey={() => `made-${++counter.current}`}
+          />
+        )}
+        <PagePreview
+          entries={entries}
+          at={previewAt >= 0 ? previewAt : null}
+          describe={describe}
+          render={renderPage}
+          onStep={(to) => setPreview(entries[to]?.key ?? null)}
+          onClose={() => setPreview(null)}
         />
         <p className="sr-only" role="status" aria-live="polite">
           {announcement}
@@ -519,8 +878,8 @@ export function PdfMerger() {
             Merged PDF
           </h2>
           <p className="text-sm text-muted-foreground" data-testid="plan">
-            {status.pages > 0
-              ? `${plural(status.pages, "page")} from ${plural(used, "file")} · ${sizeLabel(status.bytes)} together`
+            {entries.length > 0
+              ? `${plural(entries.length, "page")} from ${plural(used, "file")}${arranged ? ", in your own order" : ` · ${sizeLabel(status.bytes)} together`}`
               : status.reading
                 ? "Reading your files…"
                 : "No pages to merge yet."}
@@ -528,7 +887,7 @@ export function PdfMerger() {
               ` · ${plural(status.leftOut, "file")} left out`}
           </p>
 
-          {status.problem && (
+          {problem && (
             <p
               role="alert"
               className="flex items-start gap-2 text-sm text-destructive"
@@ -537,7 +896,7 @@ export function PdfMerger() {
                 className="mt-0.5 size-4 shrink-0"
                 aria-hidden="true"
               />
-              {status.problem}
+              {problem}
             </p>
           )}
 
@@ -654,6 +1013,50 @@ export function PdfMerger() {
             Files are merged on your device and are not uploaded.
           </p>
         </section>
+
+        {hasPictures && (
+          <div
+            className="space-y-5 rounded-xl border bg-card p-4 sm:p-5"
+            data-testid="picture-options"
+          >
+            <Section title="Pictures as pages">
+              <ChoiceChips
+                label="Page size"
+                value={picturePage}
+                onValueChange={setPicturePage}
+                options={[
+                  { value: "previous", label: "Like the page before" },
+                  { value: "fit", label: "Fit the picture" },
+                  { value: "a4", label: "A4" },
+                  { value: "letter", label: "Letter" },
+                ]}
+                hint={
+                  picturePage === "previous"
+                    ? "A picture takes the size of the page before it, or A4 when none comes before. The sheet is turned to suit the picture."
+                    : picturePage === "fit"
+                      ? "The page is exactly as large as the picture, at 150 pixels to the inch."
+                      : "The sheet is turned to suit the picture."
+                }
+              />
+              {picturePage !== "fit" && (
+                <ChoiceChips
+                  label="Margin"
+                  value={pictureMargin}
+                  onValueChange={setPictureMargin}
+                  options={[
+                    { value: "none", label: "None" },
+                    { value: "small", label: "Small" },
+                    { value: "normal", label: "Normal" },
+                  ]}
+                />
+              )}
+              <p className="text-xs text-muted-foreground">
+                JPEG photographs go in as they are, without being compressed
+                again. See-through parts of other pictures become white.
+              </p>
+            </Section>
+          </div>
+        )}
 
         <section className="space-y-2 rounded-xl border bg-card p-4 text-sm sm:p-5">
           <h2 className="font-heading text-base font-medium">What is kept</h2>

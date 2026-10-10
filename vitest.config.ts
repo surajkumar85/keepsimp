@@ -26,6 +26,8 @@ export default defineConfig({
         "lib/offline.ts",
         "lib/pdf-merger/files.ts",
         "lib/pdf-merger/outline.ts",
+        "lib/pdf-merger/pages.ts",
+        "lib/pdf-merger/picture.ts",
         "lib/pdf-merger/ranges.ts",
         "lib/pdf-merger/settings.ts",
         "lib/animation/bytes.ts",

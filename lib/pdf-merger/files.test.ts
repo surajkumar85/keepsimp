@@ -2,8 +2,10 @@ import { describe, expect, it } from "vitest"
 import {
   chosenPages,
   filesReducer,
+  lockedProblem,
   mergeStatus,
   noFiles,
+  pagesProblem,
   type FileFacts,
   type FilesAction,
   type FilesState,
@@ -261,6 +263,15 @@ describe("pages, turning and adding a file again", () => {
     expect(state.arrivals).toBe(4)
     expect(run([{ type: "again", id: "gone", newId: "n" }], three)).toBe(three)
   })
+
+  it("remembers that a file is a picture, also when it is added again", () => {
+    const state = run([
+      { type: "add", items: [{ ...item("p", "photo.jpg"), picture: true }] },
+      { type: "again", id: "p", newId: "p2" },
+    ])
+    expect(state.files.map((file) => file.picture)).toEqual([true, true])
+    expect(three.files[0].picture).toBeUndefined()
+  })
 })
 
 describe("chosenPages and mergeStatus", () => {
@@ -339,6 +350,14 @@ describe("chosenPages and mergeStatus", () => {
     // A missing password comes first: it is the one thing that blocks reading.
     const locked = run([{ type: "locked", id: "b", wrong: false }], state)
     expect(mergeStatus(locked.files).problem).toMatch(/password for b\.pdf/)
+  })
+
+  it("has the two checks on their own, for a list arranged page by page", () => {
+    expect(lockedProblem(three.files)).toBeNull()
+    expect(pagesProblem(10, 10)).toBeNull()
+    expect(pagesProblem(1234, 1000)).toBe(
+      "The result would have 1,234 pages. Up to 1,000 can be merged at once."
+    )
   })
 
   it("stops at the page limit", () => {

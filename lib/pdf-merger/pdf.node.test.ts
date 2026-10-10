@@ -6,6 +6,7 @@
  */
 import { readFileSync } from "node:fs"
 import * as mupdf from "mupdf"
+import sharp from "sharp"
 import { afterEach, describe, expect, it } from "vitest"
 import {
   damage,
@@ -16,13 +17,17 @@ import {
 import { readPdf, texts } from "@/tests/pdf-reader"
 import {
   closePdf,
+  mergePages,
   mergePdfs,
   NO_PAGES,
   openPdf,
+  openPicture,
   PasswordNeeded,
   renderPage,
   UNREADABLE,
   type MergeInput,
+  type MergePage,
+  type MergeSource,
   type OpenedPdf,
 } from "./mupdf-engine"
 import type { BookmarkPolicy } from "./outline"
@@ -559,6 +564,338 @@ describe("pictures of pages", () => {
         true
       )
     }
+  })
+})
+
+describe("arranging single pages", () => {
+  const arrange = async (
+    sources: Record<string, OpenedPdf>,
+    wanted: MergePage[],
+    options: Partial<Parameters<typeof mergePages>[3]> = {}
+  ) =>
+    (
+      await mergePages(
+        mupdf,
+        new Map<string, MergeSource>(
+          Object.entries(sources).map(([key, pdf]) => [
+            key,
+            { pdf, name: `File ${key}` },
+          ])
+        ),
+        wanted,
+        { bookmarks: "nested", ...options }
+      )
+    ).bytes
+  const from = (
+    source: string,
+    index: number,
+    rotation: MergeInput["rotation"] = 0
+  ): MergePage => ({ source, index, rotation })
+
+  it("weaves pages of two files together, and their links still find them", async () => {
+    const a = await source("A", {
+      pages: 3,
+      links: [{ from: 1, to: 3 }],
+      bookmarks: [{ title: "A end", page: 3 }],
+    })
+    const b = await source("B", {
+      pages: 2,
+      links: [{ from: 2, to: 1, how: "name" }],
+      bookmarks: [{ title: "B start", page: 1 }],
+    })
+    const result = await readPdf(
+      await arrange({ a, b }, [
+        from("a", 0),
+        from("b", 0),
+        from("a", 2),
+        from("b", 1),
+        from("a", 1),
+      ])
+    )
+    expect(result.pages.map((page) => page.text)).toEqual([
+      "A-P1",
+      "B-P1",
+      "A-P3",
+      "B-P2",
+      "A-P2",
+    ])
+    // A's first page links to its third, now page 3; B's second to its first, now page 2.
+    expect(result.pages.map((page) => page.links)).toEqual([
+      [3],
+      [],
+      [],
+      [2],
+      [],
+    ])
+    // One entry per file, at the file's first page, in order of first use.
+    expect(result.bookmarks).toEqual([
+      { title: "File a", to: 1, items: [{ title: "A end", to: 3, items: [] }] },
+      {
+        title: "File b",
+        to: 2,
+        items: [{ title: "B start", to: 2, items: [] }],
+      },
+    ])
+  })
+
+  it("turns each page by itself, copies included", async () => {
+    const a = await source("A", { pages: 2, rotate: { 2: 90 } })
+    const result = await readPdf(
+      await arrange({ a }, [
+        from("a", 0, 90),
+        from("a", 0),
+        from("a", 1, 180),
+        from("a", 0, 270),
+        from("a", 1),
+      ])
+    )
+    expect(result.pages.map((page) => [page.text, page.rotate])).toEqual([
+      ["A-P1", 90],
+      ["A-P1", 0],
+      // This page was already turned a quarter inside the file.
+      ["A-P2", 270],
+      ["A-P1", 270],
+      ["A-P2", 90],
+    ])
+  })
+
+  it("adds blank pages of the size asked", async () => {
+    const a = await source("A", { pages: 2 })
+    const bytes = await arrange({ a }, [
+      { blank: { width: 200, height: 300 } },
+      from("a", 0),
+      { blank: { width: 298, height: 420 } },
+      from("a", 1),
+    ])
+    const result = await readPdf(bytes)
+    expect(
+      result.pages.map((page) => [page.text, page.width, page.height])
+    ).toEqual([
+      ["", 200, 300],
+      ["A-P1", 298, 420],
+      ["", 298, 420],
+      ["A-P2", 298, 420],
+    ])
+    // A blank page is white all over.
+    const blank = renderPage(mupdf, open(bytes), 0, 40)
+    expect(new Set(blank.data)).toEqual(new Set([255]))
+    // Only blank pages is still a file.
+    const empty = await mergePages(
+      mupdf,
+      new Map(),
+      [{ blank: { width: 100, height: 100 } }],
+      { bookmarks: "nested" }
+    )
+    expect(await texts(empty.bytes)).toEqual([""])
+  })
+
+  it("says so when a page's file is not open, or there is nothing to merge", async () => {
+    const a = await source("A")
+    await expect(arrange({ a }, [from("gone", 0)])).rejects.toThrow(
+      "A file to merge is no longer open."
+    )
+    await expect(arrange({ a }, [])).rejects.toThrow(
+      "Choose at least one page to merge."
+    )
+  })
+})
+
+describe("pictures as pages", () => {
+  const photo = (width: number, height: number, orientation?: number) =>
+    sharp({
+      create: {
+        width,
+        height,
+        channels: 3,
+        // Red on the left half, blue on the right: a turn is easy to see.
+        background: { r: 0, g: 0, b: 255 },
+      },
+    })
+      .composite([
+        {
+          input: {
+            create: {
+              width: Math.floor(width / 2),
+              height,
+              channels: 3,
+              background: { r: 255, g: 0, b: 0 },
+            },
+          },
+          left: 0,
+          top: 0,
+        },
+      ])
+      .withMetadata(orientation ? { orientation } : {})
+      .jpeg({ quality: 90 })
+      .toBuffer()
+  const picture = (input: Parameters<typeof openPicture>[1]): OpenedPdf => {
+    const pdf = openPicture(mupdf, input)
+    opened.push(pdf)
+    return pdf
+  }
+  const colourAt = (
+    image: { data: Uint8ClampedArray; width: number; height: number },
+    x: number,
+    y: number
+  ) => {
+    const at =
+      (Math.floor(y * image.height) * image.width +
+        Math.floor(x * image.width)) *
+      4
+    const [r, , b] = image.data.subarray(at, at + 3)
+    return r > 200 && b < 80 ? "red" : b > 200 && r < 80 ? "blue" : "other"
+  }
+  const sources = (pdfs: Record<string, OpenedPdf>) =>
+    new Map<string, MergeSource>(
+      Object.entries(pdfs).map(([key, pdf]) => [key, { pdf, name: key }])
+    )
+
+  it("keeps a JPEG as it is, on a page that fits it", async () => {
+    const jpeg = new Uint8Array(await photo(600, 300))
+    const pdf = picture({ jpeg, turn: 0 })
+    expect(pdf.facts).toMatchObject({
+      pages: 1,
+      // 600 × 300 pixels at 150 to the inch.
+      width: 288,
+      height: 144,
+      picture: { width: 600, height: 300 },
+    })
+    const merged = await mergePages(
+      mupdf,
+      sources({ p: pdf }),
+      [{ source: "p", index: 0, rotation: 0 }],
+      { bookmarks: "nested", picturePage: "fit" }
+    )
+    const result = await readPdf(merged.bytes)
+    expect(result.pages).toMatchObject([
+      { width: 288, height: 144, pictures: 1, text: "" },
+    ])
+    // The JPEG went in whole: the file is the picture plus a little wrapping.
+    expect(merged.bytes.length).toBeGreaterThan(jpeg.length)
+    expect(merged.bytes.length).toBeLessThan(jpeg.length + 1500)
+    expect(
+      Buffer.from(merged.bytes).includes(Buffer.from(jpeg.subarray(0, 64)))
+    ).toBe(true)
+    const drawn = renderPage(mupdf, open(merged.bytes), 0, 200)
+    expect([colourAt(drawn, 0.25, 0.5), colourAt(drawn, 0.75, 0.5)]).toEqual([
+      "red",
+      "blue",
+    ])
+  })
+
+  it("shows a JPEG stored on its side the right way up", async () => {
+    // Orientation 6: the stored picture must be turned a quarter clockwise.
+    const jpeg = new Uint8Array(await photo(600, 300, 6))
+    const pdf = picture({ jpeg, turn: 90 })
+    expect(pdf.facts).toMatchObject({
+      width: 144,
+      height: 288,
+      picture: { width: 300, height: 600 },
+    })
+    const merged = await mergePages(
+      mupdf,
+      sources({ p: pdf }),
+      [{ source: "p", index: 0, rotation: 0 }],
+      { bookmarks: "nested", picturePage: "fit" }
+    )
+    const drawn = renderPage(mupdf, open(merged.bytes), 0, 200)
+    expect([drawn.width, drawn.height]).toEqual([100, 200])
+    // The stored left half (red) is now at the top.
+    expect([colourAt(drawn, 0.5, 0.25), colourAt(drawn, 0.5, 0.75)]).toEqual([
+      "red",
+      "blue",
+    ])
+    // The thumbnail from the opened picture agrees.
+    const thumbnail = renderPage(mupdf, pdf, 0, 200)
+    expect(colourAt(thumbnail, 0.5, 0.25)).toBe("red")
+  })
+
+  it("takes pixels from any other format, filling see-through parts with white", async () => {
+    const width = 40
+    const height = 20
+    const data = new Uint8ClampedArray(width * height * 4)
+    for (let i = 0; i < width * height; i++)
+      // Solid red on the left, fully see-through on the right.
+      data.set(i % width < width / 2 ? [255, 0, 0, 255] : [0, 0, 255, 0], i * 4)
+    const pdf = picture({ pixels: { data, width, height } })
+    expect(pdf.facts.picture).toEqual({ width: 40, height: 20 })
+    const drawn = renderPage(mupdf, pdf, 0, 40)
+    expect(colourAt(drawn, 0.25, 0.5)).toBe("red")
+    const right = (10 * drawn.width + 30) * 4
+    expect([...drawn.data.subarray(right, right + 3)]).toEqual([255, 255, 255])
+  })
+
+  it("gives a picture the size of the page before it, or a sheet, with a margin", async () => {
+    const pdf = picture({
+      jpeg: new Uint8Array(await photo(600, 300)),
+      turn: 0,
+    })
+    const tall = picture({
+      jpeg: new Uint8Array(await photo(300, 600)),
+      turn: 0,
+    })
+    const doc = await source("A", { size: () => [400, 600] })
+    const all = sources({ p: pdf, t: tall, a: doc })
+    const wanted: MergePage[] = [
+      { source: "p", index: 0, rotation: 0 },
+      { source: "a", index: 0, rotation: 0 },
+      { source: "t", index: 0, rotation: 0 },
+      { source: "p", index: 0, rotation: 0 },
+    ]
+    const like = await readPdf(
+      (await mergePages(mupdf, all, wanted, { bookmarks: "nested" })).bytes
+    )
+    expect(like.pages.map((page) => [page.width, page.height])).toEqual([
+      // Nothing comes before the first picture, so it gets A4, turned to suit it.
+      [841.89, 595.28],
+      [400, 600],
+      // After the document, pictures take its size; the wide one turns the sheet.
+      [400, 600],
+      [600, 400],
+    ])
+    const letter = await mergePages(mupdf, all, wanted, {
+      bookmarks: "nested",
+      picturePage: "letter",
+      pictureMargin: "normal",
+    })
+    expect(
+      (await readPdf(letter.bytes)).pages.map((page) => [
+        page.width,
+        page.height,
+      ])
+    ).toEqual([
+      [792, 612],
+      [400, 600],
+      [612, 792],
+      [792, 612],
+    ])
+    // With a margin, the corner is paper and the middle is the picture.
+    const drawn = renderPage(mupdf, open(letter.bytes), 0, 396)
+    expect([...drawn.data.subarray(0, 3)]).toEqual([255, 255, 255])
+    expect(colourAt(drawn, 0.3, 0.5)).toBe("red")
+    // The same picture on two pages is stored once.
+    const once = await mergePages(mupdf, sources({ p: pdf }), [wanted[0]], {
+      bookmarks: "nested",
+    })
+    const twice = await mergePages(
+      mupdf,
+      sources({ p: pdf }),
+      [wanted[0], { source: "p", index: 0, rotation: 90 }],
+      { bookmarks: "nested" }
+    )
+    expect(twice.bytes.length - once.bytes.length).toBeLessThan(600)
+    expect(
+      (await readPdf(twice.bytes)).pages.map((page) => page.rotate)
+    ).toEqual([0, 90])
+  })
+
+  it("says so when the bytes are not a picture", () => {
+    expect(() =>
+      openPicture(mupdf, {
+        jpeg: new TextEncoder().encode("not a jpeg"),
+        turn: 0,
+      })
+    ).toThrow("This picture could not be read. It may be damaged.")
   })
 })
 

@@ -1,8 +1,21 @@
-import type { FileFacts, MergePart } from "./files"
+import type { Rotation, Size } from "@/lib/image-compressor/geometry"
+import type { FileFacts } from "./files"
 import type { BookmarkPolicy } from "./outline"
+import type { PictureMargin, PicturePage } from "./picture"
+
+/** One page of the result, as the worker is asked for it. */
+export type WantedPage =
+  { file: string; page: number; rotation: Rotation } | { blank: Size }
 
 export type PdfRequest =
-  | { type: "open"; id: string; file: Blob; password?: string }
+  | {
+      type: "open"
+      id: string
+      file: Blob
+      password?: string
+      /** The file is a picture, to become a one-page file. */
+      picture?: boolean
+    }
   | { type: "close"; id: string }
   | {
       type: "thumbnail"
@@ -18,8 +31,12 @@ export type PdfRequest =
       type: "merge"
       /** Echoed back; a newer job or a cancel stops this one. */
       job: number
-      parts: (MergePart & { name: string })[]
+      pages: WantedPage[]
+      /** What each file is called in the result's bookmarks, by its id. */
+      names: Record<string, string>
       bookmarks: BookmarkPolicy
+      picturePage: PicturePage
+      pictureMargin: PictureMargin
     }
   | { type: "cancel"; job: number }
 

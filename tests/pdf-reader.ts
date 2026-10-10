@@ -3,7 +3,7 @@
  * writes our results.
  */
 import { PDFDocument } from "@cantoo/pdf-lib"
-import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs"
+import { getDocument, OPS } from "pdfjs-dist/legacy/build/pdf.mjs"
 
 export interface ReadBookmark {
   title: string
@@ -26,6 +26,8 @@ export interface ReadPage {
   notes: string[]
   /** Every kind of annotation on the page, sorted. */
   kinds: string[]
+  /** How many pictures the page draws. */
+  pictures: number
 }
 
 async function fieldNames(bytes: Uint8Array, password?: string) {
@@ -59,6 +61,7 @@ export async function readPdf(bytes: Uint8Array, password?: string) {
       const page = await doc.getPage(number)
       const content = await page.getTextContent()
       const annotations = await page.getAnnotations()
+      const operators = await page.getOperatorList()
       const links: (number | string)[] = []
       for (const annotation of annotations)
         if (annotation.subtype === "Link")
@@ -83,6 +86,11 @@ export async function readPdf(bytes: Uint8Array, password?: string) {
           .filter((annotation) => annotation.subtype === "Text")
           .map((annotation) => annotation.contentsObj?.str ?? ""),
         kinds: annotations.map((annotation) => annotation.subtype).sort(),
+        pictures: operators.fnArray.filter(
+          (operator) =>
+            operator === OPS.paintImageXObject ||
+            operator === OPS.paintInlineImageXObject
+        ).length,
       })
     }
     type Item = {

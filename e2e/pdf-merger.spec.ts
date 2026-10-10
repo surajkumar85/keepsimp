@@ -1,5 +1,7 @@
 import { test, expect, type Download, type Page } from "@playwright/test"
 import AxeBuilder from "@axe-core/playwright"
+import { readFile } from "node:fs/promises"
+import sharp from "sharp"
 import { damage, makePdf, type FixtureOptions } from "../tests/pdf-fixtures"
 import { readPdf } from "../tests/pdf-reader"
 
@@ -59,6 +61,15 @@ async function merged(page: Page, password?: string) {
     ...(await readPdf(bytes, password)),
   }
 }
+
+const chipIn = (
+  scope: ReturnType<Page["getByTestId"]>,
+  group: string,
+  name: string
+) =>
+  scope
+    .getByRole("radiogroup", { name: group, exact: true })
+    .getByRole("radio", { name, exact: true })
 
 const rowNames = (page: Page) =>
   page.getByTestId("file-row").locator("p.font-medium").allInnerTexts()
@@ -417,28 +428,31 @@ test("repairs a damaged file and leaves out what cannot be read", async ({
       buffer: Buffer.from("%PDF-1.7\nthis is not a real file\n%%EOF"),
     },
     { name: "notes.txt", mimeType: "text/plain", buffer: Buffer.from("hello") },
+    // Named like a PDF, starts like a picture, and is neither.
     {
       name: "picture.pdf",
       mimeType: "application/pdf",
-      buffer: Buffer.from("\x89PNG\r\n\x1a\n"),
+      buffer: Buffer.from("\x89PNG\r\n\x1a\nnot really", "latin1"),
     },
     { name: "empty.pdf", mimeType: "application/pdf", buffer: Buffer.alloc(0) }
   )
   await ready(page)
   // Files that are not PDFs at all never join the list.
   const notice = page.getByRole("main").getByRole("alert").first()
-  await expect(notice).toContainText("notes.txt is not a PDF.")
-  await expect(notice).toContainText("picture.pdf is not a PDF.")
+  await expect(notice).toContainText("notes.txt is not a PDF or a picture.")
   await expect(notice).toContainText("empty.pdf: This file is empty.")
   const rows = page.getByTestId("file-row")
-  await expect(rows).toHaveCount(3)
+  await expect(rows).toHaveCount(4)
+  await expect(rows.nth(3)).toContainText(
+    "This picture could not be read. It may be damaged."
+  )
   await expect(rows.nth(1)).toContainText(
     "This file was damaged and has been repaired."
   )
   await expect(rows.nth(2)).toHaveAttribute("data-status", "error")
   await expect(rows.nth(2)).toContainText("It is left out of the merge.")
   await expect(page.getByTestId("plan")).toContainText("5 pages from 2 files")
-  await expect(page.getByTestId("plan")).toContainText("1 file left out")
+  await expect(page.getByTestId("plan")).toContainText("2 files left out")
 
   const result = await merged(page)
   expect(result.pages.map((entry) => entry.text)).toEqual([
@@ -552,6 +566,397 @@ test("accepts dropped files and the samples", async ({ page }) => {
   expect(result.pages[0].links).toEqual([3])
 })
 
+/** The pages of the Pages view, as short labels: "A2" for page 2 of A.pdf, "A2↻" when turned. */
+async function tiles(page: Page) {
+  const labels = await page
+    .getByTestId("page-tile")
+    .getByRole("button")
+    .evaluateAll((buttons) =>
+      buttons.map((button) => button.getAttribute("aria-label") ?? "")
+    )
+  return labels.map((label) => {
+    const match =
+      /^Page \d+: (.*?)(?:\.pdf, page (\d+))?(, turned \d+°)?$/.exec(label)!
+    return `${match[1] === "Blank page" ? "blank" : match[1]}${match[2] ?? ""}${match[3] ? "↻" : ""}`
+  })
+}
+const tile = (page: Page, at: number) =>
+  page.getByTestId("page-tile").nth(at).getByRole("button")
+const openPages = async (page: Page) => {
+  await ready(page)
+  await page.getByRole("radio", { name: /^Pages/ }).click()
+  await expect(page.getByTestId("page-grid")).toBeVisible()
+}
+
+test("arranges single pages: select, turn, move, copy, remove, blank, undo", async ({
+  page,
+}) => {
+  await page.goto(ROUTE)
+  await upload(
+    page,
+    await pdf("A.pdf", "A", { pages: 4, links: [{ from: 2, to: 4 }] }),
+    await pdf("B.pdf", "B", { pages: 2 })
+  )
+  await openPages(page)
+  await expect(page.getByRole("radio", { name: "Pages (6)" })).toBeChecked()
+  expect(await tiles(page)).toEqual(["A1", "A2", "A3", "A4", "B1", "B2"])
+  // Every page gets its picture.
+  await expect(page.getByTestId("page-tile").locator("canvas")).toHaveCount(6)
+  await expect(page.getByTestId("selection-count")).toHaveText("None selected")
+  await expect(
+    page.getByRole("button", { name: "Turn clockwise" })
+  ).toBeDisabled()
+
+  // Click, then Shift-click: everything between is selected.
+  await tile(page, 1).click()
+  await tile(page, 3).click({ modifiers: ["Shift"] })
+  await expect(page.getByTestId("selection-count")).toHaveText("3 selected")
+  await expect(tile(page, 2)).toHaveAttribute("aria-pressed", "true")
+  await page.getByRole("button", { name: "Turn clockwise" }).click()
+  await page.getByRole("button", { name: "Move to the start" }).click()
+  expect(await tiles(page)).toEqual(["A2↻", "A3↻", "A4↻", "A1", "B1", "B2"])
+  await expect(page.getByRole("status")).toContainText(
+    "Moved 3 pages to the start."
+  )
+  // From the first change, the pages are the person's own arrangement.
+  await expect(page.getByTestId("arranged-note")).toContainText(
+    "Pages are in your own order"
+  )
+  await expect(page.getByTestId("plan")).toContainText(
+    "6 pages from 2 files, in your own order"
+  )
+
+  await page.getByRole("button", { name: "Clear", exact: true }).click()
+  await tile(page, 3).click()
+  await page.getByRole("button", { name: "Remove", exact: true }).click()
+  expect(await tiles(page)).toEqual(["A2↻", "A3↻", "A4↻", "B1", "B2"])
+  await expect(page.getByRole("status")).toContainText(
+    "Removed 1 page. 5 pages left."
+  )
+  await page.getByRole("button", { name: "Undo" }).click()
+  expect(await tiles(page)).toHaveLength(6)
+  await page.getByRole("button", { name: "Redo" }).click()
+  expect(await tiles(page)).toHaveLength(5)
+  await expect(page.getByRole("button", { name: "Redo" })).toBeDisabled()
+
+  // A copy follows its page; a blank page follows the selected one.
+  await tile(page, 3).click()
+  await page.getByRole("button", { name: "Copy", exact: true }).click()
+  await page.getByRole("button", { name: "Add a blank page" }).click()
+  await page.getByRole("button", { name: "Clear", exact: true }).click()
+  await tile(page, 0).click()
+  await page.getByRole("button", { name: "Move later" }).click()
+  await page.getByRole("button", { name: "Turn anticlockwise" }).click()
+  expect(await tiles(page)).toEqual([
+    "A3↻",
+    "A2",
+    "A4↻",
+    "B1",
+    "blank",
+    "B1",
+    "B2",
+  ])
+  await expect(page.getByTestId("page-tile").nth(4)).toContainText("Blank")
+
+  const result = await merged(page)
+  expect(result.pages.map((entry) => [entry.text, entry.rotate])).toEqual([
+    ["A-P3", 90],
+    ["A-P2", 0],
+    ["A-P4", 90],
+    ["B-P1", 0],
+    ["", 0],
+    ["B-P1", 0],
+    ["B-P2", 0],
+  ])
+  // The blank page takes the size of the file beside it.
+  expect([result.pages[4].width, result.pages[4].height]).toEqual([298, 420])
+  // Page 2's link to page 4 follows it to its new place.
+  expect(result.pages[1].links).toEqual([3])
+
+  // The Files view still shows the files, but no longer sets the result.
+  await page.getByRole("radio", { name: "Files", exact: true }).click()
+  await expect(page.getByTestId("arranged-note")).toContainText(
+    "no longer change the result"
+  )
+  await expect(
+    page.getByRole("button", { name: "Move B.pdf earlier" })
+  ).toBeDisabled()
+  await expect(page.getByLabel("Pages from A.pdf")).toBeHidden()
+  // A file added now joins at the end; a removed one takes its pages with it.
+  await upload(page, await pdf("C.pdf", "C"))
+  await ready(page)
+  await page.getByRole("button", { name: "Remove B.pdf" }).click()
+  await page.getByRole("radio", { name: /^Pages/ }).click()
+  expect(await tiles(page)).toEqual(["A3↻", "A2", "A4↻", "blank", "C1"])
+
+  // Going back to whole files is asked for twice, then done.
+  await page.getByRole("button", { name: "Start again from the files" }).click()
+  await page.getByRole("button", { name: "Keep it" }).click()
+  await expect(page.getByTestId("arranged-note")).toBeVisible()
+  await page.getByRole("button", { name: "Start again from the files" }).click()
+  await page.getByRole("button", { name: "Discard my page order" }).click()
+  await expect(page.getByTestId("arranged-note")).toBeHidden()
+  await expect(page.getByLabel("Pages from A.pdf")).toBeVisible()
+  await expect(page.getByTestId("plan")).toContainText("5 pages from 2 files")
+})
+
+test("works the Pages view from the keyboard, and by dragging", async ({
+  page,
+  isMobile,
+}) => {
+  await page.goto(ROUTE)
+  await upload(page, await pdf("A.pdf", "A", { pages: 5 }))
+  await openPages(page)
+  // One tile is in the tab order; arrows move between tiles.
+  await tile(page, 0).focus()
+  await page.keyboard.press("ArrowRight")
+  await expect(tile(page, 1)).toBeFocused()
+  await page.keyboard.press("End")
+  await expect(tile(page, 4)).toBeFocused()
+  await page.keyboard.press("Home")
+  // Space selects; Shift with an arrow selects on from there.
+  await page.keyboard.press("Space")
+  await page.keyboard.press("Shift+ArrowRight")
+  await expect(page.getByTestId("selection-count")).toHaveText("2 selected")
+  // Alt with an arrow moves the selected pages; R turns them.
+  await page.keyboard.press("Alt+ArrowRight")
+  expect(await tiles(page)).toEqual(["A3", "A1", "A2", "A4", "A5"])
+  await expect(page.getByRole("status")).toContainText(
+    "Moved 2 pages later. Now at position 2 of 5."
+  )
+  await page.keyboard.press("r")
+  expect(await tiles(page)).toEqual(["A3", "A1↻", "A2↻", "A4", "A5"])
+  await page.keyboard.press("Shift+R")
+  expect(await tiles(page)).toEqual(["A3", "A1", "A2", "A4", "A5"])
+  // Escape lets go of the selection; then keys act on the page that has focus.
+  await page.keyboard.press("Escape")
+  await expect(page.getByTestId("selection-count")).toHaveText("None selected")
+  await page.keyboard.press("End")
+  await page.keyboard.press("Delete")
+  expect(await tiles(page)).toEqual(["A3", "A1", "A2", "A4"])
+  await expect(tile(page, 3)).toBeFocused()
+  await page.keyboard.press("ControlOrMeta+z")
+  expect(await tiles(page)).toHaveLength(5)
+  await page.keyboard.press("ControlOrMeta+Shift+z")
+  expect(await tiles(page)).toHaveLength(4)
+  await page.keyboard.press("ControlOrMeta+a")
+  await expect(page.getByTestId("selection-count")).toHaveText("4 selected")
+  await page.keyboard.press("Escape")
+
+  // Dragging a page onto the left half of another puts it before that page.
+  if (!isMobile) {
+    await page
+      .getByTestId("page-tile")
+      .nth(3)
+      .dragTo(page.getByTestId("page-tile").nth(0), {
+        targetPosition: { x: 8, y: 60 },
+      })
+    expect(await tiles(page)).toEqual(["A4", "A3", "A1", "A2"])
+    // Dragging one of several selected pages takes them all.
+    await tile(page, 1).click()
+    await tile(page, 2).click()
+    const box = (await page.getByTestId("page-tile").nth(3).boundingBox())!
+    await page
+      .getByTestId("page-tile")
+      .nth(1)
+      .dragTo(page.getByTestId("page-tile").nth(3), {
+        targetPosition: { x: box.width - 8, y: 60 },
+      })
+    expect(await tiles(page)).toEqual(["A4", "A2", "A3", "A1"])
+  }
+  const result = await merged(page)
+  expect(result.pages.map((entry) => entry.text)).toEqual(
+    isMobile
+      ? ["A-P3", "A-P1", "A-P2", "A-P4"]
+      : ["A-P4", "A-P2", "A-P3", "A-P1"]
+  )
+})
+
+test("shows a page large, and steps to the pages beside it", async ({
+  page,
+}) => {
+  await page.goto(ROUTE)
+  await upload(page, await pdf("A.pdf", "A", { pages: 3 }))
+  await openPages(page)
+  await tile(page, 1).click()
+  await page.getByRole("button", { name: "Add a blank page" }).click()
+  await page.getByRole("button", { name: "Look at the page closely" }).click()
+  const sheet = page.getByRole("dialog")
+  await expect(sheet.getByRole("heading")).toHaveText("Page 2 of 4")
+  await expect(sheet).toContainText("A.pdf, page 2")
+  const stage = page.getByTestId("page-preview")
+  await expect(stage).toHaveAttribute("data-state", "drawn", {
+    timeout: 30_000,
+  })
+  // The picture is far larger than a tile's.
+  expect(
+    await stage
+      .locator("canvas")
+      .evaluate((canvas: HTMLCanvasElement) => canvas.height)
+  ).toBeGreaterThan(1000)
+  await sheet.getByRole("button", { name: "Next" }).click()
+  await expect(sheet.getByRole("heading")).toHaveText("Page 3 of 4")
+  await expect(sheet).toContainText("Blank page")
+  await sheet.getByRole("button", { name: "Previous" }).click()
+  await sheet.getByRole("button", { name: "Previous" }).click()
+  await expect(sheet.getByRole("heading")).toHaveText("Page 1 of 4")
+  await expect(sheet.getByRole("button", { name: "Previous" })).toBeDisabled()
+  await page.keyboard.press("Escape")
+  await expect(sheet).toBeHidden()
+  // A double click on a page opens it too.
+  await tile(page, 3).dblclick()
+  await expect(page.getByRole("dialog").getByRole("heading")).toHaveText(
+    "Page 4 of 4"
+  )
+})
+
+test("alternates the pages of two files, for fronts and backs", async ({
+  page,
+}) => {
+  await page.goto(ROUTE)
+  await upload(
+    page,
+    await pdf("fronts.pdf", "F", { pages: 3 }),
+    // The backs were scanned with the stack turned over: last page first.
+    await pdf("backs.pdf", "K", { pages: 3 })
+  )
+  await ready(page)
+  await page.getByRole("button", { name: "Alternate pages" }).click()
+  await expect(page.getByTestId("alternate")).toContainText(
+    "the first page of each file, then the second"
+  )
+  await page
+    .getByRole("switch", { name: "The last file is in reverse order" })
+    .click()
+  await page.getByRole("button", { name: "Alternate the pages" }).click()
+  // The result opens in the Pages view, to be checked.
+  await expect(page.getByTestId("page-grid")).toBeVisible()
+  expect(await tiles(page)).toEqual([
+    "fronts1",
+    "backs3",
+    "fronts2",
+    "backs2",
+    "fronts3",
+    "backs1",
+  ])
+  const result = await merged(page)
+  expect(result.pages.map((entry) => entry.text)).toEqual([
+    "F-P1",
+    "K-P3",
+    "F-P2",
+    "K-P2",
+    "F-P3",
+    "K-P1",
+  ])
+  // One undo puts the files back as they were.
+  await page.getByRole("button", { name: "Undo" }).click()
+  // With nothing left to undo, the file list sets the result again.
+  await expect(page.getByTestId("arranged-note")).toBeHidden()
+  expect(await tiles(page)).toEqual([
+    "fronts1",
+    "fronts2",
+    "fronts3",
+    "backs1",
+    "backs2",
+    "backs3",
+  ])
+})
+
+test("turns pictures into pages", async ({ page }) => {
+  await page.goto(ROUTE)
+  // A photograph stored on its side, as phones store them.
+  const photo = await sharp({
+    create: { width: 900, height: 600, channels: 3, background: "#c2410c" },
+  })
+    .withMetadata({ orientation: 6 })
+    .jpeg()
+    .toBuffer()
+  const logo = await sharp({
+    create: {
+      width: 300,
+      height: 150,
+      channels: 4,
+      background: { r: 0, g: 120, b: 111, alpha: 0.5 },
+    },
+  })
+    .png()
+    .toBuffer()
+  await upload(
+    page,
+    await pdf("letter.pdf", "A", { size: () => [400, 600] }),
+    { name: "holiday.jpg", mimeType: "image/jpeg", buffer: photo },
+    { name: "logo.png", mimeType: "image/png", buffer: logo },
+    {
+      name: "coast.heic",
+      mimeType: "image/heic",
+      buffer: await readFile("e2e/fixtures/coastline-small.heic"),
+    },
+    {
+      name: "drawing.svg",
+      mimeType: "image/svg+xml",
+      buffer: Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"/>'),
+    }
+  )
+  await ready(page)
+  await expect(page.getByRole("main").getByRole("alert").first()).toContainText(
+    "drawing.svg: SVG cannot be added as a page. Convert it to PNG first."
+  )
+  const rows = page.getByTestId("file-row")
+  await expect(rows).toHaveCount(4)
+  // The photograph is described the way it is shown: upright.
+  await expect(rows.nth(1)).toContainText("Picture · 600 × 900 px")
+  await expect(rows.nth(2)).toContainText("Picture · 300 × 150 px")
+  await expect(rows.nth(3)).toContainText("Picture ·")
+  await expect(page.getByLabel("Pages from holiday.jpg")).toBeHidden()
+  await expect(page.getByTestId("file-thumbnail")).toHaveCount(4)
+
+  const options = page.getByTestId("picture-options")
+  await expect(
+    chipIn(options, "Page size", "Like the page before")
+  ).toBeChecked()
+  let result = await merged(page)
+  expect(result.pages.map((entry) => entry.pictures)).toEqual([0, 1, 1, 1])
+  expect(
+    result.pages.slice(0, 3).map((entry) => [entry.width, entry.height])
+  ).toEqual([
+    [400, 600],
+    // Upright, like the letter before it; the wide logo turns the sheet.
+    [400, 600],
+    [600, 400],
+  ])
+  // The photograph went in as the JPEG it was.
+  expect(Buffer.from(result.bytes).includes(photo.subarray(0, 200))).toBe(true)
+
+  await chipIn(options, "Page size", "Fit the picture").click()
+  await expect(options.getByRole("radiogroup", { name: "Margin" })).toBeHidden()
+  result = await merged(page)
+  expect(
+    result.pages.slice(1, 3).map((entry) => [entry.width, entry.height])
+  ).toEqual([
+    // 600 × 900 and 300 × 150 pixels at 150 to the inch.
+    [288, 432],
+    [144, 72],
+  ])
+  await chipIn(options, "Page size", "A4").click()
+  await chipIn(options, "Margin", "None").click()
+  result = await merged(page)
+  expect(
+    result.pages.slice(1, 3).map((entry) => [entry.width, entry.height])
+  ).toEqual([
+    [595.28, 841.89],
+    [841.89, 595.28],
+  ])
+  // In the Pages view a picture is one page, named after its file.
+  await page.getByRole("radio", { name: /^Pages/ }).click()
+  expect(
+    await page
+      .getByTestId("page-tile")
+      .getByRole("button")
+      .nth(1)
+      .getAttribute("aria-label")
+  ).toBe("Page 2: holiday.jpg")
+})
+
 test("stays accessible, keyboard-friendly, local and responsive", async ({
   page,
 }) => {
@@ -607,6 +1012,15 @@ test("stays accessible, keyboard-friendly, local and responsive", async ({
   }
 
   await page.getByRole("button", { name: "Remove locked.pdf" }).click()
+  // The Pages view, with a page selected and a blank one added.
+  await page.getByRole("radio", { name: /^Pages/ }).click()
+  await page.getByTestId("page-tile").first().getByRole("button").click()
+  await page.getByRole("button", { name: "Add a blank page" }).click()
+  await expect(page.getByTestId("page-tile").locator("canvas")).toHaveCount(3)
+  const pagesView = await new AxeBuilder({ page })
+    .withTags(["wcag2a", "wcag2aa", "wcag21aa"])
+    .analyze()
+  expect(pagesView.violations).toEqual([])
   await merged(page)
   const results = await new AxeBuilder({ page })
     .withTags(["wcag2a", "wcag2aa", "wcag21aa"])
@@ -632,6 +1046,9 @@ test("the written help covers every option", async ({ page }) => {
   for (const term of [
     "Pages",
     "Sorting",
+    "Pages view",
+    "Alternate pages",
+    "Pictures as pages",
     "Locked files",
     "Damaged files",
     "What is kept",
