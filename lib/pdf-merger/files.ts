@@ -23,6 +23,12 @@ export interface FileFacts {
   forms: boolean
   /** Set for a picture added as a page: its size in pixels, as it is shown. */
   picture?: { width: number; height: number }
+  /** Files attached inside the PDF. */
+  attachments?: number
+  /** The author, subject and keywords the file names, where it does. */
+  author?: string
+  subject?: string
+  keywords?: string
 }
 
 export type SortOrder = "added" | "name" | "name-desc" | "oldest" | "newest"

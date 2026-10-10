@@ -8,6 +8,13 @@ import type { Rotation, Size } from "@/lib/image-compressor/geometry"
 import type { Pixels } from "@/lib/image-compressor/ssim"
 import type { FileFacts } from "./files"
 import {
+  contentsPageCount,
+  CONTENTS_HEADING,
+  drawContents,
+  layoutContents,
+  showGlyphs,
+} from "./contents"
+import {
   countBookmarks,
   mergeBookmarks,
   type Bookmark,
@@ -16,6 +23,7 @@ import {
   type OutlineSource,
 } from "./outline"
 import { pictureLayout, type PictureMargin, type PicturePage } from "./picture"
+import type { ContentsChoice, FormsChoice, LabelsChoice } from "./settings"
 
 type Engine = typeof MuPDF
 type Doc = MuPDF.PDFDocument
@@ -46,6 +54,8 @@ export interface OpenedPdf {
   bookmarks: Bookmark[]
   /** Set for a picture added as a page: the picture itself, to be laid out when merging. */
   picture?: { image: Obj; width: number; height: number; turn: Rotation }
+  /** The page number each page shows in a viewer, when the file sets its own. */
+  labels?: string[]
 }
 
 const nameOf = (object: Obj) => (object.isName() ? object.asName() : "")
@@ -182,8 +192,22 @@ export function openPdf(
         (flags.isNumber() && (flags.asNumber() & 1) === 1) || isSigned(fields),
       tagged: marked.isBoolean() && marked.asBoolean(),
       forms: fields.isArray() && fields.length > 0,
+      attachments: Object.keys(doc.getEmbeddedFiles()).length,
+      author: doc.getMetaData("info:Author") || undefined,
+      subject: doc.getMetaData("info:Subject") || undefined,
+      keywords: doc.getMetaData("info:Keywords") || undefined,
     }
-    return { doc, pages: prepare(doc, count), facts, bookmarks }
+    // Only a file that numbers its own pages is asked for every page's label.
+    let labels: string[] | undefined
+    if (!root.get("PageLabels").isNull()) {
+      labels = []
+      for (let index = 0; index < count; index++) {
+        const page = doc.loadPage(index)
+        labels.push(page.getLabel())
+        page.destroy()
+      }
+    }
+    return { doc, pages: prepare(doc, count), facts, bookmarks, labels }
   } catch (error) {
     doc.destroy()
     if (error instanceof PasswordNeeded) throw error
@@ -362,6 +386,21 @@ export interface MergeOptions {
   /** How large a page a picture gets, and the space around it. */
   picturePage?: PicturePage
   pictureMargin?: PictureMargin
+  /** A contents page at the front, and whether the first file is a cover that stays ahead of it. */
+  contents?: ContentsChoice
+  cover?: boolean
+  forms?: FormsChoice
+  labels?: LabelsChoice
+  /** Carry attached files over; on unless turned off. */
+  attachments?: boolean
+  details?: { title: string; author: string; subject: string; keywords: string }
+  /** Lock the result: the password to open it, a second one that lifts the limits, and the limits. */
+  lock?: { password: string; ownerPassword: string; permissions: number }
+  /**
+   * Draw text the built-in font has no letters for, as a picture `height`
+   * points tall. Without it, such letters are written as "?".
+   */
+  textPicture?: (text: string, height: number) => Pixels | null
   /** Called between pages; it may pause, or throw to stop the merge. */
   checkpoint?: () => Promise<void>
   progress?: (done: number, total: number) => void
@@ -465,7 +504,8 @@ function signaturesToStamps(out: Doc, pages: readonly Obj[]) {
 function buildForm(
   out: Doc,
   grafts: { map: MuPDF.PDFGraftMap; input: MergeSource }[],
-  pages: readonly Obj[]
+  pages: readonly Obj[],
+  join: boolean
 ) {
   const live = new Set<number>()
   eachAnnotation(pages, (annotation) => {
@@ -487,9 +527,41 @@ function buildForm(
   const fields = out.newArray()
   const fonts = out.newDictionary()
   const resources = out.newDictionary()
-  const taken = new Set<string>()
+  /** Field names in use, and where each field sits in the list. */
+  const taken = new Map<string, number>()
   let appearance: Obj | null = null
   let redraw = false
+
+  /** The places a field is drawn: its kids when they are all that, or itself. */
+  const widgetsOf = (field: Obj): Obj[] | null => {
+    const kids = field.get("Kids")
+    if (!kids.isArray())
+      return nameOf(field.get("Subtype")) === "Widget" ? [field] : null
+    const widgets: Obj[] = []
+    for (let index = 0; index < kids.length; index++) {
+      const kid = kids.get(index)
+      // A kid with a name of its own is a field, not a place one is drawn.
+      if (!kid.get("T").isNull()) return null
+      widgets.push(kid)
+    }
+    return widgets
+  }
+  /** Make a field that is also its own single widget into a field with one kid. */
+  const split = (field: Obj) => {
+    if (field.get("Kids").isArray()) return field
+    const parent = out.addObject(out.newDictionary())
+    for (const key of FIELD_KEYS.filter((name) => name !== "Parent")) {
+      const value = field.get(key)
+      if (value.isNull() || key === "MK") continue
+      parent.put(key, value)
+      field.delete(key)
+    }
+    const kids = out.newArray()
+    kids.push(field)
+    parent.put("Kids", kids)
+    field.put("Parent", parent)
+    return parent
+  }
   grafts.forEach(({ map, input }, fileIndex) => {
     const root = input.pdf.doc.getTrailer().get("Root")
     const own = root.get("AcroForm", "Fields")
@@ -500,11 +572,33 @@ function buildForm(
       if (nameOf(field.get("FT")) === "Sig" || !keep(field)) continue
       const title = field.get("T")
       const name = title.isString() ? title.asString() : ""
+      const earlier = taken.get(name)
+      if (join && earlier !== undefined) {
+        const first = fields.get(earlier)
+        const places = widgetsOf(field)
+        // Only fields of the same kind, each drawn in plain places, can become one.
+        if (
+          places &&
+          widgetsOf(first) &&
+          nameOf(first.get("FT")) === nameOf(field.get("FT"))
+        ) {
+          const parent = split(first)
+          fields.put(earlier, parent)
+          for (const place of places) {
+            for (const key of FIELD_KEYS) if (key !== "MK") place.delete(key)
+            place.put("Parent", parent)
+            parent.get("Kids").push(place)
+          }
+          // The joined places still show their old entries until redrawn.
+          redraw = true
+          continue
+        }
+      }
       let unique = name
       for (let extra = fileIndex + 1; taken.has(unique); extra++)
         unique = `${name}_${extra}`
       if (unique !== name) field.put("T", out.newString(unique))
-      taken.add(unique)
+      taken.set(unique, fields.length)
       fields.push(field)
     }
     const shared = root.get("AcroForm", "DR")
@@ -604,6 +698,165 @@ function buildLayers(
   properties.put("OCGs", layers)
   properties.put("D", settings)
   out.getTrailer().get("Root").put("OCProperties", out.addObject(properties))
+}
+
+/** Carry files attached to the PDFs into the result; a name already taken gets a number. */
+function carryAttachments(
+  out: Doc,
+  grafts: { map: MuPDF.PDFGraftMap; input: MergeSource }[]
+) {
+  const taken = new Set<string>()
+  for (const { map, input } of grafts) {
+    if (input.pdf.picture) continue
+    for (const [name, file] of Object.entries(
+      input.pdf.doc.getEmbeddedFiles()
+    )) {
+      let unique = name
+      const dot = name.lastIndexOf(".")
+      for (let extra = 2; taken.has(unique); extra++)
+        unique =
+          dot > 0
+            ? `${name.slice(0, dot)} (${extra})${name.slice(dot)}`
+            : `${name} (${extra})`
+      taken.add(unique)
+      out.insertEmbeddedFile(unique, map.graftObject(file))
+    }
+  }
+}
+
+interface TakenFile {
+  source: MergeSource
+  first: number
+}
+
+/**
+ * Add contents pages: one line per file, with the page it starts on, each a
+ * link to that page. They go at the front, or after the first file when it is
+ * a cover, which then has no line of its own.
+ * @returns Where the contents pages start and how many there are.
+ */
+function addContents(
+  mupdf: Engine,
+  out: Doc,
+  pages: readonly Obj[],
+  files: readonly TakenFile[],
+  options: MergeOptions
+) {
+  const choice = options.contents ?? "none"
+  const listed = options.cover ? files.slice(1) : files
+  if (choice === "none" || !listed.length) return { at: 0, count: 0 }
+  // A cover is the first file's pages for as long as they come first.
+  const at = options.cover && files.length ? listed[0].first : 0
+  const size = shownSize(pages[0])
+  const count = contentsPageCount(listed.length, size)
+
+  const font = new mupdf.Font("Helvetica")
+  const fontObject = out.addFont(font)
+  const glyphs = (text: string) =>
+    [...text].map((letter) => font.encodeCharacter(letter.codePointAt(0)!))
+  const writable = (text: string) => glyphs(text).every((glyph) => glyph > 0)
+  /** Pictures of lines the font cannot write, by their text. */
+  const drawn = new Map<string, { name: string; object: Obj; ratio: number }>()
+  const pictureOf = (text: string) => {
+    if (writable(text) || !options.textPicture) return null
+    let picture = drawn.get(text)
+    if (!picture) {
+      const pixels = options.textPicture(text, 64)
+      if (!pixels) return null
+      const pixmap = new mupdf.Pixmap(
+        mupdf.ColorSpace.DeviceRGB,
+        [0, 0, pixels.width, pixels.height],
+        false
+      )
+      const stride = pixmap.getStride()
+      const target = pixmap.getPixels()
+      for (let y = 0; y < pixels.height; y++)
+        for (let x = 0; x < pixels.width; x++) {
+          const from = (y * pixels.width + x) * 4
+          const alpha = pixels.data[from + 3] / 255
+          for (let channel = 0; channel < 3; channel++)
+            target[y * stride + x * 3 + channel] =
+              pixels.data[from + channel] * alpha + 255 * (1 - alpha)
+        }
+      const image = new mupdf.Image(pixmap)
+      pixmap.destroy()
+      picture = {
+        name: `T${drawn.size}`,
+        object: out.addImage(image),
+        ratio: pixels.width / pixels.height,
+      }
+      image.destroy()
+      drawn.set(text, picture)
+    }
+    return picture
+  }
+  /** A drawn line stands a little taller than the letters, to hold their tails. */
+  const TALL = 1.4
+  const measure = (text: string, textSize: number) => {
+    const picture = pictureOf(text)
+    if (picture) return picture.ratio * textSize * TALL
+    return (
+      glyphs(text).reduce((sum, glyph) => sum + font.advanceGlyph(glyph), 0) *
+      textSize
+    )
+  }
+  const question = font.encodeCharacter(63)
+  const show = (text: string, textSize: number, x: number, y: number) => {
+    const picture = pictureOf(text)
+    if (picture) {
+      const height = textSize * TALL
+      return `q ${picture.ratio * height} 0 0 ${height} ${x} ${y - textSize * 0.3} cm /${picture.name} Do Q`
+    }
+    return showGlyphs(
+      "F1",
+      glyphs(text)
+        .map((glyph) => (glyph || question).toString(16).padStart(4, "0"))
+        .join(""),
+      textSize,
+      x,
+      y
+    )
+  }
+
+  const entries = listed.map((file) => ({
+    title:
+      (choice === "titles" && file.source.pdf.facts.title.trim()) ||
+      file.source.name,
+    page: file.first + (file.first >= at ? count : 0) + 1,
+  }))
+  const layouts = layoutContents(entries, size, measure)
+  layouts.forEach((layout, index) => {
+    const content = drawContents(layout, show)
+    const fonts = out.newDictionary()
+    fonts.put("F1", fontObject)
+    const resources = out.newDictionary()
+    resources.put("Font", fonts)
+    if (drawn.size) {
+      const pictures = out.newDictionary()
+      for (const picture of drawn.values())
+        pictures.put(picture.name, picture.object)
+      resources.put("XObject", pictures)
+    }
+    out.insertPage(
+      at + index,
+      out.addPage([0, 0, size.width, size.height], 0, resources, content)
+    )
+  })
+  // Links are made once every contents page is in, so page numbers are final.
+  layouts.forEach((layout, index) => {
+    const page = out.loadPage(at + index)
+    for (const line of layout.lines) {
+      const [left, bottom, right, top] = line.area
+      // Links are placed from the top of the page, text from the bottom.
+      page.createLink(
+        [left, size.height - top, right, size.height - bottom],
+        `#page=${line.target + 1}`
+      )
+    }
+    page.destroy()
+  })
+  font.destroy()
+  return { at, count }
 }
 
 function writeBookmarks(out: Doc, bookmarks: readonly MergedBookmark[]) {
@@ -743,31 +996,101 @@ export async function mergePages(
     }))
     dropDeadLinks(pages)
     signaturesToStamps(out, pages)
-    buildForm(out, grafts, pages)
+    const forms = options.forms ?? "keep"
+    if (forms === "remove")
+      eachAnnotation(pages, (annotation, remove) => {
+        if (nameOf(annotation.get("Subtype")) === "Widget") remove()
+      })
+    else if (
+      buildForm(out, grafts, pages, forms === "join") &&
+      forms === "flatten"
+    ) {
+      // What is filled in becomes part of the page; the fields themselves go.
+      out.bake(false, true)
+      out.getTrailer().get("Root").delete("AcroForm")
+    }
     buildLayers(out, grafts)
+    if (options.attachments !== false) carryAttachments(out, grafts)
+
+    // A contents page shifts every page behind it; from here on, places are final.
+    const contents = addContents(mupdf, out, pages, files, options)
+    const shifted = (index: number) =>
+      index >= contents.at ? index + contents.count : index
     const bookmarks = mergeBookmarks(
       files.map((file): OutlineSource => ({
         name: file.source.name,
         bookmarks: file.source.pdf.bookmarks,
-        placed: file.placed,
-        first: file.first,
+        placed: new Map(
+          [...file.placed].map(([page, index]) => [page, shifted(index)])
+        ),
+        first: shifted(file.first),
       })),
       options.bookmarks
     )
+    if (contents.count && options.bookmarks !== "none")
+      bookmarks.unshift({
+        title: CONTENTS_HEADING,
+        uri: `#page=${contents.at + 1}`,
+        open: false,
+        children: [],
+      })
     writeBookmarks(out, bookmarks)
+
+    if (options.labels === "keep") {
+      // Each page shows the number it had in its own file.
+      const own = new Map<number, string>()
+      wanted.forEach((want, index) => {
+        if ("blank" in want) return
+        const pdf = sources.get(want.source)!.pdf
+        if (!pdf.picture)
+          own.set(
+            shifted(index),
+            pdf.labels?.[want.index] ?? String(want.index + 1)
+          )
+      })
+      const total = pages.length + contents.count
+      for (let index = 0; index < total; index++) {
+        const inContents =
+          index >= contents.at && index < contents.at + contents.count
+        if (inContents)
+          // Contents pages count in small Roman numerals, as front matter does.
+          out.setPageLabels(index, "r", "", index - contents.at + 1)
+        else out.setPageLabels(index, "\0", own.get(index) ?? "", 1)
+      }
+    }
+
     const stamp = pdfDate(options.now ?? new Date())
     out.setMetaData("info:Producer", PRODUCER)
     out.setMetaData("info:CreationDate", stamp)
     out.setMetaData("info:ModDate", stamp)
+    for (const [key, value] of Object.entries(options.details ?? {}))
+      if (value.trim())
+        out.setMetaData(
+          `info:${key[0].toUpperCase()}${key.slice(1)}`,
+          value.trim()
+        )
     await options.checkpoint?.()
     // Objects no longer referenced are dropped; identical ones, streams
-    // included (level 4), are stored once.
-    const buffer = out.saveToBuffer("garbage=4,compress=yes,objstms=yes")
+    // included (level 4), are stored once. Options go as an object, so a
+    // password may hold any character.
+    const buffer = out.saveToBuffer({
+      garbage: 4,
+      compress: "yes",
+      objstms: "yes",
+      ...(options.lock
+        ? {
+            encrypt: "aes-256",
+            "user-password": options.lock.password,
+            "owner-password": options.lock.ownerPassword,
+            permissions: options.lock.permissions,
+          }
+        : null),
+    })
     try {
       // The buffer is a view of the engine's memory; the copy outlives it.
       return {
         bytes: buffer.asUint8Array().slice(),
-        pages: pages.length,
+        pages: pages.length + contents.count,
         bookmarks: countBookmarks(bookmarks),
       }
     } finally {

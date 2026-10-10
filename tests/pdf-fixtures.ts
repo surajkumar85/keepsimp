@@ -43,6 +43,15 @@ export interface FixtureOptions {
   tagged?: boolean
   /** The same picture of noise on every page, several kilobytes even when compressed. */
   picture?: boolean
+  /** Files attached to the document: name to text. */
+  attachments?: Record<string, string>
+  /** Page numbers of its own: the first pages in small Roman numerals, then from 1. */
+  romanPages?: number
+  author?: string
+  subject?: string
+  keywords?: string
+  /** A check box with this name on page 1, ticked. */
+  checkBox?: string
 }
 
 export const pageText = (tag: string, page: number) => `${tag}-P${page}`
@@ -271,6 +280,25 @@ export async function makePdf(tag: string, options: FixtureOptions = {}) {
     pages[0].node.set(PDFName.of("StructParents"), context.obj(0))
   }
 
+  for (const [name, text] of Object.entries(options.attachments ?? {}))
+    await doc.attach(new TextEncoder().encode(text), name, {
+      mimeType: "text/plain",
+    })
+  if (options.romanPages)
+    doc.catalog.set(
+      PDFName.of("PageLabels"),
+      context.obj({
+        Nums: [0, { S: "r" }, options.romanPages, { S: "D" }],
+      })
+    )
+  if (options.checkBox) {
+    const box = doc.getForm().createCheckBox(options.checkBox)
+    box.addToPage(pages[0], { x: 220, y: 100, width: 16, height: 16 })
+    box.check()
+  }
+  if (options.author) doc.setAuthor(options.author)
+  if (options.subject) doc.setSubject(options.subject)
+  if (options.keywords) doc.setKeywords([options.keywords])
   if (options.title) doc.setTitle(options.title)
   if (options.password)
     doc.encrypt({

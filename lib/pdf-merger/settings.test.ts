@@ -6,10 +6,15 @@ import {
   entryName,
   desktopLimits,
   limitsFor,
+  limitsReaders,
   looksLikePdf,
   megabytes,
   outputName,
+  permissionBits,
   phoneLimits,
+  settingsKey,
+  settingsProblem,
+  type MergeSettings,
 } from "./settings"
 
 const bytes = (text: string) => Uint8Array.from(text, (c) => c.charCodeAt(0))
@@ -133,5 +138,138 @@ describe("describeSize", () => {
     expect(describeSize(1000, 1000)).toBe("the same size as the files together")
     expect(describeSize(1000, 996)).toBe("the same size as the files together")
     expect(describeSize(1000, 1004)).toBe("the same size as the files together")
+  })
+})
+
+describe("settingsProblem", () => {
+  const problem = (change: Partial<MergeSettings>) =>
+    settingsProblem({ ...defaultSettings, ...change })
+
+  it("accepts the defaults and ordinary details", () => {
+    expect(problem({})).toBeNull()
+    expect(
+      problem({ title: "Annual report", author: "Ada", keywords: "a, b" })
+    ).toBeNull()
+    expect(problem({ subject: "x".repeat(500) })).toBeNull()
+  })
+
+  it("keeps details to a sensible length", () => {
+    expect(problem({ title: "x".repeat(501) })).toBe(
+      "Keep the title under 500 characters."
+    )
+    expect(problem({ author: "x".repeat(501) })).toMatch(/the author/)
+    expect(problem({ subject: "x".repeat(501) })).toMatch(/the subject/)
+    expect(problem({ keywords: "x".repeat(501) })).toMatch(/the keywords/)
+  })
+
+  it("asks for a password only when one is wanted", () => {
+    expect(problem({ password: "" })).toBeNull()
+    expect(problem({ protect: true })).toBe(
+      "Enter a password for the merged PDF, or turn the password off."
+    )
+    expect(problem({ protect: true, password: "hunter2" })).toBeNull()
+    expect(problem({ protect: true, password: "a, b = c" })).toBeNull()
+  })
+
+  it("keeps passwords within what the lock can take", () => {
+    expect(problem({ protect: true, password: "x".repeat(127) })).toBeNull()
+    expect(problem({ protect: true, password: "x".repeat(128) })).toMatch(
+      /at most 127 bytes/
+    )
+    // Letters outside plain ASCII take more than one byte each.
+    expect(problem({ protect: true, password: "é".repeat(64) })).toMatch(
+      /at most 127 bytes/
+    )
+    expect(
+      problem({ protect: true, password: "a", ownerPassword: "y".repeat(128) })
+    ).toMatch(/at most 127 bytes/)
+    // A long password matters only when it is used.
+    expect(problem({ password: "x".repeat(300) })).toBeNull()
+  })
+
+  it("wants the second password to be a different one", () => {
+    expect(
+      problem({ protect: true, password: "same", ownerPassword: "same" })
+    ).toBe("The second password must differ from the first, or be left empty.")
+    expect(
+      problem({ protect: true, password: "one", ownerPassword: "two" })
+    ).toBeNull()
+  })
+})
+
+describe("permissionBits and limitsReaders", () => {
+  const all = { allowPrint: true, allowCopy: true, allowChanges: true }
+  const none = { allowPrint: false, allowCopy: false, allowChanges: false }
+
+  it("sets the bits a PDF reader looks at", () => {
+    // Printing (two bits), copying, the four kinds of change, and reading aloud.
+    expect(permissionBits(all)).toBe(-4)
+    expect(permissionBits(none)).toBe(-3392)
+    expect(permissionBits({ ...none, allowPrint: true }) & (4 | 2048)).toBe(
+      4 | 2048
+    )
+    expect(permissionBits({ ...none, allowCopy: true }) & 16).toBe(16)
+    expect(
+      permissionBits({ ...none, allowChanges: true }) & (8 | 32 | 256 | 1024)
+    ).toBe(8 | 32 | 256 | 1024)
+    // Reading aloud is never taken away, and the two lowest bits are never set.
+    expect(permissionBits(none) & 512).toBe(512)
+    expect(permissionBits(all) & 3).toBe(0)
+  })
+
+  it("knows when a lock would limit its readers", () => {
+    expect(limitsReaders(defaultSettings)).toBe(false)
+    expect(limitsReaders({ ...defaultSettings, allowCopy: false })).toBe(false)
+    expect(
+      limitsReaders({ ...defaultSettings, protect: true, password: "x" })
+    ).toBe(false)
+    expect(
+      limitsReaders({ ...defaultSettings, protect: true, allowPrint: false })
+    ).toBe(true)
+  })
+})
+
+describe("settingsKey", () => {
+  const key = (change: Partial<MergeSettings>) =>
+    settingsKey({ ...defaultSettings, ...change })
+  const base = key({})
+
+  it("changes with what changes the result, not with the file name", () => {
+    expect(key({ name: "other" })).toBe(base)
+    for (const change of [
+      { bookmarks: "none" },
+      { contents: "files" },
+      { forms: "flatten" },
+      { labels: "keep" },
+      { attachments: false },
+      { title: "T" },
+      { author: "A" },
+      { subject: "S" },
+      { keywords: "K" },
+      { protect: true },
+    ] as Partial<MergeSettings>[])
+      expect(key(change), JSON.stringify(change)).not.toBe(base)
+  })
+
+  it("ignores options that are not in use", () => {
+    // A cover only matters with a contents page.
+    expect(key({ cover: true })).toBe(base)
+    expect(key({ contents: "files", cover: true })).not.toBe(
+      key({ contents: "files" })
+    )
+    // The lock's details only matter with a lock.
+    for (const change of [
+      { password: "x" },
+      { ownerPassword: "y" },
+      { allowPrint: false },
+      { allowCopy: false },
+      { allowChanges: false },
+    ] as Partial<MergeSettings>[]) {
+      expect(key(change), JSON.stringify(change)).toBe(base)
+      expect(
+        key({ protect: true, ...change }),
+        JSON.stringify(change)
+      ).not.toBe(key({ protect: true }))
+    }
   })
 })

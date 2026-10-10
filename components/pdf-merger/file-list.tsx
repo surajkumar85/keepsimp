@@ -23,7 +23,8 @@ function notesFor(file: PdfFile) {
   if (!facts) return []
   return [
     facts.repaired && "This file was damaged and has been repaired.",
-    facts.unlocked && "Unlocked. The merged file will not have a password.",
+    facts.unlocked &&
+      "Unlocked. The merged file has no password unless you set one.",
     facts.restricted &&
       "Its author restricted changes. Make sure you have the right to merge it.",
     facts.signed &&

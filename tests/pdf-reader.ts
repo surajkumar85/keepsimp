@@ -30,6 +30,15 @@ export interface ReadPage {
   pictures: number
 }
 
+/** pdf.js has given attachments as a plain object and, later, as a Map. */
+async function attachmentNames(doc: { getAttachments(): Promise<unknown> }) {
+  const found = await doc.getAttachments()
+  if (!found) return []
+  return (
+    found instanceof Map ? [...found.keys()] : Object.keys(found)
+  ).sort() as string[]
+}
+
 async function fieldNames(bytes: Uint8Array, password?: string) {
   const doc = await PDFDocument.load(bytes, { password })
   return doc
@@ -71,8 +80,10 @@ export async function readPdf(bytes: Uint8Array, password?: string) {
       pages.push({
         text: content.items
           .map((item) => ("str" in item ? item.str : ""))
-          .filter(Boolean)
-          .join(" "),
+          .join(" ")
+          // Text set far apart comes back with runs of spaces between.
+          .replace(/\s+/g, " ")
+          .trim(),
         width: page.view[2] - page.view[0],
         height: page.view[3] - page.view[1],
         rotate: page.rotate,
@@ -119,6 +130,12 @@ export async function readPdf(bytes: Uint8Array, password?: string) {
         visible: group.visible as boolean,
       })),
       info,
+      /** The page number a viewer shows for each page; null when pages are simply counted. */
+      labels: await doc.getPageLabels(),
+      /** Names of the files attached to the document. */
+      attachments: await attachmentNames(doc),
+      /** What a reader may do, as the document's permission flags; null when nothing is limited. */
+      permissions: await doc.getPermissions(),
       /** True when the document says it holds signatures. */
       signatures: Boolean(info.IsSignaturesPresent),
       encrypted: Boolean(info.EncryptFilterName),

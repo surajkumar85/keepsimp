@@ -2,6 +2,7 @@ import type { Rotation, Size } from "@/lib/image-compressor/geometry"
 import type { FileFacts } from "./files"
 import type { BookmarkPolicy } from "./outline"
 import type { PictureMargin, PicturePage } from "./picture"
+import type { ContentsChoice, FormsChoice, LabelsChoice } from "./settings"
 
 /** One page of the result, as the worker is asked for it. */
 export type WantedPage =
@@ -37,6 +38,23 @@ export type PdfRequest =
       bookmarks: BookmarkPolicy
       picturePage: PicturePage
       pictureMargin: PictureMargin
+      contents: ContentsChoice
+      cover: boolean
+      forms: FormsChoice
+      labels: LabelsChoice
+      attachments: boolean
+      details: {
+        title: string
+        author: string
+        subject: string
+        keywords: string
+      }
+      /** A password for the result, a second one that lifts its limits, and the limits; null for no lock. */
+      lock: {
+        password: string
+        ownerPassword: string
+        permissions: number
+      } | null
     }
   | { type: "cancel"; job: number }
 

@@ -65,14 +65,21 @@ import {
   desktopLimits,
   entryName,
   limitsFor,
+  limitsReaders,
   looksLikePdf,
   megabytes,
   outputName,
+  permissionBits,
+  settingsKey,
+  settingsProblem,
   type Limits,
+  type MergeSettings,
 } from "@/lib/pdf-merger/settings"
 import { FileList } from "./file-list"
+import { OutputPanel } from "./output-panel"
 import { PageGrid, type GridFile } from "./page-grid"
 import { PagePreview } from "./page-preview"
+import { StructurePanel } from "./structure-panel"
 
 const INPUT_ID = "pdf-file"
 const ACCEPT = "application/pdf,.pdf,image/*,.heic,.heif,.jxl"
@@ -99,6 +106,8 @@ interface Result {
   bookmarks: number
   /** Bytes of the files that went in, when all of their pages were used; otherwise null. */
   input: number | null
+  /** The result asks for a password when opened. */
+  locked: boolean
 }
 
 const plural = (count: number, word: string) =>
@@ -107,7 +116,12 @@ const plural = (count: number, word: string) =>
 export function PdfMerger() {
   const ids = useId()
   const [state, dispatchState] = useReducer(filesReducer, noFiles)
-  const [name, setName] = useState(defaultSettings.name)
+  const [settings, setSettings] = useState<MergeSettings>(defaultSettings)
+  const update = useCallback(
+    (change: Partial<MergeSettings>) =>
+      setSettings((current) => ({ ...current, ...change })),
+    []
+  )
   const [thumbnails, setThumbnails] = useState<Record<string, ImageBitmap>>({})
   const [view, setView] = useState<"files" | "pages">("files")
   /** The pages as arranged by hand; null while they follow the file list. */
@@ -341,6 +355,8 @@ export function PdfMerger() {
     })
     setNotice("")
     setFailure("")
+    // A fresh start: nothing typed for the last result, a password least of all, stays behind.
+    setSettings(defaultSettings)
   }
 
   function move(id: string, to: number) {
@@ -386,9 +402,11 @@ export function PdfMerger() {
         : derived,
     [arranged, derived, usable]
   )
-  const problem = arranged
-    ? (lockedProblem(state.files) ?? pagesProblem(entries.length, limits.pages))
-    : status.problem
+  const problem =
+    (arranged
+      ? (lockedProblem(state.files) ??
+        pagesProblem(entries.length, limits.pages))
+      : status.problem) ?? settingsProblem(settings)
   const usedFiles = new Set(
     entries.flatMap((entry) => (entry.kind === "page" ? [entry.file] : []))
   )
@@ -400,7 +418,7 @@ export function PdfMerger() {
         : [entry.file, entry.page, entry.rotation]
     ),
     [...usedFiles].map((id) => names[id]),
-    defaultSettings.bookmarks,
+    settingsKey(settings),
     hasPictures && [picturePage, pictureMargin],
   ])
   const current = result?.key === key ? result : null
@@ -420,6 +438,13 @@ export function PdfMerger() {
         return file?.facts?.pages === part.pages.length && !file.range.trim()
       })
     const input = whole ? status.bytes : null
+    const locked = settings.protect
+    // Without a second password, limits get a random one that nobody keeps;
+    // with no limits, the one password opens everything.
+    const random = () =>
+      Array.from(crypto.getRandomValues(new Uint8Array(24)), (byte) =>
+        byte.toString(16).padStart(2, "0")
+      ).join("")
     const job = client.current.merge(
       {
         pages: entries.map((entry) =>
@@ -428,9 +453,29 @@ export function PdfMerger() {
             : { file: entry.file, page: entry.page, rotation: entry.rotation }
         ),
         names,
-        bookmarks: defaultSettings.bookmarks,
+        bookmarks: settings.bookmarks,
         picturePage,
         pictureMargin,
+        contents: settings.contents,
+        cover: settings.cover,
+        forms: settings.forms,
+        labels: settings.labels,
+        attachments: settings.attachments,
+        details: {
+          title: settings.title,
+          author: settings.author,
+          subject: settings.subject,
+          keywords: settings.keywords,
+        },
+        lock: locked
+          ? {
+              password: settings.password,
+              ownerPassword:
+                settings.ownerPassword ||
+                (limitsReaders(settings) ? random() : settings.password),
+              permissions: permissionBits(settings),
+            }
+          : null,
       },
       (done, total) => setProgress({ done, total })
     )
@@ -448,6 +493,7 @@ export function PdfMerger() {
             pages: merged.pages,
             bookmarks: merged.bookmarks,
             input,
+            locked,
           }
         })
         setAnnouncement(
@@ -523,6 +569,23 @@ export function PdfMerger() {
       client.current?.thumbnail(file, page, edge) ?? Promise.resolve(null),
     []
   )
+  /** The details of the first file that has any, to take over with one press. */
+  const firstFacts = state.files.find(
+    (file) =>
+      file.facts &&
+      (file.facts.title ||
+        file.facts.author ||
+        file.facts.subject ||
+        file.facts.keywords)
+  )?.facts
+  const firstDetails = firstFacts
+    ? {
+        title: firstFacts.title,
+        author: firstFacts.author,
+        subject: firstFacts.subject,
+        keywords: firstFacts.keywords,
+      }
+    : null
   const previewAt = preview
     ? entries.findIndex((entry) => entry.key === preview)
     : -1
@@ -945,12 +1008,13 @@ export function PdfMerger() {
                     ` · ${describeSize(current.input, current.bytes)}`}
                   {current.bookmarks > 0 &&
                     ` · ${plural(current.bookmarks, "bookmark")}`}
+                  {current.locked && " · locked with your password"}
                 </span>
               </p>
               <div className="flex flex-wrap gap-2">
                 <a
                   href={current.url}
-                  download={outputName(name)}
+                  download={outputName(settings.name)}
                   className={buttonVariants({ size: "lg" })}
                 >
                   <IconDownload aria-hidden="true" /> Download PDF
@@ -994,8 +1058,8 @@ export function PdfMerger() {
             </label>
             <Input
               id={`${ids}-name`}
-              value={name}
-              onChange={(event) => setName(event.target.value)}
+              value={settings.name}
+              onChange={(event) => update({ name: event.target.value })}
               placeholder={defaultSettings.name}
               spellCheck={false}
               aria-describedby={`${ids}-name-hint`}
@@ -1005,7 +1069,9 @@ export function PdfMerger() {
               className="mt-2 text-xs text-muted-foreground"
             >
               Saved as{" "}
-              <span className="font-mono break-all">{outputName(name)}</span>
+              <span className="font-mono break-all">
+                {outputName(settings.name)}
+              </span>
             </p>
           </div>
           <p className="flex items-start gap-2 text-xs text-muted-foreground">
@@ -1013,6 +1079,16 @@ export function PdfMerger() {
             Files are merged on your device and are not uploaded.
           </p>
         </section>
+
+        <StructurePanel
+          settings={settings}
+          update={update}
+          forms={state.files.some((file) => file.facts?.forms)}
+          attachments={state.files.reduce(
+            (sum, file) => sum + (file.facts?.attachments ?? 0),
+            0
+          )}
+        />
 
         {hasPictures && (
           <div
@@ -1058,15 +1134,14 @@ export function PdfMerger() {
           </div>
         )}
 
+        <OutputPanel settings={settings} update={update} first={firstDetails} />
+
         <section className="space-y-2 rounded-xl border bg-card p-4 text-sm sm:p-5">
           <h2 className="font-heading text-base font-medium">What is kept</h2>
           <ul className="list-disc space-y-1 pl-5 text-muted-foreground">
             <li>Every page as it is: text, pictures, fonts and page sizes.</li>
             <li>Links, notes, fillable fields and layers.</li>
-            <li>
-              Bookmarks, grouped under each file&apos;s name when there are
-              several files.
-            </li>
+            <li>Bookmarks, organised the way you choose above.</li>
             <li>
               Fonts and pictures that files share are stored once, so the result
               is often smaller than the files together.

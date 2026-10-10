@@ -1,6 +1,6 @@
 # PDF merger
 
-Updated 11 October 2026. Applies to `/dashboard/pdf-merger/`. Phases 1 and 2 of four are built: merging files and chosen pages, the page organiser, and pictures as pages. The plan for the rest is at the end.
+Updated 11 October 2026. Applies to `/dashboard/pdf-merger/`. Phases 1 to 3 of four are built: merging files and chosen pages; the page organiser and pictures as pages; and bookmark, contents, field, detail and password choices. The plan for the last is at the end.
 
 ## What it does
 
@@ -24,28 +24,36 @@ Updated 11 October 2026. Applies to `/dashboard/pdf-merger/`. Phases 1 and 2 of 
 - **Pictures as pages:** JPG, PNG, WebP, AVIF, HEIC, GIF, TIFF, BMP and JPEG XL. SVG is refused with a reason.
   - Page size: like the page before (the default; A4 when nothing comes before), fit the picture at 150 pixels to the inch, A4 or Letter. The sheet is turned to suit the picture. Margin: none, small or normal.
   - A JPEG goes in as it is, byte for byte, and is shown upright by the turn its EXIF data asks for. A mirrored JPEG and every other format are decoded and stored without loss; see-through parts become white.
+- **Bookmarks:** under each file (the default), keep all, one per file, or none.
+- **Contents page:** none, by file name or by document title. A first page lists every file with the page it starts on; every line is a link. With "the first file is a cover", it comes after the cover and does not list it. It takes the size of the result's first page and runs onto more pages when needed. It gets a bookmark of its own unless bookmarks are off.
+  - Text is written with the engine's built-in Helvetica, which has Latin, Greek and Cyrillic letters. A name with other letters is drawn by the browser as a picture and placed on the line, so any script the device can show appears correctly.
+- **Fillable fields** (offered when a file has any): keep, join same names, flatten or remove.
+- **Page numbers shown by a viewer:** count from 1, or each file's own.
+- **Attachments** (offered when a file has any): carried over unless turned off.
+- **Details:** title, author, subject and keywords, empty unless filled in; one press takes them from the first file that has any.
+- **Password:** AES-256, with switches for printing, copying and changes, and an optional second password that lifts those limits. Without one, limits get a random second password that is thrown away. "Clear all" also clears the password.
 - **Merge** is an explicit button, with progress and a cancel. Any later change marks the result as out of date.
 - **Result:** pages, size, how the size compares with the files together (only when every file went in whole), bookmarks, a file name field, "Download PDF" and "Open in a new tab".
 - **Privacy:** everything runs in a Web Worker in the browser. Files, their contents and passwords are not uploaded or stored.
 
 ### What a merge keeps
 
-| Part of a PDF                             | What happens                                                                                                                                                                                                                 |
-| ----------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Page content, fonts, pictures, page sizes | Copied as they are. Nothing is re-compressed.                                                                                                                                                                                |
-| A page's own turn                         | Kept; the turn chosen for the file is added to it.                                                                                                                                                                           |
-| Links inside a file                       | Follow their page to its new place, whether written as a place, a name or an action. A link to a page that was left out is removed.                                                                                          |
-| Links to addresses outside                | Unchanged.                                                                                                                                                                                                                   |
-| Notes, highlights and other annotations   | Kept. A page used twice gets its own copies.                                                                                                                                                                                 |
-| Bookmarks                                 | Kept and pointed at the new pages. With several files they sit under an entry named after each file. One for a page that was left out is dropped, unless something beneath it is kept.                                       |
-| Blank pages                               | Take the size of the first page of the file beside them, or A4.                                                                                                                                                              |
-| Fillable fields                           | Kept and still fillable. A field whose name an earlier file already uses gets the file's number added (`name_2`). Fields on pages that were left out are dropped. A page used twice keeps its fields on the first copy only. |
-| Layers                                    | Kept, each shown or hidden as its own file had it. With several files, each file's layers are listed under its name.                                                                                                         |
-| Digital signatures                        | Cannot stay valid. The signature's picture is kept as a stamp; the field behind it is removed, so no viewer reports a broken signature. The row says so.                                                                     |
-| Accessibility tags                        | Not carried over. The row says so.                                                                                                                                                                                           |
-| Title, author and other details           | Not carried over. The result is stamped with "KeepSimp" as its producer and the time of the merge.                                                                                                                           |
-| Attachments, page labels                  | Not carried over yet (phase 3).                                                                                                                                                                                              |
-| Passwords and restrictions                | Removed.                                                                                                                                                                                                                     |
+| Part of a PDF                             | What happens                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| ----------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Page content, fonts, pictures, page sizes | Copied as they are. Nothing is re-compressed.                                                                                                                                                                                                                                                                                                                                                                                                       |
+| A page's own turn                         | Kept; the turn chosen for the file is added to it.                                                                                                                                                                                                                                                                                                                                                                                                  |
+| Links inside a file                       | Follow their page to its new place, whether written as a place, a name or an action. A link to a page that was left out is removed.                                                                                                                                                                                                                                                                                                                 |
+| Links to addresses outside                | Unchanged.                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| Notes, highlights and other annotations   | Kept. A page used twice gets its own copies.                                                                                                                                                                                                                                                                                                                                                                                                        |
+| Bookmarks                                 | By the choice made: under each file, all in a row, one per file, or none. They point at the new pages; one for a page that was left out is dropped, unless something beneath it is kept.                                                                                                                                                                                                                                                            |
+| Blank pages                               | Take the size of the first page of the file beside them, or A4.                                                                                                                                                                                                                                                                                                                                                                                     |
+| Fillable fields                           | By the choice made. Keep: still fillable, and a field whose name an earlier file already uses gets the file's number added (`name_2`). Join: fields of one name and kind become one field with several places; the first file's entry stands. Flatten: entries become page content and the fields go. Remove: fields and entries go. Fields on pages that were left out are dropped, and a page used twice keeps its fields on the first copy only. |
+| Layers                                    | Kept, each shown or hidden as its own file had it. With several files, each file's layers are listed under its name.                                                                                                                                                                                                                                                                                                                                |
+| Digital signatures                        | Cannot stay valid. The signature's picture is kept as a stamp; the field behind it is removed, so no viewer reports a broken signature. The row says so.                                                                                                                                                                                                                                                                                            |
+| Accessibility tags                        | Not carried over. The row says so.                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| Title, author and other details           | Not carried over unless typed into Details or taken from the first file with one press. The result is stamped with "KeepSimp" as its producer and the time of the merge.                                                                                                                                                                                                                                                                            |
+| Attachments, page labels                  | Attachments are carried over unless turned off; a name that is taken gets a number. Page labels are dropped by default, or kept per file when asked: a file without labels counts from 1, blank pages and pictures have none, and contents pages count in small Roman numerals.                                                                                                                                                                     |
+| Passwords and restrictions                | Those of the files are removed. The result gets a password only when one is set.                                                                                                                                                                                                                                                                                                                                                                    |
 
 Shared parts are stored once: identical fonts and pictures in different files, or in one file used twice, become one object. Streams that were not compressed are compressed. This is why the result is often smaller than the files together.
 
@@ -74,6 +82,7 @@ Set from measurements with the real engine (Node, Apple silicon):
 - More pure logic since phase 2: `pages.ts` (the page list and everything done to it, with undo and redo) and `picture.ts` (a JPEG's orientation, and where a picture sits on its page).
 - The engine merges page by page (`mergePages`): each page names its file, its page there and a turn, or is a blank page of a size. Pages of one file share one copy map wherever they end up, so a file's links find its pages even when another file's pages sit between them. `mergePdfs` remains for callers that think in whole files.
 - A picture is opened as a one-page file (`openPicture`) for its thumbnail; when merging, its page is laid out afresh for the chosen page size, and the picture itself is stored once however many pages show it.
+- `contents.ts` (pure) lays out contents pages and writes their drawing commands; the engine supplies the widths of letters and turns text into glyph numbers.
 - **`pdf.worker.ts`**, `protocol.ts` and `client.ts`: one worker holds every opened file and does everything, one request at a time. The plan had a second worker for thumbnails; with one, a file is held in memory once, not twice. A merge pauses every 16 ms to let a cancel through.
 
 ### How pages are copied
@@ -91,6 +100,9 @@ A page that appears twice is not copied twice: the second is a new page that sha
 - **A worker that awaits its imports loses messages.** `mupdf` waits for its WebAssembly file as it is imported. With a plain import at the top of the worker, the worker has no message handler until that finishes, and what it was sent in the meantime is gone. The worker therefore sets its handler first and loads the engine with `import()`.
 - **Node-only imports.** MuPDF imports `module` and `node:fs` when it finds itself in Node. `next.config.ts` points both at an empty stand-in for the browser build.
 - **`garbage=deduplicate` is not enough.** It merges identical objects but not identical streams; level 4 does both, which is what stores a shared picture once.
+- **Save options as an object.** As a string, options are split at commas, so a password with a comma was rejected ("Unused pdf arguments found"). Passed as an object they are sent as JSON, and a password may hold any character.
+- **Links on contents pages are made last.** `createLink` resolves "#page=N" to the page that has that number at that moment, so every contents page is inserted before any link is made.
+- **pdf.js gives attachments as a Map** since version 6; the test reader accepts both shapes.
 - **`TextDecoder("latin1")` is Windows-1252.** It changes bytes 0x80 to 0x9F, so a test that edits a PDF as text must use Node's `Buffer` with `latin1`.
 
 ## Samples
@@ -99,7 +111,7 @@ A page that appears twice is not copied twice: the second is a new page that sha
 
 ## Tests
 
-- **Unit:** `ranges`, `files`, `outline`, `settings`, `pages` and `picture`, each with its edge cases.
+- **Unit:** `ranges`, `files`, `outline`, `settings`, `pages`, `picture` and `contents`, each with its edge cases.
 - **Real engine in Node** (`pdf.node.test.ts`). Files are written by pdf-lib (`tests/pdf-fixtures.ts`) and results are read back by pdf.js, with form fields read by pdf-lib (`tests/pdf-reader.ts`), so the engine is never only checked against itself. Covers:
   - what a file is found to hold; passwords (missing, wrong, user, owner, restrictions only); damage of three kinds; files that are not PDFs
   - page order with chosen, repeated and reordered pages; sizes and turns; settings inherited from the page tree
@@ -111,8 +123,11 @@ A page that appears twice is not copied twice: the second is a new page that sha
   - every merged page drawn and compared, pixel for pixel, with the page it came from
   - single pages woven together from two files, with links and bookmarks; each page turned by itself; blank pages
   - pictures: a JPEG kept byte for byte, one stored on its side, pixels with see-through parts, every page-size choice, and a picture used twice stored once
+  - contents pages: lines, links and page numbers, document titles, a cover, several contents pages, and names drawn as pictures
+  - form choices: joining two and three fields of a name, kinds that cannot be joined, flattening and removing
+  - details read and written; each file's own page numbers; attachments with a shared name; a password with commas, quotes and accents, either password opening the file, and the permission flags
   - files from two other producers, committed in `e2e/fixtures/pdf/` and made by `scripts/pdf-test-files.mjs`: a tagged document printed by Chromium (Skia) and a picture page written by macOS (Quartz)
-- **Browser** (`e2e/pdf-merger.spec.ts`), 15 journeys on all five profiles, reading downloaded bytes with pdf.js:
+- **Browser** (`e2e/pdf-merger.spec.ts`), 19 journeys on all five profiles, reading downloaded bytes with pdf.js:
   - merging in order with links, notes, bookmarks, the file name and the result line
   - reordering with buttons, dragging and sorting
   - pages fields, mistakes in them, turning and using a file twice
@@ -126,6 +141,10 @@ A page that appears twice is not copied twice: the second is a new page that sha
   - the large preview
   - alternating two files, one in reverse
   - pictures as pages: a turned JPEG, a PNG, an HEIC and a refused SVG, with each page size
+  - every bookmark choice, and contents pages by name and by title, with a cover and a name in Chinese drawn by the browser
+  - keeping, joining, flattening and removing fields
+  - details, each file's own page numbers and attachments
+  - a password with awkward characters, limits, the second password, and "Clear all" clearing it
   - keyboard use, axe in both themes, 320 px and no external requests
   - the written help and structured data
 - **Offline:** the merger, its samples and the engine are part of the offline journey in `e2e/offline.spec.ts`.
@@ -137,7 +156,6 @@ A page that appears twice is not copied twice: the second is a new page that sha
 
 ## Later phases
 
-- **Phase 3 — bookmarks, contents, forms and protection:** the four bookmark choices (`mergeBookmarks` already has them), a table of contents page, form choices (keep, join, flatten, remove), document details, page labels, attachments and a password on the result.
 - **Phase 4 — print preparation and polish:** blank pages for double-sided printing, one page size, file names and page numbers in the footer, other documents as pages where the engine converts them faithfully, the tutorial video and the written guide.
 
 Not planned: lossy recompression of pictures, OCR, text editing, signing and splitting (the PDF splitter is its own tool, still marked as coming soon).

@@ -76,7 +76,7 @@ const content: TutorialContent = {
     {
       term: "Locked files",
       detail:
-        "A file that needs a password to open is merged once you enter it. The merged PDF has no password. A file whose author only restricted changes opens without a password; the page reminds you to make sure you may change it.",
+        "A file that needs a password to open is merged once you enter it. The merged PDF has no password unless you set one under Password. A file whose author only restricted changes opens without a password; the page reminds you to make sure you may change it.",
     },
     {
       term: "Damaged files",
@@ -91,7 +91,37 @@ const content: TutorialContent = {
     {
       term: "Bookmarks",
       detail:
-        "Each file's bookmarks are kept. With several files they are grouped under an entry named after each file, which opens that file's first page.",
+        "Under each file groups every file's bookmarks under an entry named after the file. Keep all lists them one after another. One per file makes a single bookmark for each file. None leaves them out. A bookmark for a page you left out is dropped.",
+    },
+    {
+      term: "Contents page",
+      detail:
+        "Adds a first page that lists every file and the page it starts on; each line is a link. List the files by name, or by the title each document carries inside. If the first file is a cover, the contents page comes after it and does not list it. Names in scripts the PDF's own font cannot write, such as Chinese or Arabic, are drawn as pictures.",
+    },
+    {
+      term: "Fillable fields",
+      detail:
+        "Keep leaves every field fillable and adds a number to a name another file already uses. Join same names turns fields with one name into one field, filled in once; the entry from the first file is kept. Flatten prints what is filled in onto the page and removes the fields. Remove takes out the fields and their entries.",
+    },
+    {
+      term: "Page numbers",
+      detail:
+        "This is the number a viewer shows beside each page, not anything printed on it. Count from 1 numbers the pages from first to last. Each file's own keeps the numbers the files gave their pages, such as Roman numerals for a preface.",
+    },
+    {
+      term: "Attachments",
+      detail:
+        "Files attached inside the PDFs are carried into the result unless you turn that off. When two share a name, the later one gets a number added.",
+    },
+    {
+      term: "Details",
+      detail:
+        "The title, author, subject and keywords that viewers and search tools show. Nothing is copied from your files unless you ask: Take them from the first file fills the fields, and you can change them.",
+    },
+    {
+      term: "Password",
+      detail:
+        "Locks the merged PDF with AES-256 encryption; the password is asked for whenever it is opened. You can also stop printing, copying or changes. Those limits rely on viewers respecting them, and a second password lifts them; left empty, a random one is used and thrown away. A lost password cannot be recovered.",
     },
     {
       term: "Signatures and accessibility tags",

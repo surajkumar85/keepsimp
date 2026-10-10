@@ -31,6 +31,7 @@ import {
   type OpenedPdf,
 } from "./mupdf-engine"
 import type { BookmarkPolicy } from "./outline"
+import { permissionBits } from "./settings"
 
 const opened: OpenedPdf[] = []
 afterEach(() => {
@@ -80,6 +81,7 @@ describe("opening", () => {
       signed: false,
       tagged: false,
       forms: true,
+      attachments: 0,
     })
     expect(pdf.bookmarks).toMatchObject([
       { title: "One", page: 0, children: [{ title: "Two", page: 1 }] },
@@ -564,6 +566,375 @@ describe("pictures of pages", () => {
         true
       )
     }
+  })
+})
+
+describe("a contents page", () => {
+  type Options = Parameters<typeof mergePdfs>[2]
+  const withContents = async (
+    inputs: MergeInput[],
+    options: Partial<Options> = {}
+  ) =>
+    readPdf(
+      (
+        await mergePdfs(mupdf, inputs, {
+          bookmarks: "files",
+          contents: "files",
+          ...options,
+        })
+      ).bytes
+    )
+
+  it("lists every file with the page it starts on, as links", async () => {
+    const a = await source("A", { pages: 2, size: () => [400, 500] })
+    const b = await source("B", { pages: 3 })
+    const c = await source("C")
+    const result = await withContents([
+      part(a, "Introduction"),
+      part(b, "Résumé – Обзор"),
+      part(c, "Notes"),
+    ])
+    expect(result.pages.map((page) => page.text)).toEqual([
+      "Contents Introduction 2 Résumé – Обзор 4 Notes 7",
+      "A-P1",
+      "A-P2",
+      "B-P1",
+      "B-P2",
+      "B-P3",
+      "C-P1",
+    ])
+    // The contents page is as large as the first page, and each line leads to its file.
+    expect([result.pages[0].width, result.pages[0].height]).toEqual([400, 500])
+    expect(result.pages[0].links).toEqual([2, 4, 7])
+    // Bookmarks point past the new page, with one for the contents themselves.
+    expect(result.bookmarks.map((item) => `${item.title}>${item.to}`)).toEqual([
+      "Contents>1",
+      "Introduction>2",
+      "Résumé – Обзор>4",
+      "Notes>7",
+    ])
+  })
+
+  it("uses each document's own title where it has one", async () => {
+    const a = await source("A", { title: "Annual report 2026" })
+    const b = await source("B")
+    const result = await withContents([part(a, "a-file"), part(b, "b-file")], {
+      contents: "titles",
+      bookmarks: "none",
+    })
+    expect(result.pages[0].text).toBe("Contents Annual report 2026 2 b-file 3")
+    // With no bookmarks asked for, the contents get none either.
+    expect(result.bookmarks).toEqual([])
+  })
+
+  it("comes after a cover, which it does not list", async () => {
+    const cover = await source("C", { pages: 2 })
+    const a = await source("A", { pages: 2 })
+    const b = await source("B")
+    const result = await withContents(
+      [part(cover, "Cover"), part(a, "First"), part(b, "Second")],
+      { cover: true }
+    )
+    expect(result.pages.map((page) => page.text)).toEqual([
+      "C-P1",
+      "C-P2",
+      "Contents First 4 Second 6",
+      "A-P1",
+      "A-P2",
+      "B-P1",
+    ])
+    expect(result.pages[2].links).toEqual([4, 6])
+    expect(result.bookmarks.map((item) => `${item.title}>${item.to}`)).toEqual([
+      "Contents>3",
+      "Cover>1",
+      "First>4",
+      "Second>6",
+    ])
+    // A cover and nothing else leaves nothing to list.
+    const alone = await withContents([part(cover, "Cover")], { cover: true })
+    expect(alone.pages.map((page) => page.text)).toEqual(["C-P1", "C-P2"])
+  })
+
+  it("runs onto more pages when there are many files", async () => {
+    const one = await source("A")
+    const inputs = Array.from({ length: 40 }, (_, index) =>
+      part(one, `File ${index + 1}`)
+    )
+    const result = await withContents(inputs, { bookmarks: "none" })
+    // A6 pages hold 14 lines under the heading and 16 after: three contents pages.
+    expect(result.pages).toHaveLength(43)
+    expect(result.pages[0].text).toMatch(/^Contents File 1 4 File 2 5 /)
+    expect(result.pages[1].text).not.toContain("Contents")
+    const links = result.pages.slice(0, 3).flatMap((page) => page.links)
+    expect(links).toEqual(Array.from({ length: 40 }, (_, index) => index + 4))
+    expect(result.pages[3].text).toBe("A-P1")
+  })
+
+  it("writes names in other scripts as pictures when it is given a way to draw them", async () => {
+    const a = await source("A")
+    const plain = await withContents([part(a, "概要 notes")])
+    // Without a way to draw them, the letters the font lacks become "?".
+    expect(plain.pages[0].text).toBe("Contents ?? notes 2")
+    expect(plain.pages[0].pictures).toBe(0)
+    const asked: string[] = []
+    const drawn = await withContents(
+      [part(a, "概要 notes"), part(a, "Plain")],
+      {
+        textPicture: (text, height) => {
+          asked.push(`${text}@${height}`)
+          return {
+            data: new Uint8ClampedArray(120 * 40 * 4).fill(255),
+            width: 120,
+            height: 40,
+          }
+        },
+      }
+    )
+    expect(asked).toEqual(["概要 notes@64"])
+    expect(drawn.pages[0].pictures).toBe(1)
+    expect(drawn.pages[0].text).toBe("Contents 2 Plain 3")
+    expect(drawn.pages[0].links).toEqual([2, 3])
+    // A drawing that fails falls back to "?" too.
+    const failed = await withContents([part(a, "概要")], {
+      textPicture: () => null,
+    })
+    expect(failed.pages[0].text).toBe("Contents ?? 2")
+  })
+})
+
+describe("form choices", () => {
+  const two = async () => [
+    part(
+      await source("A", { fields: [{ name: "name", value: "Ada", page: 1 }] }),
+      "A"
+    ),
+    part(
+      await source("B", {
+        fields: [
+          { name: "name", value: "Grace", page: 1 },
+          { name: "city", value: "Paris", page: 1 },
+        ],
+      }),
+      "B"
+    ),
+  ]
+  const formed = async (
+    inputs: MergeInput[],
+    forms: "join" | "flatten" | "remove"
+  ) =>
+    readPdf(
+      (await mergePdfs(mupdf, inputs, { bookmarks: "none", forms })).bytes
+    )
+
+  it("joins fields with the same name into one, keeping the first entry", async () => {
+    const result = await formed(await two(), "join")
+    expect(result.fields).toEqual(["city", "name"])
+    // Both places show the one field; the first file's entry stands.
+    expect(result.pages.map((page) => page.fields.sort())).toEqual([
+      ["name=Ada"],
+      ["city=Paris", "name=Ada"],
+    ])
+  })
+
+  it("joins three of a name, and leaves fields of different kinds apart", async () => {
+    const [a, b] = await two()
+    const c = part(
+      await source("C", {
+        fields: [{ name: "name", value: "Third", page: 1 }],
+      }),
+      "C"
+    )
+    const tick = part(await source("D", { checkBox: "name" }), "D")
+    const result = await formed([a, b, c, tick], "join")
+    // A check box cannot be part of a text field, so it gets a name of its own.
+    expect(result.fields).toEqual(["city", "name", "name_4"])
+    expect(result.pages.map((page) => page.fields.sort()[0])).toEqual([
+      "name=Ada",
+      "city=Paris",
+      "name=Ada",
+      "name_4=Yes",
+    ])
+  })
+
+  it("flattens fields into the page", async () => {
+    const result = await formed(await two(), "flatten")
+    expect(result.fields).toEqual([])
+    expect(result.info.IsAcroFormPresent).toBe(false)
+    expect(result.pages.map((page) => page.kinds)).toEqual([[], []])
+    // What was filled in is now part of the page's own text.
+    expect(result.pages[0].text).toBe("A-P1 Ada")
+    expect(result.pages[1].text).toContain("Grace")
+    expect(result.pages[1].text).toContain("Paris")
+  })
+
+  it("removes fields and what was filled in", async () => {
+    const result = await formed(await two(), "remove")
+    expect(result.fields).toEqual([])
+    expect(result.pages.map((page) => [page.text, page.kinds])).toEqual([
+      ["A-P1", []],
+      ["B-P1", []],
+    ])
+  })
+
+  it("leaves a file without fields as it is, whatever the choice", async () => {
+    const a = await source("A", { notes: [{ page: 1, text: "kept" }] })
+    for (const forms of ["join", "flatten", "remove"] as const) {
+      const result = await formed([part(a, "A")], forms)
+      expect(result.pages[0].notes, forms).toEqual(["kept"])
+      expect(result.pages[0].text, forms).toBe("A-P1")
+    }
+  })
+})
+
+describe("details, page numbers, attachments and a password", () => {
+  type Options = Parameters<typeof mergePdfs>[2]
+  const made = async (inputs: MergeInput[], options: Partial<Options>) =>
+    (await mergePdfs(mupdf, inputs, { bookmarks: "none", ...options })).bytes
+
+  it("reads the details a file names, and writes the ones asked for", async () => {
+    const a = await source("A", {
+      title: "Old title",
+      author: "Old author",
+      subject: "Old subject",
+      keywords: "old, words",
+      attachments: { "note.txt": "hello" },
+    })
+    expect(a.facts).toMatchObject({
+      title: "Old title",
+      author: "Old author",
+      subject: "Old subject",
+      keywords: "old, words",
+      attachments: 1,
+    })
+    const { info } = await readPdf(
+      await made([part(a, "A")], {
+        details: {
+          title: "  Board pack  ",
+          author: "Ada Lovelace",
+          subject: "",
+          keywords: "minutes, budget",
+        },
+      })
+    )
+    expect(info).toMatchObject({
+      Title: "Board pack",
+      Author: "Ada Lovelace",
+      Keywords: "minutes, budget",
+      Producer: "KeepSimp",
+    })
+    // Nothing is carried over from the files, and an empty field writes nothing.
+    expect(info.Subject).toBeUndefined()
+  })
+
+  it("keeps each file's own page numbers when asked", async () => {
+    const book = await source("A", { pages: 4, romanPages: 2 })
+    const plain = await source("B", { pages: 2 })
+    expect(book.labels).toEqual(["i", "ii", "1", "2"])
+    expect(plain.labels).toBeUndefined()
+    const inputs = [part(book, "Book"), part(plain, "Plain", [1, 0])]
+    expect((await readPdf(await made(inputs, {}))).labels).toBeNull()
+    expect(
+      (await readPdf(await made(inputs, { labels: "keep" }))).labels
+    ).toEqual([
+      "i",
+      "ii",
+      "1",
+      "2",
+      // A file without numbers of its own counts its pages from 1.
+      "2",
+      "1",
+    ])
+    // Contents pages count in small Roman numerals of their own.
+    const withContents = await readPdf(
+      await made(inputs, { labels: "keep", contents: "files" })
+    )
+    expect(withContents.labels).toEqual(["i", "i", "ii", "1", "2", "2", "1"])
+    expect(withContents.pages[0].text).toBe("Contents Book 2 Plain 6")
+  })
+
+  it("leaves blank pages and pictures without a number of their own", async () => {
+    const a = await source("A")
+    const result = await mergePages(
+      mupdf,
+      new Map([["a", { pdf: a, name: "A" }]]),
+      [
+        { blank: { width: 100, height: 100 } },
+        { source: "a", index: 0, rotation: 0 },
+      ],
+      { bookmarks: "none", labels: "keep" }
+    )
+    expect((await readPdf(result.bytes)).labels).toEqual(["", "1"])
+  })
+
+  it("carries attachments over, numbering a name that is taken", async () => {
+    const a = await source("A", { attachments: { "note.txt": "from A" } })
+    const b = await source("B", {
+      attachments: { "note.txt": "from B", "data.csv": "1,2" },
+    })
+    const c = await source("C")
+    const inputs = [part(a, "A"), part(c, "C"), part(b, "B")]
+    expect((await readPdf(await made(inputs, {}))).attachments).toEqual([
+      "data.csv",
+      "note (2).txt",
+      "note.txt",
+    ])
+    expect(
+      (await readPdf(await made(inputs, { attachments: false }))).attachments
+    ).toEqual([])
+  })
+
+  it("locks the result with a password of any characters", async () => {
+    const a = await source("A", { pages: 2 })
+    const password = 'pä, ss=w "ord"'
+    const bytes = await made([part(a, "A")], {
+      lock: {
+        password,
+        ownerPassword: "owner, too",
+        permissions: permissionBits({
+          allowPrint: false,
+          allowCopy: true,
+          allowChanges: false,
+        }),
+      },
+    })
+    await expect(readPdf(bytes)).rejects.toMatchObject({
+      name: "PasswordException",
+    })
+    await expect(readPdf(bytes, "wrong")).rejects.toMatchObject({
+      name: "PasswordException",
+    })
+    const opened = await readPdf(bytes, password)
+    expect(opened.encrypted).toBe(true)
+    expect(opened.pages.map((page) => page.text)).toEqual(["A-P1", "A-P2"])
+    // Copying is allowed (16), printing (4) and changing (8) are not.
+    expect(opened.permissions).toContain(16)
+    expect(opened.permissions).not.toContain(4)
+    expect(opened.permissions).not.toContain(8)
+    // Our own engine asks for the password too, and takes either one.
+    expect(() => open(bytes)).toThrow(PasswordNeeded)
+    expect(open(bytes, password).facts).toMatchObject({
+      unlocked: true,
+      restricted: true,
+    })
+    expect(open(bytes, "owner, too").facts.restricted).toBe(false)
+  })
+
+  it("limits nothing when every permission is given", async () => {
+    const a = await source("A")
+    const bytes = await made([part(a, "A")], {
+      lock: {
+        password: "open",
+        ownerPassword: "own",
+        permissions: permissionBits({
+          allowPrint: true,
+          allowCopy: true,
+          allowChanges: true,
+        }),
+      },
+    })
+    const opened = await readPdf(bytes, "open")
+    for (const flag of [4, 8, 16, 32, 256, 1024, 2048])
+      expect(opened.permissions, `${flag}`).toContain(flag)
   })
 })
 

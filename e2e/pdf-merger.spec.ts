@@ -390,7 +390,7 @@ test("unlocks a password-protected file and merges it", async ({ page }) => {
   await expect(locked).toHaveAttribute("data-status", "ready")
   await expect(locked).toContainText("2 pages")
   await expect(locked).toContainText(
-    "Unlocked. The merged file will not have a password."
+    "Unlocked. The merged file has no password unless you set one."
   )
   // A file that only restricts changes opens by itself, with a reminder.
   const restricted = page.getByTestId("file-row").nth(2)
@@ -957,6 +957,235 @@ test("turns pictures into pages", async ({ page }) => {
   ).toBe("Page 2: holiday.jpg")
 })
 
+test("chooses how bookmarks are kept and adds a contents page", async ({
+  page,
+}) => {
+  await page.goto(ROUTE)
+  await upload(
+    page,
+    await pdf("Cover.pdf", "C", { title: "The cover" }),
+    await pdf("Report.pdf", "A", {
+      pages: 2,
+      title: "Annual report 2026",
+      bookmarks: [{ title: "Summary", page: 2 }],
+    }),
+    // A name the PDF's built-in font cannot write.
+    await pdf("概要.pdf", "B", { bookmarks: [{ title: "Start", page: 1 }] })
+  )
+  await ready(page)
+  const options = page.getByTestId("structure-options")
+  const titles = (result: Awaited<ReturnType<typeof merged>>) =>
+    result.bookmarks.map((entry) => `${entry.title}>${entry.to}`)
+
+  await expect(chipIn(options, "Bookmarks", "Under each file")).toBeChecked()
+  await chipIn(options, "Bookmarks", "Keep all").click()
+  expect(titles(await merged(page))).toEqual(["Summary>3", "Start>4"])
+  await chipIn(options, "Bookmarks", "One per file").click()
+  expect(titles(await merged(page))).toEqual(["Cover>1", "Report>2", "概要>4"])
+  await chipIn(options, "Bookmarks", "None").click()
+  expect(titles(await merged(page))).toEqual([])
+
+  // A contents page: every file, the page it starts on, and a link there.
+  await expect(
+    options.getByRole("switch", { name: "The first file is a cover" })
+  ).toBeHidden()
+  await chipIn(options, "Contents page", "File names").click()
+  await chipIn(options, "Bookmarks", "One per file").click()
+  let result = await merged(page)
+  expect(result.pages).toHaveLength(5)
+  // The third name is drawn as a picture, since the font has no letters for it.
+  expect(result.pages[0].text).toBe("Contents Cover 2 Report 3 5")
+  expect(result.pages[0].pictures).toBe(1)
+  expect(result.pages[0].links).toEqual([2, 3, 5])
+  expect(titles(result)).toEqual([
+    "Contents>1",
+    "Cover>2",
+    "Report>3",
+    "概要>5",
+  ])
+  await expect(page.getByTestId("result-facts")).toContainText("5 pages")
+
+  // With a cover, the contents come after it and do not list it.
+  await options
+    .getByRole("switch", { name: "The first file is a cover" })
+    .click()
+  await chipIn(options, "Contents page", "Document titles").click()
+  result = await merged(page)
+  expect(result.pages.map((entry) => entry.text)).toEqual([
+    "C-P1",
+    // The second file has no title of its own inside, so its name is used.
+    "Contents Annual report 2026 3 5",
+    "A-P1",
+    "A-P2",
+    "B-P1",
+  ])
+  expect(result.pages[1].links).toEqual([3, 5])
+})
+
+test("keeps, joins, flattens or removes fillable fields", async ({ page }) => {
+  await page.goto(ROUTE)
+  await upload(page, await pdf("plain.pdf", "P"))
+  await ready(page)
+  const options = page.getByTestId("structure-options")
+  // The choice only appears once a file has fields.
+  await expect(options.getByRole("radiogroup", { name: "Fields" })).toBeHidden()
+  await upload(
+    page,
+    await pdf("form-a.pdf", "A", {
+      fields: [{ name: "name", value: "Ada", page: 1 }],
+    }),
+    await pdf("form-b.pdf", "B", {
+      fields: [{ name: "name", value: "Grace", page: 1 }],
+    })
+  )
+  await ready(page)
+  await expect(chipIn(options, "Fields", "Keep")).toBeChecked()
+
+  await chipIn(options, "Fields", "Join same names").click()
+  await expect(options).toContainText("The entry from the first file is kept.")
+  let result = await merged(page)
+  expect(result.fields).toEqual(["name"])
+  expect(result.pages.map((entry) => entry.fields)).toEqual([
+    [],
+    ["name=Ada"],
+    ["name=Ada"],
+  ])
+
+  await chipIn(options, "Fields", "Flatten").click()
+  result = await merged(page)
+  expect(result.fields).toEqual([])
+  expect(result.pages.map((entry) => entry.text)).toEqual([
+    "P-P1",
+    "A-P1 Ada",
+    "B-P1 Grace",
+  ])
+
+  await chipIn(options, "Fields", "Remove").click()
+  result = await merged(page)
+  expect(result.fields).toEqual([])
+  expect(result.pages.map((entry) => entry.text)).toEqual([
+    "P-P1",
+    "A-P1",
+    "B-P1",
+  ])
+})
+
+test("writes details, keeps page numbers and carries attachments", async ({
+  page,
+}) => {
+  await page.goto(ROUTE)
+  await upload(
+    page,
+    await pdf("book.pdf", "A", {
+      pages: 3,
+      romanPages: 2,
+      title: "The book",
+      author: "Ada Lovelace",
+      keywords: "engines",
+      attachments: { "note.txt": "from the book" },
+    }),
+    await pdf("extra.pdf", "B", {
+      attachments: { "note.txt": "from the extra", "data.csv": "1,2" },
+    })
+  )
+  await ready(page)
+  const structure = page.getByTestId("structure-options")
+  const output = page.getByTestId("output-options")
+
+  // By default nothing is taken from the files, and pages count from 1.
+  let result = await merged(page)
+  expect(result.info.Title).toBeUndefined()
+  expect(result.info.Author).toBeUndefined()
+  expect(result.labels).toBeNull()
+  expect(result.attachments).toEqual(["data.csv", "note (2).txt", "note.txt"])
+
+  await output
+    .getByRole("button", { name: "Take them from the first file" })
+    .click()
+  await expect(output.getByLabel("Title")).toHaveValue("The book")
+  await expect(output.getByLabel("Author")).toHaveValue("Ada Lovelace")
+  await output.getByLabel("Subject").fill("Merged for the board")
+  await chipIn(
+    structure,
+    "Page numbers shown by a viewer",
+    "Each file's own"
+  ).click()
+  await structure
+    .getByRole("switch", { name: "Keep the 3 attached files" })
+    .click()
+  result = await merged(page)
+  expect(result.info).toMatchObject({
+    Title: "The book",
+    Author: "Ada Lovelace",
+    Subject: "Merged for the board",
+    Keywords: "engines",
+    Producer: "KeepSimp",
+  })
+  expect(result.labels).toEqual(["i", "ii", "1", "1"])
+  expect(result.attachments).toEqual([])
+})
+
+test("locks the merged PDF with a password and limits", async ({ page }) => {
+  await page.goto(ROUTE)
+  await upload(page, await pdf("a.pdf", "A", { pages: 2 }))
+  await ready(page)
+  const output = page.getByTestId("output-options")
+  await expect(output.getByLabel("Password to open the file")).toBeHidden()
+  await output
+    .getByRole("switch", { name: "Lock the merged PDF with a password" })
+    .click()
+  // A lock without a password stops the merge and says why.
+  await expect(page.getByTestId("result").getByRole("alert")).toContainText(
+    "Enter a password for the merged PDF, or turn the password off."
+  )
+  await expect(page.getByRole("button", { name: "Merge PDF" })).toBeDisabled()
+  const password = 'pä, ss=w "ord"'
+  await output.getByLabel("Password to open the file").fill(password)
+  await expect(output.getByLabel("Password to open the file")).toHaveAttribute(
+    "type",
+    "password"
+  )
+  // With nothing limited, there is no second password to ask for.
+  await expect(output.getByLabel(/^Second password/)).toBeHidden()
+
+  let result = await merged(page, password)
+  expect(result.encrypted).toBe(true)
+  expect(result.pages.map((entry) => entry.text)).toEqual(["A-P1", "A-P2"])
+  await expect(page.getByTestId("result-facts")).toContainText(
+    "locked with your password"
+  )
+  // Without the password, another reader cannot open it.
+  await expect(readPdf(result.bytes)).rejects.toMatchObject({
+    name: "PasswordException",
+  })
+  for (const flag of [4, 8, 16]) expect(result.permissions).toContain(flag)
+
+  // Limits: no printing, no changes; copying stays allowed.
+  await output.getByRole("switch", { name: "Allow printing" }).click()
+  await output.getByRole("switch", { name: "Allow changes" }).click()
+  const second = output.getByLabel(/^Second password/)
+  await second.fill(password)
+  await expect(page.getByTestId("result").getByRole("alert")).toContainText(
+    "The second password must differ from the first"
+  )
+  await second.fill("owner-key")
+  result = await merged(page, password)
+  expect(result.permissions).toContain(16)
+  expect(result.permissions).not.toContain(4)
+  expect(result.permissions).not.toContain(8)
+  // The second password opens it as well.
+  expect((await readPdf(result.bytes, "owner-key")).pages).toHaveLength(2)
+
+  // Starting again leaves no password behind.
+  await page.getByRole("button", { name: "Clear all" }).click()
+  await upload(page, await pdf("b.pdf", "B"))
+  await ready(page)
+  await expect(
+    page.getByRole("switch", { name: "Lock the merged PDF with a password" })
+  ).not.toBeChecked()
+  expect((await merged(page)).encrypted).toBe(false)
+})
+
 test("stays accessible, keyboard-friendly, local and responsive", async ({
   page,
 }) => {
@@ -1012,6 +1241,20 @@ test("stays accessible, keyboard-friendly, local and responsive", async ({
   }
 
   await page.getByRole("button", { name: "Remove locked.pdf" }).click()
+  // Every option open: a contents page with a cover, and a password with limits.
+  await page.getByRole("radio", { name: "File names", exact: true }).click()
+  await page
+    .getByRole("switch", { name: "Lock the merged PDF with a password" })
+    .click()
+  await page.getByLabel("Password to open the file").fill("secret")
+  await page.getByRole("switch", { name: "Allow printing" }).click()
+  const allOptions = await new AxeBuilder({ page })
+    .withTags(["wcag2a", "wcag2aa", "wcag21aa"])
+    .analyze()
+  expect(allOptions.violations).toEqual([])
+  await page
+    .getByRole("switch", { name: "Lock the merged PDF with a password" })
+    .click()
   // The Pages view, with a page selected and a blank one added.
   await page.getByRole("radio", { name: /^Pages/ }).click()
   await page.getByTestId("page-tile").first().getByRole("button").click()
@@ -1049,6 +1292,9 @@ test("the written help covers every option", async ({ page }) => {
     "Pages view",
     "Alternate pages",
     "Pictures as pages",
+    "Contents page",
+    "Fillable fields",
+    "Password",
     "Locked files",
     "Damaged files",
     "What is kept",

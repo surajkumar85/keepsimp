@@ -144,6 +144,31 @@ async function thumbnail(request: Extract<PdfRequest, { type: "thumbnail" }>) {
   )
 }
 
+/**
+ * Text as a picture, for a contents line in a script the engine's own font
+ * cannot write. The browser's fonts can. The picture is `height` pixels tall
+ * with the foot of the letters 0.3 text sizes above its bottom edge, which is
+ * where the engine expects it.
+ */
+function textPicture(text: string, height: number) {
+  if (typeof OffscreenCanvas === "undefined") return null
+  const size = height / 1.4
+  const font = `${size}px sans-serif`
+  const probe = new OffscreenCanvas(1, 1).getContext("2d")
+  if (!probe) return null
+  probe.font = font
+  const width = Math.max(1, Math.ceil(probe.measureText(text).width) + 2)
+  const context = new OffscreenCanvas(width, height).getContext("2d", {
+    willReadFrequently: true,
+  })
+  if (!context) return null
+  context.font = font
+  context.textBaseline = "alphabetic"
+  context.fillText(text, 1, height - size * 0.3)
+  const image = context.getImageData(0, 0, width, height)
+  return { data: image.data, width, height }
+}
+
 async function merge(request: Extract<PdfRequest, { type: "merge" }>) {
   const { job } = request
   try {
@@ -161,6 +186,14 @@ async function merge(request: Extract<PdfRequest, { type: "merge" }>) {
       bookmarks: request.bookmarks,
       picturePage: request.picturePage,
       pictureMargin: request.pictureMargin,
+      contents: request.contents,
+      cover: request.cover,
+      forms: request.forms,
+      labels: request.labels,
+      attachments: request.attachments,
+      details: request.details,
+      lock: request.lock ?? undefined,
+      textPicture,
       checkpoint: async () => {
         // Let a cancel message in now and then; a pause after every page
         // would cost more time than the pages themselves.

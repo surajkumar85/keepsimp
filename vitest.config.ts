@@ -24,6 +24,7 @@ export default defineConfig({
         "lib/site.ts",
         "lib/pwa.ts",
         "lib/offline.ts",
+        "lib/pdf-merger/contents.ts",
         "lib/pdf-merger/files.ts",
         "lib/pdf-merger/outline.ts",
         "lib/pdf-merger/pages.ts",
