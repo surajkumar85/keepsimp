@@ -381,6 +381,205 @@ describe("gatherFrames", () => {
   })
 })
 
+describe("crop, exact sizes and limits", () => {
+  /** A 4 × 2 source whose pixels each carry their own grey level. */
+  const numbered: Source = {
+    ...source([0]),
+    durations: [100, 100, 100],
+    async *read(indices) {
+      for (const index of indices) {
+        const pixels = solid(4, 2, 0)
+        for (let i = 0; i < 8; i++) pixels.data[i * 4] = i * 10 + index
+        yield pixels
+      }
+    },
+  }
+
+  it("keeps only the cropped part, clamped to the picture", async () => {
+    const { deps } = fakeDeps()
+    const [first] = await gatherFrames(
+      numbered,
+      defaultSettings,
+      { start: 0, end: 100, crop: { x: 2, y: 0, width: 2, height: 1 } },
+      deps
+    )
+    expect([first.width, first.height]).toEqual([2, 1])
+    expect([first.data[0], first.data[4]]).toEqual([20, 30])
+    const [clamped] = await gatherFrames(
+      numbered,
+      defaultSettings,
+      { start: 0, end: 100, crop: { x: 3, y: 1, width: 50, height: 50 } },
+      deps
+    )
+    expect([clamped.width, clamped.height]).toEqual([4, 2])
+  })
+
+  it("centres the picture on an exact canvas, clear or filled", async () => {
+    const { deps } = fakeDeps()
+    const exact = {
+      ...defaultSettings,
+      resize: "exact" as const,
+      resizeValue: 4,
+      resizeHeight: 6,
+    }
+    const [clear] = await gatherFrames(
+      numbered,
+      exact,
+      { start: 0, end: 100 },
+      deps
+    )
+    expect([clear.width, clear.height]).toEqual([4, 6])
+    // Two clear rows, the picture, two clear rows.
+    expect(clear.data[3]).toBe(0)
+    expect([clear.data[2 * 4 * 4], clear.data[2 * 4 * 4 + 3]]).toEqual([0, 255])
+    expect(clear.data[5 * 4 * 4 + 3]).toBe(0)
+    const [filled] = await gatherFrames(
+      numbered,
+      { ...exact, background: "black" },
+      { start: 0, end: 100 },
+      deps
+    )
+    expect([...filled.data.subarray(0, 4)]).toEqual([0, 0, 0, 255])
+  })
+
+  it("stops at the length limit", async () => {
+    const { deps } = fakeDeps()
+    const frames = await gatherFrames(
+      numbered,
+      { ...defaultSettings, maxSeconds: 0.15 },
+      noTrim,
+      deps
+    )
+    expect(frames.map((item) => item.duration)).toEqual([100, 50])
+  })
+
+  it("lowers quality, frame rate and size until the file fits, and says what changed", async () => {
+    const { deps, calls } = fakeDeps()
+    // The stand-in WebP grows with the number of pixels it is given.
+    deps.encodeWebp = async (pixels, options) => {
+      calls.webp.push({ ...options, pixels: pixels.width * pixels.height })
+      const body = new ByteWriter()
+      riffChunk(
+        body,
+        "VP8 ",
+        new Uint8Array(pixels.width * pixels.height * options.quality)
+      )
+      return webpFile(body.finish())
+    }
+    const big = source([0, 85, 170, 255], { width: 20, height: 20 })
+    const free = await convertAnimation(
+      big,
+      { ...defaultSettings, quality: "custom" },
+      noTrim,
+      deps
+    )
+    expect(free.note).toBeNull()
+    const limit = Math.round(free.bytes.length * 0.5)
+    const fitted = await convertAnimation(
+      big,
+      { ...defaultSettings, quality: "custom", sizeLimit: limit },
+      noTrim,
+      deps
+    )
+    expect(fitted.bytes.length).toBeLessThanOrEqual(limit)
+    expect(fitted.note).toMatch(/^To fit under \d+ KB: quality \d+/)
+    expect(
+      calls.progress.some((label) =>
+        /^Fitting under \d+ KB · try 2/.test(label)
+      )
+    ).toBe(true)
+    expect(
+      calls.progress.some((label) =>
+        /· try 1 · Reading frame 1 of 4$/.test(label)
+      )
+    ).toBe(true)
+  })
+
+  it("says nothing extra when the chosen settings already fit", async () => {
+    const { deps } = fakeDeps()
+    const result = await convertAnimation(
+      source([0, 85]),
+      { ...defaultSettings, sizeLimit: 50_000_000 },
+      noTrim,
+      deps
+    )
+    expect(result.note).toBeNull()
+  })
+
+  it("hands back the smallest it could make, and says so, when nothing fits", async () => {
+    const { deps } = fakeDeps()
+    const result = await convertAnimation(
+      source([0, 85, 170]),
+      { ...defaultSettings, target: "gif", sizeLimit: 10_000 },
+      noTrim,
+      {
+        ...deps,
+        // A palette step that cannot shrink: every try is the same size.
+        palette: async (sample, count) => ({
+          ...(await deps.palette(sample, count)),
+          remap: (pixels) => {
+            const indices = new Uint8Array(pixels.width * pixels.height)
+            for (let i = 0; i < indices.length; i++) indices[i] = (i * 7919) % 4
+            return indices
+          },
+        }),
+      }
+    )
+    // The limit is far above this tiny file, so it fits at once.
+    expect(result.note).toBeNull()
+    const never = await convertAnimation(
+      source([0, 85, 170]),
+      { ...defaultSettings, target: "mp4", sizeLimit: 10_000 },
+      noTrim,
+      {
+        ...deps,
+        encodeVideo: async (frames) => ({
+          bytes: new Uint8Array(20_000),
+          frames: frames.length,
+        }),
+      }
+    )
+    expect(never.note).toBe(
+      "This could not be made smaller than 20 KB, which is over 10 KB. Trim it or choose a smaller size."
+    )
+  })
+
+  it("sets a video's bitrate from the size limit", async () => {
+    const { deps, calls } = fakeDeps()
+    await convertAnimation(
+      source([0, 85], { width: 100, height: 100 }),
+      { ...defaultSettings, target: "webm", sizeLimit: 1_000_000 },
+      noTrim,
+      deps
+    )
+    // 1 MB over 0.2 s, 90% used: 36 Mbit/s across 100 × 100 pixels at 10 frames a second.
+    expect(calls.video[0].level).toBeCloseTo(
+      (1_000_000 * 8 * 0.9) / 0.2 / (100 * 100 * 10),
+      5
+    )
+  })
+
+  it("joins a note about the encoder with one about the limit", async () => {
+    const { deps, calls } = fakeDeps()
+    calls.dropped = 1
+    const result = await convertAnimation(
+      source([0, 85, 170]),
+      { ...defaultSettings, target: "webm", sizeLimit: 10_000 },
+      noTrim,
+      {
+        ...deps,
+        encodeVideo: async (frames) => ({
+          bytes: new Uint8Array(frames[0].width > 3 ? 20_000 : 5_000),
+          frames: frames.length - 1,
+        }),
+      }
+    )
+    expect(result.note).toMatch(
+      /^This browser's video encoder kept \d of \d frames\. The length is unchanged\. To fit under 10 KB: /
+    )
+  })
+})
+
 describe("convertAnimation", () => {
   it("reports what it made", async () => {
     const { deps } = fakeDeps()

@@ -8,7 +8,7 @@ import {
   IconRotate2,
   IconRotateClockwise2,
 } from "@tabler/icons-react"
-import { Section } from "@/components/image-batch/controls"
+import { Section, ToggleRow } from "@/components/image-batch/controls"
 import { Button } from "@/components/ui/button"
 import { ChoiceChips } from "@/components/ui/choice-chips"
 import { Input } from "@/components/ui/input"
@@ -30,6 +30,7 @@ const sizeLabels: Record<Exclude<ResizeChoice, "original">, string> = {
   height: "Height (px)",
   longEdge: "Longest side (px)",
   percent: "Size (%)",
+  exact: "Width (px)",
 }
 
 /** Size, orientation, background and file names. */
@@ -67,6 +68,8 @@ export function OptionsPanel({
                       current.resize === "original"
                     ? 480
                     : current.resizeValue,
+              resizeHeight:
+                current.resize === "exact" ? current.resizeHeight : 480,
             }))
           }
           options={[
@@ -75,32 +78,73 @@ export function OptionsPanel({
             { value: "height", label: "Height" },
             { value: "longEdge", label: "Longest side" },
             { value: "percent", label: "Percent" },
+            { value: "exact", label: "Exact size" },
           ]}
-          hint={`Proportions are kept. Results can be up to ${MAX_EDGE.toLocaleString("en")} px on the longest side.`}
+          hint={
+            settings.resize === "exact"
+              ? "The picture is fitted inside this size and centred. The space around it is see-through, or the background colour."
+              : `Proportions are kept. Results can be up to ${MAX_EDGE.toLocaleString("en")} px on the longest side.`
+          }
         />
         {settings.resize !== "original" && (
-          <div className="w-32">
-            <label
-              htmlFor={`${ids}-size`}
-              className="mb-2 block text-sm font-medium"
-            >
-              {sizeLabels[settings.resize]}
-            </label>
-            <Input
-              id={`${ids}-size`}
-              type="number"
-              inputMode="numeric"
-              min={1}
-              max={settings.resize === "percent" ? 400 : MAX_EDGE}
-              value={
-                Number.isNaN(settings.resizeValue) ? "" : settings.resizeValue
-              }
-              onChange={(event) =>
-                update({ resizeValue: event.target.valueAsNumber })
-              }
-              className="font-mono"
-            />
+          <div className="flex flex-wrap gap-3">
+            <div className="w-32">
+              <label
+                htmlFor={`${ids}-size`}
+                className="mb-2 block text-sm font-medium"
+              >
+                {sizeLabels[settings.resize]}
+              </label>
+              <Input
+                id={`${ids}-size`}
+                type="number"
+                inputMode="numeric"
+                min={1}
+                max={settings.resize === "percent" ? 400 : MAX_EDGE}
+                value={
+                  Number.isNaN(settings.resizeValue) ? "" : settings.resizeValue
+                }
+                onChange={(event) =>
+                  update({ resizeValue: event.target.valueAsNumber })
+                }
+                className="font-mono"
+              />
+            </div>
+            {settings.resize === "exact" && (
+              <div className="w-32">
+                <label
+                  htmlFor={`${ids}-height`}
+                  className="mb-2 block text-sm font-medium"
+                >
+                  Height (px)
+                </label>
+                <Input
+                  id={`${ids}-height`}
+                  type="number"
+                  inputMode="numeric"
+                  min={1}
+                  max={MAX_EDGE}
+                  value={
+                    Number.isNaN(settings.resizeHeight)
+                      ? ""
+                      : settings.resizeHeight
+                  }
+                  onChange={(event) =>
+                    update({ resizeHeight: event.target.valueAsNumber })
+                  }
+                  className="font-mono"
+                />
+              </div>
+            )}
           </div>
+        )}
+        {settings.resize !== "original" && (
+          <ToggleRow
+            label="Enlarge smaller animations"
+            hint="When off, an animation already smaller than this size is left at its own size."
+            checked={settings.enlarge}
+            onCheckedChange={(enlarge) => update({ enlarge })}
+          />
         )}
       </Section>
 

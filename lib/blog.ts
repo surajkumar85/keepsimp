@@ -144,6 +144,103 @@ export const posts: readonly BlogPost[] = [
     ],
   },
   {
+    slug: "gif-webp-apng-or-video",
+    title: "GIF, WebP, APNG or video? Choose how it moves.",
+    description:
+      "A practical guide to choosing a format for an animation: where it will play, what it shows, and how large the file may be.",
+    category: "A little know-how",
+    readingTime: "5 min read",
+    image: "/images/coastline-display.webp",
+    imageAlt: "A rocky coastline with a small house above turquoise water",
+    tool: "animation-converter",
+    intro:
+      "An animation can be saved as a GIF, an animated WebP, an animated PNG or a short video. They all move, but they differ in where they play, how they treat colour and transparency, and how heavy they are. The right one depends on where the animation is going.",
+    sections: [
+      {
+        id: "quick-choice",
+        title: "A quick way to choose.",
+        paragraphs: [
+          "For a web page you control, try animated WebP first, or a video if the animation is long or photographic. For chat apps, email and anywhere you cannot be sure what the other side supports, GIF is the safe choice. For a sticker or artwork with soft, see-through edges, use WebP or APNG.",
+          "Then check the destination's rules. Many places accept only certain formats and reject files over a set size. A format is only right if the place it is going will take it.",
+        ],
+      },
+      {
+        id: "gif",
+        title: "GIF: plays everywhere, at a price.",
+        paragraphs: [
+          "GIF is the oldest of the four and works almost anywhere an image can be shown. Each frame holds at most 256 colours, and a pixel is either fully solid or fully clear, so photographs band and soft edges turn hard. Files are large for what they show.",
+          "You can make a GIF lighter by using fewer colours, a lower frame rate, a smaller size or a shorter clip. In KeepSimp, the fast encoder stores only what changes between frames, and the gifski option gives each frame its own colours for the smoothest result.",
+        ],
+      },
+      {
+        id: "webp",
+        title: "Animated WebP: full colour, far smaller.",
+        paragraphs: [
+          "Animated WebP keeps full colour and smooth transparency. Google reports that animated GIFs converted to lossy WebP are 64% smaller, and 19% smaller as lossless WebP. Every current browser plays it. Outside browsers support is patchier, so check before sending one to an app or an older device.",
+          "Results depend on the content. Flat artwork is often smallest as lossless WebP, and photographs as lossy. KeepSimp tries both on the first frames at Balanced and High quality and keeps whichever is smaller.",
+        ],
+      },
+      {
+        id: "apng",
+        title: "APNG: exact colour and soft edges.",
+        paragraphs: [
+          "An animated PNG stores every pixel exactly, with smooth transparency. That makes it a good fit for stickers and interface artwork. Files are usually larger than WebP. Software that does not know the format shows the first frame as an ordinary PNG, which is a gentle way to fail.",
+          "If an exact APNG is too heavy, reducing it to a palette of up to 256 colours, as KeepSimp does at Balanced and Small file quality, often makes it much lighter while keeping soft edges.",
+        ],
+      },
+      {
+        id: "video",
+        title: "Video: smallest for photographs and recordings.",
+        paragraphs: [
+          "A short, silent MP4 or WebM is usually far smaller than any animated image, because video formats are built to describe motion. In one test with KeepSimp's sample, a 20-frame pan across a photograph, the GIF was 627 KB, the animated WebP 225 KB and the MP4 between 18 and 36 KB depending on the browser that encoded it. Your own files will differ.",
+          "Video has limits of its own. An MP4 has no transparency, a video cannot be used where only an image is accepted, and it needs a video player on the page, set to loop, mute and play inline. Use it where you control the page.",
+        ],
+      },
+      {
+        id: "fit-the-destination",
+        title: "Fit the destination.",
+        paragraphs: [
+          "Services publish limits, and change them. At the time of writing, Discord asks for animated emoji under 256 KB and stickers as 320 by 320 pixel APNG files of at most 512 KB, and Telegram asks for video stickers as WebM files of at most three seconds and 256 KB. Check the service's own page before relying on a figure.",
+          "KeepSimp's animation converter has presets for these, each with its source and the date it was checked. Set a file size limit and it lowers quality, then frame rate, then size, measuring the real file each time, and tells you what it changed.",
+        ],
+      },
+      {
+        id: "try-it",
+        title: "Compare your own animation.",
+        paragraphs: [
+          "Add your animation, then use Compare formats. KeepSimp converts it to every format your browser can write and lists the real sizes, smallest first. Pause the preview on a frame and drag the slider to see what each format did to the picture.",
+          "Keep your original. Converting to a lossy format discards detail that cannot be brought back, and converting a GIF to another format cannot restore colours the GIF never had.",
+        ],
+      },
+    ],
+    sources: [
+      {
+        title: "MDN: Image file type and format guide",
+        url: "https://developer.mozilla.org/en-US/docs/Web/Media/Guides/Formats/Image_types",
+      },
+      {
+        title: "Google: WebP frequently asked questions",
+        url: "https://developers.google.com/speed/webp/faq",
+      },
+      {
+        title: "web.dev: Replace animated GIFs with video",
+        url: "https://web.dev/articles/replace-gifs-with-videos",
+      },
+      {
+        title: "Discord: emoji resource",
+        url: "https://docs.discord.com/developers/resources/emoji",
+      },
+      {
+        title: "Discord: sticker file requirements",
+        url: "https://support.discord.com/hc/articles/4402687377815",
+      },
+      {
+        title: "Telegram: video stickers",
+        url: "https://core.telegram.org/stickers/webm-vp9-encoding",
+      },
+    ],
+  },
+  {
     slug: "format-json-without-losing-precision",
     title: "Make JSON readable. Keep the details.",
     description:

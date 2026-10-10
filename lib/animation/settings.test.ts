@@ -7,6 +7,9 @@ import {
   defaultSettings,
   frameFormats,
   keepsTransparency,
+  layoutFor,
+  MAX_SIZE_LIMIT,
+  MIN_SIZE_LIMIT,
   encodePlan,
   FRAME_BUDGET,
   losslessApplies,
@@ -220,6 +223,129 @@ describe("outputSize", () => {
     expect(
       outputSize(source, make({ resize: "width", resizeValue: 100_000 }))
     ).toEqual({ width: MAX_EDGE, height: MAX_EDGE / 2 })
+  })
+})
+
+describe("layoutFor", () => {
+  const source = { width: 400, height: 200 }
+
+  it("fills the canvas with the picture unless an exact size is asked for", () => {
+    expect(
+      layoutFor(source, make({ resize: "width", resizeValue: 100 }))
+    ).toEqual({
+      canvas: { width: 100, height: 50 },
+      picture: { width: 100, height: 50 },
+      x: 0,
+      y: 0,
+    })
+  })
+
+  it("fits the picture inside an exact size and centres it", () => {
+    expect(
+      layoutFor(
+        source,
+        make({ resize: "exact", resizeValue: 320, resizeHeight: 320 })
+      )
+    ).toEqual({
+      canvas: { width: 320, height: 320 },
+      picture: { width: 320, height: 160 },
+      x: 0,
+      y: 80,
+    })
+    // A tall canvas for a wide picture, and a turned picture.
+    expect(
+      layoutFor(
+        source,
+        make({
+          resize: "exact",
+          resizeValue: 100,
+          resizeHeight: 400,
+          rotation: 90,
+        })
+      )
+    ).toMatchObject({ picture: { width: 100, height: 200 }, x: 0, y: 100 })
+  })
+
+  it("leaves a small picture at its own size inside an exact canvas when enlarging is off", () => {
+    expect(
+      layoutFor(
+        { width: 40, height: 20 },
+        make({
+          resize: "exact",
+          resizeValue: 100,
+          resizeHeight: 100,
+          enlarge: false,
+        })
+      )
+    ).toEqual({
+      canvas: { width: 100, height: 100 },
+      picture: { width: 40, height: 20 },
+      x: 30,
+      y: 40,
+    })
+  })
+
+  it("keeps an exact size within the largest side, and even for video", () => {
+    expect(
+      outputSize(
+        source,
+        make({ resize: "exact", resizeValue: 5000, resizeHeight: 0 })
+      )
+    ).toEqual({ width: MAX_EDGE, height: 1 })
+    expect(
+      layoutFor(
+        source,
+        make({
+          target: "mp4",
+          resize: "exact",
+          resizeValue: 101,
+          resizeHeight: 51,
+        })
+      ).canvas
+    ).toEqual({ width: 100, height: 50 })
+  })
+
+  it("never enlarges when asked not to", () => {
+    const small = make({
+      resize: "longEdge",
+      resizeValue: 1280,
+      enlarge: false,
+    })
+    expect(outputSize(source, small)).toEqual(source)
+    expect(outputSize({ width: 2560, height: 1280 }, small)).toEqual({
+      width: 1280,
+      height: 640,
+    })
+    expect(
+      outputSize(
+        source,
+        make({ resize: "percent", resizeValue: 200, enlarge: false })
+      )
+    ).toEqual(source)
+  })
+
+  it("sizes from the crop when there is one", () => {
+    const crop = { width: 100, height: 100 }
+    expect(outputSize(source, make(), crop)).toEqual(crop)
+    expect(
+      outputSize(source, make({ resize: "width", resizeValue: 50 }), crop)
+    ).toEqual({
+      width: 50,
+      height: 50,
+    })
+  })
+
+  it("applies the tool's own shrink on top of the chosen size", () => {
+    expect(outputSize(source, make({ shrink: 0.5 }))).toEqual({
+      width: 200,
+      height: 100,
+    })
+    expect(
+      outputSize(
+        source,
+        make({ resize: "width", resizeValue: 100, shrink: 0.5 })
+      )
+    ).toEqual({ width: 50, height: 25 })
   })
 })
 
@@ -446,6 +572,40 @@ describe("settingsProblem", () => {
     )
   })
 
+  it("checks both sides of an exact size", () => {
+    expect(
+      problem({ resize: "exact", resizeValue: 320, resizeHeight: 320 })
+    ).toBeNull()
+    expect(
+      problem({ resize: "exact", resizeValue: 320, resizeHeight: 0 })
+    ).toMatch(/whole pixels/)
+    expect(
+      problem({ resize: "exact", resizeValue: 320, resizeHeight: NaN })
+    ).toMatch(/whole pixels/)
+    expect(
+      problem({ resize: "exact", resizeValue: 320, resizeHeight: MAX_EDGE + 1 })
+    ).toMatch(/1,920/)
+    // The height is ignored for every other way of sizing.
+    expect(
+      problem({ resize: "width", resizeValue: 320, resizeHeight: NaN })
+    ).toBeNull()
+  })
+
+  it("checks the length and file-size limits", () => {
+    expect(problem({ maxSeconds: 3 })).toBeNull()
+    expect(problem({ maxSeconds: 0 })).toMatch(/0\.1 to 600 seconds/)
+    expect(problem({ maxSeconds: 601 })).toMatch(/0\.1 to 600 seconds/)
+    expect(problem({ maxSeconds: NaN })).toMatch(/0\.1 to 600 seconds/)
+    expect(problem({ sizeLimit: 256_000 })).toBeNull()
+    expect(problem({ sizeLimit: MIN_SIZE_LIMIT - 1 })).toMatch(
+      /10 KB to 100 MB/
+    )
+    expect(problem({ sizeLimit: MAX_SIZE_LIMIT + 1 })).toMatch(
+      /10 KB to 100 MB/
+    )
+    expect(problem({ sizeLimit: NaN })).toMatch(/10 KB to 100 MB/)
+  })
+
   it("checks the custom quality that the chosen encoder uses", () => {
     const custom = (change: Partial<AnimationSettings>) =>
       problem({ quality: "custom", ...change })
@@ -526,6 +686,16 @@ describe("processingKey", () => {
     expect(processingKey(make({ speed: 2 }), noTrim)).not.toBe(base)
     expect(processingKey(make(), { start: 100, end: null })).not.toBe(base)
     expect(processingKey(make(), { start: 0, end: 500 })).not.toBe(base)
+    expect(
+      processingKey(make(), {
+        start: 0,
+        end: null,
+        crop: { x: 1, y: 1, width: 5, height: 5 },
+      })
+    ).not.toBe(base)
+    expect(processingKey(make({ sizeLimit: 256_000 }), noTrim)).not.toBe(base)
+    // "shrink" is set by the tool while it works, not chosen.
+    expect(processingKey(make({ shrink: 0.5 }), noTrim)).toBe(base)
     // The page reads the format back out of the key.
     expect(
       JSON.parse(processingKey(make({ target: "apng" }), noTrim)).target

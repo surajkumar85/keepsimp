@@ -1,6 +1,6 @@
 # Animation converter
 
-Updated 10 October 2026. Applies to `/dashboard/animation-converter/`. Phases 1 and 2 of four are built; the plan for the rest is at the end. It shares codecs with the image tools (`docs/image-compressor.md`) and the batch code with the resizer and converter.
+Updated 10 October 2026. Applies to `/dashboard/animation-converter/`. Phases 1 to 3 of four are built; the plan for the last is at the end. It shares codecs with the image tools (`docs/image-compressor.md`) and the batch code with the resizer and converter.
 
 ## What it does
 
@@ -37,6 +37,12 @@ Updated 10 October 2026. Applies to `/dashboard/animation-converter/`. Phases 1 
 - **Facts line:** format, size, frames, length, frame rate, loop count and file size, before and after.
 - **Animations from images:** a frame list to reorder (buttons or drag), set each frame's time, duplicate and remove. The first image sets the size; the others are fitted inside it and centred. One more image added while such an animation is selected joins it.
 - **Video defaults:** a clip faster than 16 frames a second or larger than 640 px starts at 15 frames a second and 640 px on its longest side, if nothing was chosen yet. The page says so, and nothing is ever enlarged by this.
+- **File size limit:** 128 KB to 10 MB chips, or a custom figure. The tool converts with the chosen settings first; if the file is too big it lowers quality, then frame rate, then size, and says what it changed.
+- **Destinations:** one-tap presets that set format, size, length and file size limit (see the table below), each with its source and the date it was checked.
+- **Crop:** a rectangle per animation, with shape presets, on the same overlay as the image compressor. It turns and flips with the picture.
+- **Exact size:** a width and height the picture is fitted inside and centred in, and a switch for whether smaller animations are enlarged.
+- **Length limit:** cuts every animation to a number of seconds, counted from the start of its trim.
+- **Compare formats:** converts the selected animation to every format the browser can write, at the current settings, and lists the real sizes, smallest first, with a "Use" action.
 - **Privacy:** everything runs in Web Workers in the browser. Nothing is uploaded.
 
 ## Quality settings
@@ -55,6 +61,47 @@ These numbers are KeepSimp's own choices. GIF holds at most 256 colours, so it c
 
 For WebP at High and Balanced, the first two patches are written both lossy and lossless, and the smaller way is used for the rest. Flat artwork is usually smaller lossless; photographs are not.
 
+## Fitting a file size
+
+`target-size.ts` holds a ladder of twelve rungs. Each rung says how far three levers are pulled: quality (four steps), a frame rate cap (20, 15, 12, 10, 8) and a scale (down to 20%). The rungs interleave the levers, so quality is not driven to its worst before the frame rate is touched.
+
+1. The chosen settings are tried first. If the file fits, nothing changes and nothing is said.
+2. Otherwise the ladder is searched by halving, which finds the gentlest rung that fits in at most five tries. Every try is a real conversion, measured in bytes.
+3. The note under the preview lists what the rung changed, for example "To fit under 128 KB: 64 colours, at most 15 frames a second, 85% of the size."
+4. If even the last rung is too big, that result is returned with a note saying so.
+
+Details:
+
+- Quality steps per format: WebP and JPEG or WebP frames 60, 45, 30; gifski 70, 50, 30; GIF 128, 64, 32 colours; APNG 256, 128, 64 colours. Dithering stops once the palette is small.
+- Video is sized by bitrate: the limit, less 10% for overhead, divided by the length. Its rungs differ only in frame rate and scale.
+- An exact size is never scaled, because the canvas is the point of it.
+- A lower setting already chosen by hand is never raised.
+
+These numbers are KeepSimp's own choices.
+
+## Destinations
+
+Checked October 2026. Presets with "reported" figures say so in the interface, because the service does not publish them.
+
+| Destination            | Format | Size                 | Limit               | Source                                                                                                                   |
+| ---------------------- | ------ | -------------------- | ------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| Discord emoji          | GIF    | within 128 px        | 256 KB              | [Discord developer docs](https://docs.discord.com/developers/resources/emoji) (256 KiB; the preset uses 256,000 bytes)   |
+| Discord sticker        | APNG   | exactly 320 × 320 px | 512 KB              | [Discord support](https://support.discord.com/hc/articles/4402687377815)                                                 |
+| Slack emoji            | GIF    | within 128 px        | 128 KB              | reported: [Compresto guide](https://compresto.app/blog/compress-gif-for-slack-emoji-custom-workspace)                    |
+| Telegram video sticker | WebM   | within 512 px        | 256 KB, 3 s, 30 fps | [Telegram](https://core.telegram.org/stickers/webm-vp9-encoding)                                                         |
+| WhatsApp sticker       | WebP   | exactly 512 × 512 px | 500 KB              | reported: [Moda guide](https://moda.app/resources/sizes/whatsapp-sticker)                                                |
+| GitHub                 | GIF    | any                  | 10 MB               | [GitHub docs](https://docs.github.com/en/get-started/writing-on-github/working-with-advanced-formatting/attaching-files) |
+| X (Twitter) GIF        | GIF    | within 1280 px       | 15 MB               | [X developer docs](https://docs.x.com/x-api/media/quickstart/best-practices)                                             |
+
+Limits of the presets:
+
+- "Within" never enlarges. Telegram asks for one side of exactly 512 px, so a smaller clip needs its size set by hand, and the preset's note says so.
+- Telegram asks for VP9. A browser that can only write VP8 produces a WebM that Telegram may refuse.
+- X also asks for at most 350 frames and 1080 px of height, which the preset does not enforce.
+- Twitch is left out: its published figures disagree with each other.
+
+A preset is shown as selected only while every setting it applies still holds. "Anywhere" lifts the limits and the size.
+
 ## Engine
 
 - **Pure logic** lives in `lib/animation/` and has 100% unit coverage:
@@ -64,6 +111,7 @@ For WebP at High and Balanced, the first two patches are written both lossy and 
   - `decoders/`: GIF (including LZW and interlacing), APNG and WebP container readers. APNG and WebP frames come out as small still files, which the existing PNG and WebP decoders read.
   - `encoders/`: GIF, APNG (`acTL`, `fcTL`, `fdAT`, with our own row filtering) and WebP (`ANIM`, `ANMF`) writers.
   - `sprite.ts`: sheet layout, and the CSS and JSON that describe it.
+  - `target-size.ts`, `presets.ts` and `compare.ts`: the ladder, the destinations and the ranking of compared sizes.
   - `build.ts`, `pipeline.ts`, `settings.ts`, `source.ts` (including stills as a source and telling dropped files apart).
 - **Browser-only:** `animation.worker.ts`, `client.ts`, `protocol.ts`, `deps.ts`, `video.ts` and `capability.ts`.
 - **Codecs:** libimagequant for palettes, libwebp for WebP frames, the platform's `CompressionStream` for PNG data, the WASM resampler, and gifski. gifski is used through its single-thread module.
@@ -104,6 +152,20 @@ Settings and results count plays: 0 is forever, 1 is once. WebP and APNG store t
 - **Workers starting together.** When several workers start at the same moment, Safari and sometimes Firefox load some of their scripts past the service worker, which fails offline. `WorkerPool` now starts workers one after another and restarts one that fails to load. This applies to the resizer and converter too.
 - **APNG downloads.** Blobs use the plain `image/png` type. With `image/apng`, Firefox renames the download to `.apng`.
 
+## Tutorial video
+
+`public/videos/animation-converter-tutorial.mp4` (1 min 14 s, 9.5 MB, with poster and captions) is recorded from the real app by the shared recorder and `scripts/tutorial/animation-converter.mjs`:
+
+```bash
+npm run build
+npx serve out --listen tcp://127.0.0.1:4180
+KEEPSIMP_PREVIEW_URL=http://127.0.0.1:4180 npm run tutorial:video -- animation-converter
+```
+
+The recorder asks for reduced motion, so the preview stays on single frames and nothing moves on its own between screenshots. If the length changes, update `video.duration` in `components/animation-converter/tutorial.tsx` and the tutorial test. A frame-by-frame scan of this render found no pulses in static text.
+
+The journal article "GIF, WebP, APNG or video?" (`lib/blog.ts`) is the written guide the help section links to.
+
 ## Samples
 
 `npm run samples:animations` writes the two files behind "Try a sample" into `public/images/samples/`: a pan across the coastline photograph (GIF) and the KeepSimp mark pulsing on a see-through background (WebP).
@@ -112,7 +174,7 @@ Settings and results count plays: 0 is forever, 1 is once. WebP and APNG store t
 
 - **Unit:** one file per area (`timeline`, `compose` with bytes and frame differences, `containers` for the three formats, `settings`, `pipeline` with stand-in codecs).
 - **Real codecs** (`animation.node.test.ts`). Sources are written by other software and results are read back by it: sharp for GIF and WebP, UPNG for APNG. Covers every reader and writer, exact frames, see-through pixels, trim, speed, frame rate, reverse, boomerang, loop counts, resize, rotation, background and gifski.
-- **Browser** (`e2e/animation-converter.spec.ts`), 12 journeys on all five profiles, checking downloaded bytes:
+- **Browser** (`e2e/animation-converter.spec.ts`), 15 journeys on all five profiles, checking downloaded bytes:
   - every format, with each frame's content compared with the original
   - trim, speed, reverse, boomerang, frame rate and loop count
   - resize, rotation and background; see-through GIF
@@ -120,11 +182,14 @@ Settings and results count plays: 0 is forever, 1 is once. WebP and APNG store t
   - a batch with a still image, a damaged file and a text file; names, ZIP and per-file trim
   - the player: playing, pausing, stepping, and the frames drawn before and after
   - keyboard use, reduced motion, axe in both themes, 320 px layout and no external requests
-  - the written guide
   - MP4 and WebM written and then played by the browser's own video element, and a clip turned back into exact frames
   - video defaults for a fast clip
   - frames as PNG and JPEG, and a sprite sheet whose CSS and JSON match its pixels
   - an animation built from stills: order, times, duplicate, remove, add, save a frame; axe and 320 px with the frame list open
+  - a size limit met with real bytes, a custom limit, and no limit
+  - destination presets: exact canvas, no enlarging, sources shown, leaving a preset by hand
+  - length limit, crop (shape, keyboard, rotation, reset) and the comparison table
+  - the tutorial section
 - **Offline:** the tool, its samples and gifski are part of the offline journey in `e2e/offline.spec.ts`.
 
 ## Licences
@@ -135,5 +200,4 @@ Settings and results count plays: 0 is forever, 1 is once. WebP and APNG store t
 
 ## Later phases
 
-1. **Phase 3 — size and destinations:** a measured target file size; destination presets with sourced limits; crop; a format comparison table; the tutorial video and a journal article.
-2. **Phase 4 — text and effects:** captions, filters, an overlay image, and animated AVIF. Animated AVIF input was planned for phase 2 and moved here: no tool at hand writes an animated AVIF to test against, so it will be built together with AVIF output, which can then serve as the fixture.
+**Phase 4 — text and effects:** captions, filters, an overlay image, and animated AVIF. Animated AVIF input was planned for phase 2 and moved here: no tool at hand writes an animated AVIF to test against, so it will be built together with AVIF output, which can then serve as the fixture.

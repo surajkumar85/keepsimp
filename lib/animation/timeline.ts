@@ -4,6 +4,8 @@ export interface Timing {
   start: number
   /** Where it ends; null keeps everything to the end. */
   end: number | null
+  /** Longest kept part, in milliseconds from its start; absent or null for no limit. */
+  longest?: number | null
   /** 2 plays twice as fast. */
   speed: number
   /** Most frames per second to keep; null keeps every frame. */
@@ -76,7 +78,13 @@ export function planFrames(
   timing: Timing
 ): Step[] {
   if (!durations.length) return []
-  let steps = trim(durations, timing.start, timing.end)
+  // A length limit is one more reason to end early.
+  const from = Math.min(Math.max(0, timing.start), sum(durations))
+  const end =
+    timing.longest != null
+      ? Math.min(timing.end ?? Infinity, from + timing.longest)
+      : timing.end
+  let steps = trim(durations, timing.start, end)
   if (timing.speed !== 1)
     steps = steps.map((step) => ({
       source: step.source,

@@ -605,14 +605,54 @@ test("stays accessible, keyboard-friendly, local and responsive", async ({
   expect(errors).toEqual([])
 })
 
-test("the written guide explains every option", async ({ page }) => {
+test("the tutorial video, captions and written guide are available", async ({
+  page,
+  request,
+  browserName,
+}) => {
   await page.goto(ROUTE)
   const section = page.getByRole("region", {
     name: "A little help along the way",
   })
+  const video = section.locator("video")
+  await expect(video).toHaveAttribute(
+    "poster",
+    "/videos/animation-converter-tutorial-poster.webp"
+  )
+  await expect(video).toHaveAttribute("preload", "none")
+  for (const [path, type] of [
+    ["/videos/animation-converter-tutorial.mp4", "video/mp4"],
+    ["/videos/animation-converter-tutorial-poster.webp", "image/webp"],
+    ["/videos/animation-converter-tutorial.vtt", "text/vtt"],
+  ]) {
+    const response = await request.get(path)
+    expect(response.ok()).toBe(true)
+    expect(response.headers()["content-type"]).toContain(type)
+  }
+  const captions = await (
+    await request.get("/videos/animation-converter-tutorial.vtt")
+  ).text()
+  expect(captions.startsWith("WEBVTT")).toBe(true)
+  expect(captions).toContain("Step 6 of 6: Download")
+
+  // Playwright's Firefox build has no H.264 decoder; real Firefox uses the system one.
+  if (browserName !== "firefox") {
+    const metadata = await video.evaluate(
+      (element: HTMLVideoElement) =>
+        new Promise<{ duration: number; width: number }>((resolve, reject) => {
+          element.addEventListener("loadedmetadata", () =>
+            resolve({ duration: element.duration, width: element.videoWidth })
+          )
+          element.addEventListener("error", () => reject(new Error("decode")))
+          element.preload = "metadata"
+          element.load()
+        })
+    )
+    expect(metadata.width).toBe(1920)
+    expect(Math.round(metadata.duration)).toBe(74)
+  }
+
   await expect(section.locator("#tutorial-steps > li")).toHaveCount(6)
-  // There is no video yet, and the page does not pretend there is.
-  await expect(section.locator("video")).toHaveCount(0)
   const details = section.locator("details")
   await details.locator("summary").focus()
   await page.keyboard.press("Enter")
@@ -620,6 +660,9 @@ test("the written guide explains every option", async ({ page }) => {
   await expect(
     section.getByText("Which format should I choose?", { exact: true })
   ).toBeVisible()
+  await expect(
+    section.getByRole("link", { name: "Read the step-by-step guide" })
+  ).toHaveAttribute("href", "/blog/gif-webp-apng-or-video/")
 })
 
 /** Load a video file in the page and read what the browser's own decoder makes of it. */
@@ -1029,4 +1072,183 @@ test("builds an animation from still images", async ({ page }) => {
   const gif = await result(page, "gif")
   expect(gif.name).toBe("animation.gif")
   expect(gif.frames).toHaveLength(3)
+})
+
+test("fits a file under a size limit and says what it changed", async ({
+  page,
+}) => {
+  await page.goto(ROUTE)
+  await page.getByRole("button", { name: "Try a sample" }).click()
+  await expect(page.getByTestId("queue-item")).toHaveCount(2)
+  await page.getByRole("button", { name: "Remove keepsimp-pulse.webp" }).click()
+  await chip(page, "Format", "GIF").click()
+  const free = await result(page, "gif")
+  expect(free.buffer.length).toBeGreaterThan(300_000)
+
+  await chip(page, "Largest file", "128 KB").click()
+  const fitted = await result(page, "gif")
+  expect(fitted.buffer.length).toBeLessThanOrEqual(128_000)
+  // Still the whole animation: the same length, just lighter.
+  expect(fitted.delays.reduce((total, delay) => total + delay, 0)).toBe(1600)
+  await expect(page.getByText(/^To fit under 128 KB: /)).toBeVisible()
+
+  // A custom limit, typed in.
+  await chip(page, "Largest file", "Custom").click()
+  const field = page.getByLabel("Largest file (MB)")
+  await expect(field).toHaveValue("2")
+  await chip(page, "Unit", "KB").click()
+  const kilobytes = page.getByLabel("Largest file (KB)")
+  await kilobytes.fill("200")
+  await kilobytes.press("Enter")
+  const custom = await result(page, "gif")
+  expect(custom.buffer.length).toBeLessThanOrEqual(200_000)
+  expect(custom.buffer.length).toBeGreaterThan(fitted.buffer.length)
+
+  // With no limit the file is as it was.
+  await chip(page, "Largest file", "No limit").click()
+  expect((await result(page, "gif")).buffer.length).toBe(free.buffer.length)
+})
+
+test("destination presets set the format, size and limit, with their sources", async ({
+  page,
+}) => {
+  await page.goto(ROUTE)
+  await upload(page, await animation("gif", "wave.gif", { scale: SCALE }))
+  await settled(page)
+  const destination = page.getByTestId("destination")
+
+  // An exact canvas: the 192 × 144 picture is enlarged to fit 320 wide and centred.
+  await chip(page, "Destination", "Discord sticker").click()
+  await expect(chip(page, "Format", "APNG")).toBeChecked()
+  await expect(chip(page, "Resize", "Exact size")).toBeChecked()
+  await expect(page.getByLabel("Height (px)")).toHaveValue("320")
+  await expect(chip(page, "Largest file", "512 KB")).toBeChecked()
+  await expect(destination).toContainText("exactly 320 × 320 px")
+  await expect(destination).toContainText("Checked October 2026")
+  await expect(
+    destination.getByRole("link", { name: /Discord support/ })
+  ).toHaveAttribute(
+    "href",
+    "https://support.discord.com/hc/articles/4402687377815"
+  )
+  const sticker = await result(page, "apng")
+  expect([sticker.width, sticker.height]).toEqual([320, 320])
+  expect(sticker.buffer.length).toBeLessThanOrEqual(512_000)
+  // Clear above and below the picture, solid inside it.
+  expect(sticker.frames[0][3]).toBe(0)
+  expect(sticker.frames[0][(160 * 320 + 160) * 4 + 3]).toBe(255)
+
+  // A size to stay within: a smaller animation is not enlarged.
+  await chip(page, "Destination", "X (Twitter) GIF").click()
+  await expect(chip(page, "Format", "GIF")).toBeChecked()
+  await expect(
+    page.getByRole("switch", { name: "Enlarge smaller animations" })
+  ).not.toBeChecked()
+  const posted = await result(page, "gif")
+  expect([posted.width, posted.height]).toEqual(BIG)
+
+  await chip(page, "Destination", "Discord emoji").click()
+  const emoji = await result(page, "gif")
+  expect([emoji.width, emoji.height]).toEqual([128, 96])
+  expect(emoji.buffer.length).toBeLessThanOrEqual(256 * 1024)
+
+  // A figure the service does not publish is labelled as reported.
+  await chip(page, "Destination", "Slack emoji").click()
+  await expect(destination).toContainText("Reported by:")
+  await expect(destination).toContainText("Slack does not publish the figure")
+
+  // Changing one of its settings by hand leaves the preset.
+  await chip(page, "Format", "WebP").click()
+  await expect(chip(page, "Destination", "Anywhere")).toBeChecked()
+  await expect(destination).toHaveCount(0)
+
+  // "Anywhere" lifts the limits and the size.
+  await chip(page, "Destination", "Slack emoji").click()
+  await chip(page, "Destination", "Anywhere").click()
+  await expect(chip(page, "Largest file", "No limit")).toBeChecked()
+  await expect(chip(page, "Resize", "Original")).toBeChecked()
+
+  const telegram = chip(page, "Destination", "Telegram video sticker")
+  await telegram.click()
+  if (await chip(page, "Format", "WebM").isDisabled()) return
+  await expect(chip(page, "Longest result", "3 s")).toBeChecked()
+  await expect(chip(page, "Frames per second", "30")).toBeChecked()
+  const clip = await downloadNamed(page, "Download video")
+  expect(clip.name).toBe("wave.webm")
+  expect(clip.buffer.length).toBeLessThanOrEqual(256_000)
+})
+
+test("limits length, crops to a shape and compares formats", async ({
+  page,
+}) => {
+  await page.goto(ROUTE)
+  await upload(page, await animation("apng", "walk.png", { scale: SCALE }))
+  await chip(page, "Format", "APNG").click()
+  await chip(page, "Quality", "Lossless").click()
+  await settled(page)
+
+  // Six frames of 80 ms; a quarter of a second keeps three and a bit.
+  await chip(page, "Longest result", "Custom").click()
+  await page.getByLabel("Longest result (s)").fill("0.24")
+  let file = await result(page, "apng")
+  expect(file.delays).toEqual([80, 80, 80])
+  await chip(page, "Longest result", "No limit").click()
+
+  // Crop to a square: the middle of the picture.
+  await page.getByRole("button", { name: "Crop", exact: true }).click()
+  await expect(page.getByTestId("crop-mode")).toBeVisible()
+  await chip(page, "Shape", "1:1").click()
+  const box = page.getByTestId("crop-box")
+  await expect(box).toHaveAttribute("aria-label", /144 by 144 pixels/)
+  // The crop box moves with the arrow keys.
+  await box.focus()
+  await page.keyboard.press("Shift+ArrowLeft")
+  await page.getByRole("button", { name: "Done" }).click()
+  await expect(page.getByTestId("crop-note")).toContainText(
+    "Cropped to 144 × 144 px"
+  )
+  file = await result(page, "apng")
+  expect([file.width, file.height]).toEqual([144, 144])
+  expect(file.frames).toHaveLength(6)
+  // The crop started 24 px in and moved 10 px left, so the square sits 14 px further left.
+  expect(squareAt(file.frames[1], 144, 72)).toBe(8 * SCALE - 14)
+
+  // Turning the picture turns the crop with it; the result stays square.
+  await page.getByRole("button", { name: "Rotate right" }).click()
+  file = await result(page, "apng")
+  expect([file.width, file.height]).toEqual([144, 144])
+  await page.getByRole("button", { name: "Rotate left" }).click()
+
+  // Compare formats at these settings, smallest first.
+  await page.getByRole("button", { name: "Compare formats" }).click()
+  const table = page.getByTestId("comparison")
+  await expect(table).toBeVisible({ timeout: 120_000 })
+  const formats = await table.locator("tbody th").allInnerTexts()
+  const offered: string[] = []
+  for (const label of ["GIF", "WebP", "APNG", "MP4", "WebM"])
+    if (!(await chip(page, "Format", label).isDisabled())) offered.push(label)
+  expect(formats.map((text) => text.split("\n")[0]).sort()).toEqual(
+    [...offered].sort()
+  )
+  expect(formats[0]).toContain("Smallest")
+  // The APNG row is the file that is already made, to the byte.
+  const row = table.locator("tbody tr").filter({ hasText: "APNG" })
+  await expect(row.getByRole("button", { name: "Use APNG" })).toBeDisabled()
+  const sizes = (
+    await table.locator("tbody td:nth-child(2)").allInnerTexts()
+  ).map((text) => text.split("\n")[0])
+  const bytes = (text: string) =>
+    Number(text.replace(/[^0-9.]/g, "")) *
+    (text.includes("MB") ? 1048576 : text.includes("KB") ? 1024 : 1)
+  expect(sizes.map(bytes)).toEqual([...sizes.map(bytes)].sort((a, b) => a - b))
+  await table.getByRole("button", { name: "Use WebP" }).click()
+  await expect(chip(page, "Format", "WebP")).toBeChecked()
+
+  // Reset removes the crop.
+  await page.getByRole("button", { name: "Change the crop" }).click()
+  await page.getByRole("button", { name: "Reset" }).click()
+  await page.getByRole("button", { name: "Done" }).click()
+  await expect(page.getByTestId("crop-note")).toHaveCount(0)
+  const whole = await result(page, "webp")
+  expect([whole.width, whole.height]).toEqual(BIG)
 })

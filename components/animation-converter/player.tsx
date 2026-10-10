@@ -15,7 +15,7 @@ import { ChoiceChips } from "@/components/ui/choice-chips"
 import { FrameViewer, type ViewedFrames } from "@/lib/animation/client"
 import type { SourceInput } from "@/lib/animation/protocol"
 import { frameAt, sum, type Step } from "@/lib/animation/timeline"
-import type { Rotation, Size } from "@/lib/image-compressor/geometry"
+import type { Rect, Rotation, Size } from "@/lib/image-compressor/geometry"
 
 const seconds = (milliseconds: number) => (milliseconds / 1000).toFixed(2)
 const tag =
@@ -94,7 +94,14 @@ export function Player({
   result: PlayerResult | null
   /** Which original frame each moment of the result shows. */
   steps: Step[]
-  orientation: { rotation: Rotation; flipX: boolean; flipY: boolean }
+  /** How the original is turned, cropped and padded to line up with the result. */
+  orientation: {
+    rotation: Rotation
+    flipX: boolean
+    flipY: boolean
+    crop: Rect | null
+    pad: Size | null
+  }
   originalLabel: string
   resultLabel: string | null
   status: string | null
@@ -212,6 +219,12 @@ export function Player({
     orientation.rotation,
     orientation.flipX,
     orientation.flipY,
+    orientation.crop?.x,
+    orientation.crop?.y,
+    orientation.crop?.width,
+    orientation.crop?.height,
+    orientation.pad?.width,
+    orientation.pad?.height,
   ])
 
   const pause = (at: number) => {

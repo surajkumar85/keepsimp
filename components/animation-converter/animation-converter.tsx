@@ -11,6 +11,7 @@ import {
 import {
   IconAlertCircle,
   IconClockPlay,
+  IconCrop,
   IconInfoCircle,
   IconPlayerPlay,
   IconStack2,
@@ -23,7 +24,12 @@ import {
   type DropZoneCopy,
 } from "@/components/image-compressor/drop-zone"
 import { videoEncodeSupport } from "@/lib/animation/capability"
-import { AnimationPool, animationPoolSize } from "@/lib/animation/client"
+import {
+  AnimationPool,
+  animationPoolSize,
+  compareFormats,
+} from "@/lib/animation/client"
+import { rankSizes } from "@/lib/animation/compare"
 import type { AnimationResponse, SourceInput } from "@/lib/animation/protocol"
 import {
   defaultSettings,
@@ -55,11 +61,24 @@ import {
   type QueueAction,
   type QueueItem,
 } from "@/lib/image-batch/queue"
+import { CropOverlay } from "@/components/image-compressor/crop-overlay"
+import { ChoiceChips } from "@/components/ui/choice-chips"
+import { Button } from "@/components/ui/button"
 import { MAX_INPUT_BYTES, sizeLabel } from "@/lib/image-compressor/formats"
+import {
+  aspectPresets,
+  aspectValue,
+  flipCrop,
+  initialCrop,
+  orientedSize,
+  rotateCrop,
+  type AspectPreset,
+} from "@/lib/image-compressor/geometry"
 import { savingsPercent } from "@/lib/image-compressor/quality"
 import { fileName, uniqueNames } from "@/lib/image-resizer/naming"
 import { createZip } from "@/lib/image-resizer/zip"
-import { FormatPanel } from "./format-panel"
+import { DestinationPanel } from "./destination-panel"
+import { FormatPanel, type ComparisonState } from "./format-panel"
 import { FrameList, type StillFrame } from "./frame-list"
 import { OptionsPanel } from "./options-panel"
 import { Player, type Playable } from "./player"
@@ -168,6 +187,13 @@ export function AnimationConverter() {
   const [notice, setNotice] = useState("")
   /** Something worth knowing that is not an error. */
   const [tip, setTip] = useState("")
+  const [cropping, setCropping] = useState(false)
+  const [aspect, setAspect] = useState<AspectPreset>("free")
+  const [compared, setCompared] = useState<{
+    key: string
+    state: ComparisonState
+  } | null>(null)
+  const comparing = useRef<(() => void) | null>(null)
   const [paused, setPaused] = useState(false)
   const [zipping, setZipping] = useState(false)
 
@@ -193,6 +219,9 @@ export function AnimationConverter() {
   const select = useCallback((id: string | null) => {
     live.current.selectedId = id
     setSelectedId(id)
+    // A crop belongs to one animation; choosing another leaves crop mode.
+    setCropping(false)
+    setAspect("free")
   }, [])
 
   const resume = () => {
@@ -211,6 +240,30 @@ export function AnimationConverter() {
         typeof change === "function"
           ? change(current)
           : { ...current, ...change }
+      // Crops are drawn on the turned picture, so they turn and flip with it.
+      const turned = (next.rotation - current.rotation + 360) % 360
+      const flipped = {
+        x: next.flipX !== current.flipX,
+        y: next.flipY !== current.flipY,
+      }
+      if (turned || flipped.x || flipped.y) {
+        const trims = { ...live.current.trims }
+        for (const item of live.current.items) {
+          const trim = trims[item.id]
+          if (!trim?.crop || !item.size) continue
+          let crop = trim.crop
+          let bounds = orientedSize(item.size, current.rotation)
+          for (let quarter = 0; quarter < turned / 90; quarter++) {
+            crop = rotateCrop(crop, bounds, "right")
+            bounds = { width: bounds.height, height: bounds.width }
+          }
+          if (flipped.x) crop = flipCrop(crop, bounds, "x")
+          if (flipped.y) crop = flipCrop(crop, bounds, "y")
+          trims[item.id] = { ...trim, crop }
+        }
+        live.current.trims = trims
+        setTrims(trims)
+      }
       live.current.settings = next
       live.current.paused = false
       setPaused(false)
@@ -360,6 +413,7 @@ export function AnimationConverter() {
     return () => {
       instance.dispose()
       pool.current = null
+      comparing.current?.()
     }
   }, [])
 
@@ -626,8 +680,12 @@ export function AnimationConverter() {
     setLabels({})
   }
 
-  function setTrim(id: string, trim: Trim) {
-    const next = { ...live.current.trims, [id]: trim }
+  /** Change when an animation starts and ends, or how it is cropped, keeping the other. */
+  function setTrim(id: string, change: Partial<Trim>) {
+    const next = {
+      ...live.current.trims,
+      [id]: { ...noTrim, ...live.current.trims[id], ...change },
+    }
     live.current.trims = next
     setTrims(next)
     resume()
@@ -798,6 +856,10 @@ export function AnimationConverter() {
         ? planFrames(selectedFacts.durations, {
             start: selectedTrim.start,
             end: selectedTrim.end,
+            longest:
+              problem || settings.maxSeconds === null
+                ? null
+                : settings.maxSeconds * 1000,
             // While a setting is invalid, the preview keeps the original timing.
             speed: problem ? 1 : settings.speed,
             fps: problem ? null : settings.fps,
@@ -809,12 +871,82 @@ export function AnimationConverter() {
       selectedFacts,
       selectedTrim,
       problem,
+      settings.maxSeconds,
       settings.speed,
       settings.fps,
       settings.reverse,
       settings.boomerang,
     ]
   )
+
+  /** Everything a comparison depends on: the animation, its trim and the settings, bar the format. */
+  const comparisonKey = selected
+    ? JSON.stringify([
+        selected.id,
+        processingKey(
+          { ...settings, target: "gif", sizeLimit: null },
+          selectedTrim
+        ),
+      ])
+    : ""
+
+  function runComparison() {
+    if (!selected || selected.status !== "ready") return
+    const forKey = comparisonKey
+    const originalBytes = sizeOf(selected)
+    comparing.current?.()
+    setCompared({
+      key: forKey,
+      state: { status: "running", label: "Starting…" },
+    })
+    const { promise, cancel: stop } = compareFormats(
+      {
+        input: inputOf(selected, sequences[selected.id]).input,
+        settings,
+        trim: selectedTrim,
+        targets: (["gif", "webp", "apng", "mp4", "webm"] as const).filter(
+          (target) =>
+            targets[target].kind !== "video" ||
+            video?.[target as "mp4" | "webm"]
+        ),
+      },
+      (label) =>
+        setCompared((current) =>
+          current?.key === forKey
+            ? { key: forKey, state: { status: "running", label } }
+            : current
+        )
+    )
+    comparing.current = stop
+    promise
+      .then((results) =>
+        setCompared({
+          key: forKey,
+          state: { status: "done", rows: rankSizes(results, originalBytes) },
+        })
+      )
+      .catch((failure: Error) =>
+        setCompared((current) =>
+          current?.key === forKey
+            ? {
+                key: forKey,
+                state: { status: "error", message: failure.message },
+              }
+            : current
+        )
+      )
+  }
+
+  function cancelComparison() {
+    comparing.current?.()
+    comparing.current = null
+    setCompared(null)
+  }
+
+  const comparison: ComparisonState =
+    selected && compared?.key === comparisonKey
+      ? compared.state
+      : { status: "idle" }
 
   async function downloadZip() {
     setZipping(true)
@@ -942,10 +1074,51 @@ export function AnimationConverter() {
       data-settled={(totals.settled && !zipping) || undefined}
     >
       <div className="min-w-0 space-y-4 lg:col-span-3">
-        {selected?.status !== "error" &&
-        selected?.size &&
-        selectedFacts &&
-        selectedInput ? (
+        {cropping && selected?.size && thumbnails[selected.id] ? (
+          <div className="space-y-3" data-testid="crop-mode">
+            <ChoiceChips
+              label="Shape"
+              value={aspect}
+              onValueChange={(preset: AspectPreset) => {
+                setAspect(preset)
+                const bounds = orientedSize(selected.size!, settings.rotation)
+                const ratio = aspectValue(preset, bounds)
+                if (ratio)
+                  setTrim(selected.id, { crop: initialCrop(bounds, ratio) })
+              }}
+              options={aspectPresets.map((preset) => ({
+                value: preset,
+                label:
+                  preset === "free"
+                    ? "Free"
+                    : preset === "original"
+                      ? "Original"
+                      : preset,
+              }))}
+            />
+            <CropOverlay
+              preview={thumbnails[selected.id]}
+              bounds={orientedSize(selected.size, settings.rotation)}
+              rotation={settings.rotation}
+              flipX={settings.flipX}
+              flipY={settings.flipY}
+              crop={selectedTrim.crop ?? null}
+              aspect={aspectValue(
+                aspect,
+                orientedSize(selected.size, settings.rotation)
+              )}
+              onChange={(crop) => setTrim(selected.id, { crop })}
+              onReset={() => {
+                setAspect("free")
+                setTrim(selected.id, { crop: null })
+              }}
+              onDone={() => setCropping(false)}
+            />
+          </div>
+        ) : selected?.status !== "error" &&
+          selected?.size &&
+          selectedFacts &&
+          selectedInput ? (
           <Player
             key={selected.id}
             original={{
@@ -978,6 +1151,11 @@ export function AnimationConverter() {
               rotation: settings.rotation,
               flipX: settings.flipX,
               flipY: settings.flipY,
+              crop: selectedTrim.crop ?? null,
+              pad:
+                settings.resize === "exact" && !problem
+                  ? outputSize(selected.size, settings, selectedTrim.crop)
+                  : null,
             }}
             originalLabel={`Original · ${sizeLabel(selectedBytes)}`}
             resultLabel={
@@ -1066,11 +1244,33 @@ export function AnimationConverter() {
                     : problem
                       ? "Waiting for settings"
                       : `About ${
-                          outputSize(selected.size, settings).width
-                        } × ${outputSize(selected.size, settings).height}, ${steps.length} frames`}
+                          outputSize(selected.size, settings, selectedTrim.crop)
+                            .width
+                        } × ${
+                          outputSize(selected.size, settings, selectedTrim.crop)
+                            .height
+                        }, ${steps.length} frames`}
               </dd>
             </dl>
           )}
+        {selected?.status === "ready" && selected.size && !cropping && (
+          <div className="flex flex-wrap items-center gap-3">
+            <Button variant="outline" onClick={() => setCropping(true)}>
+              <IconCrop aria-hidden="true" />
+              {selectedTrim.crop ? "Change the crop" : "Crop"}
+            </Button>
+            {selectedTrim.crop && (
+              <p
+                className="text-xs text-muted-foreground"
+                data-testid="crop-note"
+              >
+                Cropped to {selectedTrim.crop.width} ×{" "}
+                {selectedTrim.crop.height} px. This applies to this animation
+                only.
+              </p>
+            )}
+          </div>
+        )}
         {selected && selectedStills && (
           <FrameList
             frames={selectedStills}
@@ -1151,11 +1351,16 @@ export function AnimationConverter() {
       </div>
 
       <div className="min-w-0 space-y-4 lg:col-span-2">
+        <DestinationPanel settings={settings} update={update} />
         <FormatPanel
           settings={settings}
           update={update}
           problem={problem}
           video={video}
+          comparison={comparison}
+          canCompare={selected?.status === "ready" && !problem}
+          onCompare={runComparison}
+          onCancelCompare={cancelComparison}
         />
         <TimingPanel
           settings={settings}

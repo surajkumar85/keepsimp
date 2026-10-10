@@ -81,6 +81,24 @@ describe("planFrames", () => {
     ])
   })
 
+  it("cuts to a longest length, counted from the start of the trim", () => {
+    const durations = [100, 100, 100, 100, 100]
+    expect(lengths(plan(durations, { longest: 250 }))).toEqual([100, 100, 50])
+    expect(sources(plan(durations, { start: 200, longest: 150 }))).toEqual([
+      2, 3,
+    ])
+    // The earlier of the trim's end and the limit wins.
+    expect(
+      lengths(plan(durations, { start: 100, end: 200, longest: 300 }))
+    ).toEqual([100])
+    expect(lengths(plan(durations, { longest: 5000 }))).toEqual(durations)
+    expect(lengths(plan(durations, { longest: null }))).toEqual(durations)
+    // The limit is on the original, before speed is applied.
+    expect(lengths(plan(durations, { longest: 200, speed: 2 }))).toEqual([
+      50, 50,
+    ])
+  })
+
   it("changes speed by scaling every frame", () => {
     expect(lengths(plan([100, 50], { speed: 2 }))).toEqual([50, 25])
     expect(lengths(plan([100, 50], { speed: 0.5 }))).toEqual([200, 100])

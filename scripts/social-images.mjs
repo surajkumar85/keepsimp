@@ -43,6 +43,12 @@ const cards = [
     "/images/private-workspace.webp",
   ],
   [
+    "gif-webp-apng-or-video",
+    "GIF, WebP, APNG or video?",
+    "Choose how your animation moves.",
+    "/images/coastline.jpg",
+  ],
+  [
     "format-json-without-losing-precision",
     "Make JSON readable. Keep the details.",
     "Format locally, and preserve number precision.",

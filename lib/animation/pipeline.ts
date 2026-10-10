@@ -1,4 +1,4 @@
-import { orientedSize } from "@/lib/image-compressor/geometry"
+import { clampCrop, orientedSize } from "@/lib/image-compressor/geometry"
 import { extractOriented, flattenAlpha } from "@/lib/image-compressor/pixels"
 import type { Pixels } from "@/lib/image-compressor/ssim"
 import {
@@ -15,13 +15,14 @@ import {
   bestFits,
   budgetProblem,
   encodePlan,
+  layoutFor,
   matte,
-  outputSize,
   playsFor,
   type AnimationSettings,
   type Trim,
 } from "./settings"
 import type { Source } from "./source"
+import { applyLevel, describeLevel, fitLadder, LADDER } from "./target-size"
 import { planFrames, sum } from "./timeline"
 import type { Frame } from "./types"
 
@@ -60,43 +61,65 @@ export async function gatherFrames(
   const steps = planFrames(source.durations, {
     start: trim.start,
     end: trim.end,
+    longest: settings.maxSeconds === null ? null : settings.maxSeconds * 1000,
     speed: settings.speed,
     fps: settings.fps,
     reverse: settings.reverse,
     boomerang: settings.boomerang,
   })
-  const size = outputSize(source, settings)
+  const oriented = orientedSize(source, settings.rotation)
+  // A crop is kept inside the picture, however it was arrived at.
+  const crop = trim.crop ? clampCrop(trim.crop, oriented) : null
+  const kept = crop ?? { x: 0, y: 0, ...oriented }
+  const { canvas, picture, x, y } = layoutFor(source, settings, crop)
   const needed = new Set(steps.map((step) => step.source))
-  const problem = budgetProblem(needed.size, size, settings)
+  const problem = budgetProblem(needed.size, canvas, settings)
   if (problem) throw new Error(problem)
   const order = [...needed].sort((a, b) => a - b)
-  const oriented = orientedSize(source, settings.rotation)
   const background = matte(settings)
   const kernel =
-    size.width > oriented.width || size.height > oriented.height
+    picture.width > kept.width || picture.height > kept.height
       ? "mitchell"
       : "lanczos3"
+  const padded =
+    picture.width !== canvas.width || picture.height !== canvas.height
   const ready = new Map<number, Pixels>()
   let position = 0
-  for await (const canvas of source.read(order)) {
+  for await (const frame of source.read(order)) {
     await deps.checkpoint()
     deps.progress(`Reading frame ${position + 1} of ${order.length}`)
     // This also copies the frame off the shared canvas.
-    let pixels = extractOriented(
-      canvas,
+    const pixels = extractOriented(
+      frame,
       settings.rotation,
       settings.flipX,
       settings.flipY,
-      { x: 0, y: 0, ...oriented }
+      kept
     )
-    if (background) pixels = flattenAlpha(pixels, background)
-    const sized = await deps.resize(pixels, size, kernel)
+    const sized = await deps.resize(pixels, picture, kernel)
     // A resampler may hand back an ImageData, whose fields do not copy with "...".
-    ready.set(order[position], {
+    let placed: Pixels = {
       data: sized.data,
       width: sized.width,
       height: sized.height,
-    })
+    }
+    if (padded) {
+      // An exact size: the picture sits in the middle of a clear canvas.
+      const data = new Uint8ClampedArray(canvas.width * canvas.height * 4)
+      for (let row = 0; row < picture.height; row++)
+        data.set(
+          sized.data.subarray(
+            row * picture.width * 4,
+            (row + 1) * picture.width * 4
+          ),
+          ((y + row) * canvas.width + x) * 4
+        )
+      placed = { data, ...canvas }
+    }
+    ready.set(
+      order[position],
+      background ? flattenAlpha(placed, background) : placed
+    )
     position++
   }
   // A damaged file can hold fewer frames than it claims.
@@ -108,8 +131,8 @@ export async function gatherFrames(
   }))
 }
 
-/** Convert one opened animation with the chosen settings. */
-export async function convertAnimation(
+/** Convert one opened animation with the settings exactly as given. */
+async function convertOnce(
   source: Source,
   settings: AnimationSettings,
   trim: Trim,
@@ -136,7 +159,14 @@ export async function convertAnimation(
   }
   if (plan.kind === "video") {
     deps.progress(`Encoding ${frames.length} frames as video…`)
-    const video = await deps.encodeVideo(frames, plan.container, plan.level)
+    // With a size limit, the bitrate is what fills it: a little under, as files carry some overhead.
+    const level =
+      settings.sizeLimit === null
+        ? plan.level
+        : (settings.sizeLimit * 8 * 0.9) /
+          (duration / 1000) /
+          (width * height * Math.min(60, (frames.length * 1000) / duration))
+    const video = await deps.encodeVideo(frames, plan.container, level)
     return {
       bytes: video.bytes,
       width,
@@ -170,4 +200,44 @@ export async function convertAnimation(
     plays,
     note,
   }
+}
+
+const sizeText = (bytes: number) =>
+  bytes >= 1_000_000
+    ? `${Math.round(bytes / 100_000) / 10} MB`
+    : `${Math.round(bytes / 1000)} KB`
+
+/**
+ * Convert one opened animation. With a size limit, lower quality, frame rate
+ * and size step by step until the file fits, and say what was changed.
+ */
+export async function convertAnimation(
+  source: Source,
+  settings: AnimationSettings,
+  trim: Trim,
+  deps: ConvertDeps
+): Promise<Converted> {
+  const limit = settings.sizeLimit
+  if (limit === null) return convertOnce(source, settings, trim, deps)
+  const fitted = await fitLadder(LADDER.length, limit, async (index, tries) => {
+    const label = `Fitting under ${sizeText(limit)} · try ${tries}`
+    deps.progress(label)
+    const result = await convertOnce(
+      source,
+      applyLevel(settings, LADDER[index]),
+      trim,
+      { ...deps, progress: (step) => deps.progress(`${label} · ${step}`) }
+    )
+    return { result, bytes: result.bytes.length }
+  })
+  const changes = describeLevel(settings, LADDER[fitted.index])
+  const notes = [
+    fitted.result.note,
+    fitted.fits
+      ? changes.length
+        ? `To fit under ${sizeText(limit)}: ${changes.join(", ")}.`
+        : null
+      : `This could not be made smaller than ${sizeText(fitted.result.bytes.length)}, which is over ${sizeText(limit)}. Trim it or choose a smaller size.`,
+  ].filter(Boolean)
+  return { ...fitted.result, note: notes.length ? notes.join(" ") : null }
 }

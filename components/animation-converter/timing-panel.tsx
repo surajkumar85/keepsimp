@@ -15,6 +15,8 @@ import {
 import type { Update } from "./format-panel"
 import { TrimBar } from "./trim-bar"
 
+const lengthChoices = [3, 6, 10]
+
 /** Trim for the selected animation, then speed, frame rate, direction and looping for all. */
 export function TimingPanel({
   settings,
@@ -153,6 +155,65 @@ export function TimingPanel({
             />
           </div>
         )}
+      </Section>
+
+      <Section title="Length limit">
+        <ChoiceChips
+          label="Longest result"
+          hideLabel
+          value={
+            settings.maxSeconds === null
+              ? "none"
+              : lengthChoices.includes(settings.maxSeconds)
+                ? String(settings.maxSeconds)
+                : "custom"
+          }
+          onValueChange={(value) =>
+            update({
+              maxSeconds:
+                value === "none"
+                  ? null
+                  : value === "custom"
+                    ? 5
+                    : Number(value),
+            })
+          }
+          options={[
+            { value: "none", label: "No limit" },
+            ...lengthChoices.map((choice) => ({
+              value: String(choice),
+              label: `${choice} s`,
+            })),
+            { value: "custom", label: "Custom" },
+          ]}
+          hint="Every animation is cut to this length, counted from the start of its trim and before any change of speed."
+        />
+        {settings.maxSeconds !== null &&
+          !lengthChoices.includes(settings.maxSeconds) && (
+            <div className="w-32">
+              <label
+                htmlFor={`${ids}-length`}
+                className="mb-2 block text-sm font-medium"
+              >
+                Longest result (s)
+              </label>
+              <Input
+                id={`${ids}-length`}
+                type="number"
+                inputMode="decimal"
+                min={0.1}
+                max={600}
+                step={0.1}
+                value={
+                  Number.isNaN(settings.maxSeconds) ? "" : settings.maxSeconds
+                }
+                onChange={(event) =>
+                  update({ maxSeconds: event.target.valueAsNumber })
+                }
+                className="font-mono"
+              />
+            </div>
+          )}
       </Section>
 
       <Section title="Direction and looping">

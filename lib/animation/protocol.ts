@@ -1,4 +1,4 @@
-import type { Rotation } from "@/lib/image-compressor/geometry"
+import type { Rect, Rotation, Size } from "@/lib/image-compressor/geometry"
 import type { AnimationSettings, Target, Trim } from "./settings"
 import type { SourceFormat } from "./source"
 
@@ -40,13 +40,36 @@ export interface ViewRequest {
     inputKey: string
     /** Milliseconds from the start of that file. */
     time: number
-    /** Turn or mirror the frame, so an original lines up with its result. */
-    orientation?: { rotation: Rotation; flipX: boolean; flipY: boolean }
+    /** Turn, mirror, crop and pad the frame, so an original lines up with its result. */
+    orientation?: {
+      rotation: Rotation
+      flipX: boolean
+      flipY: boolean
+      /** The part of the turned picture that is kept. */
+      crop?: Rect | null
+      /** The shape of the result, when the picture is centred in an exact size. */
+      pad?: Size | null
+    }
   }[]
 }
 
+/** Convert one animation to several formats to compare their sizes; nothing is kept. */
+export interface CompareRequest {
+  type: "compare"
+  input: SourceInput
+  settings: AnimationSettings
+  trim: Trim
+  targets: Target[]
+}
+
+export type CompareResponse =
+  | { type: "compare-progress"; label: string }
+  | { type: "compared"; results: { target: Target; bytes: number }[] }
+  | { type: "compare-error"; message: string }
+
 export type AnimationRequest =
   | ProcessRequest
+  | CompareRequest
   | ViewRequest
   | { type: "supersede"; generation: number }
   | { type: "forget"; id: string }

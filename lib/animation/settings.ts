@@ -1,6 +1,7 @@
 import { parseHexColor } from "@/lib/image-compressor/pixels"
 import {
   orientedSize,
+  type Rect,
   type Rotation,
   type Size,
 } from "@/lib/image-compressor/geometry"
@@ -13,7 +14,7 @@ export type FrameFormat = "png" | "webp" | "jpeg"
 export type QualityChoice =
   "balanced" | "high" | "small" | "lossless" | "custom"
 export type ResizeChoice =
-  "original" | "width" | "height" | "percent" | "longEdge"
+  "original" | "width" | "height" | "percent" | "longEdge" | "exact"
 export type LoopChoice = "forever" | "once" | "count"
 export type BackgroundChoice = "keep" | "white" | "black" | "custom"
 
@@ -122,6 +123,9 @@ export const FRAME_BUDGET = 96_000_000
 /** gifski takes every frame in one block and copies it, so it gets a smaller share. */
 export const BEST_BUDGET = 32_000_000
 export const DEFAULT_PATTERN = "{name}"
+/** The smallest and largest file sizes the tool will try to fit. */
+export const MIN_SIZE_LIMIT = 10_000
+export const MAX_SIZE_LIMIT = 100_000_000
 export const DEFAULT_BACKGROUND = "#ffffff"
 export const speedChoices = [0.25, 0.5, 0.75, 1, 1.5, 2, 3, 4] as const
 export const fpsChoices = [10, 12, 15, 20, 24, 30] as const
@@ -147,8 +151,18 @@ export interface AnimationSettings {
   /** Times to play when loop is "count". */
   loopCount: number
   resize: ResizeChoice
-  /** Pixels, or percent when resize is "percent". */
+  /** Pixels (the width, for an exact size), or percent when resize is "percent". */
   resizeValue: number
+  /** Height in pixels when resize is "exact". */
+  resizeHeight: number
+  /** Whether an animation smaller than the size asked for is scaled up to it. */
+  enlarge: boolean
+  /** Longest result in seconds, counted from the start of the trim; null for no limit. */
+  maxSeconds: number | null
+  /** Largest file in bytes; the tool lowers quality, frame rate and size to fit. Null for no limit. */
+  sizeLimit: number | null
+  /** Set by the tool while it fits a size limit: a further scale on top of the size chosen. */
+  shrink: number
   rotation: Rotation
   flipX: boolean
   flipY: boolean
@@ -157,10 +171,12 @@ export interface AnimationSettings {
   pattern: string
 }
 
-/** The part of one animation to keep, in milliseconds of the original. */
+/** The part of one animation to keep: in time (milliseconds of the original) and in the picture. */
 export interface Trim {
   start: number
   end: number | null
+  /** A rectangle of the picture as it looks after turning and flipping; absent for all of it. */
+  crop?: Rect | null
 }
 
 export const defaultSettings: AnimationSettings = {
@@ -179,6 +195,11 @@ export const defaultSettings: AnimationSettings = {
   loopCount: 3,
   resize: "original",
   resizeValue: 480,
+  resizeHeight: 480,
+  enlarge: true,
+  maxSeconds: null,
+  sizeLimit: null,
+  shrink: 1,
   rotation: 0,
   flipX: false,
   flipY: false,
@@ -210,35 +231,89 @@ export function matte(
   return parseHexColor(settings.backgroundColor) ?? [255, 255, 255]
 }
 
-/** The size of the result for a source of a given size. */
-export function outputSize(source: Size, settings: AnimationSettings): Size {
-  const oriented = orientedSize(source, settings.rotation)
+/** Where the picture sits in the result: the whole canvas, and the picture inside it. */
+export interface Layout {
+  canvas: Size
+  /** The picture after scaling. It is smaller than the canvas only for an exact size. */
+  picture: Size
+  /** Top-left corner of the picture on the canvas. */
+  x: number
+  y: number
+}
+
+const even = (value: number) => Math.max(2, value - (value % 2))
+
+/**
+ * Work out the size of a result and where the picture sits in it.
+ * @param crop The part of the turned picture that is kept, if it was cropped.
+ */
+export function layoutFor(
+  source: Size,
+  settings: AnimationSettings,
+  crop?: Size | null
+): Layout {
+  const kept = crop ?? orientedSize(source, settings.rotation)
+  const video = targets[settings.target].kind === "video"
+  if (settings.resize === "exact") {
+    // An exact size is a canvas: the picture is fitted inside it and centred.
+    const width = Math.min(MAX_EDGE, Math.max(1, settings.resizeValue))
+    const height = Math.min(MAX_EDGE, Math.max(1, settings.resizeHeight))
+    const canvas = video
+      ? { width: even(width), height: even(height) }
+      : { width, height }
+    let scale = Math.min(canvas.width / kept.width, canvas.height / kept.height)
+    if (!settings.enlarge) scale = Math.min(1, scale)
+    const picture = {
+      width: Math.max(
+        1,
+        Math.min(canvas.width, Math.round(kept.width * scale))
+      ),
+      height: Math.max(
+        1,
+        Math.min(canvas.height, Math.round(kept.height * scale))
+      ),
+    }
+    return {
+      canvas,
+      picture,
+      x: Math.floor((canvas.width - picture.width) / 2),
+      y: Math.floor((canvas.height - picture.height) / 2),
+    }
+  }
   const value = settings.resizeValue
-  const scale =
+  let scale =
     settings.resize === "width"
-      ? value / oriented.width
+      ? value / kept.width
       : settings.resize === "height"
-        ? value / oriented.height
+        ? value / kept.height
         : settings.resize === "percent"
           ? value / 100
           : settings.resize === "longEdge"
-            ? value / Math.max(oriented.width, oriented.height)
+            ? value / Math.max(kept.width, kept.height)
             : 1
+  if (!settings.enlarge) scale = Math.min(1, scale)
   // Whatever was asked for, the result fits the largest size the tool writes.
-  const limit = Math.min(
-    scale,
-    MAX_EDGE / Math.max(oriented.width, oriented.height)
-  )
+  scale =
+    Math.min(scale, MAX_EDGE / Math.max(kept.width, kept.height)) *
+    settings.shrink
   const size = {
-    width: Math.max(1, Math.round(oriented.width * limit)),
-    height: Math.max(1, Math.round(oriented.height * limit)),
+    width: Math.max(1, Math.round(kept.width * scale)),
+    height: Math.max(1, Math.round(kept.height * scale)),
   }
   // Video encoders want even sides.
-  if (targets[settings.target].kind !== "video") return size
-  return {
-    width: Math.max(2, size.width - (size.width % 2)),
-    height: Math.max(2, size.height - (size.height % 2)),
-  }
+  const canvas = video
+    ? { width: even(size.width), height: even(size.height) }
+    : size
+  return { canvas, picture: canvas, x: 0, y: 0 }
+}
+
+/** The size of the result for a source of a given size. */
+export function outputSize(
+  source: Size,
+  settings: AnimationSettings,
+  crop?: Size | null
+): Size {
+  return layoutFor(source, settings, crop).canvas
 }
 
 export type EncodePlan =
@@ -422,11 +497,28 @@ export function settingsProblem(settings: AnimationSettings): string | null {
     if (!(settings.resizeValue >= 1 && settings.resizeValue <= 400))
       return "Enter a size from 1% to 400%."
   } else if (settings.resize !== "original") {
-    if (!whole(settings.resizeValue) || settings.resizeValue < 1)
+    const sides =
+      settings.resize === "exact"
+        ? [settings.resizeValue, settings.resizeHeight]
+        : [settings.resizeValue]
+    if (sides.some((side) => !whole(side) || side < 1))
       return "Enter a size in whole pixels."
-    if (settings.resizeValue > MAX_EDGE)
+    if (sides.some((side) => side > MAX_EDGE))
       return `Enter a size up to ${MAX_EDGE.toLocaleString("en")} pixels.`
   }
+  if (
+    settings.maxSeconds !== null &&
+    !(settings.maxSeconds >= 0.1 && settings.maxSeconds <= 600)
+  )
+    return "Enter a length limit from 0.1 to 600 seconds."
+  if (
+    settings.sizeLimit !== null &&
+    !(
+      settings.sizeLimit >= MIN_SIZE_LIMIT &&
+      settings.sizeLimit <= MAX_SIZE_LIMIT
+    )
+  )
+    return "Enter a file size from 10 KB to 100 MB."
   if (settings.quality === "custom") {
     if (customIsNumeric(settings)) {
       if (!(settings.customQuality >= 1 && settings.customQuality <= 100))
@@ -471,7 +563,9 @@ export function bestFits(frames: number, size: Size) {
 
 /** Everything that changes the bytes of a result. File names are applied afterwards. */
 export function processingKey(settings: AnimationSettings, trim: Trim) {
-  const { pattern, ...rest } = settings
+  // The file name is applied afterwards, and "shrink" is the tool's own, set while it works.
+  const { pattern, shrink, ...rest } = settings
   void pattern
+  void shrink
   return JSON.stringify({ ...rest, trim })
 }

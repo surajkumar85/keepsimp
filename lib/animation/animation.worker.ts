@@ -9,7 +9,7 @@ import {
   tooLarge,
 } from "@/lib/image-compressor/decode"
 import { sniffFormat } from "@/lib/image-compressor/formats"
-import { orientedSize } from "@/lib/image-compressor/geometry"
+import { clampCrop, orientedSize } from "@/lib/image-compressor/geometry"
 import { extractOriented } from "@/lib/image-compressor/pixels"
 import type { Pixels } from "@/lib/image-compressor/ssim"
 import { createDeps } from "./deps"
@@ -17,12 +17,14 @@ import { convertAnimation } from "./pipeline"
 import type {
   AnimationRequest,
   AnimationResponse,
+  CompareRequest,
+  CompareResponse,
   ProcessRequest,
   SourceInput,
   ViewRequest,
   ViewResponse,
 } from "./protocol"
-import { MAX_FRAMES, settingsProblem } from "./settings"
+import { MAX_FRAMES, settingsProblem, targets } from "./settings"
 import {
   allFrames,
   isVideo,
@@ -47,7 +49,7 @@ let generation = 0
 class Abandoned extends Error {}
 
 const post = (
-  message: AnimationResponse | ViewResponse,
+  message: AnimationResponse | ViewResponse | CompareResponse,
   transfer: Transferable[] = []
 ) => self.postMessage(message, transfer)
 
@@ -234,6 +236,65 @@ async function process(job: ProcessRequest) {
   }
 }
 
+/** Convert to each format in turn and report the sizes; a format this browser cannot write is left out. */
+async function compare(job: CompareRequest) {
+  const progress = (label: string) => post({ type: "compare-progress", label })
+  setCodecLoadListener((label) => progress(`Loading the ${label}…`))
+  let source: Source | null = null
+  try {
+    source = await open(job.input)
+    const results = []
+    for (const target of job.targets) {
+      progress(`Trying ${targets[target].label}…`)
+      try {
+        const result = await convertAnimation(
+          source,
+          // The comparison is at the chosen quality, not at a size limit.
+          { ...job.settings, target, sizeLimit: null },
+          job.trim,
+          createDeps(
+            async () => {},
+            () => {},
+            encodeVideo
+          )
+        )
+        results.push({ target, bytes: result.bytes.length })
+      } catch (error) {
+        // A video format the browser cannot write simply does not take part.
+        if (targets[target].kind !== "video") throw error
+      }
+    }
+    post({ type: "compared", results })
+  } catch (error) {
+    post({ type: "compare-error", message: readable(error) })
+  } finally {
+    source?.close?.()
+  }
+}
+
+/** Centre a picture on a clear canvas of another shape, at the picture's own scale. */
+function padTo(pixels: Pixels, shape: { width: number; height: number }) {
+  const wide = pixels.width * shape.height > pixels.height * shape.width
+  const width = wide
+    ? pixels.width
+    : Math.round((pixels.height * shape.width) / shape.height)
+  const height = wide
+    ? Math.round((pixels.width * shape.height) / shape.width)
+    : pixels.height
+  const data = new Uint8ClampedArray(width * height * 4)
+  const left = Math.floor((width - pixels.width) / 2)
+  const top = Math.floor((height - pixels.height) / 2)
+  for (let row = 0; row < pixels.height; row++)
+    data.set(
+      pixels.data.subarray(
+        row * pixels.width * 4,
+        (row + 1) * pixels.width * 4
+      ),
+      ((top + row) * width + left) * 4
+    )
+  return { data, width, height }
+}
+
 /** An opened file being stepped through for the paused preview. */
 interface Viewer {
   inputKey: string
@@ -282,19 +343,20 @@ async function view(job: ViewRequest) {
       }
       if (viewer.frame) {
         // Either way this copies the frame off the shared canvas.
-        const still = orientation
-          ? extractOriented(
-              viewer.frame,
-              orientation.rotation,
-              orientation.flipX,
-              orientation.flipY,
-              {
-                x: 0,
-                y: 0,
-                ...orientedSize(viewer.frame, orientation.rotation),
-              }
-            )
-          : copy(viewer.frame)
+        let still = copy(viewer.frame)
+        if (orientation) {
+          const bounds = orientedSize(viewer.frame, orientation.rotation)
+          still = extractOriented(
+            viewer.frame,
+            orientation.rotation,
+            orientation.flipX,
+            orientation.flipY,
+            orientation.crop
+              ? clampCrop(orientation.crop, bounds)
+              : { x: 0, y: 0, ...bounds }
+          )
+          if (orientation.pad) still = padTo(still, orientation.pad)
+        }
         frames[slot] = await previewBitmap(
           still,
           Math.max(still.width, still.height)
@@ -321,8 +383,8 @@ self.onmessage = (event: MessageEvent<AnimationRequest>) => {
       cached.source.close?.()
       cached = null
     }
-  } else if (request.type === "view")
-    viewing = viewing.then(() => view(request))
+  } else if (request.type === "compare") void compare(request)
+  else if (request.type === "view") viewing = viewing.then(() => view(request))
   else {
     generation = Math.max(generation, request.generation)
     void process(request)

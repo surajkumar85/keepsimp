@@ -3,10 +3,13 @@
 import { WorkerPool } from "@/lib/image-batch/pool"
 import type {
   AnimationResponse,
+  CompareRequest,
+  CompareResponse,
   ProcessRequest,
   ViewRequest,
   ViewResponse,
 } from "./protocol"
+import type { Target } from "./settings"
 
 type Job = Omit<ProcessRequest, "type" | "generation">
 
@@ -87,4 +90,30 @@ export class FrameViewer {
     this.worker?.terminate()
     this.worker = null
   }
+}
+
+/**
+ * Convert one animation to several formats in a worker of its own and report
+ * the sizes. Returns a promise and a `cancel` that stops the work.
+ */
+export function compareFormats(
+  request: Omit<CompareRequest, "type">,
+  onProgress: (label: string) => void
+) {
+  const worker = createWorker()
+  const promise = new Promise<{ target: Target; bytes: number }[]>(
+    (resolve, reject) => {
+      worker.onmessage = (event: MessageEvent<CompareResponse>) => {
+        const message = event.data
+        if (message.type === "compare-progress") onProgress(message.label)
+        else if (message.type === "compared") resolve(message.results)
+        else if (message.type === "compare-error")
+          reject(new Error(message.message))
+      }
+      worker.onerror = () =>
+        reject(new Error("The comparison stopped unexpectedly. Try again."))
+      worker.postMessage({ ...request, type: "compare" })
+    }
+  ).finally(() => worker.terminate())
+  return { promise, cancel: () => worker.terminate() }
 }

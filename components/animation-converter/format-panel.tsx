@@ -1,10 +1,13 @@
 "use client"
 
 import { useId } from "react"
-import { IconInfoCircle } from "@tabler/icons-react"
+import { IconInfoCircle, IconScale } from "@tabler/icons-react"
 import { Section, ToggleRow } from "@/components/image-batch/controls"
+import { Button } from "@/components/ui/button"
 import { ChoiceChips } from "@/components/ui/choice-chips"
 import { Input } from "@/components/ui/input"
+import type { SizeRow } from "@/lib/animation/compare"
+import { sizeLabel } from "@/lib/image-compressor/formats"
 import {
   customIsNumeric,
   frameFormats,
@@ -16,6 +19,12 @@ import {
   type QualityChoice,
   type Target,
 } from "@/lib/animation/settings"
+
+export type ComparisonState =
+  | { status: "idle" }
+  | { status: "running"; label: string }
+  | { status: "done"; rows: SizeRow[] }
+  | { status: "error"; message: string }
 
 export type Update = (
   change:
@@ -37,6 +46,10 @@ export function FormatPanel({
   update,
   problem,
   video,
+  comparison,
+  canCompare,
+  onCompare,
+  onCancelCompare,
 }: {
   settings: AnimationSettings
   update: Update
@@ -44,6 +57,10 @@ export function FormatPanel({
   problem: string | null
   /** Which video formats this browser can write; null while that is being checked. */
   video: { mp4: boolean; webm: boolean } | null
+  comparison: ComparisonState
+  canCompare: boolean
+  onCompare: () => void
+  onCancelCompare: () => void
 }) {
   const ids = useId()
   const gif = settings.target === "gif"
@@ -208,6 +225,94 @@ export function FormatPanel({
             />
             {problem}
           </p>
+        )}
+      </Section>
+
+      <Section title="Which format is smallest?">
+        <p className="text-sm text-muted-foreground">
+          Convert the selected animation to every format with your settings and
+          compare the real sizes.
+        </p>
+        {comparison.status === "running" ? (
+          <div className="flex flex-wrap items-center gap-3" role="status">
+            <span className="text-sm text-muted-foreground">
+              {comparison.label}
+            </span>
+            <Button variant="outline" onClick={onCancelCompare}>
+              Cancel
+            </Button>
+          </div>
+        ) : (
+          <Button variant="outline" onClick={onCompare} disabled={!canCompare}>
+            <IconScale aria-hidden="true" />
+            {comparison.status === "done" ? "Compare again" : "Compare formats"}
+          </Button>
+        )}
+        {comparison.status === "error" && (
+          <p role="alert" className="text-sm text-destructive">
+            {comparison.message}
+          </p>
+        )}
+        {comparison.status === "done" && (
+          <div className="relative overflow-x-auto rounded-lg border">
+            <table
+              className="w-full text-left text-sm"
+              data-testid="comparison"
+            >
+              <caption className="sr-only">
+                File size for each format, smallest first
+              </caption>
+              <thead className="bg-muted text-xs text-muted-foreground">
+                <tr>
+                  <th scope="col" className="py-2 pr-2 pl-3 font-medium">
+                    Format
+                  </th>
+                  <th scope="col" className="px-2 py-2 font-medium">
+                    Size
+                  </th>
+                  <th scope="col" className="py-2 pr-1">
+                    <span className="sr-only">Action</span>
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {comparison.rows.map((row) => (
+                  <tr key={row.target} className="border-t align-top">
+                    <th scope="row" className="py-2 pr-2 pl-3 font-medium">
+                      {targets[row.target].label}
+                      {row.smallest && (
+                        <span className="mt-1 block w-fit rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
+                          Smallest
+                        </span>
+                      )}
+                    </th>
+                    <td className="px-2 py-2">
+                      <span className="block whitespace-nowrap">
+                        {sizeLabel(row.bytes)}
+                      </span>
+                      <span className="block text-xs whitespace-nowrap text-muted-foreground">
+                        {row.ratio < 1
+                          ? `${Math.round((1 - row.ratio) * 100)}% smaller`
+                          : row.ratio > 1
+                            ? `${Math.round((row.ratio - 1) * 100)}% larger`
+                            : "same"}
+                      </span>
+                    </td>
+                    <td className="py-1 pr-1 pl-0 text-right">
+                      <Button
+                        variant="ghost"
+                        aria-label={`Use ${targets[row.target].label}`}
+                        disabled={settings.target === row.target}
+                        onClick={() => update({ target: row.target })}
+                      >
+                        Use
+                      </Button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </Section>
     </div>
