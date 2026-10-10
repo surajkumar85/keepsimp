@@ -3,6 +3,7 @@ import { readdir, readFile } from "node:fs/promises"
 import { join, relative, sep } from "node:path"
 import { test, expect, type Download, type Page } from "@playwright/test"
 import sharp from "sharp"
+import { readPdf } from "../tests/pdf-reader"
 import { serveExport, type Site } from "./static-server"
 
 // The other suites block service workers; these journeys are about the worker.
@@ -211,6 +212,29 @@ test("every tool works offline after one visit", async ({ page }) => {
     { timeout: 150_000 }
   )
   await expect(page.getByRole("main").getByRole("alert")).toBeHidden()
+
+  // The PDF merger's engine (10 MB) and its samples come from the saved copy.
+  await page.goto(`${site.origin}/dashboard/pdf-merger/`)
+  await page.getByRole("button", { name: "Try a sample" }).click()
+  await expect(page.getByTestId("pdf-merger")).toHaveAttribute(
+    "data-ready",
+    "true",
+    { timeout: 150_000 }
+  )
+  await page.getByRole("button", { name: "Merge PDF" }).click()
+  await expect(page.getByTestId("pdf-merger")).toHaveAttribute(
+    "data-merged",
+    "true",
+    { timeout: 150_000 }
+  )
+  pending = page.waitForEvent("download")
+  await page.getByRole("link", { name: "Download PDF" }).click()
+  const merged = await readPdf(new Uint8Array(await bytesOf(await pending)))
+  expect(merged.pages).toHaveLength(5)
+  expect(merged.bookmarks.map((entry) => entry.title)).toEqual([
+    "keepsimp-report",
+    "keepsimp-appendix",
+  ])
 
   await page.goto(`${site.origin}/dashboard/json-formatter/`)
   await replaceEditor(

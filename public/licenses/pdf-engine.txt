@@ -1,0 +1,27 @@
+KeepSimp PDF merger: third-party engine
+=======================================
+
+The PDF merger runs MuPDF in your browser, compiled to WebAssembly. KeepSimp itself is
+licensed under AGPL-3.0-only (see LICENSE in the repository), which is compatible with
+MuPDF's licence. Source code is available from the links below.
+
+Component        Version  Licence             Source
+---------------  -------  ------------------  ----------------------------------------------
+mupdf (MuPDF.js) 1.28.1   AGPL-3.0-or-later   https://www.npmjs.com/package/mupdf
+                                              https://cgit.ghostscript.com/mupdf.git/
+                                              https://github.com/ArtifexSoftware/mupdf.js
+
+MuPDF is Copyright (C) 2004-2026 Artifex Software, Inc. It is free software: you can
+redistribute it and/or modify it under the terms of the GNU Affero General Public License
+as published by the Free Software Foundation, either version 3 of the License, or (at
+your option) any later version. It is distributed WITHOUT ANY WARRANTY; without even the
+implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+See https://www.gnu.org/licenses/agpl-3.0.html for the full text.
+
+MuPDF bundles further components (FreeType, HarfBuzz, OpenJPEG, jbig2dec, zlib, libjpeg,
+Little CMS, Gumbo and others) under their own permissive licences; they are listed in the
+MuPDF source tree under thirdparty/.
+
+Used only in tests, not shipped to the browser:
+@cantoo/pdf-lib  2.11.x   MIT                 https://github.com/cantoo-scribe/pdf-lib
+pdfjs-dist       6.4.x    Apache-2.0          https://github.com/mozilla/pdf.js

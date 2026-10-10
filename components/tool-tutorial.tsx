@@ -22,7 +22,8 @@ export interface TutorialContent {
   intro: string
   steps: { title: string; text: string }[]
   options: { term: string; detail: string }[]
-  guideHref: string
+  /** The journal article that goes with the tool, once it is written. */
+  guideHref?: string
 }
 
 /** Help section for a tool: tutorial video with captions, written steps and an options reference. */
@@ -107,12 +108,14 @@ export function ToolTutorial({ content }: { content: TutorialContent }) {
           ))}
         </dl>
       </details>
-      <Link
-        href={content.guideHref}
-        className="mt-3 inline-flex min-h-11 items-center text-sm text-primary underline underline-offset-4"
-      >
-        Read the step-by-step guide
-      </Link>
+      {content.guideHref && (
+        <Link
+          href={content.guideHref}
+          className="mt-3 inline-flex min-h-11 items-center text-sm text-primary underline underline-offset-4"
+        >
+          Read the step-by-step guide
+        </Link>
+      )}
     </section>
   )
 }

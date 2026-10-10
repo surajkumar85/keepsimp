@@ -118,6 +118,7 @@ export function DropZone({
   inputId = INPUT_ID,
   formats = listedFormats,
   accept,
+  icon: Icon = IconPhotoUp,
 }: {
   /** Receives the first file; use `onFiles` to accept several at once. */
   onFile?: (file: File) => void
@@ -129,6 +130,8 @@ export function DropZone({
   /** Format names listed under the buttons. */
   formats?: string[]
   accept?: string
+  /** Shown above the heading and on the button; a picture by default. */
+  icon?: typeof IconPhotoUp
 }) {
   const emit = (files: File[]) =>
     onFiles ? onFiles(files) : onFile?.(files[0])
@@ -145,7 +148,7 @@ export function DropZone({
       )}
     >
       <div className="mb-4 flex size-12 items-center justify-center rounded-lg bg-primary/10 text-primary">
-        <IconPhotoUp className="size-6" stroke={1.7} aria-hidden="true" />
+        <Icon className="size-6" stroke={1.7} aria-hidden="true" />
       </div>
       <h2 className="font-heading text-xl font-medium">
         {over ? copy.dropping : copy.heading}
@@ -168,7 +171,7 @@ export function DropZone({
               "cursor-pointer peer-focus-visible:ring-3 peer-focus-visible:ring-ring/50 peer-disabled:pointer-events-none peer-disabled:opacity-50"
             )}
           >
-            <IconPhotoUp aria-hidden="true" /> {copy.action}
+            <Icon aria-hidden="true" /> {copy.action}
           </label>
         </div>
         <Button variant="outline" size="lg" onClick={onSample} disabled={busy}>

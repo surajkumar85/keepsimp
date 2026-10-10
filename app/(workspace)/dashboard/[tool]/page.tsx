@@ -13,6 +13,8 @@ import { ImageConverterTutorial } from "@/components/image-converter/tutorial"
 import { ImageResizer } from "@/components/image-resizer/image-resizer"
 import { ImageResizerTutorial } from "@/components/image-resizer/tutorial"
 import { JsonTool } from "@/components/json-tool"
+import { PdfMerger } from "@/components/pdf-merger/pdf-merger"
+import { PdfMergerTutorial } from "@/components/pdf-merger/tutorial"
 import { JsonTutorial } from "@/components/json-workspace/tutorial"
 
 const ready = tools.filter((tool) => tool.status === "available")
@@ -59,7 +61,9 @@ export default async function ToolPage({
           applicationCategory:
             tool.category === "image"
               ? "MultimediaApplication"
-              : "DeveloperApplication",
+              : tool.category === "document"
+                ? "BusinessApplication"
+                : "DeveloperApplication",
           operatingSystem: "Modern web browser",
           description: tool.description,
           ...(id === "json-formatter"
@@ -100,6 +104,8 @@ export default async function ToolPage({
         <ImageConverter />
       ) : id === "animation-converter" ? (
         <AnimationConverter />
+      ) : id === "pdf-merger" ? (
+        <PdfMerger />
       ) : (
         <JsonTool />
       )}
@@ -111,6 +117,8 @@ export default async function ToolPage({
         <ImageConverterTutorial />
       ) : id === "animation-converter" ? (
         <AnimationConverterTutorial />
+      ) : id === "pdf-merger" ? (
+        <PdfMergerTutorial />
       ) : (
         <JsonTutorial />
       )}

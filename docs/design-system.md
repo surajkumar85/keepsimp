@@ -1,6 +1,6 @@
 # KeepSimp design reference
 
-Version 3.6 · marketing, functional dashboard, chips, image comparison, batch tools, result tables, JSON workspace, animation player and adjustment sliders · updated 10 October 2026 · applies to every future implementation. Tokens are unchanged from version 3.
+Version 3.7 · marketing, functional dashboard, chips, image comparison, batch tools, result tables, JSON workspace, animation player, adjustment sliders and document lists · updated 11 October 2026 · applies to every future implementation. Tokens are unchanged from version 3.
 
 KeepSimp combines the requested shadcn preset with Airbnb-informed clarity, spacing, hierarchy, and human language. The exact numbers below are **KeepSimp decisions**, not an official Airbnb token export. Airbnb's public references reviewed here do not provide a complete numerical radius specification. We retain our own teal identity and fonts.
 
@@ -126,6 +126,10 @@ Trim bars (`components/animation-converter/trim-bar.tsx`) draw a strip of frames
 Reorderable lists (`components/animation-converter/frame-list.tsx`) are ordered lists of `rounded-lg` rows with a position number, a 48px thumbnail, the name, the row's own field and icon buttons. Every row has "move earlier" and "move later" buttons with the position in their accessible names, so reordering never depends on dragging; dragging is an extra. The buttons at either end are disabled, not hidden. Long lists scroll inside a fixed maximum height.
 
 Adjustment sliders (`components/animation-converter/effects-panel.tsx`) are native range inputs with the `primary` accent, 44px/36px tall, for values a person tunes by eye, such as brightness. The label carries the current value in monospace with its sign, a neutral value sits in the middle of the track, and one "Reset" button appears only while something is changed. Use chips, not a slider, when there are a handful of sensible values (fade lengths, text sizes). Options that only matter once something is present, such as text colour before any text is typed or a logo's position before a logo is added, stay hidden until then; the fields that reveal them are always visible and labelled.
+
+Document lists (`components/pdf-merger/file-list.tsx`) follow the reorderable-list rules for files that become one result. A row is a `rounded-xl` card with its position, a 64px picture of the first page, the name, facts, the row's own field and its icon buttons, which carry the file's name in their accessible names. What the page has to say about a file (repaired, unlocked, a signature that cannot be kept) sits in the row as muted text with an information icon; a file that cannot be used takes the `destructive` border and says it is left out. A locked file's row holds its own password form: a labelled password field, an "Unlock" button and a hint that turns into an alert when the password is wrong. Passwords are never stored.
+
+Results that are built on request (`components/pdf-merger/pdf-merger.tsx`) use one card: a line saying what would be made, a `lg` primary button to make it, then in the same place a progress bar with a cancel button, then the facts of the result with a `lg` primary download and an outline "open" action. A change that makes the result out of date puts the build button back with a sentence saying why. Use this instead of converting on every change when a result is slow or large to make.
 
 Crop overlays dim the excluded area with a `background` veil, show rule-of-thirds guides and eight handles with 44px/28px hit areas, and pair the box with exact pixel fields. The image compressor reference is `docs/image-compressor.md`.
 

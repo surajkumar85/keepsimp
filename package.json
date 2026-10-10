@@ -22,6 +22,7 @@
     "tutorial:video": "node scripts/tutorial-video.mjs",
     "pwa:icons": "node scripts/pwa-icons.mjs",
     "samples:animations": "node scripts/sample-animations.mjs",
+    "samples:pdfs": "node scripts/sample-pdfs.mjs",
     "check": "npm run design:check && npm run format:check && npm run lint && npm run build && npm run typecheck && npm run test:coverage",
     "audit:production": "npm audit --omit=dev --audit-level=high"
   },
@@ -57,6 +58,7 @@
     "libheif-js": "^1.23.5",
     "libimagequant-wasm": "^0.3.0",
     "mediabunny": "^1.61.3",
+    "mupdf": "^1.28.1",
     "next": "16.3.8",
     "next-themes": "^0.4.6",
     "papaparse": "^5.7.0",
@@ -68,6 +70,7 @@
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.13.0",
+    "@cantoo/pdf-lib": "^2.11.1",
     "@playwright/test": "^1.64.0",
     "@tailwindcss/postcss": "^4",
     "@testing-library/dom": "^10.4.2",
