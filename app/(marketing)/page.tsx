@@ -68,7 +68,7 @@ const faqs = [
   ],
   [
     "Can I use it on my phone?",
-    "Yes, with a current mobile browser. The image compressor accepts files up to 50 MB and 50 million pixels; the resizer and converter accept 20 MB, 16 million pixels and 4096 pixels per output side. Large images may take longer or use more memory on a phone.",
+    "Yes, with a current mobile browser. The image compressor and resizer accept files up to 50 MB and 50 million pixels, and the resizer takes up to 50 images at once; the converter accepts 20 MB, 16 million pixels and 4096 pixels per output side. Large images may take longer or use more memory on a phone.",
   ],
   [
     "Will compression always make my image smaller?",

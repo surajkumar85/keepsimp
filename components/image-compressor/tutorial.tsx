@@ -1,13 +1,4 @@
-import Link from "next/link"
-import { IconChevronDown } from "@tabler/icons-react"
-import { StructuredData } from "@/components/structured-data"
-import { absoluteUrl } from "@/lib/site"
-
-const VIDEO = "/videos/image-compressor-tutorial.mp4"
-const POSTER = "/videos/image-compressor-tutorial-poster.webp"
-const CAPTIONS = "/videos/image-compressor-tutorial.vtt"
-/** Keep in step with the file written by `npm run tutorial:video`. */
-const DURATION = { iso: "PT1M44S", label: "1 min 44 s" }
+import { ToolTutorial, type TutorialContent } from "@/components/tool-tutorial"
 
 const steps = [
   {
@@ -97,103 +88,20 @@ const options: { term: string; detail: string }[] = [
   },
 ]
 
+const content: TutorialContent = {
+  video: "image-compressor-tutorial",
+  duration: { iso: "PT1M44S", label: "1 min 44 s" },
+  uploadDate: "2026-10-10",
+  name: "How to use the KeepSimp image compressor",
+  description:
+    "A short tour of compressing, comparing, converting, resizing, cropping and downloading an image in your browser.",
+  intro:
+    "Watch the tour, or follow the same six steps below. Every option is explained underneath.",
+  steps,
+  options,
+  guideHref: "/blog/compress-images-without-uploading/",
+}
+
 export function ImageCompressorTutorial() {
-  return (
-    <section aria-labelledby="tutorial-title" className="mt-8 border-t pt-5">
-      <StructuredData
-        data={{
-          "@context": "https://schema.org",
-          "@type": "VideoObject",
-          name: "How to use the KeepSimp image compressor",
-          description:
-            "A short tour of compressing, comparing, converting, resizing, cropping and downloading an image in your browser.",
-          thumbnailUrl: absoluteUrl(POSTER),
-          contentUrl: absoluteUrl(VIDEO),
-          uploadDate: "2026-10-10",
-          duration: DURATION.iso,
-        }}
-      />
-      <h2 id="tutorial-title" className="section-title">
-        A little help along the way
-      </h2>
-      <p className="mt-2 text-sm text-muted-foreground">
-        Watch the tour, or follow the same six steps below. Every option is
-        explained underneath.
-      </p>
-      <div className="mt-5 grid gap-6 lg:grid-cols-5">
-        <figure className="min-w-0 lg:col-span-3">
-          <video
-            controls
-            playsInline
-            preload="none"
-            poster={POSTER}
-            width={1920}
-            height={1080}
-            aria-describedby="tutorial-steps"
-            className="aspect-video h-auto w-full rounded-xl border bg-muted"
-          >
-            <source src={VIDEO} type="video/mp4" />
-            <track
-              kind="captions"
-              src={CAPTIONS}
-              srcLang="en"
-              label="English"
-            />
-            Your browser cannot play this video.{" "}
-            <a href={VIDEO} download>
-              Download the tutorial
-            </a>
-            .
-          </video>
-          <figcaption className="mt-2 text-xs text-muted-foreground">
-            {DURATION.label}, no sound. On-screen captions describe each step;
-            the same steps are written out here.
-          </figcaption>
-        </figure>
-        <ol id="tutorial-steps" className="space-y-4 lg:col-span-2">
-          {steps.map((step, index) => (
-            <li key={step.title} className="flex gap-3">
-              <span
-                aria-hidden="true"
-                className="flex size-7 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary"
-              >
-                {index + 1}
-              </span>
-              <span>
-                <span className="block text-sm font-medium">{step.title}</span>
-                <span className="text-sm text-muted-foreground">
-                  {step.text}
-                </span>
-              </span>
-            </li>
-          ))}
-        </ol>
-      </div>
-      <details className="group mt-6 rounded-xl border bg-card">
-        <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 rounded-xl px-4 py-3 font-heading text-base font-medium md:min-h-9 [&::-webkit-details-marker]:hidden">
-          Every option explained
-          <IconChevronDown
-            className="size-5 shrink-0 text-muted-foreground transition-transform duration-200 group-open:rotate-180 motion-reduce:transition-none"
-            aria-hidden="true"
-          />
-        </summary>
-        <dl className="grid gap-x-6 gap-y-4 border-t px-4 py-4 sm:grid-cols-2">
-          {options.map((option) => (
-            <div key={option.term}>
-              <dt className="text-sm font-medium">{option.term}</dt>
-              <dd className="mt-1 text-sm text-muted-foreground">
-                {option.detail}
-              </dd>
-            </div>
-          ))}
-        </dl>
-      </details>
-      <Link
-        href="/blog/compress-images-without-uploading/"
-        className="mt-3 inline-flex min-h-11 items-center text-sm text-primary underline underline-offset-4"
-      >
-        Read the step-by-step guide
-      </Link>
-    </section>
-  )
+  return <ToolTutorial content={content} />
 }

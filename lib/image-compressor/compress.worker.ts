@@ -1,16 +1,18 @@
 /// <reference lib="webworker" />
 import {
-  decodeAvif,
-  decodeHeic,
-  decodeJxl,
   decodeOutput,
-  decodeTiff,
   encodeImage,
   resizePixels,
   setCodecLoadListener,
 } from "./codecs"
-import type { InputFormat } from "./formats"
-import { MAX_PIXELS, type Size } from "./geometry"
+import {
+  decodeErrorMessage,
+  decodeImageFile,
+  previewBitmap,
+  tooLarge,
+  TOO_MANY_PIXELS,
+} from "./decode"
+import type { Size } from "./geometry"
 import { extractOriented, hasTransparency } from "./pixels"
 import { runPipeline } from "./pipeline"
 import type { Pixels } from "./ssim"
@@ -32,61 +34,15 @@ class Superseded extends Error {}
 const post = (message: WorkerResponse, transfer: Transferable[] = []) =>
   self.postMessage(message, transfer)
 
-const tooLarge = (width: number, height: number) => width * height > MAX_PIXELS
-
-async function nativeDecode(blob: Blob): Promise<Pixels> {
-  const bitmap = await createImageBitmap(blob, {
-    premultiplyAlpha: "none",
-    colorSpaceConversion: "default",
-  })
-  try {
-    if (tooLarge(bitmap.width, bitmap.height))
-      throw new Error("Use an image with at most 50 megapixels.")
-    const canvas = new OffscreenCanvas(bitmap.width, bitmap.height)
-    const context = canvas.getContext("2d", { willReadFrequently: true })
-    if (!context) throw new Error("Your browser cannot read image pixels here.")
-    context.drawImage(bitmap, 0, 0)
-    const image = context.getImageData(0, 0, bitmap.width, bitmap.height)
-    canvas.width = canvas.height = 0
-    return { data: image.data, width: image.width, height: image.height }
-  } finally {
-    bitmap.close()
-  }
-}
-
-async function decode(file: Blob, format: InputFormat): Promise<Pixels> {
-  const bytes = () => file.arrayBuffer()
-  if (format === "jxl") return decodeJxl(await bytes())
-  try {
-    return await nativeDecode(file)
-  } catch (error) {
-    if ((error as Error).message.includes("50 megapixels")) throw error
-    if (format === "avif") return decodeAvif(await bytes())
-    if (format === "heic") return decodeHeic(await bytes())
-    if (format === "tiff") return decodeTiff(await bytes())
-    throw error
-  }
-}
-
 async function open(request: OpenRequest) {
   try {
     source = null
     const pixels =
-      request.pixels ?? (await decode(request.file, request.format))
-    if (tooLarge(pixels.width, pixels.height))
-      throw new Error("Use an image with at most 50 megapixels.")
+      request.pixels ?? (await decodeImageFile(request.file, request.format))
+    if (tooLarge(pixels.width, pixels.height)) throw new Error(TOO_MANY_PIXELS)
     source = pixels
     transparent = hasTransparency(pixels)
-    const scale = Math.min(1, 1600 / Math.max(pixels.width, pixels.height))
-    const preview = await createImageBitmap(
-      new ImageData(pixels.data, pixels.width, pixels.height),
-      {
-        resizeWidth: Math.max(1, Math.round(pixels.width * scale)),
-        resizeHeight: Math.max(1, Math.round(pixels.height * scale)),
-        resizeQuality: "high",
-        premultiplyAlpha: "none",
-      }
-    )
+    const preview = await previewBitmap(pixels, 1600)
     post(
       {
         type: "opened",
@@ -98,13 +54,7 @@ async function open(request: OpenRequest) {
       [preview]
     )
   } catch (error) {
-    const message = (error as Error).message
-    post({
-      type: "open-error",
-      message: message.includes("megapixels")
-        ? message
-        : "We could not read that image. It may be damaged, or this browser cannot decode it.",
-    })
+    post({ type: "open-error", message: decodeErrorMessage(error) })
   }
 }
 

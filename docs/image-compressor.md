@@ -1,6 +1,6 @@
 # Image compressor
 
-Updated 10 October 2026. Applies to `/dashboard/image-compressor/` only. The image resizer, image converter and landing demonstration still use the canvas engine in `lib/image-tools.ts`.
+Updated 10 October 2026. Applies to `/dashboard/image-compressor/`. The image resizer shares this engine and is documented in `docs/image-resizer.md`. The image converter and landing demonstration still use the canvas engine in `lib/image-tools.ts`.
 
 ## What it does
 
@@ -135,12 +135,12 @@ The tool page's help section embeds `public/videos/image-compressor-tutorial.mp4
 
 The video loads only when played (`preload="none"`); the page fetches just the 0.1 MB poster.
 
-The video is recorded from the real, built app by `scripts/tutorial-video.mjs`:
+The video is recorded from the real, built app. `scripts/tutorial/recorder.mjs` is the shared recorder, and `scripts/tutorial/image-compressor.mjs` is this tool's storyboard:
 
 ```bash
 npm run build
 npx serve out --listen tcp://127.0.0.1:4180
-KEEPSIMP_PREVIEW_URL=http://127.0.0.1:4180 npm run tutorial:video
+KEEPSIMP_PREVIEW_URL=http://127.0.0.1:4180 npm run tutorial:video -- image-compressor
 ```
 
 - **Recording:** every frame is a 1920×1080 screenshot (a 1280×720 layout at 1.5×) taken with reduced motion. The cursor, captions, highlights and title slates are an overlay animated per frame, so pacing does not depend on machine speed.
@@ -149,7 +149,7 @@ KEEPSIMP_PREVIEW_URL=http://127.0.0.1:4180 npm run tutorial:video
 - **Keyframes:** encoders re-render static text slightly differently on each keyframe, which looks like shimmering. Keyframes are therefore placed during scrolls and slate fades, with a 12-second cap.
 - **Verification:** a frame-by-frame scan of the October 2026 render found no visible pulses in static text. The only isolated changes were cursor and hover updates.
 
-The captions file is generated from the same script. If the recording length changes, update `DURATION` in `components/image-compressor/tutorial.tsx`. The current render is 1 min 44 s and 10.0 MB, and it plays in Chromium and WebKit.
+The captions file is generated from the same script. If the recording length changes, update `duration` in `components/image-compressor/tutorial.tsx`. The current render is 1 min 44 s and 10.0 MB, and it plays in Chromium and WebKit.
 
 ## Licences
 

@@ -79,7 +79,7 @@ export const tools: readonly Tool[] = [
     name: "Image resizer",
     description: "Make your images fit wherever they go.",
     category: "image",
-    keywords: ["resize", "photo", "dimensions"],
+    keywords: ["resize", "photo", "dimensions", "crop", "batch", "social"],
     status: "available",
   },
   {

@@ -27,33 +27,41 @@ const listedFormats = [
   "JPEG XL",
 ]
 
-function FileInput({
-  onFile,
+export function FileInput({
+  onFiles,
   disabled,
   label,
+  id = INPUT_ID,
+  multiple,
 }: {
-  onFile: (file: File) => void
+  onFiles: (files: File[]) => void
   disabled?: boolean
   label: string
+  id?: string
+  multiple?: boolean
 }) {
   return (
     <input
-      id={INPUT_ID}
+      id={id}
       type="file"
       accept={acceptedInput}
       aria-label={label}
       disabled={disabled}
+      multiple={multiple}
       className="peer sr-only"
       onChange={(event) => {
-        const file = event.target.files?.[0]
+        const files = Array.from(event.target.files ?? [])
         event.target.value = ""
-        if (file) onFile(file)
+        if (files.length) onFiles(files)
       }}
     />
   )
 }
 
-function useDropTarget(onFile: (file: File) => void, disabled?: boolean) {
+export function useDropTarget(
+  onFiles: (files: File[]) => void,
+  disabled?: boolean
+) {
   const [over, setOver] = useState(false)
   const depth = useRef(0)
   return {
@@ -73,23 +81,50 @@ function useDropTarget(onFile: (file: File) => void, disabled?: boolean) {
         event.preventDefault()
         depth.current = 0
         setOver(false)
-        const file = event.dataTransfer.files[0]
-        if (file && !disabled) onFile(file)
+        const files = Array.from(event.dataTransfer.files)
+        if (files.length && !disabled) onFiles(files)
       },
     },
   }
 }
 
+export interface DropZoneCopy {
+  heading: string
+  dropping: string
+  body: string
+  inputLabel: string
+  action: string
+  limits: string
+}
+
+const compressorCopy: DropZoneCopy = {
+  heading: "Drop an image to compress",
+  dropping: "Drop to start compressing",
+  body: "Or choose one from your device. You can also paste an image with ⌘V or Ctrl+V.",
+  inputLabel: "Choose an image to compress",
+  action: "Choose image",
+  limits: "Stays on your device · up to 50 MB and 50 megapixels",
+}
+
 export function DropZone({
   onFile,
+  onFiles,
   onSample,
   busy,
+  copy = compressorCopy,
+  inputId = INPUT_ID,
 }: {
-  onFile: (file: File) => void
+  /** Receives the first file; use `onFiles` to accept several at once. */
+  onFile?: (file: File) => void
+  onFiles?: (files: File[]) => void
   onSample: () => void
   busy: boolean
+  copy?: DropZoneCopy
+  inputId?: string
 }) {
-  const { over, handlers } = useDropTarget(onFile, busy)
+  const emit = (files: File[]) =>
+    onFiles ? onFiles(files) : onFile?.(files[0])
+  const { over, handlers } = useDropTarget(emit, busy)
   return (
     <div
       {...handlers}
@@ -105,27 +140,26 @@ export function DropZone({
         <IconPhotoUp className="size-6" stroke={1.7} aria-hidden="true" />
       </div>
       <h2 className="font-heading text-xl font-medium">
-        {over ? "Drop to start compressing" : "Drop an image to compress"}
+        {over ? copy.dropping : copy.heading}
       </h2>
-      <p className="mt-2 max-w-md text-sm text-muted-foreground">
-        Or choose one from your device. You can also paste an image with ⌘V or
-        Ctrl+V.
-      </p>
+      <p className="mt-2 max-w-md text-sm text-muted-foreground">{copy.body}</p>
       <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
         <div>
           <FileInput
-            onFile={onFile}
+            onFiles={emit}
             disabled={busy}
-            label="Choose an image to compress"
+            label={copy.inputLabel}
+            id={inputId}
+            multiple={Boolean(onFiles)}
           />
           <label
-            htmlFor={INPUT_ID}
+            htmlFor={inputId}
             className={cn(
               buttonVariants({ size: "lg" }),
               "cursor-pointer peer-focus-visible:ring-3 peer-focus-visible:ring-ring/50 peer-disabled:pointer-events-none peer-disabled:opacity-50"
             )}
           >
-            <IconPhotoUp aria-hidden="true" /> Choose image
+            <IconPhotoUp aria-hidden="true" /> {copy.action}
           </label>
         </div>
         <Button variant="outline" size="lg" onClick={onSample} disabled={busy}>
@@ -147,7 +181,7 @@ export function DropZone({
       </ul>
       <p className="mt-5 flex items-center gap-1.5 text-xs text-muted-foreground">
         <IconLock className="size-3.5" aria-hidden="true" />
-        Stays on your device · up to 50 MB and 50 megapixels
+        {copy.limits}
       </p>
     </div>
   )
@@ -169,7 +203,7 @@ export function FileBar({
   busy: boolean
 }) {
   const thumbnail = useRef<HTMLCanvasElement>(null)
-  const { over, handlers } = useDropTarget(onFile, busy)
+  const { over, handlers } = useDropTarget((files) => onFile(files[0]), busy)
   useEffect(() => {
     const canvas = thumbnail.current
     if (!canvas || !preview) return
@@ -201,7 +235,11 @@ export function FileBar({
         <p className="truncate text-xs text-muted-foreground">{details}</p>
       </div>
       <div className="flex shrink-0 items-center gap-1">
-        <FileInput onFile={onFile} disabled={busy} label="Replace image" />
+        <FileInput
+          onFiles={(files) => onFile(files[0])}
+          disabled={busy}
+          label="Replace image"
+        />
         <label
           htmlFor={INPUT_ID}
           className={cn(

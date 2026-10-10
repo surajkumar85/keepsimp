@@ -1,6 +1,6 @@
 # KeepSimp design reference
 
-Version 3.1 · marketing, functional dashboard, choice chips and image comparison · updated 10 October 2026 · applies to every future implementation. Tokens are unchanged from version 3.
+Version 3.2 · marketing, functional dashboard, chips, image comparison and batch tools · updated 10 October 2026 · applies to every future implementation. Tokens are unchanged from version 3.
 
 KeepSimp combines the requested shadcn preset with Airbnb-informed clarity, spacing, hierarchy, and human language. The exact numbers below are **KeepSimp decisions**, not an official Airbnb token export. Airbnb's public references reviewed here do not provide a complete numerical radius specification. We retain our own teal identity and fonts.
 
@@ -106,6 +106,14 @@ Use `components/ui/choice-chips.tsx` when a visitor picks one option from a shor
 File drop zones are `rounded-xl` cards with a 2px dashed border, a 48px `rounded-lg` icon tile tinted with `primary/10`, one heading and one primary action. Dragging a file over the zone switches to a `primary` border and `primary/5` fill, with a 1% lift that reduced motion removes. A labelled native file input sits behind the visible action, which shows its focus ring. After a file loads, the zone collapses to a compact file bar: thumbnail, name, facts, Replace and Remove.
 
 Before/after comparisons stack the processed result over the original at identical pixel size. The result is revealed to the right of a divider with a 44px/36px `rounded-full` grip. A visually hidden native range input labelled "Comparison position" provides keyboard and screen-reader control. Transparent areas sit on the `.checkerboard` utility, built from `background` and `muted`. Corner labels are small pill tags. Progress shows as a pill at the bottom of the stage with a Cancel action; the previous result stays visible but dimmed until the new one arrives.
+
+Use `components/ui/toggle-chips.tsx` when several options can be on at once, such as the widths of a responsive set. It shares the chip shape and sizes, uses Base UI `CheckboxGroup` (each chip is a Tab stop; Space toggles it) and shows a tick on selected chips so state never depends on colour alone.
+
+Position grids (`components/image-resizer/anchor-grid.tsx`) offer nine labelled radio positions in a 3×3 block of 44px/36px cells inside a `rounded-lg` border. Use them to choose which part of a picture a crop keeps, or where a padded picture sits.
+
+Frame previews draw the output to scale on the checkerboard, with pill tags for original and output size. When the picture is cropped or padded, the frame is focusable: dragging or arrow keys move the picture, and a line of helper text says so. Optional safe-area bands use a `foreground` veil with dashed edges.
+
+Batch lists are `rounded-xl` rows with a 48px thumbnail, the file name, facts and a status line with an icon for progress or errors. The selected row takes the `primary` border. Row actions are icon buttons with accessible names. A summary card above the list carries totals and the primary download action.
 
 Crop overlays dim the excluded area with a `background` veil, show rule-of-thirds guides and eight handles with 44px/28px hit areas, and pair the box with exact pixel fields. The image compressor reference is `docs/image-compressor.md`.
 

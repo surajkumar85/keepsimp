@@ -262,10 +262,14 @@ export async function decodeTiff(bytes: ArrayBuffer): Promise<Pixels> {
   }
 }
 
+/** Every kernel the WASM resampler offers; the compressor exposes a subset. */
+export type ResizeKernel = Resample | "triangle" | "magicKernelSharp2021"
+
 export async function resizePixels(
   pixels: Pixels,
   size: Size,
-  method: Resample
+  method: ResizeKernel,
+  linearRGB = true
 ): Promise<Pixels> {
   if (pixels.width === size.width && pixels.height === size.height)
     return pixels
@@ -280,6 +284,6 @@ export async function resizePixels(
     method,
     fitMethod: "stretch",
     premultiply: true,
-    linearRGB: true,
+    linearRGB,
   })
 }

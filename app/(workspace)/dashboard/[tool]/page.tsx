@@ -7,6 +7,8 @@ import { StructuredData } from "@/components/structured-data"
 import { ImageTool } from "@/components/image-tool"
 import { ImageCompressor } from "@/components/image-compressor/image-compressor"
 import { ImageCompressorTutorial } from "@/components/image-compressor/tutorial"
+import { ImageResizer } from "@/components/image-resizer/image-resizer"
+import { ImageResizerTutorial } from "@/components/image-resizer/tutorial"
 import { JsonTool } from "@/components/json-tool"
 
 const ready = tools.filter((tool) => tool.status === "available")
@@ -65,6 +67,8 @@ export default async function ToolPage({
       </p>
       {id === "image-compressor" ? (
         <ImageCompressor />
+      ) : id === "image-resizer" ? (
+        <ImageResizer />
       ) : tool.category === "image" ? (
         <ImageTool mode={id} />
       ) : (
@@ -72,6 +76,8 @@ export default async function ToolPage({
       )}
       {id === "image-compressor" ? (
         <ImageCompressorTutorial />
+      ) : id === "image-resizer" ? (
+        <ImageResizerTutorial />
       ) : (
         <div className="mt-8 border-t pt-5">
           <h2 className="section-title">A little help along the way</h2>
