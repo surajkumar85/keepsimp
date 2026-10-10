@@ -374,7 +374,7 @@ export default function LandingPage() {
             </Link>
           </div>
           <div className="grid gap-7 md:grid-cols-3">
-            {posts.map((post) => (
+            {posts.slice(0, 3).map((post) => (
               <article key={post.slug} className="group">
                 <Link
                   prefetch={false}

@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 600" role="img" aria-labelledby="title desc">
+  <title id="title">Preview a JSON change</title><desc id="desc">The name Ada becomes Grace through an explicit JSON Patch replace operation.</desc>
+  <rect width="900" height="600" rx="24" fill="#f5f5f0"/>
+  <g fill="#fff" stroke="#d4d4d4"><rect x="60" y="95" width="355" height="170" rx="16"/><rect x="485" y="95" width="355" height="170" rx="16"/><rect x="60" y="320" width="780" height="185" rx="16"/></g>
+  <g font-family="sans-serif" font-size="17" fill="#525252"><text x="87" y="135">SOURCE</text><text x="512" y="135">COMPARISON</text><text x="87" y="363">PATCH PREVIEW</text></g>
+  <g font-family="monospace" font-size="23" fill="#0a0a0a"><text x="87" y="195">{"name":"Ada"}</text><text x="512" y="195">{"name":"Grace"}</text></g>
+  <path d="M427 180h43m-10-10 10 10-10 10" fill="none" stroke="#00786f" stroke-width="3"/>
+  <g font-family="monospace" font-size="21" fill="#00786f"><text x="87" y="410">{"op":"replace", "path":"/name",</text><text x="112" y="450">"value":"Grace"}</text></g>
+</svg>

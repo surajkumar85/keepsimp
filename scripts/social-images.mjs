@@ -1,9 +1,7 @@
 import { mkdir, readFile } from "node:fs/promises"
 import { chromium } from "@playwright/test"
 
-// Run with the local preview available. These are exported brand graphics,
-// not live product UI; the browser supplies the same locally hosted fonts.
-const preview = process.env.KEEPSIMP_PREVIEW_URL || "http://127.0.0.1:3000"
+// Render standalone brand graphics from local assets and fonts; no server needed.
 const tokens = JSON.parse(await readFile("design-system/tokens.json", "utf8"))
 const outfit = (
   await readFile(
@@ -50,7 +48,41 @@ const cards = [
     "Format locally, and preserve number precision.",
     "/images/json-guide.svg",
   ],
+  [
+    "jsonpath-json-pointer-find-data",
+    "Find the JSON you need.",
+    "Query with JSONPath. Select with JSON Pointer.",
+    "/images/json-query-guide.svg",
+  ],
+  [
+    "repair-compare-json-patch",
+    "Preview every JSON change.",
+    "Repair, compare and apply JSON Patch locally.",
+    "/images/json-patch-guide.svg",
+  ],
+  [
+    "validate-json-schema-locally",
+    "Check your JSON's shape.",
+    "Local schema validation, with useful error paths.",
+    "/images/json-schema-guide.svg",
+  ],
+  [
+    "convert-json-yaml-csv-typescript",
+    "Your JSON. The next format.",
+    "YAML, CSV, JSON Lines and TypeScript, locally.",
+    "/images/json-convert-guide.svg",
+  ],
 ]
+const requested = new Set(process.argv.slice(2))
+async function asset(path) {
+  const mime = path.endsWith(".svg")
+    ? "image/svg+xml"
+    : path.endsWith(".webp")
+      ? "image/webp"
+      : "image/jpeg"
+  return `data:${mime};base64,${(await readFile(`public${path}`)).toString("base64")}`
+}
+const logoSource = await asset("/brand/keepsimp-logo.svg")
 await mkdir("public/images/social", { recursive: true })
 const browser = await chromium.launch()
 try {
@@ -59,23 +91,20 @@ try {
     colorScheme: "light",
     reducedMotion: "reduce",
   })
-  const exportUrl = `${preview}/__social-export/`
-  await page.route(exportUrl, (route) =>
-    route.fulfill({
-      contentType: "text/html",
-      body: `<!doctype html><html><head><style>${css}</style></head><body></body></html>`,
-    })
-  )
   for (const [slug, title, subtitle, image] of cards) {
-    await page.goto(exportUrl)
+    if (requested.size && !requested.has(slug)) continue
+    const imageSource = await asset(image)
+    await page.setContent(
+      `<!doctype html><html><head><style>${css}</style></head><body></body></html>`
+    )
     await page.evaluate(
-      ({ title, subtitle, image }) => {
+      ({ title, subtitle, image, imageSource, logoSource }) => {
         document.documentElement.classList.remove("dark")
         const card = document.createElement("div")
         card.style.cssText =
           "display:flex;position:relative;width:1200px;height:630px;overflow:hidden;background:var(--marketing-surface);color:var(--foreground);padding:56px;box-sizing:border-box;"
         const logo = document.createElement("img")
-        logo.src = "/brand/keepsimp-logo.svg"
+        logo.src = logoSource
         logo.style.cssText =
           "position:absolute;top:50px;left:56px;width:168px;height:40px"
         const copy = document.createElement("div")
@@ -90,7 +119,7 @@ try {
           "font-family:var(--font-inter),sans-serif;font-size:22px;line-height:1.5;max-width:440px;color:var(--muted-foreground);margin:24px 0 0;"
         copy.append(heading, description)
         const photo = document.createElement("img")
-        photo.src = image
+        photo.src = imageSource
         photo.style.cssText =
           "position:absolute;right:56px;top:80px;width:500px;height:470px;object-fit:cover;border-radius:24px;"
         if (image.endsWith(".svg")) photo.style.objectFit = "contain"
@@ -101,7 +130,7 @@ try {
         card.append(logo, copy, photo, footer)
         document.body.replaceChildren(card)
       },
-      { title, subtitle, image }
+      { title, subtitle, image, imageSource, logoSource }
     )
     await page.evaluate(async () => {
       await document.fonts.ready

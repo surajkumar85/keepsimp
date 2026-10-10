@@ -1,3 +1,4 @@
+import { replaceEditor } from "./editor"
 import { test, expect, type Download } from "@playwright/test"
 import AxeBuilder from "@axe-core/playwright"
 import sharp from "sharp"
@@ -70,15 +71,15 @@ test("JSON formatting validates input and preserves precision in the download", 
 }) => {
   await page.goto("/dashboard/json-formatter/")
   const input = page.getByLabel("Your JSON", { exact: true })
-  await input.fill('{"bad":}')
+  await replaceEditor(input, '{"bad":}')
   await page.getByRole("button", { name: "Format JSON", exact: true }).click()
   await expect(page.getByRole("main").getByRole("alert")).toContainText(
     "not valid"
   )
   const value = '{"id":9007199254740993,"escaped":"a, b","empty":[]}'
-  await input.fill(value)
+  await replaceEditor(input, value)
   await page.getByRole("button", { name: "Format JSON", exact: true }).click()
-  await expect(page.getByLabel("Formatted result")).toHaveValue(
+  await expect(page.getByLabel("Formatted result")).toContainText(
     /9007199254740993/
   )
   await expect(page.getByRole("main").getByRole("alert")).toHaveCount(0)
@@ -88,18 +89,19 @@ test("JSON formatting validates input and preserves precision in the download", 
   expect(result).toContain('\n  "id": 9007199254740993')
   expect(result).toContain('"escaped": "a, b"')
   await page.getByRole("button", { name: "Minify", exact: true }).click()
-  await expect(page.getByLabel("Formatted result")).toHaveValue(value)
+  await expect(page.getByLabel("Formatted result")).toContainText(value)
   await page.reload()
-  await expect(input).toHaveValue("")
+  await expect(input.locator(".cm-placeholder")).toBeVisible()
 })
 
 test("journal articles have crawlable content, accurate metadata and working tool links", async ({
   page,
 }) => {
+  test.setTimeout(90_000)
   await page.goto("/blog/")
-  await expect(page.getByRole("article")).toHaveCount(3)
+  await expect(page.getByRole("article")).toHaveCount(posts.length)
   for (const post of posts) {
-    await page.goto(`/blog/${post.slug}/`)
+    await page.goto(`/blog/${post.slug}/`, { waitUntil: "domcontentloaded" })
     await expect(page.getByRole("heading", { level: 1 })).toHaveText(post.title)
     await expect(page.locator('link[rel="canonical"]')).toHaveAttribute(
       "href",
@@ -126,7 +128,15 @@ test("journal articles have crawlable content, accurate metadata and working too
       .click()
     await expect(page).toHaveURL(new RegExp(`#${post.sections[0].id}$`))
     await page.getByRole("link", { name: "Try the tool", exact: true }).click()
-    await expect(page).toHaveURL(new RegExp(`/dashboard/${post.tool}/$`))
+    await expect(page).toHaveURL(
+      new RegExp(
+        `/dashboard/${post.tool}/${post.toolAnchor ? `#${post.toolAnchor}` : ""}$`
+      )
+    )
+    if (post.toolAnchor)
+      await expect(
+        page.getByRole("tab", { name: new RegExp(`^${post.toolAnchor}$`, "i") })
+      ).toHaveAttribute("aria-selected", "true")
   }
 })
 
@@ -168,6 +178,7 @@ test("sitemap, robots and social graphics are production ready", async ({
 test("marketing pages and tool editors are accessible in both themes", async ({
   page,
 }) => {
+  test.setTimeout(90_000)
   for (const route of [
     "/",
     "/blog/compress-images-without-uploading/",

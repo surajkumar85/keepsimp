@@ -11,6 +11,7 @@ import { ImageConverterTutorial } from "@/components/image-converter/tutorial"
 import { ImageResizer } from "@/components/image-resizer/image-resizer"
 import { ImageResizerTutorial } from "@/components/image-resizer/tutorial"
 import { JsonTool } from "@/components/json-tool"
+import { JsonTutorial } from "@/components/json-workspace/tutorial"
 
 const ready = tools.filter((tool) => tool.status === "available")
 export function generateStaticParams() {
@@ -25,6 +26,12 @@ export async function generateMetadata({
   const { tool: id } = await params
   const tool = ready.find((tool) => tool.id === id)
   if (!tool) notFound()
+  if (id === "json-formatter")
+    return pageMetadata(
+      "Free JSON formatter, validator & viewer",
+      "Format, repair, explore and query JSON. Compare documents, apply JSON Patch, validate schemas and convert YAML, CSV or JSON Lines locally. No uploads.",
+      `/dashboard/${id}/`
+    )
   return pageMetadata(
     `Free ${tool.name.toLowerCase()}`,
     `${tool.description} Use the free ${tool.name.toLowerCase()} in your browser. No account, no file uploads.`,
@@ -53,6 +60,23 @@ export default async function ToolPage({
               : "DeveloperApplication",
           operatingSystem: "Modern web browser",
           description: tool.description,
+          ...(id === "json-formatter"
+            ? {
+                featureList: [
+                  "JSON formatter and minifier",
+                  "Tree and table viewer",
+                  "JSONPath and JSON Pointer",
+                  "JSON repair preview",
+                  "Semantic JSON comparison",
+                  "JSON Patch",
+                  "JSON Schema validation",
+                  "JSON, YAML, CSV and JSON Lines conversion",
+                  "TypeScript and schema inference",
+                  "Exact numeric token preservation",
+                  "Local and offline processing",
+                ],
+              }
+            : {}),
           offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
         }}
       />
@@ -82,20 +106,7 @@ export default async function ToolPage({
       ) : id === "image-converter" ? (
         <ImageConverterTutorial />
       ) : (
-        <div className="mt-8 border-t pt-5">
-          <h2 className="section-title">A little help along the way</h2>
-          <p className="mt-2 text-sm text-muted-foreground">
-            Paste valid JSON, choose Format JSON or Minify, then copy or
-            download the result. Invalid JSON shows an error without changing
-            your input.
-          </p>
-          <Link
-            href="/blog/format-json-without-losing-precision/"
-            className="mt-3 inline-flex min-h-11 items-center text-sm text-primary underline underline-offset-4"
-          >
-            Read the step-by-step guide
-          </Link>
-        </div>
+        <JsonTutorial />
       )}
     </div>
   )

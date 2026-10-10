@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 600" role="img" aria-labelledby="title desc">
+  <title id="title">Choose the next format</title><desc id="desc">One local JSON document branches into YAML, CSV, JSON Lines and TypeScript.</desc>
+  <rect width="900" height="600" rx="24" fill="#f5f5f0"/>
+  <rect x="70" y="200" width="285" height="200" rx="16" fill="#00786f"/>
+  <text x="108" y="278" font-family="monospace" font-size="32" fill="#fff">{ JSON }</text><text x="108" y="331" font-family="sans-serif" font-size="19" fill="#fff">Your local source</text>
+  <path d="M355 300h110m0-180v360m0-360h80m-80 120h80m-80 120h80m-80 120h80" fill="none" stroke="#00786f" stroke-width="3"/>
+  <g fill="#fff" stroke="#d4d4d4"><rect x="545" y="75" width="285" height="90" rx="12"/><rect x="545" y="195" width="285" height="90" rx="12"/><rect x="545" y="315" width="285" height="90" rx="12"/><rect x="545" y="435" width="285" height="90" rx="12"/></g>
+  <g font-family="monospace" font-size="27" fill="#0a0a0a"><text x="580" y="132">YAML</text><text x="580" y="252">CSV</text><text x="580" y="372">JSON Lines</text><text x="580" y="492">TypeScript</text></g>
+</svg>

@@ -7,7 +7,7 @@ import { StructuredData } from "@/components/structured-data"
 
 export const metadata = pageMetadata(
   "The journal — Practical image and JSON guides",
-  "Simple guides to image compression, JPEG vs PNG vs WebP, and formatting JSON without losing number precision. Learn, then try a free KeepSimp tool.",
+  "Practical image and JSON guides: formatting, JSONPath, JSON Pointer, repair, JSON Patch, JSON Schema and YAML/CSV conversion. Learn, then try a free KeepSimp tool.",
   "/blog/"
 )
 export default function BlogIndex() {

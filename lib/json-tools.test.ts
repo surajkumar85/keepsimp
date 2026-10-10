@@ -33,7 +33,7 @@ describe("JSON formatting without data changes", () => {
     (value) => expect(() => formatJson(value)).toThrow("not valid")
   )
   it("rejects oversized content before trying to parse it", () =>
-    expect(() => formatJson(" ".repeat(1_000_001))).toThrow("1 million"))
+    expect(() => formatJson(" ".repeat(5_000_001))).toThrow("5 million"))
   it("limits formatting depth to avoid excessive output allocation", () => {
     expect(() => formatJson("[".repeat(101) + "0" + "]".repeat(101))).toThrow(
       "deeply nested"

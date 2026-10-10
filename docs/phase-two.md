@@ -2,6 +2,8 @@
 
 Implemented 10 October 2026. The user confirmed `https://keepsimp.vercel.app/` as the production origin. This phase is built and tested locally; it does not deploy changes to that hosted site.
 
+This report records the original marketing delivery. The later JSON upgrade replaces its initial formatter with six workflows and expands the journal to seven articles; current behavior, limits and verification live in [the JSON workspace reference](json-workspace.md).
+
 ## Visitor experience
 
 The homepage now introduces KeepSimp with clear calls to action into `/dashboard/`, an original illustrated identity, a live image-compression demonstration, available tools, a three-step explanation, privacy information, journal previews, keyboard-operable FAQs and a closing action. Marketing uses separate route-group layouts and the version-3 design reference. The dashboard retains the compact single sidebar.

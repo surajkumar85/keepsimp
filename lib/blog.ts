@@ -7,8 +7,14 @@ export type BlogPost = {
   image: string
   imageAlt: string
   tool: string
+  toolAnchor?: string
   intro: string
-  sections: { id: string; title: string; paragraphs: string[] }[]
+  sections: {
+    id: string
+    title: string
+    paragraphs: string[]
+    example?: { label: string; code: string }
+  }[]
   sources: { title: string; url: string }[]
 }
 
@@ -143,7 +149,7 @@ export const posts: readonly BlogPost[] = [
     description:
       "Format and minify JSON locally while preserving large numbers, escaped strings and the order of your keys.",
     category: "Developer notes",
-    readingTime: "3 min read",
+    readingTime: "4 min read",
     image: "/images/json-guide.svg",
     imageAlt: "A visual example of compact JSON becoming an indented document",
     tool: "json-formatter",
@@ -154,7 +160,7 @@ export const posts: readonly BlogPost[] = [
         id: "format-or-minify",
         title: "Choose formatting or minification.",
         paragraphs: [
-          "Formatting puts nested values on separate lines and uses two spaces of indentation. It makes objects and arrays easier to scan. Minification removes whitespace between tokens, which is useful when you need a compact document.",
+          "Formatting puts nested values on separate lines. Choose two spaces, four spaces or tabs; minification removes whitespace between tokens. Recursive key sorting is available under More transformations, preserving the order of array items.",
           "Whitespace inside a quoted string is data. It should stay exactly where it is. The KeepSimp formatter preserves original string tokens rather than rewriting them, so escaped quotes, spaces and Unicode escape sequences are retained.",
         ],
       },
@@ -163,7 +169,7 @@ export const posts: readonly BlogPost[] = [
         title: "Keep large numbers as they were written.",
         paragraphs: [
           "A formatter that parses JSON into JavaScript values and then stringifies them can change numeric text. JavaScript numbers cannot represent every large integer exactly. For instance, the integer 9007199254740993 is beyond the maximum safe integer.",
-          "KeepSimp uses the native parser to check syntax, then formats the original tokens. The downloaded text preserves 9007199254740993, exponent notation and the spelling of numeric tokens. That does not make a downstream application's numeric parser more precise; it keeps the formatter from changing your source.",
+          "KeepSimp uses a strict syntax tree and retains original tokens. The downloaded text preserves 9007199254740993, exponent notation and the spelling of numeric tokens. That does not make a downstream application's numeric parser more precise; it keeps the formatter from changing your source. Pointer selections and semantic comparisons also retain exact numbers.",
         ],
       },
       {
@@ -171,15 +177,23 @@ export const posts: readonly BlogPost[] = [
         title: "Try it with a small example first.",
         paragraphs: [
           "Open JSON formatter and choose Use example, or paste your own document into Your JSON. Select Format JSON to add indentation, or Minify to remove spacing outside strings. The result appears in a separate field, leaving your input available for comparison.",
-          "Download JSON saves the result as a .json file. Copy result uses your browser's clipboard permission; if that is unavailable, you can select the result or download it instead. The tool accepts up to one million characters and formats documents up to 100 levels deep.",
+          "Download JSON saves the result with the filename you choose. Copy result uses your browser's clipboard permission; if unavailable, select the result or download it. Documents can contain up to five million characters, 100 levels and 100,000 values. Open file and drag-and-drop accept UTF-8 text files up to 10 MB, within those text limits.",
         ],
       },
       {
         id: "syntax-errors",
         title: "A readable document still needs valid syntax.",
         paragraphs: [
-          "JSON requires double-quoted property names and strings. A trailing comma after the last item is not valid. If validation fails, the tool shows an error and keeps your input so you can fix it. Formatting is not an automatic repair tool.",
-          "Duplicate keys are preserved in the text; different consumers may interpret them differently. Use unique keys when possible and check the schema expected by the application that will read the result. KeepSimp checks JSON syntax, not an application's business rules.",
+          "JSON requires double-quoted property names and strings. A trailing comma after the last item is invalid. The tool reports a line and column, with Go to error to place the editor cursor there. Preview repair is a separate transformation that can guess fixes; review it before accepting the result.",
+          "Duplicate keys are preserved when formatting and flagged visibly. Make them unique before querying, comparing, converting or validating a schema. Use the Schema workflow to check a data contract beyond syntax; the tool does not invent your application's business rules.",
+        ],
+      },
+      {
+        id: "edit-and-transform",
+        title: "Edit comfortably, and preview transformations.",
+        paragraphs: [
+          "The editor includes syntax highlighting, folding, line numbers, find and replace, undo and redo. Ctrl/Cmd + F opens search and Ctrl/Cmd + Z undoes an edit. Tab indents inside the editor; press Escape, then Tab to move focus out. Use result as source accepts an output explicitly, and Undo edit can restore the earlier input.",
+          "More transformations can escape a document as a JSON string, unwrap one, encode or decode UTF-8 Base64 and URL text, flatten leaves into JSON Pointer keys, or redact chosen property names recursively. Redaction matches exact names without regard to case; it cannot guarantee that every secret is removed. Encoding changes representation and is not encryption.",
         ],
       },
       {
@@ -197,13 +211,15 @@ export const posts: readonly BlogPost[] = [
         url: "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Number/MAX_SAFE_INTEGER",
       },
       {
-        title: "MDN: JSON parsing",
-        url: "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/JSON/parse",
+        title: "Microsoft: JSON syntax tree parser",
+        url: "https://github.com/microsoft/node-jsonc-parser",
       },
     ],
   },
+  ...jsonPosts,
 ]
 
 export function findPost(slug: string) {
   return posts.find((post) => post.slug === slug)
 }
+import { jsonPosts } from "./json-blog"

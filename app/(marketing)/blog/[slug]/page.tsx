@@ -173,6 +173,16 @@ export default async function ArticlePage({
                 {section.paragraphs.map((paragraph) => (
                   <p key={paragraph}>{paragraph}</p>
                 ))}
+                {section.example && (
+                  <figure className="my-6 min-w-0 rounded-lg border bg-marketing-surface p-4">
+                    <figcaption className="mb-3 text-sm font-medium">
+                      {section.example.label}
+                    </figcaption>
+                    <pre className="overflow-x-auto font-mono text-xs leading-6">
+                      <code>{section.example.code}</code>
+                    </pre>
+                  </figure>
+                )}
               </section>
             ))}
             <section className="mt-10 border-t pt-5">
@@ -201,7 +211,7 @@ export default async function ArticlePage({
               </p>
               <Link
                 prefetch={false}
-                href={`/dashboard/${post.tool}/`}
+                href={`/dashboard/${post.tool}/${post.toolAnchor ? `#${post.toolAnchor}` : ""}`}
                 className={buttonVariants({
                   size: "lg",
                   className: "mt-4 gap-2",
@@ -220,6 +230,11 @@ export default async function ArticlePage({
           <div className="grid gap-4 sm:grid-cols-2">
             {posts
               .filter((item) => item.slug !== post.slug)
+              .sort(
+                (a, b) =>
+                  Number(b.tool === post.tool) - Number(a.tool === post.tool)
+              )
+              .slice(0, 2)
               .map((item) => (
                 <Link
                   prefetch={false}

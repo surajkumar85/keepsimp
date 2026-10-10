@@ -1,6 +1,6 @@
 # KeepSimp design reference
 
-Version 3.3 · marketing, functional dashboard, chips, image comparison, batch tools and result tables · updated 10 October 2026 · applies to every future implementation. Tokens are unchanged from version 3.
+Version 3.4 · marketing, functional dashboard, chips, image comparison, batch tools, result tables and JSON workspace · updated 10 October 2026 · applies to every future implementation. Tokens are unchanged from version 3.
 
 KeepSimp combines the requested shadcn preset with Airbnb-informed clarity, spacing, hierarchy, and human language. The exact numbers below are **KeepSimp decisions**, not an official Airbnb token export. Airbnb's public references reviewed here do not provide a complete numerical radius specification. We retain our own teal identity and fonts.
 
@@ -120,6 +120,14 @@ Batch lists are `rounded-xl` rows with a 48px thumbnail, the file name, facts an
 Result tables compare measured outcomes, such as one image encoded in several formats (`components/image-converter/format-panel.tsx`). Use a real `<table>` with a caption and column headers inside a `rounded-lg` border, with horizontal scrolling inside the wrapper at narrow widths. Sort by the value being compared, mark the best row with a text badge, never colour alone, and give each row one compact action. Show only measured values, and show progress with a cancel action while they are produced.
 
 Crop overlays dim the excluded area with a `background` veil, show rule-of-thirds guides and eight handles with 44px/28px hit areas, and pair the box with exact pixel fields. The image compressor reference is `docs/image-compressor.md`.
+
+## JSON workspace
+
+The JSON tool uses the shared Base UI `components/ui/workspace-tabs.tsx` with six wrapping tabs, 36px desktop and 44px mobile targets, `rounded-xl` grouping and `rounded-md` selected tabs. It remains inside the existing single-sidebar workspace. Format/minify/validate actions sit above the editors; optional transformations use a native disclosure rather than an always-expanded settings wall. All six workflows and essential actions remain available at 320px.
+
+CodeMirror editors use semantic CSS variables, Geist Mono, `rounded-lg` borders and visible focus rings. Code is 13px with a 1.7 line height; labels/body copy retain the regular type scale. Source and populated result panes are 256px on mobile and 320px on desktop; an empty mobile result is 128px. Workflow settings follow the source and precede the result on mobile. Schema validation omits an unused result pane; its source and schema sit alongside each other on wide screens. Editor search fields and buttons have 44px mobile targets. Escape then Tab exits indentation mode. Results stay separate from the source, with explicit acceptance and undo.
+
+Tree rows include type labels and named expansion controls; tables have captions and column headers, with scrolling confined to their wrappers. Syntax errors include line/column and a cursor action. Schema and query results are scoped to the current source and settings. Operation progress includes cancellation, and a worker timeout reports an incomplete operation. See [JSON workspace behavior and research](json-workspace.md). Blog illustrations use the documented fixed artwork palette; live editors do not add another theme or arbitrary radius.
 
 ## Adding components and changing the system
 

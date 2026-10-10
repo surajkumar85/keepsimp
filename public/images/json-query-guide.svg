@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 600" role="img" aria-labelledby="title desc">
+  <title id="title">Find a value inside JSON</title><desc id="desc">A JSON document flows through a query into an array containing Ada and Lin.</desc>
+  <rect width="900" height="600" rx="24" fill="#f5f5f0"/>
+  <rect x="55" y="90" width="390" height="410" rx="16" fill="#fff" stroke="#d4d4d4"/>
+  <g font-family="monospace" font-size="21" fill="#0a0a0a"><text x="82" y="140">{</text><text x="105" y="182">"users": [</text><text x="125" y="224">{"name": "Ada"},</text><text x="125" y="266">{"name": "Lin"}</text><text x="105" y="308">]</text><text x="82" y="350">}</text></g>
+  <path d="M445 290h55m-10-10 10 10-10 10" fill="none" stroke="#00786f" stroke-width="3"/>
+  <rect x="520" y="185" width="325" height="75" rx="12" fill="#00786f"/><text x="543" y="231" font-family="monospace" font-size="21" fill="#fff">$.users[*].name</text>
+  <rect x="520" y="290" width="325" height="140" rx="12" fill="#fff" stroke="#d4d4d4"/><text x="545" y="340" font-family="monospace" font-size="23" fill="#00786f">["Ada", "Lin"]</text><text x="545" y="388" font-family="sans-serif" font-size="17" fill="#525252">Two matches. One clear result.</text>
+</svg>

@@ -13,6 +13,13 @@ export default defineConfig({
       include: [
         "lib/catalogue.ts",
         "lib/json-tools.ts",
+        "lib/json-workspace/document.ts",
+        "lib/json-workspace/numbers.ts",
+        "lib/json-workspace/transforms.ts",
+        "lib/json-workspace/compare.ts",
+        "lib/json-workspace/query.ts",
+        "lib/json-workspace/schema.ts",
+        "lib/json-workspace/convert.ts",
         "lib/image-tools.ts",
         "lib/site.ts",
         "lib/pwa.ts",

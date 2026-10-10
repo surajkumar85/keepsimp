@@ -1,3 +1,4 @@
+import { replaceEditor } from "./editor"
 import { readdir, readFile } from "node:fs/promises"
 import { join, relative, sep } from "node:path"
 import { test, expect, type Download, type Page } from "@playwright/test"
@@ -96,6 +97,10 @@ test("every tool works offline after one visit", async ({ page }) => {
   // Worked out here from the export itself, not from the app's own list.
   const left = [
     /^sw\.js$/,
+    /\.map$/,
+    // Git-ignored local sync copies can reappear in out/ after the build.
+    // They are not artifacts of the release being tested.
+    /(^|\/)[^/]* [2-9](?:\.|$)/,
     /^videos\/.*\.mp4$/,
     /^images\/social\//,
     /^(robots\.txt|sitemap\.xml|\.gitkeep)$/,
@@ -107,6 +112,7 @@ test("every tool works offline after one visit", async ({ page }) => {
     .filter((file) => !left.some((pattern) => pattern.test(file)))
     .map((file) => `/${file}`.replace(/\/index\.html$/, "/"))
   expect(copy.saved.map(decodeURIComponent).sort()).toEqual(expected.sort())
+  expect(copy.saved.some((path) => path.endsWith(".map"))).toBe(false)
   expect(expected).toContain("/dashboard/image-converter/")
   expect(expected.some((path) => path.endsWith(".wasm"))).toBe(true)
 
@@ -166,13 +172,44 @@ test("every tool works offline after one visit", async ({ page }) => {
   )
 
   await page.goto(`${site.origin}/dashboard/json-formatter/`)
-  await page
-    .getByLabel("Your JSON", { exact: true })
-    .fill('{"id":9007199254740993}')
+  await replaceEditor(
+    page.getByLabel("Your JSON", { exact: true }),
+    '{"id":9007199254740993}'
+  )
   await page.getByRole("button", { name: "Format JSON", exact: true }).click()
-  await expect(page.getByLabel("Formatted result")).toHaveValue(
+  await expect(page.getByLabel("Formatted result")).toContainText(
     /"id": 9007199254740993/
   )
+  await page.getByRole("tab", { name: "Query", exact: true }).click()
+  await page.getByRole("radio", { name: "JSON Pointer", exact: true }).click()
+  await page.getByLabel("JSON Pointer", { exact: true }).fill("/id")
+  await page.getByRole("button", { name: "Run query" }).click()
+  await expect(page.getByLabel("Formatted result")).toContainText(
+    "9007199254740993"
+  )
+  await replaceEditor(
+    page.getByLabel("Your JSON", { exact: true }),
+    '{"project":"KeepSimp","version":1}'
+  )
+  await page.getByRole("tab", { name: "Schema", exact: true }).click()
+  await page.getByRole("button", { name: "Use schema example" }).click()
+  await page
+    .getByRole("button", { name: "Validate schema", exact: true })
+    .click()
+  await expect(
+    page.getByText("Your JSON matches the schema.", { exact: true })
+  ).toBeVisible()
+  await page.getByRole("tab", { name: "Convert", exact: true }).click()
+  await page
+    .getByRole("button", { name: "Convert document", exact: true })
+    .click()
+  pending = page.waitForEvent("download")
+  await page.getByRole("button", { name: "Download YAML", exact: true }).click()
+  expect((await bytesOf(await pending)).toString("utf8")).toContain(
+    '"project": "KeepSimp"'
+  )
+  await page.goto(`${site.origin}/blog/validate-json-schema-locally/`)
+  await expect(page.getByRole("heading", { level: 1 })).toContainText("schema")
 
   // The rest of the site is there too, including a path without its slash.
   await page.goto(`${site.origin}/`)
