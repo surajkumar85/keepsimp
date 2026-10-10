@@ -2,7 +2,6 @@ import { readdir, readFile } from "node:fs/promises"
 import { join, relative, sep } from "node:path"
 import { test, expect, type Download, type Page } from "@playwright/test"
 import sharp from "sharp"
-import { shouldPrecache, urlPath } from "../lib/offline"
 import { serveExport, type Site } from "./static-server"
 
 // The other suites block service workers; these journeys are about the worker.
@@ -94,14 +93,26 @@ test("marketing pages do not start the offline download", async ({ page }) => {
 test("every tool works offline after one visit", async ({ page }) => {
   const copy = await install(page)
   expect(copy.names).toHaveLength(1)
-  const expected = (await exported()).filter(shouldPrecache).map(urlPath)
+  // Worked out here from the export itself, not from the app's own list.
+  const left = [
+    /^sw\.js$/,
+    /^videos\/.*\.mp4$/,
+    /^images\/social\//,
+    /^(robots\.txt|sitemap\.xml|\.gitkeep)$/,
+    // Not-found pages, and the data Next.js fetches for page transitions.
+    /^(404\.html|404\/|_not-found\/)/,
+    /(^|\/)(index|__next\.[^/]+)\.txt$/,
+  ]
+  const expected = (await exported())
+    .filter((file) => !left.some((pattern) => pattern.test(file)))
+    .map((file) => `/${file}`.replace(/\/index\.html$/, "/"))
   expect(copy.saved.map(decodeURIComponent).sort()).toEqual(expected.sort())
-  expect(copy.saved).not.toContain("/sw.js")
-  expect(copy.saved.some((path) => path.endsWith(".mp4"))).toBe(false)
+  expect(expected).toContain("/dashboard/image-converter/")
+  expect(expected.some((path) => path.endsWith(".wasm"))).toBe(true)
 
   await site.stop()
 
-  // A full page load, then a move between tools without one.
+  // A full page load, then a move between tools from a link.
   await page.reload()
   await expect(page.getByTestId("tool-card")).toHaveCount(13)
   await page
@@ -188,17 +199,28 @@ test("shows the latest page online and the saved one when the network fails", as
   await expect(heading).toContainText("(published later)")
 
   // A stalled connection falls back to the saved page after a few seconds.
-  site.delay("/privacy/", 20_000)
-  const started = Date.now()
+  site.delay(/^\/(privacy|blog)\//, 20_000)
+  let started = Date.now()
   await page.goto(`${site.origin}/privacy/`)
   await expect(heading).toBeVisible()
   await expect(heading).not.toContainText("(published later)")
   expect(Date.now() - started).toBeLessThan(15_000)
 
+  // A link does not hang on it either: the transition gives up on its data
+  // and the page loads in full from the saved copy.
+  started = Date.now()
+  await page
+    .getByRole("contentinfo")
+    .getByRole("link", { name: "Journal", exact: true })
+    .click()
+  await expect(page).toHaveURL(/\/blog\/$/, { timeout: 18_000 })
+  await expect(heading).toBeVisible()
+  expect(Date.now() - started).toBeLessThan(18_000)
+
   // So does no connection at all.
   await site.stop()
-  await page.reload()
-  await expect(heading).toBeVisible()
+  await page.goto(`${site.origin}/privacy/`)
+  await expect(heading).toContainText("privacy")
   await expect(heading).not.toContainText("(published later)")
 })
 
@@ -211,12 +233,12 @@ test("a new release replaces the saved copy once the old pages are closed", asyn
   const version = first.names[0].replace("keepsimp-offline-", "")
   expect(worker).toContain(version)
   // The next release also lists a file its host does not serve; that must not block it.
-  expect(worker).toContain('"/robots.txt"')
+  expect(worker).toContain('"/licenses/outfit.txt"')
   site.replace(
     "/sw.js",
     worker
       .replaceAll(version, "next-release")
-      .replace('"/robots.txt"', '"/withdrawn.txt"')
+      .replace('"/licenses/outfit.txt"', '"/licenses/withdrawn.txt"')
   )
   site.replace("/privacy/", await privacyPage("next release"))
   site.seen()

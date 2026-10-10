@@ -27,7 +27,7 @@ const TYPES: Record<string, string> = {
  */
 export async function serveExport(root = "out") {
   const replaced = new Map<string, string>()
-  const delays = new Map<string, number>()
+  const delays: [RegExp, number][] = []
   const requests: string[] = []
   let server: Server | undefined
   let port = 0
@@ -39,7 +39,7 @@ export async function serveExport(root = "out") {
           new URL(request.url!, "http://site").pathname
         )
         requests.push(path)
-        const wait = delays.get(path)
+        const wait = delays.find(([pattern]) => pattern.test(path))?.[1]
         if (wait) await new Promise((done) => setTimeout(done, wait))
         const file = path.endsWith("/") ? `${path}index.html` : path
         let body: Buffer
@@ -96,9 +96,9 @@ export async function serveExport(root = "out") {
     seen: () => requests.splice(0),
     /** Publish different content at a path, as a new release would. */
     replace: (path: string, body: string) => replaced.set(path, body),
-    /** Make a path answer slowly. */
-    delay: (path: string, milliseconds: number) =>
-      delays.set(path, milliseconds),
+    /** Make matching paths answer slowly. */
+    delay: (pattern: RegExp, milliseconds: number) =>
+      delays.push([pattern, milliseconds]),
     start,
     stop,
   }

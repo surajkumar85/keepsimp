@@ -44,5 +44,5 @@ next-env.d.ts
 /blob-report/
 
 # iCloud Drive conflict copies (this folder is synced by iCloud)
-* 2.*
-* 2
+* [2-9].*
+* [2-9]

@@ -17,6 +17,7 @@ export default defineConfig({
         "lib/site.ts",
         "lib/pwa.ts",
         "lib/offline.ts",
+        "service-worker/rules.js",
         "lib/image-compressor/formats.ts",
         "lib/image-compressor/geometry.ts",
         "lib/image-compressor/pixels.ts",

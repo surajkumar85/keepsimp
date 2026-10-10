@@ -1,62 +1,65 @@
+import { posts } from "@/lib/blog"
+import { tools } from "@/lib/catalogue"
+import { shouldPrecache } from "@/service-worker/rules.js"
+
+/** Every page of the site, as its address. Each is a folder with an index.html in the export. */
+export function pagePaths(): string[] {
+  return [
+    "/",
+    "/dashboard/",
+    "/design-system/",
+    "/blog/",
+    "/privacy/",
+    ...posts.map((post) => `/blog/${post.slug}/`),
+    ...tools
+      .filter((tool) => tool.status === "available")
+      .map((tool) => `/dashboard/${tool.id}/`),
+  ]
+}
+
+/** Files Next.js writes at the site root itself, which a visitor's browser asks for. */
+const GENERATED = ["/favicon.ico", "/manifest.webmanifest"]
+
 /**
- * Offline support: which exported files are kept on the device, and how the
- * service worker answers a request. Pure, so both the build step and the
- * worker share one set of rules.
+ * The addresses saved for offline use.
+ * @param buildFiles Paths relative to `.next/static`, such as "chunks/app.js".
+ * @param publicFiles Paths relative to `public`, such as "images/coastline.jpg".
  */
-
-/** Left out of the offline copy. */
-const SKIPPED = [
-  // Tutorial videos are 29 MB and stream on demand; posters and captions stay.
-  /^videos\/.*\.mp4$/,
-  // Link-preview images are read by other sites, never by a visitor.
-  /^images\/social\//,
-  // Not-found pages answer under other addresses, and only with a connection.
-  /^404(\.html$|\/)/,
-  /^_not-found\//,
-  // The worker never serves itself, so updates always come from the network.
-  /^sw\.js$/,
-  // Dotfiles such as .gitkeep.
-  /(^|\/)\.[^/]*$/,
-]
-
-/** Whether a file in the export belongs in the offline copy. */
-export function shouldPrecache(file: string): boolean {
-  return !SKIPPED.some((pattern) => pattern.test(file))
+export function offlineFiles(
+  buildFiles: readonly string[],
+  publicFiles: readonly string[]
+): string[] {
+  return [
+    ...new Set([
+      ...pagePaths(),
+      ...GENERATED,
+      ...buildFiles.map((file) => `/_next/static/${file}`),
+      ...publicFiles.filter(shouldPrecache).map((file) => `/${file}`),
+    ]),
+  ].sort()
 }
 
-/** The URL path a file in the export is served at: "blog/index.html" is "/blog/". */
-export function urlPath(file: string): string {
-  return `/${file}`.replace(/\/index\.html$/, "/")
-}
-
-/** Build files carry a content hash in their name, so a saved copy never goes stale. */
-export function isImmutable(path: string): boolean {
-  return path.startsWith("/_next/static/")
-}
-
-export type Route =
-  /** Not ours to answer; the browser handles it as if there were no worker. */
-  | { kind: "network" }
-  /** A hashed build file: the saved copy first. */
-  | { kind: "immutable"; key: string }
-  /** A page or asset that can change: the network first, the saved copy when it fails. */
-  | { kind: "fresh"; key: string }
-
-/** Decide how to answer a request, given what the offline copy holds. */
-export function routeFor(
-  request: { method: string; url: string; range: boolean },
-  origin: string,
-  saved: (path: string) => boolean
-): Route {
-  const url = new URL(request.url)
-  // Range requests are video seeks; the worker never slices files.
-  if (request.method !== "GET" || url.origin !== origin || request.range)
-    return { kind: "network" }
-  // The query is ignored: page data is requested with a cache-busting one.
-  const path = url.pathname
-  if (isImmutable(path))
-    return saved(path) ? { kind: "immutable", key: path } : { kind: "network" }
-  // "/dashboard" is served as "/dashboard/".
-  const key = [path, `${path}/`].find(saved)
-  return key ? { kind: "fresh", key } : { kind: "network" }
+/**
+ * The finished service worker: the release's file list, the shared rules and
+ * the worker body, as one classic script.
+ * @param rules Text of service-worker/rules.js.
+ * @param body Text of service-worker/sw.js.
+ */
+export function workerScript(
+  version: string,
+  files: readonly string[],
+  rules: string,
+  body: string
+): string {
+  return [
+    '"use strict";',
+    "(() => {",
+    `const VERSION = ${JSON.stringify(version)};`,
+    `const PRECACHE = ${JSON.stringify(files)};`,
+    // A worker script has no modules, so the rules lose their export keywords.
+    rules.replace(/^export /gm, ""),
+    body,
+    "})();",
+    "",
+  ].join("\n")
 }

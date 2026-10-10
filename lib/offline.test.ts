@@ -1,136 +1,83 @@
-import { describe, expect, it } from "vitest"
-import { isImmutable, routeFor, shouldPrecache, urlPath } from "./offline"
+import { readFile } from "node:fs/promises"
+import { expect, it } from "vitest"
+import { tools } from "./catalogue"
+import { offlineFiles, pagePaths, workerScript } from "./offline"
 
-describe("shouldPrecache", () => {
-  it("keeps pages, page data, build files, images and icons", () => {
-    for (const file of [
-      "index.html",
-      "dashboard/image-converter/index.html",
-      "dashboard/index.txt",
-      "__next.!KG1hcmtldGluZyk.__PAGE__.txt",
-      "_next/static/chunks/abc.js",
-      "_next/static/media/avif_enc.wasm",
-      "images/coastline.jpg",
-      "icons/icon-192.png",
-      "manifest.webmanifest",
-      "videos/image-converter-tutorial-poster.webp",
-      "videos/image-converter-tutorial.vtt",
-    ])
-      expect(shouldPrecache(file), file).toBe(true)
-  })
-
-  it("leaves out video files, link-preview images, not-found pages, the worker and dotfiles", () => {
-    for (const file of [
-      "videos/image-converter-tutorial.mp4",
-      "images/social/keepsimp.png",
-      "sw.js",
-      "404.html",
-      "404/index.html",
-      "_not-found/index.txt",
-      ".gitkeep",
-      "images/.DS_Store",
-    ])
-      expect(shouldPrecache(file), file).toBe(false)
-  })
-
-  it("does not mistake similar names for skipped ones", () => {
-    expect(shouldPrecache("blog/videos/index.html")).toBe(true)
-    expect(shouldPrecache("_next/static/chunks/sw.js")).toBe(true)
-    expect(shouldPrecache("images/social.png")).toBe(true)
-    expect(shouldPrecache("blog/404-errors/index.html")).toBe(true)
-    expect(shouldPrecache("4040.html")).toBe(true)
-  })
-})
-
-describe("urlPath", () => {
-  it("serves index pages at their folder", () => {
-    expect(urlPath("index.html")).toBe("/")
-    expect(urlPath("blog/index.html")).toBe("/blog/")
-    expect(urlPath("dashboard/image-converter/index.html")).toBe(
-      "/dashboard/image-converter/"
-    )
-  })
-
-  it("leaves every other file at its own path", () => {
-    expect(urlPath("icon.svg")).toBe("/icon.svg")
-    expect(urlPath("dashboard/index.txt")).toBe("/dashboard/index.txt")
-    expect(urlPath("images/my-index.html")).toBe("/images/my-index.html")
-  })
-})
-
-describe("routeFor", () => {
-  const origin = "https://keepsimp.vercel.app"
-  const files = new Set([
+it("lists every page of the site, and only working tools", () => {
+  const pages = pagePaths()
+  for (const page of [
     "/",
     "/dashboard/",
-    "/dashboard/index.txt",
-    "/_next/static/chunks/app.js",
-    "/images/coastline.jpg",
+    "/design-system/",
+    "/blog/",
+    "/privacy/",
+    "/blog/jpeg-png-webp-which-format/",
+    "/dashboard/image-converter/",
+    "/dashboard/json-formatter/",
   ])
-  const saved = (path: string) => files.has(path)
-  const route = (
-    path: string,
-    options: { method?: string; range?: boolean } = {}
-  ) =>
-    routeFor(
-      {
-        method: options.method ?? "GET",
-        url: new URL(path, origin).toString(),
-        range: options.range ?? false,
-      },
-      origin,
-      saved
-    )
+    expect(pages).toContain(page)
+  for (const tool of tools.filter((tool) => tool.status === "planned"))
+    expect(pages).not.toContain(`/dashboard/${tool.id}/`)
+  for (const page of pages) expect(page).toMatch(/^\/([a-z0-9-]+\/)*$/)
+})
 
-  it("answers hashed build files from the saved copy", () => {
-    expect(isImmutable("/_next/static/chunks/app.js")).toBe(true)
-    expect(isImmutable("/_next/image")).toBe(false)
-    expect(route("/_next/static/chunks/app.js")).toEqual({
-      kind: "immutable",
-      key: "/_next/static/chunks/app.js",
-    })
-  })
+it("gathers pages, build files and public files into one sorted list", () => {
+  const files = offlineFiles(
+    ["chunks/app.js", "media/avif_enc.wasm", "build-id/_buildManifest.js"],
+    [
+      "icon.svg",
+      "images/coastline.jpg",
+      "images/social/keepsimp.png",
+      "videos/image-converter-tutorial.mp4",
+      "videos/image-converter-tutorial-poster.webp",
+      ".gitkeep",
+    ]
+  )
+  for (const file of [
+    "/",
+    "/dashboard/image-compressor/",
+    "/favicon.ico",
+    "/manifest.webmanifest",
+    "/_next/static/chunks/app.js",
+    "/_next/static/media/avif_enc.wasm",
+    "/_next/static/build-id/_buildManifest.js",
+    "/icon.svg",
+    "/images/coastline.jpg",
+    "/videos/image-converter-tutorial-poster.webp",
+  ])
+    expect(files).toContain(file)
+  expect(files).not.toContain("/videos/image-converter-tutorial.mp4")
+  expect(files).not.toContain("/images/social/keepsimp.png")
+  expect(files).not.toContain("/.gitkeep")
+  expect(files).not.toContain("/sw.js")
+  expect(files).toEqual([...files].sort())
+})
 
-  it("leaves build files from a newer release to the network", () => {
-    expect(route("/_next/static/chunks/newer.js")).toEqual({ kind: "network" })
-  })
+it("lists a file once, even when it is found twice", () => {
+  const files = offlineFiles(
+    ["chunks/app.js", "chunks/app.js"],
+    ["favicon.ico"]
+  )
+  expect(new Set(files).size).toBe(files.length)
+  expect(files.filter((file) => file === "/favicon.ico")).toHaveLength(1)
+})
 
-  it("prefers the network for pages, page data and assets", () => {
-    expect(route("/")).toEqual({ kind: "fresh", key: "/" })
-    expect(route("/dashboard/")).toEqual({ kind: "fresh", key: "/dashboard/" })
-    expect(route("/images/coastline.jpg")).toEqual({
-      kind: "fresh",
-      key: "/images/coastline.jpg",
-    })
-  })
+it("writes a worker that runs as a plain script", async () => {
+  const rules = await readFile("service-worker/rules.js", "utf8")
+  const body = await readFile("service-worker/sw.js", "utf8")
+  const script = workerScript("abc123", ["/", '/a "quoted" file'], rules, body)
+  expect(script).toContain('const VERSION = "abc123";')
+  expect(script).toContain('const PRECACHE = ["/","/a \\"quoted\\" file"];')
+  // No module syntax survives, and the whole script parses.
+  expect(script).not.toMatch(/^\s*(export|import) /m)
+  expect(() => new Function(script)).not.toThrow()
 
-  it("ignores the query and a missing trailing slash", () => {
-    expect(route("/dashboard/index.txt?_rsc=1a2b3")).toEqual({
-      kind: "fresh",
-      key: "/dashboard/index.txt",
-    })
-    expect(route("/dashboard?category=image")).toEqual({
-      kind: "fresh",
-      key: "/dashboard/",
-    })
-  })
-
-  it("stays out of the way of everything else", () => {
-    expect(route("/videos/image-converter-tutorial.mp4")).toEqual({
-      kind: "network",
-    })
-    expect(route("/images/coastline.jpg", { range: true })).toEqual({
-      kind: "network",
-    })
-    expect(route("/dashboard/", { method: "POST" })).toEqual({
-      kind: "network",
-    })
-    expect(
-      routeFor(
-        { method: "GET", url: "https://example.com/", range: false },
-        origin,
-        saved
-      )
-    ).toEqual({ kind: "network" })
-  })
+  // Run it against a stand-in worker scope: it must take its three events.
+  const events: string[] = []
+  const scope = {
+    location: { origin: "https://keepsimp.vercel.app" },
+    addEventListener: (name: string) => events.push(name),
+  }
+  new Function("self", script)(scope)
+  expect(events).toEqual(["install", "activate", "fetch"])
 })

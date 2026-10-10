@@ -29,16 +29,21 @@ After one visit to the tools, the whole site works without a connection: every t
 
 ### What is saved
 
-`npm run build` runs `next build` and then `scripts/service-worker.mjs`, which bundles `service-worker/sw.ts` into `out/sw.js` together with the list of exported files to save. The rules for that list are in `lib/offline.ts`.
+`next build` writes the worker itself. `app/sw.js/route.ts` is a static route that produces `/sw.js` from three parts:
 
-- **Saved:** pages, page data, scripts, styles, fonts, WebAssembly codecs, images, icons, and tutorial posters and captions. This is about 15 MB on disk and about 5 MB to download with Brotli compression.
+1. the list of files to save, from `offlineFiles()` in `lib/offline.ts`
+2. the routing rules in `service-worker/rules.js`
+3. the worker body in `service-worker/sw.js`
+
+Both files in `service-worker/` are plain JavaScript with JSDoc types, because their text is copied into the worker as it is. There is no bundler and no step after the build, so any host that serves the export serves the worker. An earlier version wrote `out/sw.js` after `next build`; Vercel did not publish that file.
+
+- **Saved:** every page, the build files in `.next/static` (scripts, styles, fonts, WebAssembly codecs), and the files in `public/` (images, icons, tutorial posters and captions). This is about 14 MB on disk and about 5 MB to download with Brotli compression.
 - **Not saved:**
   - tutorial videos (29 MB), which stream on demand
   - link-preview images, which only other sites read
-  - not-found pages
-  - the worker itself
+  - the data Next.js fetches for page transitions, whose file names only exist after the build
 
-When a video cannot load, the player says so and points at the written steps.
+Because page data is not saved, following a link offline loads the page in full from the saved copy instead of swapping it in place. When a video cannot load, the player says so and points at the written steps.
 
 ### When the download starts
 
@@ -50,6 +55,7 @@ When a video cannot load, the player says so and points at the written steps.
 | ------------------------------------------ | ---------------------------------------------------------------------------------------- |
 | Hashed build files (`/_next/static/`)      | The saved copy; the network if this release never saved it.                              |
 | Pages, page data and other saved files     | The network first. The saved copy when the network fails or takes longer than 4 seconds. |
+| Page-transition data of a saved page       | The network. After 4 seconds without an answer it fails, and the page loads in full.     |
 | Videos, range requests, anything not saved | Left to the browser, as if there were no worker.                                         |
 
 Online visitors therefore always get the latest pages. The saved copy is a fallback, and nothing is written to it after install, so it stays one complete release.
@@ -58,7 +64,7 @@ A worker script served from the saved copy is rebuilt as a new `Response`. Other
 
 ### Releases
 
-- Each build has a version: a hash of every saved file. The cache is named `keepsimp-offline-<version>`.
+- Each build has a version: a hash of the list of saved files, which changes with every build because build file names do. The cache is named `keepsimp-offline-<version>`.
 - A new release downloads beside the old one. Hashed files are copied from the earlier cache, so only pages and other small files are fetched again.
 - The worker does not call `skipWaiting`. The new release takes over once every KeepSimp window is closed, so an open page keeps the files it was built with. The old cache is then deleted.
 - A file the host answers with 404 is skipped. Any other failure fails the install, and the browser retries on a later visit.
@@ -67,12 +73,12 @@ A worker script served from the saved copy is rebuilt as a new `Response`. Other
 
 - The first visit to the tools needs a connection, and so does the tutorial video.
 - Browsers may clear saved data for sites that are not installed and not used for a while. Opening the tools online saves the copy again.
-- `next dev` has no worker. Use `npm run build` and `npm run start` to try it.
+- The worker is registered in production builds only. Use `npm run build` and `npm run start` to try it.
 
 ## Tests
 
 - **Unit** (`lib/pwa.test.ts`): manifest fields, icon sizes and purposes, and shortcuts limited to working tools.
-- **Unit** (`lib/offline.test.ts`): which files are saved, their URL paths, and how each kind of request is routed.
+- **Unit** (`service-worker/rules.test.ts`, `lib/offline.test.ts`): which files are saved, how each kind of request is routed, and that the composed worker parses and registers its three events.
 - **Browser** (`e2e/marketing-and-tools.spec.ts`), on all five profiles:
   - the manifest and Apple tags are linked from marketing and dashboard pages
   - the manifest is served as `application/manifest+json`
@@ -81,7 +87,8 @@ A worker script served from the saved copy is rebuilt as a new `Response`. Other
   - the status bar colour follows a manual theme switch and survives a reload
 - **Offline** (`e2e/offline.spec.ts`), on all five profiles. Each test serves the export on its own port (`e2e/static-server.ts`) and stops that server to go offline, so the network is really gone for both the page and the worker:
   - marketing pages register no worker
-  - the saved copy matches the export exactly, and without a server the compressor, converter (AVIF), resizer and JSON formatter produce real output
+  - the saved copy matches what the export holds, and without a server the compressor, converter (AVIF), resizer and JSON formatter produce real output
+  - a link followed offline, or on a stalled connection, still opens its page
   - online, a newer page wins; a stalled or missing network falls back to the saved one
   - a new release installs beside the old one without re-downloading hashed files, tolerates a file the host no longer serves, and takes over after the windows close
   - videos stream through the worker online, and the player explains itself offline
