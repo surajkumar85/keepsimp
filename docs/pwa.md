@@ -1,6 +1,6 @@
-# Installing KeepSimp
+# Installing KeepSimp and using it offline
 
-Updated 10 October 2026. KeepSimp can be added to a phone's home screen and opened in its own window, without browser controls.
+Updated 10 October 2026. KeepSimp can be added to a phone's home screen and opened in its own window, without browser controls. After one visit to the tools it also works offline.
 
 ## What is configured
 
@@ -23,17 +23,67 @@ Updated 10 October 2026. KeepSimp can be added to a phone's home screen and open
   - `components/theme-color.tsx` points both at the chosen theme when someone switches by hand.
 - **iOS:** `appleWebApp` in `app/layout.tsx` sets the home-screen title and a standard status bar.
 
-## Not included
+## Offline use
 
-There is no service worker, so the installed app still needs a connection to load pages and codecs. Files are still processed on the device. Offline use would need a worker that caches the tool bundles and WebAssembly codecs, with a plan for updating them; add it only on request.
+After one visit to the tools, the whole site works without a connection: every tool, the journal and the privacy page.
+
+### What is saved
+
+`npm run build` runs `next build` and then `scripts/service-worker.mjs`, which bundles `service-worker/sw.ts` into `out/sw.js` together with the list of exported files to save. The rules for that list are in `lib/offline.ts`.
+
+- **Saved:** pages, page data, scripts, styles, fonts, WebAssembly codecs, images, icons, and tutorial posters and captions. This is about 15 MB on disk and about 5 MB to download with Brotli compression.
+- **Not saved:**
+  - tutorial videos (29 MB), which stream on demand
+  - link-preview images, which only other sites read
+  - not-found pages
+  - the worker itself
+
+When a video cannot load, the player says so and points at the written steps.
+
+### When the download starts
+
+`components/offline-support.tsx` registers the worker from the workspace layout only, after the page has loaded. Marketing pages never start the download, in line with the rule that they do not fetch tool bundles before intent. Once registered, the worker covers the whole site.
+
+### How requests are answered
+
+| Request                                    | Answer                                                                                   |
+| ------------------------------------------ | ---------------------------------------------------------------------------------------- |
+| Hashed build files (`/_next/static/`)      | The saved copy; the network if this release never saved it.                              |
+| Pages, page data and other saved files     | The network first. The saved copy when the network fails or takes longer than 4 seconds. |
+| Videos, range requests, anything not saved | Left to the browser, as if there were no worker.                                         |
+
+Online visitors therefore always get the latest pages. The saved copy is a fallback, and nothing is written to it after install, so it stays one complete release.
+
+A worker script served from the saved copy is rebuilt as a new `Response`. Otherwise the worker takes the saved response's address and loses the `#params` that Turbopack passes to its worker loader, and the image engines fail to start.
+
+### Releases
+
+- Each build has a version: a hash of every saved file. The cache is named `keepsimp-offline-<version>`.
+- A new release downloads beside the old one. Hashed files are copied from the earlier cache, so only pages and other small files are fetched again.
+- The worker does not call `skipWaiting`. The new release takes over once every KeepSimp window is closed, so an open page keeps the files it was built with. The old cache is then deleted.
+- A file the host answers with 404 is skipped. Any other failure fails the install, and the browser retries on a later visit.
+
+### Limits
+
+- The first visit to the tools needs a connection, and so does the tutorial video.
+- Browsers may clear saved data for sites that are not installed and not used for a while. Opening the tools online saves the copy again.
+- `next dev` has no worker. Use `npm run build` and `npm run start` to try it.
 
 ## Tests
 
 - **Unit** (`lib/pwa.test.ts`): manifest fields, icon sizes and purposes, and shortcuts limited to working tools.
+- **Unit** (`lib/offline.test.ts`): which files are saved, their URL paths, and how each kind of request is routed.
 - **Browser** (`e2e/marketing-and-tools.spec.ts`), on all five profiles:
   - the manifest and Apple tags are linked from marketing and dashboard pages
   - the manifest is served as `application/manifest+json`
   - every icon is a PNG of the size it claims; maskable icons are opaque to the corners
   - the start page and every shortcut load
   - the status bar colour follows a manual theme switch and survives a reload
+- **Offline** (`e2e/offline.spec.ts`), on all five profiles. Each test serves the export on its own port (`e2e/static-server.ts`) and stops that server to go offline, so the network is really gone for both the page and the worker:
+  - marketing pages register no worker
+  - the saved copy matches the export exactly, and without a server the compressor, converter (AVIF), resizer and JSON formatter produce real output
+  - online, a newer page wins; a stalled or missing network falls back to the saved one
+  - a new release installs beside the old one without re-downloading hashed files, tolerates a file the host no longer serves, and takes over after the windows close
+  - videos stream through the worker online, and the player explains itself offline
+- The other suites set `serviceWorkers: "block"` in `playwright.config.ts`, because every test starts with an empty profile and would download the offline copy again.
 - **Chrome's own check:** `Page.getAppManifest` and `Page.getInstallabilityErrors` reported no errors against the exported site on 10 October 2026.

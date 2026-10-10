@@ -41,6 +41,14 @@ export default function PrivacyPage() {
           contain no selected files or pasted text. You can remove them through
           your browser’s site-data settings.
         </p>
+        <h2>A copy of the tools for offline use.</h2>
+        <p>
+          Once you open the tools, your browser keeps a copy of KeepSimp’s own
+          pages, scripts and image codecs, about 15 MB, so they work without a
+          connection. That copy contains none of your files or text. It is
+          replaced when a new version is published, and you can remove it
+          through your browser’s site-data settings.
+        </p>
         <h2>Keep the limits in mind.</h2>
         <p>
           Browser extensions, clipboard synchronization and device software can

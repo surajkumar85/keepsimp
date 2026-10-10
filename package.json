@@ -5,7 +5,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "next build && node scripts/service-worker.mjs",
     "start": "serve out",
     "lint": "eslint",
     "format": "prettier --write .",
@@ -60,6 +60,7 @@
     "@types/react-dom": "^19",
     "@vitejs/plugin-react": "^5.2.0",
     "@vitest/coverage-v8": "^5.0.3",
+    "esbuild": "^0.28.2",
     "eslint": "^9",
     "eslint-config-next": "16.3.8",
     "fflate": "^0.8.3",

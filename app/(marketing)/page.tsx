@@ -68,7 +68,7 @@ const faqs = [
   ],
   [
     "Can I use it on my phone?",
-    "Yes, with a current mobile browser. The image compressor, resizer and converter accept files up to 50 MB and 50 million pixels, and the resizer and converter take up to 50 images at once. Large images may take longer or use more memory on a phone.",
+    "Yes, with a current mobile browser. The image compressor, resizer and converter accept files up to 50 MB and 50 million pixels, and the resizer and converter take up to 50 images at once. Large images may take longer or use more memory on a phone. You can add KeepSimp to your home screen, and once you have opened the tools they work without a connection.",
   ],
   [
     "Will compression always make my image smaller?",

@@ -12,6 +12,9 @@ export default defineConfig({
     trace: "retain-on-failure",
     screenshot: "only-on-failure",
     colorScheme: "light",
+    // Each test starts in a fresh browser profile, where a worker would download
+    // the whole offline copy. e2e/offline.spec.ts turns it back on.
+    serviceWorkers: "block",
   },
   projects: [
     { name: "chromium", use: { ...devices["Desktop Chrome"] } },

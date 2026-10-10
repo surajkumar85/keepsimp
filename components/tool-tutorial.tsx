@@ -1,6 +1,7 @@
 import Link from "next/link"
 import { IconChevronDown } from "@tabler/icons-react"
 import { StructuredData } from "@/components/structured-data"
+import { TutorialVideo } from "@/components/tutorial-video"
 import { absoluteUrl } from "@/lib/site"
 
 export interface TutorialContent {
@@ -44,29 +45,7 @@ export function ToolTutorial({ content }: { content: TutorialContent }) {
       <p className="mt-2 text-sm text-muted-foreground">{content.intro}</p>
       <div className="mt-5 grid gap-6 lg:grid-cols-5">
         <figure className="min-w-0 lg:col-span-3">
-          <video
-            controls
-            playsInline
-            preload="none"
-            poster={poster}
-            width={1920}
-            height={1080}
-            aria-describedby="tutorial-steps"
-            className="aspect-video h-auto w-full rounded-xl border bg-muted"
-          >
-            <source src={video} type="video/mp4" />
-            <track
-              kind="captions"
-              src={captions}
-              srcLang="en"
-              label="English"
-            />
-            Your browser cannot play this video.{" "}
-            <a href={video} download>
-              Download the tutorial
-            </a>
-            .
-          </video>
+          <TutorialVideo video={video} poster={poster} captions={captions} />
           <figcaption className="mt-2 text-xs text-muted-foreground">
             {content.duration.label}, no sound. On-screen captions describe each
             step; the same steps are written out here.
