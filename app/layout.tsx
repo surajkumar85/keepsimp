@@ -1,8 +1,9 @@
-import type { Metadata } from "next"
+import type { Metadata, Viewport } from "next"
 import localFont from "next/font/local"
 
 import "./globals.css"
 import { ThemeProvider } from "@/components/theme-provider"
+import { themeColors } from "@/lib/pwa"
 import { site, pageMetadata } from "@/lib/site"
 import { cn } from "@/lib/utils"
 
@@ -40,7 +41,15 @@ export const metadata: Metadata = {
     template: "%s | KeepSimp",
   },
   applicationName: "KeepSimp",
-  icons: { icon: "/icon.svg" },
+  icons: { icon: "/icon.svg", apple: "/icons/apple-touch-icon.png" },
+  appleWebApp: { capable: true, title: "KeepSimp", statusBarStyle: "default" },
+}
+
+export const viewport: Viewport = {
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: themeColors.light },
+    { media: "(prefers-color-scheme: dark)", color: themeColors.dark },
+  ],
 }
 
 export default function RootLayout({

@@ -360,6 +360,8 @@ test("makes favicons and PDF documents", async ({ page }) => {
   await chip(page, "Page size", "A4").click()
   await chip(page, "Margins", "None").click()
   await page.getByRole("switch", { name: "Combine into one PDF" }).click()
+  // The new page size re-encodes both images; the row text follows the result.
+  await settled(page)
   await expect(page.getByTestId("queue-item").first()).toContainText(
     "A page in the combined PDF"
   )

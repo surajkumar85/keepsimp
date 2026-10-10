@@ -2,6 +2,7 @@
 
 import * as React from "react"
 import { ThemeProvider as NextThemesProvider } from "next-themes"
+import { ThemeColor } from "@/components/theme-color"
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   return (
@@ -11,6 +12,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
       enableSystem
       disableTransitionOnChange
     >
+      <ThemeColor />
       {children}
     </NextThemesProvider>
   )

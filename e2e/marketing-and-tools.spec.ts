@@ -225,3 +225,92 @@ test("mobile marketing has no overflow, keyboard FAQ access or unhandled errors"
   await expect(page.locator("#main-content")).toBeFocused()
   expect(errors).toEqual([])
 })
+
+test("can be installed to the home screen", async ({ page, request }) => {
+  for (const route of ["/", "/dashboard/", "/dashboard/image-converter/"]) {
+    await page.goto(route)
+    await expect(page.locator('link[rel="manifest"]')).toHaveAttribute(
+      "href",
+      "/manifest.webmanifest"
+    )
+    await expect(page.locator('link[rel="apple-touch-icon"]')).toHaveAttribute(
+      "href",
+      "/icons/apple-touch-icon.png"
+    )
+  }
+  await expect(
+    page.locator('meta[name="apple-mobile-web-app-title"]')
+  ).toHaveAttribute("content", "KeepSimp")
+
+  const response = await request.get("/manifest.webmanifest")
+  expect(response.ok()).toBe(true)
+  expect(response.headers()["content-type"]).toContain(
+    "application/manifest+json"
+  )
+  const manifest = await response.json()
+  expect(manifest).toMatchObject({
+    name: "KeepSimp",
+    short_name: "KeepSimp",
+    start_url: "/dashboard/",
+    scope: "/",
+    display: "standalone",
+  })
+
+  // Every icon is a real square PNG of the size it claims.
+  for (const icon of [
+    ...manifest.icons,
+    { src: "/icons/apple-touch-icon.png", sizes: "180x180" },
+  ]) {
+    const file = await request.get(icon.src)
+    expect(file.ok()).toBe(true)
+    const image = await sharp(await file.body()).metadata()
+    expect(image.format).toBe("png")
+    expect(`${image.width}x${image.height}`).toBe(icon.sizes)
+  }
+  // Maskable icons fill the square; plain ones keep the mark's clear corners.
+  for (const icon of manifest.icons) {
+    const { data } = await sharp(await (await request.get(icon.src)).body())
+      .ensureAlpha()
+      .raw()
+      .toBuffer({ resolveWithObject: true })
+    expect(data[3] === 255).toBe(icon.purpose === "maskable")
+  }
+
+  // The app opens on the tools, and each shortcut leads to a working one.
+  expect(manifest.shortcuts).toHaveLength(4)
+  for (const url of [
+    manifest.start_url,
+    ...manifest.shortcuts.map((shortcut: { url: string }) => shortcut.url),
+  ]) {
+    const target = await request.get(url)
+    expect(target.ok()).toBe(true)
+  }
+  await page.goto(manifest.shortcuts[0].url)
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText(
+    manifest.shortcuts[0].name
+  )
+})
+
+test("the status bar colour follows the chosen theme", async ({ page }) => {
+  await page.emulateMedia({ colorScheme: "light" })
+  await page.goto("/dashboard/")
+  const tags = page.locator('meta[name="theme-color"]')
+  await expect(tags).toHaveCount(2)
+  await expect(tags.first()).toHaveAttribute("content", "#ffffff")
+  await page.getByRole("button", { name: "Switch to dark theme" }).click()
+  for (const tag of await tags.all())
+    await expect(tag).toHaveAttribute("content", "#0a0a0a")
+  // The page background matches, so the bar and the app read as one surface.
+  expect(
+    await page.evaluate(() => {
+      const canvas = document.createElement("canvas")
+      const context = canvas.getContext("2d")!
+      context.fillStyle = getComputedStyle(document.body).backgroundColor
+      context.fillRect(0, 0, 1, 1)
+      return [...context.getImageData(0, 0, 1, 1).data.slice(0, 3)]
+    })
+  ).toEqual([10, 10, 10])
+  await page.reload()
+  for (const tag of await tags.all())
+    await expect(tag).toHaveAttribute("content", "#0a0a0a")
+})

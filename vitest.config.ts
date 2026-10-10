@@ -15,6 +15,7 @@ export default defineConfig({
         "lib/json-tools.ts",
         "lib/image-tools.ts",
         "lib/site.ts",
+        "lib/pwa.ts",
         "lib/image-compressor/formats.ts",
         "lib/image-compressor/geometry.ts",
         "lib/image-compressor/pixels.ts",

@@ -71,6 +71,8 @@ The KeepSimp logo uses a white modular K inside a rounded teal tile, paired with
 
 The mark's fixed teal is the sRGB export of the light primary token (`#00786f`); wordmarks use the exported foreground values (`#0a0a0a` and `#fafafa`). These literals belong only in exported brand assets. Product UI continues to use semantic color tokens. Do not stretch the artwork, add shadows/gradients, recreate it with a generic sparkle icon, or alter its geometry in later phases. Outfit's license remains in `public/licenses/outfit.txt`.
 
+Home-screen icons in `public/icons/` are exports of the mark, made by `npm run pwa:icons`. The maskable and Apple versions extend the teal tile to a full square and leave the K unchanged, because launchers cut their own shape. `lib/pwa.ts` holds the only other colour literals: the sRGB values of the light and dark `background` tokens (`#ffffff`, `#0a0a0a`) for the web manifest and the `theme-color` tag, which cannot read CSS variables. Update them if those tokens change. See `docs/pwa.md`.
+
 ### Interface typography
 
 | Role                         | Family     | Size / line height          | Weight  |
