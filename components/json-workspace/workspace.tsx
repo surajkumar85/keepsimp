@@ -613,31 +613,32 @@ export function JsonWorkspace() {
         </div>
       </WorkspaceTabs>
       {output && (
-        <div className="flex flex-wrap items-end gap-3 rounded-xl border bg-marketing-surface p-4">
-          <div className="min-w-0 flex-1">
-            <label
-              htmlFor="json-download-name"
-              className="mb-2 block text-sm font-medium"
-            >
-              Download filename
-            </label>
+        <div className="rounded-xl border bg-marketing-surface p-4">
+          <label
+            htmlFor="json-download-name"
+            className="mb-2 block text-sm font-medium"
+          >
+            Download filename
+          </label>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
             <Input
               id="json-download-name"
+              className="flex-1"
               value={downloadName}
               onChange={(event) => setDownloadName(event.target.value)}
             />
-            <p className="mt-2 text-xs text-muted-foreground">
-              .{output.extension} is added automatically.
-            </p>
+            <Button onClick={download}>
+              <IconDownload aria-hidden="true" />
+              {output.extension === "json"
+                ? "Download JSON"
+                : `Download ${output.extension.toUpperCase()}`}
+            </Button>
           </div>
-          <Button onClick={download}>
-            <IconDownload aria-hidden="true" />
-            {output.extension === "json"
-              ? "Download JSON"
-              : `Download ${output.extension.toUpperCase()}`}
-          </Button>
+          <p className="mt-2 text-xs text-muted-foreground">
+            .{output.extension} is added automatically.
+          </p>
           {output.note && (
-            <p className="w-full text-xs leading-6 text-muted-foreground">
+            <p className="mt-2 text-xs leading-6 text-muted-foreground">
               {output.note}
             </p>
           )}
