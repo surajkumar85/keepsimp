@@ -615,6 +615,27 @@ describe("a contents page", () => {
     ])
   })
 
+  it("carries a font only for letters the standard one lacks", async () => {
+    const a = await source("A")
+    const size = async (name: string) =>
+      (
+        await mergePdfs(mupdf, [part(a, name)], {
+          bookmarks: "none",
+          contents: "files",
+        })
+      ).bytes.length
+    const without = (await merge([part(a, "x")], "none")).length
+    // Western names, accents and dashes included, add a page and no font.
+    expect((await size("Résumé – “final”")) - without).toBeLessThan(1_500)
+    // Greek or Cyrillic brings the engine's font along.
+    expect((await size("Обзор")) - without).toBeGreaterThan(10_000)
+    const greek = await withContents([
+      part(a, "Résumé"),
+      part(a, "αβγ – Обзор"),
+    ])
+    expect(greek.pages[0].text).toBe("Contents Résumé 2 αβγ – Обзор 3")
+  })
+
   it("uses each document's own title where it has one", async () => {
     const a = await source("A", { title: "Annual report 2026" })
     const b = await source("B")

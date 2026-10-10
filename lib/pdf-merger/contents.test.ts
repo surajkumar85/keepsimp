@@ -4,6 +4,7 @@ import {
   drawContents,
   layoutContents,
   showGlyphs,
+  winAnsiHex,
   type ContentsEntry,
 } from "./contents"
 
@@ -166,5 +167,36 @@ describe("showGlyphs", () => {
     expect(showGlyphs("F2", "", 20.555, 1 / 3, 2)).toBe(
       "BT /F2 20.56 Tf 0.33 2 Td <> Tj ET"
     )
+  })
+})
+
+describe("winAnsiHex", () => {
+  it("writes plain and accented Latin letters as one byte each", () => {
+    expect(winAnsiHex("Az 09~")).toBe("417a2030397e")
+    expect(winAnsiHex("Résumé ÿ")).toBe("52e973756de920ff")
+    expect(winAnsiHex("")).toBe("")
+  })
+
+  it("knows the dashes, quotes and signs the encoding adds", () => {
+    expect(
+      winAnsiHex("– — … ‘ ’ “ ” • € ™ Œ œ Š š Ž ž Ÿ ƒ ˆ ˜ ‚ „ † ‡ ‰ ‹ ›")
+    ).toBe(
+      "96 97 85 91 92 93 94 95 80 99 8c 9c 8a 9a 8e 9e 9f 83 88 98 82 84 86 87 89 8b 9b"
+        .split(" ")
+        .join("20")
+    )
+  })
+
+  it("has no answer for letters outside the encoding", () => {
+    for (const text of [
+      "Обзор",
+      "αβγ",
+      "概要",
+      "tab\there",
+      "line\nbreak",
+      "emoji 😀",
+      "Ł",
+    ])
+      expect(winAnsiHex(text), text).toBeNull()
   })
 })

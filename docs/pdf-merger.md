@@ -26,7 +26,7 @@ Updated 11 October 2026. Applies to `/dashboard/pdf-merger/`. Phases 1 to 3 of f
   - A JPEG goes in as it is, byte for byte, and is shown upright by the turn its EXIF data asks for. A mirrored JPEG and every other format are decoded and stored without loss; see-through parts become white.
 - **Bookmarks:** under each file (the default), keep all, one per file, or none.
 - **Contents page:** none, by file name or by document title. A first page lists every file with the page it starts on; every line is a link. With "the first file is a cover", it comes after the cover and does not list it. It takes the size of the result's first page and runs onto more pages when needed. It gets a bookmark of its own unless bookmarks are off.
-  - Text is written with the engine's built-in Helvetica, which has Latin, Greek and Cyrillic letters. A name with other letters is drawn by the browser as a picture and placed on the line, so any script the device can show appears correctly.
+  - Western names are written with the standard Helvetica that every PDF reader has, so no font travels with the file. Greek and Cyrillic names use the engine's own Helvetica, which is then carried in the file (about 30 KB). A name with other letters is drawn by the browser as a picture and placed on the line, so any script the device can show appears correctly.
 - **Fillable fields** (offered when a file has any): keep, join same names, flatten or remove.
 - **Page numbers shown by a viewer:** count from 1, or each file's own.
 - **Attachments** (offered when a file has any): carried over unless turned off.

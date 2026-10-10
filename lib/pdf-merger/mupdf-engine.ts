@@ -13,6 +13,7 @@ import {
   drawContents,
   layoutContents,
   showGlyphs,
+  winAnsiHex,
 } from "./contents"
 import {
   countBookmarks,
@@ -750,8 +751,19 @@ function addContents(
   const size = shownSize(pages[0])
   const count = contentsPageCount(listed.length, size)
 
+  // Measuring uses the engine's Helvetica, which has the standard one's widths.
   const font = new mupdf.Font("Helvetica")
-  const fontObject = out.addFont(font)
+  /**
+   * Text in Western letters is written with the Helvetica every reader has,
+   * named and not carried (F0). Greek and Cyrillic need the engine's own
+   * font to travel with the file (F1), which is only added when used.
+   */
+  const standard = out.addObject(out.newDictionary())
+  standard.put("Type", out.newName("Font"))
+  standard.put("Subtype", out.newName("Type1"))
+  standard.put("BaseFont", out.newName("Helvetica"))
+  standard.put("Encoding", out.newName("WinAnsiEncoding"))
+  let carried: Obj | null = null
   const glyphs = (text: string) =>
     [...text].map((letter) => font.encodeCharacter(letter.codePointAt(0)!))
   const writable = (text: string) => glyphs(text).every((glyph) => glyph > 0)
@@ -807,6 +819,9 @@ function addContents(
       const height = textSize * TALL
       return `q ${picture.ratio * height} 0 0 ${height} ${x} ${y - textSize * 0.3} cm /${picture.name} Do Q`
     }
+    const western = winAnsiHex(text)
+    if (western !== null) return showGlyphs("F0", western, textSize, x, y)
+    carried ??= out.addFont(font)
     return showGlyphs(
       "F1",
       glyphs(text)
@@ -828,7 +843,8 @@ function addContents(
   layouts.forEach((layout, index) => {
     const content = drawContents(layout, show)
     const fonts = out.newDictionary()
-    fonts.put("F1", fontObject)
+    fonts.put("F0", standard)
+    if (carried) fonts.put("F1", carried)
     const resources = out.newDictionary()
     resources.put("Font", fonts)
     if (drawn.size) {
