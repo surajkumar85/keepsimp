@@ -41,6 +41,11 @@
   --color-foreground: var(--foreground);
   --color-background: var(--background);
   --color-marketing-surface: var(--marketing-surface);
+  --color-category-video: var(--category-video);
+  --color-category-audio: var(--category-audio);
+  --color-category-image: var(--category-image);
+  --color-category-document: var(--category-document);
+  --color-category-developer: var(--category-developer);
   --radius-sm: var(--radius-sm);
   --radius-md: var(--radius-md);
   --radius-lg: var(--radius-lg);
@@ -235,6 +240,14 @@
   }
   .tool-card {
     box-shadow: var(--shadow-card);
+  }
+  /* A card that leads somewhere lifts a little under the pointer. */
+  .tool-card[data-ready]:hover,
+  .tool-card[data-ready]:focus-within {
+    box-shadow: var(--shadow-card-hover);
+  }
+  .search-pill {
+    box-shadow: var(--shadow-search);
   }
 }
 

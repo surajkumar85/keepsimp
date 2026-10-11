@@ -6,7 +6,7 @@ const root = fileURLToPath(new URL("../", import.meta.url))
 const tokens = JSON.parse(
   await readFile(path.join(root, "design-system/tokens.json"), "utf8")
 )
-if (![1, 2, 3].includes(tokens.version) || tokens.preset !== "b2zSMmeGTw")
+if (![1, 2, 3, 4].includes(tokens.version) || tokens.preset !== "b2zSMmeGTw")
   throw new Error("Unsupported design token version or changed shadcn preset")
 const declarations = (values, prefix = "") =>
   Object.entries(values)

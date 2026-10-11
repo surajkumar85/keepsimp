@@ -22,6 +22,7 @@ export default defineConfig({
         "lib/json-workspace/convert.ts",
         "lib/image-tools.ts",
         "lib/site.ts",
+        "lib/tool-search.ts",
         "lib/pwa.ts",
         "lib/offline.ts",
         "lib/pdf-merger/contents.ts",

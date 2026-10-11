@@ -24,15 +24,25 @@ export default function Home() {
         </p>
         <div className="mt-4 flex flex-wrap gap-x-4 gap-y-2 text-xs text-muted-foreground">
           <span className="flex items-center gap-1.5">
-            <IconLock className="size-3.5" aria-hidden="true" /> Private by
-            design
+            <IconLock
+              className="size-3.5 text-category-developer"
+              aria-hidden="true"
+            />{" "}
+            Private by design
           </span>
           <span className="flex items-center gap-1.5">
-            <IconHeart className="size-3.5" aria-hidden="true" /> Always free
+            <IconHeart
+              className="size-3.5 text-category-video"
+              aria-hidden="true"
+            />{" "}
+            Always free
           </span>
           <span className="flex items-center gap-1.5">
-            <IconDeviceLaptop className="size-3.5" aria-hidden="true" /> In your
-            browser
+            <IconDeviceLaptop
+              className="size-3.5 text-category-document"
+              aria-hidden="true"
+            />{" "}
+            In your browser
           </span>
         </div>
       </section>

@@ -2,30 +2,144 @@ import { test, expect } from "@playwright/test"
 import AxeBuilder from "@axe-core/playwright"
 import tokens from "../design-system/tokens.json" with { type: "json" }
 
-test("search, empty state, and validated category URLs", async ({ page }) => {
+test("tools are grouped, coloured by kind, and follow validated category URLs", async ({
+  page,
+}) => {
   await page.goto("/dashboard/")
   await expect(page.getByTestId("tool-card")).toHaveCount(13)
-  // Both converters write WebP; only one of them makes boomerangs.
-  await page.getByRole("searchbox").fill("WEBP")
-  await expect(page.getByTestId("tool-card")).toHaveCount(2)
-  await page.getByRole("searchbox").fill("boomerang")
-  await expect(page.getByTestId("tool-card")).toHaveCount(1)
-  await expect(page.getByTestId("tool-card")).toContainText(
-    "Animation converter"
+  // What works comes first; what is still to come is kept apart and quiet.
+  const ready = page.getByTestId("tools-ready")
+  const planned = page.getByTestId("tools-planned")
+  await expect(ready.getByRole("heading", { level: 3 }).first()).toContainText(
+    "Ready to use"
   )
-  await page.getByRole("searchbox").fill("nonexistent")
-  await expect(
-    page.getByRole("heading", { name: "No tools found" })
-  ).toBeVisible()
-  await page
-    .getByRole("button", { name: "Clear search", exact: true })
-    .first()
-    .click()
-  await expect(page.getByTestId("tool-card")).toHaveCount(13)
+  await expect(ready.getByTestId("tool-card")).toHaveCount(7)
+  await expect(planned.getByTestId("tool-card")).toHaveCount(6)
+  await expect(ready.getByRole("link")).toHaveCount(7)
+  await expect(planned.getByRole("link")).toHaveCount(0)
+  // Each kind of tool has its own colour, taken from the tokens.
+  const colourOf = (name: string) =>
+    ready
+      .getByTestId("tool-card")
+      .filter({ hasText: name })
+      .locator("p")
+      .first()
+      .evaluate((label) => getComputedStyle(label).color)
+  const colours = new Set([
+    await colourOf("Image compressor"),
+    await colourOf("PDF merger"),
+    await colourOf("JSON formatter"),
+  ])
+  expect(colours.size).toBe(3)
+  expect(await colourOf("Image resizer")).toBe(
+    await colourOf("Image compressor")
+  )
+  // A card that leads somewhere answers the pointer; one that does not stays flat.
+  const card = ready.getByTestId("tool-card").first()
+  await expect(card).toHaveCSS("box-shadow", "none")
+  await card.hover()
+  await expect(card).not.toHaveCSS("box-shadow", "none")
+
   await page.goto("/dashboard/?category=video")
   await expect(page.getByTestId("tool-card")).toHaveCount(3)
+  await expect(page.getByTestId("tools-ready")).toHaveCount(0)
   await page.goto("/dashboard/?category=invalid")
   await expect(page.getByTestId("tool-card")).toHaveCount(13)
+})
+
+test("the search in the top bar finds tools and opens them", async ({
+  page,
+}) => {
+  await page.goto("/dashboard/")
+  const button = page.getByRole("button", { name: /Search tools/ })
+  await button.click()
+  const dialog = page.getByRole("dialog", { name: "Search tools" })
+  const box = dialog.getByRole("combobox", { name: "Search tools" })
+  await expect(box).toBeFocused()
+  const options = dialog.getByRole("option")
+  // With nothing typed, every tool is offered, working tools first.
+  await expect(options).toHaveCount(13)
+  await expect(options.first()).toContainText("Image compressor")
+  await expect(options.first()).toHaveAttribute("aria-selected", "true")
+  // Both converters write WebP; only one of them makes boomerangs.
+  await box.fill("WEBP")
+  await expect(options).toHaveCount(2)
+  await box.fill("boomerang")
+  await expect(options).toHaveCount(1)
+  await expect(options).toContainText("Animation converter")
+  await box.fill("nonexistent")
+  await expect(dialog).toContainText("No tools found")
+  await expect(options).toHaveCount(0)
+  // A tool that is not built yet is listed, but cannot be chosen.
+  await box.fill("video trimmer")
+  await expect(options).toHaveCount(1)
+  await expect(options).toHaveAttribute("aria-disabled", "true")
+  await expect(options).toContainText("Coming soon")
+  await box.press("Enter")
+  await expect(dialog).toBeVisible()
+
+  // Arrow keys move between tools that can be opened, going round at the ends.
+  await box.fill("pdf")
+  await expect(options).toHaveCount(2)
+  await expect(options.nth(0)).toHaveAttribute("aria-selected", "true")
+  await box.press("ArrowDown")
+  await expect(options.nth(1)).toHaveAttribute("aria-selected", "true")
+  await expect(box).toHaveAttribute(
+    "aria-activedescendant",
+    (await options.nth(1).getAttribute("id"))!
+  )
+  await box.press("ArrowDown")
+  await expect(options.nth(0)).toHaveAttribute("aria-selected", "true")
+  await box.press("ArrowUp")
+  await expect(options.nth(1)).toHaveAttribute("aria-selected", "true")
+  await box.press("Enter")
+  await expect(page).toHaveURL(/\/dashboard\/pdf-splitter\/$/)
+  await expect(dialog).toBeHidden()
+
+  // The search is in the top bar of every tool, and a press on a result opens it.
+  await page.getByRole("button", { name: /Search tools/ }).click()
+  await dialog.getByRole("combobox").fill("json")
+  await dialog.getByRole("option", { name: /JSON formatter/ }).click()
+  await expect(page).toHaveURL(/\/dashboard\/json-formatter\/$/)
+  // Escape closes it and gives focus back to the button.
+  await page.getByRole("button", { name: /Search tools/ }).click()
+  await page.keyboard.press("Escape")
+  await expect(dialog).toBeHidden()
+  await expect(page.getByRole("button", { name: /Search tools/ })).toBeFocused()
+})
+
+test("⌘K or Ctrl+K opens the search from anywhere, also while typing", async ({
+  page,
+  isMobile,
+}) => {
+  test.skip(isMobile, "Phones have no keyboard to test with.")
+  await page.goto("/dashboard/")
+  const dialog = page.getByRole("dialog", { name: "Search tools" })
+  // The button says which keys, for the keyboard this browser reports.
+  const apple = await page.evaluate(() =>
+    /mac|iphone|ipad|ipod/i.test(navigator.platform || navigator.userAgent)
+  )
+  const keys = apple ? "Meta+k" : "Control+k"
+  await expect(page.getByTestId("search-button")).toContainText(
+    apple ? "⌘K" : "Ctrl K"
+  )
+  await page.keyboard.press(keys)
+  await expect(dialog.getByRole("combobox")).toBeFocused()
+  // The same keys close it again.
+  await page.keyboard.press(keys)
+  await expect(dialog).toBeHidden()
+
+  // From a tool, with the cursor in a text field.
+  await page.goto("/dashboard/json-formatter/")
+  await page.getByLabel("Your JSON", { exact: true }).click()
+  await page.keyboard.press(keys)
+  await expect(dialog.getByRole("combobox")).toBeFocused()
+  await page.keyboard.type("resize")
+  await page.keyboard.press("Enter")
+  await expect(page).toHaveURL(/\/dashboard\/image-resizer\/$/)
+  // The plain letter does nothing by itself.
+  await page.keyboard.press("k")
+  await expect(dialog).toBeHidden()
 })
 
 test("sidebar navigation works on desktop and mobile", async ({
@@ -64,6 +178,8 @@ test("sidebar navigation works on desktop and mobile", async ({
 test("theme persists and both themes pass accessibility checks", async ({
   page,
 }) => {
+  // Colours are checked as they settle, not half-way through a transition.
+  await page.emulateMedia({ reducedMotion: "reduce" })
   await page.goto("/dashboard/")
   for (const theme of ["light", "dark"]) {
     if (theme === "dark")
@@ -71,7 +187,18 @@ test("theme persists and both themes pass accessibility checks", async ({
     const results = await new AxeBuilder({ page })
       .withTags(["wcag2a", "wcag2aa", "wcag21aa"])
       .analyze()
-    expect(results.violations).toEqual([])
+    expect(results.violations, theme).toEqual([])
+    // The search, with its list open and a tool chosen.
+    await page.getByTestId("search-button").click()
+    const search = page.getByRole("dialog", { name: "Search tools" })
+    await expect(search.getByRole("option")).toHaveCount(13)
+    const open = await new AxeBuilder({ page })
+      .include("[role=dialog]")
+      .withTags(["wcag2a", "wcag2aa", "wcag21aa"])
+      .analyze()
+    expect(open.violations, `${theme} search`).toEqual([])
+    await page.keyboard.press("Escape")
+    await expect(search).toBeHidden()
   }
   await page.reload()
   await expect(page.locator("html")).toHaveClass(/dark/)
@@ -146,10 +273,18 @@ test("compact production pages run without errors or external requests", async (
     "none"
   )
   const desktop = page.viewportSize()!.width >= 768
-  await expect(page.getByRole("searchbox")).toHaveCSS(
+  await expect(page.getByTestId("search-button")).toHaveCSS(
     "height",
     desktop ? tokens.layout["control-desktop"] : tokens.layout["control-touch"]
   )
+  // A pill: its corners are rounded by at least half its height, however the browser writes that.
+  expect(
+    await page
+      .getByTestId("search-button")
+      .evaluate((button) =>
+        parseFloat(getComputedStyle(button).borderTopLeftRadius)
+      )
+  ).toBeGreaterThanOrEqual(18)
   if (desktop)
     await expect(page.locator('[data-slot="sidebar-container"]')).toHaveCSS(
       "width",
@@ -174,12 +309,21 @@ test("skip link moves keyboard focus into the content", async ({ page }) => {
 test("navigation remains usable at 320px", async ({ page }) => {
   await page.setViewportSize({ width: 320, height: 740 })
   await page.goto("/dashboard/")
-  await page.getByRole("searchbox").waitFor()
+  await page.getByTestId("search-button").waitFor()
   expect(
     await page.evaluate(
       () => document.documentElement.scrollWidth <= innerWidth
     )
   ).toBe(true)
+  // The search still fits, as a round button, and its list fits the screen.
+  await page.getByTestId("search-button").click()
+  const search = page.getByRole("dialog", { name: "Search tools" })
+  await expect(search.getByRole("option")).toHaveCount(13)
+  const box = await search.boundingBox()
+  expect(box!.x).toBeGreaterThanOrEqual(0)
+  expect(box!.x + box!.width).toBeLessThanOrEqual(320)
+  await page.keyboard.press("Escape")
+  await expect(search).toBeHidden()
   await page.getByRole("button", { name: "Toggle Sidebar" }).click()
   const dialog = page.getByRole("dialog")
   await expect(dialog).toBeVisible()

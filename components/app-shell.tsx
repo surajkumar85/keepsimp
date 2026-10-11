@@ -6,6 +6,7 @@ import type { CSSProperties } from "react"
 import { usePathname } from "next/navigation"
 import { AppSidebar } from "@/components/app-sidebar"
 import { ThemeToggle } from "@/components/theme-toggle"
+import { ToolSearch } from "@/components/tool-search"
 import {
   SidebarInset,
   SidebarProvider,
@@ -38,15 +39,19 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <AppSidebar />
         </Suspense>
         <SidebarInset className="min-w-0">
-          <header className="flex h-14 shrink-0 items-center justify-between gap-3 border-b px-4 md:px-6">
-            <div className="flex items-center gap-2">
+          <header className="flex h-14 shrink-0 items-center gap-2 border-b px-4 sm:gap-3 md:px-6">
+            {/* The sides are equally wide from 640px, so the search sits in the middle. */}
+            <div className="flex min-w-0 flex-1 items-center gap-2 sm:basis-0">
               <SidebarTrigger />
-              <span className="text-sm font-medium">
+              <span className="truncate text-sm font-medium">
                 {designPage ? "Design reference" : "Discover tools"}
               </span>
             </div>
-            <div className="flex items-center gap-3">
-              <span className="hidden text-xs text-muted-foreground sm:block">
+            <div className="flex justify-end sm:w-full sm:max-w-sm sm:justify-center">
+              <ToolSearch />
+            </div>
+            <div className="flex items-center justify-end gap-3 sm:flex-1 sm:basis-0">
+              <span className="hidden text-xs text-muted-foreground lg:block">
                 Free. Simple. Yours.
               </span>
               <ThemeToggle />

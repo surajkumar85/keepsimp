@@ -1,6 +1,6 @@
 # KeepSimp design reference
 
-Version 3.10 · marketing, functional dashboard, chips, image comparison, batch tools, result tables, JSON workspace, animation player, adjustment sliders, document lists, page grids, dialogs, the document reader and page boards · updated 11 October 2026 · applies to every future implementation. Tokens are unchanged from version 3.
+Version 4.0 · marketing, functional dashboard, chips, image comparison, batch tools, result tables, JSON workspace, animation player, adjustment sliders, document lists, page grids, dialogs, the document reader, page boards, category colours and the search in the top bar · updated 11 October 2026 · applies to every future implementation. Token version 4 adds five category colours and two shadows.
 
 KeepSimp combines the requested shadcn preset with Airbnb-informed clarity, spacing, hierarchy, and human language. The exact numbers below are **KeepSimp decisions**, not an official Airbnb token export. Airbnb's public references reviewed here do not provide a complete numerical radius specification. We retain our own teal identity and fonts.
 
@@ -11,6 +11,8 @@ Airbnb's published design language emphasizes unified, universal, iconic, and co
 Airbnb's typography article describes a bespoke Cereal family and central semantic text styles. KeepSimp follows the shared-style principle using the preset's Inter, Outfit, and Geist Mono. Cereal is not included or licensed through this project. Fonts ship locally from Fontsource packages; builds and browser rendering need no Google Fonts request. [Airbnb Design: Working Type](https://medium.com/airbnb-design/working-type-81294544608b)
 
 Airbnb describes WCAG 2.1 AA work, keyboard navigation, contrast, responsive layouts, text zoom, and reduced-motion support. These inform our acceptance criteria. Automated axe scans support evaluation but do not prove full WCAG conformance; manual keyboard, zoom, and screen-reader reviews remain part of each tool's release. [Airbnb accessibility](https://www.airbnb.com/accessibility/)
+
+Airbnb's 2025 redesign was described by its designers as "fun, alive, and simple": playful icons that are "a universal language", more curved edges and gentle motion, with the new features kept out of the way of the main job. KeepSimp takes the same direction for its dashboard: a colour and an icon of its own for each kind of tool, cards that answer the pointer with a small lift, and one search in the top bar. The colours and numbers are KeepSimp's own. [It's Nice That: Airbnb's redesign](https://www.itsnicethat.com/articles/airbnb-app-redesign-140525)
 
 The requested initialization was `npx shadcn@latest init --preset b2zSMmeGTw --template next`. The CLI needed a new directory, so it generated `keepsimp-starter` and its contents were moved into this repository. Then `npx shadcn@latest add sidebar-09` installed the two-panel block. The user subsequently requested a single sidebar and a more compact interface. The current layout follows sidebar-01's single-panel, grouped-menu structure using the existing Base UI primitives; sidebar-09's nested panels have been removed. [shadcn CLI](https://ui.shadcn.com/docs/cli), [sidebar-01](https://ui.shadcn.com/view/new-york-v4/sidebar-01), [shadcn sidebar composition](https://ui.shadcn.com/docs/components/base/sidebar)
 
@@ -41,7 +43,9 @@ Use semantic classes: `bg-background`, `text-foreground`, `bg-card`, `bg-primary
 
 Dark mode uses charcoal surfaces and a brighter teal `oklch(0.704 0.14 182.503)` with dark foreground text. This intentionally adjusts the preset's dark primary for readable teal text and buttons. Muted text, form borders, and focus rings also receive contrast-oriented adjustments. All exact theme values live in the token file; no second palette should be maintained in components.
 
-Use a 1px border to group surfaces. Compact tool cards use `--shadow-card: none` and a quiet 1px border. Use shadows to communicate elevation; avoid oversized glows and competing gradients. Errors use `destructive` plus explanatory text and an icon, so color is never the only cue.
+Five category colours give each kind of tool its own: `category-video` (rose), `category-audio` (violet), `category-image` (orange), `category-document` (blue) and `category-developer` (green), each with a lighter value for the dark theme. They are for a tool's icon, its category label and what its card takes on under the pointer, and for the category icons in the sidebar. As text they meet 4.5:1 on `background` and `card`. An icon tile is the colour at 12% under an icon in the full colour; never put text on that fill, where the contrast falls short. Colour is kept for what can be used: a tool that is not built yet gets a `muted` tile. Brand actions stay teal (`primary`); category colours never mark a button, a selection or an error.
+
+Use a 1px border to group surfaces. Two shadows exist beside `--shadow-card: none`: `--shadow-card-hover` under a card that leads somewhere while the pointer or the keyboard is on it, and `--shadow-search` under the search pill. Compact tool cards use `--shadow-card: none` and a quiet 1px border. Use shadows to communicate elevation; avoid oversized glows and competing gradients. Errors use `destructive` plus explanatory text and an icon, so color is never the only cue.
 
 ## Spacing and layout
 
@@ -49,7 +53,15 @@ The base unit is 4px. Prefer 8, 12, 16, 20, 24, 32, 40, 48, and 64px spacing. Ca
 
 Sidebar-01 provides one 224px desktop navigation panel without an additional icon rail. The main header is 56px high. Collapsing the sidebar hides the panel completely; it remains out of the keyboard tab order while hidden. Below 768px it becomes one 256px modal sheet with full navigation. The sheet has a close button, Escape dismissal, focus containment, and return to the trigger. Tool cards progress from one to two to three columns as available width increases. Do not hide essential actions on mobile or allow page-width overflow.
 
-The dashboard uses a short, flat introduction rather than a large hero panel. Tool cards use a 12px radius, 16px padding, 32px icon tiles, 16px titles, and 14px descriptions. Do not restore large empty card headers, oversized badges, or a second navigation panel in later phases. Exact layout dimensions are recorded under `layout` in the token file.
+The dashboard uses a short, flat introduction rather than a large hero panel. Tools are shown in two groups under small headings: "Ready to use" first, then "Coming soon". Tool cards (`components/tool-catalogue.tsx`) use a 12px radius, 16px padding, a 40px `rounded-lg` icon tile with the tool's own icon (`components/tool-icon.tsx`), the category as a 12px label in its colour, a 16px title and a 14px description.
+
+- A card that leads somewhere is one link over the whole card. Under the pointer it rises 2px, takes its category's colour on the border and a 4% wash of it, gains `--shadow-card-hover`, its icon grows a little and its arrow moves up and to the right, all over 200ms. A press puts it back down. From the keyboard the whole card takes the focus ring. With reduced motion nothing moves.
+- A card for a tool that is not built yet has a dashed border, a grey tile, no arrow and no link. Its group's heading says "Coming soon"; no badge is needed.
+- Cards settle into place one after another when the page opens (a 16px rise over 200ms, 30ms apart). The rise never changes opacity, so text keeps its contrast throughout.
+
+Do not restore large empty card headers, oversized badges, or a second navigation panel in later phases. Exact layout dimensions are recorded under `layout` in the token file.
+
+The search (`components/tool-search.tsx`) lives in the middle of the header on every workspace page. It is a pill, 36px high and at most 384px wide, with a search icon, "Search tools" and the shortcut in a small key cap; below 640px it is a round 44px button with the icon alone. Pressing it, or ⌘K on a Mac and Ctrl+K elsewhere, opens a dialog 12% down the screen with a field and a list of every tool, working tools first: the tool's icon, its name and description, and its category in colour or "Coming soon". Typing narrows the list; arrow keys, Home and End move between tools that can be opened; Enter opens one; Escape closes and gives focus back to the pill. Tools that are not built are listed but cannot be chosen. The field is a combobox that names the chosen tool with `aria-activedescendant`, and the number of results is said to screen readers. The dashboard has no second search field.
 
 ### Marketing pages
 
@@ -96,7 +108,7 @@ Use Tabler outline icons, normally 20px with a 1.7 stroke. Hide decorative icons
 - Preserve visible keyboard focus. The global outline is 2px with a 3px offset; components may also use the semantic ring.
 - Keep a skip link, heading hierarchy, landmarks, logical tab order, and a focus target for main content.
 - Give the skip link an explicit `tabIndex={0}` so its first-Tab behavior is consistent in macOS WebKit as well as Chromium and Firefox. Keep negative tabindex only on programmatic focus targets, never on an essential interactive control. Safari also has a user setting for full keyboard navigation. [Apple Safari accessibility settings](https://support.apple.com/guide/safari/advanced-ibrw1075/mac)
-- Respect system theme initially and persist explicit theme choice locally. The theme toggle has an accessible name. No global single-letter shortcuts; sidebar's modifier shortcut ignores text entry.
+- Respect system theme initially and persist explicit theme choice locally. The theme toggle has an accessible name. No global single-letter shortcuts; sidebar's modifier shortcut ignores text entry. The search's shortcut (⌘K on a Mac, Ctrl+K elsewhere) works while typing as well, since it types nothing; on a Mac, Ctrl+K is left to text editors, which use it to delete to the end of a line.
 - Use 150ms for small feedback and 200ms for panels. Reduced-motion users receive essentially immediate transitions. No autoplay or infinite loading.
 - Provide honest empty, error, progress, cancellation, and completion states. Never show a planned utility as an active processor.
 - Before each tool release, test 320px layouts, 200% zoom, keyboard navigation, and manual assistive technology behavior in addition to automated checks.

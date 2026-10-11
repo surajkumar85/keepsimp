@@ -89,6 +89,7 @@ export function AppSidebar() {
                       <CategoryIcon
                         category={category.id}
                         className="size-4.5"
+                        colourful
                       />
                       <span>{category.label}</span>
                       <span className="ml-auto text-xs text-muted-foreground">

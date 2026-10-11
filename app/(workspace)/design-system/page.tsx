@@ -15,6 +15,14 @@ const colors = [
   "muted",
   "border",
 ] as const
+/** One colour for each kind of tool, used for its icon, its label and its card under the pointer. */
+const categoryColors = [
+  ["category-video", "Video"],
+  ["category-audio", "Audio"],
+  ["category-image", "Images"],
+  ["category-document", "Documents"],
+  ["category-developer", "Developer"],
+] as const
 
 export default function DesignSystem() {
   return (
@@ -67,6 +75,34 @@ export default function DesignSystem() {
               <p className="mt-1 text-xs text-muted-foreground">
                 Adapts to your theme
               </p>
+            </div>
+          ))}
+        </div>
+        <h3 className="mt-6 mb-3 text-sm font-medium">
+          A colour for each kind of tool
+        </h3>
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
+          {categoryColors.map(([color, label]) => (
+            <div
+              key={color}
+              className="rounded-lg border p-3"
+              data-testid={color}
+            >
+              {/* The colour itself, for icons and labels, beside the soft fill of an icon tile. */}
+              <div className="mb-3 flex h-16 overflow-hidden rounded-md border">
+                <div
+                  className="flex-1"
+                  style={{ background: `var(--${color})` }}
+                />
+                <div
+                  className="flex-1"
+                  style={{
+                    background: `color-mix(in oklab, var(--${color}) 12%, transparent)`,
+                  }}
+                />
+              </div>
+              <p className="text-sm font-medium">{label}</p>
+              <p className="font-mono text-xs text-muted-foreground">{color}</p>
             </div>
           ))}
         </div>
