@@ -2,19 +2,22 @@
 
 Splits PDFs in the browser. Nothing is uploaded: files are opened, drawn and written by MuPDF as WebAssembly in the same worker the PDF merger uses. Live at `/dashboard/pdf-splitter/`.
 
-Phases 1 and 2 of four are built. The ways for scans (phase 3) and a password on the parts, more choices, the tutorial video and the guide (phase 4) are not built yet, and the page does not offer them.
+Phases 1 to 3 of four are built. A password on the parts, more choices, the tutorial video and the guide (phase 4) are not built yet, and the page does not offer them.
 
 ## What it does
 
 - **Add** one PDF or several: drop, picker, paste or the sample, and more at any time. A locked file asks for its password in its row; a damaged one is repaired where possible, and the row says so. What is not a PDF is refused with the reason.
-- **Seven ways to split,** chosen with chips:
+- **Nine ways to split,** chosen with chips:
   - **Cut into parts.** A place to cut sits between every two pages. Rules place cuts for you: after every N pages, into N equal parts (none more than a page longer than another), or every page on its own. Cuts can be changed by hand afterwards, and undone and redone.
   - **Page ranges.** One part for each range typed: `1-3, 4-10, 11-`. Ranges may overlap and repeat, `5-1` counts down, `odd` and `even` work, and a plus sign joins ranges into one part (`1-3 + 7`).
   - **By bookmarks.** Each bookmark of a level starts a part that runs to the page before the next one, and gives the part its name (`{label}`). The level is chosen when bookmarks sit under one another; a field keeps only bookmarks whose titles hold the words typed; each can be unticked. Of several bookmarks that open one page, the first stands. Pages before the first bookmark become a part of their own ("Front") or join the first part.
   - **By size.** Parts that each stay under 5, 10, 20 or 25 MB, or a size that is typed, in MB or KB (counted in steps of 1,024, as sizes are shown everywhere on the site). See "Splitting by size" below.
+  - **At blank pages.** For a stack of scans with a blank sheet between documents. See "Blank pages" below.
+  - **By text.** A new part at every page that holds the words typed, or wherever the text in one marked place changes. See "Text rules" below.
   - **Odd and even.** Two files, for the fronts and backs of a double-sided scan.
   - **Extract pages.** The selected pages as one file, in the order of the file.
   - **Remove pages.** Everything except the selected pages as one file.
+- **Scans of two pages** are cut in half first, by a switch above the ways to split. See "Double pages" below.
 - **The page board** shows every page with its number and where it goes ("Part 2", "Parts 1, 4", "Left out", "Taken out", "Removed"). Neighbouring parts take turns with a tint. In the two ways that select pages, a tile is a toggle, Shift-click selects everything between two pages, and a pages field mirrors the selection both ways.
 - **Keyboard:** arrows, Home and End move between pages; S cuts after the page; Space selects; Shift+Space selects on from the last page pressed; Enter opens the reader at the page. Every cut is put into a polite live region in words.
 - **The reader** (`docs/pdf-reader.md`) opens from the file's picture, its button, a double click or Enter on a page. While cutting into parts it has a button that cuts after the page being read. After splitting, each part can be read before it is downloaded.
@@ -47,6 +50,35 @@ Many programs give every page of a file one shared list of all its fonts and pic
 
 Fonts are not cut down to the letters a part uses: a font that two parts share is carried by both, so parts of a text-heavy file together can be somewhat larger than the original.
 
+### Blank pages
+
+Each page is drawn 240 pixels on its longer side and the share of it that holds marks is measured (`inkShare` in `blank.ts`):
+
+- The paper's brightness is taken to be the commonest one, counted with its near neighbours, so cream paper and the grain of a scan are not marks. A spot counts as a mark when it differs from the paper by more than 48 of 255, lighter or darker.
+- The outer 4% of the page is left out, where scans have shadows and dark borders.
+- Measured on A4 pages: a speck is 0.003%, a page number 0.01%, a punch hole 0.07%, "This page is intentionally left blank" 0.13%, and one full line of text 0.22%.
+
+Three settings turn the share into a verdict: under 0.002% ("nothing at all"), under 0.03% ("specks or a page number") and under 0.18% ("holes or a short line"). No setting takes a full line of text for blank. Any page can be turned round by pressing it: a page found blank is kept, or another page is called blank.
+
+At a blank page the file is cut and the page left out, or cut after it with the page kept at the end of its part, or the blank pages are only removed and the rest stays one file. Blank pages side by side count as one place. Pages are looked at in the worker a slice at a time, so the page stays usable, and the row says how far the looking has got.
+
+### Text rules
+
+- **Pages with certain words** uses the reader's search (capitals and accents make no difference) on every page; each page with a match starts a part. Pages before the first become a part of their own or join the first part.
+- **Where the text in one place changes** reads the lines whose middle lies in a marked area of each page (`textInArea`), and starts a part whenever that text differs from the page before (`partsFromTexts`). A page with nothing there stays with the part before it; pages before any text take the first text found. Each part is labelled with its text, and the usual pattern becomes `{name}-{part}-{label}`.
+- The area is marked by dragging over a picture of a page, by one of four usual places, or by typing its four edges in percent, which are applied together when the fields are left. The picture can show any page, and says what is read there.
+- Both read the text a PDF holds. A scan holds pictures of text; the page says so and suggests blank pages or cuts. There is no OCR.
+
+### Double pages
+
+A book laid open on a scanner gives two pages a sheet. With the switch on, every file is replaced, in the worker, by one whose double pages are single: each sheet that is cut appears twice, shown through one half of its box (`halvePdf`).
+
+- Nothing is drawn or compressed again. The two halves share the sheet's content; only the page's `MediaBox` and `CropBox` differ.
+- The halves are worked out as a reader sees the page (`areaToBox` in `halves.ts`), so a sheet stored on its side is cut along the line on screen, not along the stored page.
+- Side by side or one above the other; the left (or top) page first, or the other, for books read from right to left; every sheet, or only those the shape of a double page; a single cover kept whole; and the cut anywhere from 20% to 80% of the sheet, for folds that are not in the middle.
+- Links and notes go with the half their middle lies on. A fillable field stays on the first half only. The file's own page numbers are dropped, since there are twice as many pages.
+- Everything chosen for a file (cuts, selected pages, names, ticks) and everything found in it is let go when its pages change, and the file is read again. The original stays open in the worker, so turning the switch off puts it back.
+
 ### Splitting by size
 
 What a run of pages weighs as a file of its own cannot be worked out from the original: shared fonts and pictures are counted once per part, and everything is compressed afresh. So the splitter measures by writing (`partsBySize` in `size.ts`, `splitBySize` in the engine).
@@ -71,15 +103,18 @@ A split into thousands of parts stays quick: board tiles are drawn again only wh
   - `settings.ts`: the plan a set of choices comes to, typed names and parts left out, what a result was made from, and why a file is refused.
   - `bookmarks.ts`: bookmarks that lead to pages with their levels, those to split at, and the parts they make.
   - `size.ts`: a typed size in bytes, and the search for the longest run of pages under a size, given a way to measure.
-  - `files.ts`: the list of files and what is chosen for each: cuts with their history, selected pages, typed names, parts left out and unticked bookmarks.
+  - `files.ts`: the list of files and what is chosen or found for each: cuts with their history, selected pages, typed names, parts left out, unticked bookmarks, each page's share of marks, pages turned round, and what a search or an area came to.
+  - `blank.ts`: how much of a picture holds marks, the three settings, and the parts a file falls into at its blank pages.
+  - `text-rule.ts`: the text in an area of a page, and parts from pages that hold words or from each page's text.
+  - `halves.ts`: the two halves of a page as shown, as boxes in the file's own units whatever its turn, and which pages are cut.
 - **`mupdf-split.ts`** writes one part by handing its pages to `mergePages`, with the file's details, its own page numbers and its bookmarks kept, and splits by size by writing runs of pages until they fit.
-- **Worker and client** (`lib/pdf-merger/`): a `split` request writes the parts one after another and hands each over as it is done; `split-size` finds the parts as it goes and says which pages each holds; `cancel` stops either between pages or parts.
-- **Components** (`components/pdf-splitter/`): `pdf-splitter.tsx` (the files, the choices, the results), `file-rows.tsx`, `rules-panel.tsx`, `page-board.tsx`, `parts-list.tsx` and `tutorial.tsx`.
+- **Worker and client** (`lib/pdf-merger/`): a `split` request writes the parts one after another and hands each over as it is done; `split-size` finds the parts as it goes and says which pages each holds; `cancel` stops either between pages or parts. `ink` and `area-text` look through a file a slice at a time, as a search does, and `halve` swaps a file for its halved form or back.
+- **Components** (`components/pdf-splitter/`): `pdf-splitter.tsx` (the files, the choices, the results), `file-rows.tsx`, `rules-panel.tsx`, `scan-panel.tsx` (blank pages, text rules, the area picker and double pages), `page-board.tsx`, `parts-list.tsx` and `tutorial.tsx`.
 - **Shared by the PDF tools** (`components/pdf/`): `use-pdf-reader.ts` (opening a file, a list of pages or a finished result in the reader), `use-page-pictures.ts` (small pictures, at most 300 kept), `use-device-limits.ts` and `password-row.tsx`.
 
 ## Tests
 
-- **Unit:** `parts`, `naming`, `settings`, `bookmarks`, `size` and `files`, with their edge cases. The size search is tested with files whose pages weigh what the test says: even pages, very uneven ones, a page over the size, a file that fits whole, and a thousand pages without a thousand writes.
+- **Unit:** `parts`, `naming`, `settings`, `bookmarks`, `size`, `files`, `blank`, `text-rule` and `halves`, with their edge cases. The size search is tested with files whose pages weigh what the test says: even pages, very uneven ones, a page over the size, a file that fits whole, and a thousand pages without a thousand writes.
 - **Real engine in Node** (`split.node.test.ts`), with files written by pdf-lib and parts read back by pdf.js and pdf-lib:
   - every rule, typed ranges that overlap, repeat and count down
   - sixty seeded sets of random cuts, each put back together and compared page by page
@@ -87,6 +122,9 @@ A split into thousands of parts stays quick: board tiles are drawn again only wh
   - every page of every part drawn and compared, pixel for pixel, with the page it came from
   - a shared list of pictures: each part holds only its own, and the parts add up to about the whole
   - files from Chromium and macOS split page by page without a pixel changing
+  - blank pages: an empty page, cream paper, a speck, a punch hole and a line of text measured against the three settings, and a scan with writing never taken for blank
+  - text in an area read from the same place on every page, and nothing found on a scan
+  - double pages: the boxes of both halves read back with pdf-lib; each half drawn pixel for pixel like that half of the sheet, also for a sheet stored on its side; the right page first, a cut off the middle, one above the other; a cover and pages that are not double; a link kept with its half
   - by size: parts filled as far as the size allows and no further, the measured size being the size of the file handed over, a page over the size, a file that fits whole, progress, stopping, and attachments in the first part only
 - **Browser** (`e2e/pdf-splitter.spec.ts`, five profiles), with the ZIP unpacked and every part read by pdf.js:
   - cutting between pages, bookmarks and links in the parts, one part downloaded on its own
@@ -101,6 +139,10 @@ A split into thousands of parts stays quick: board tiles are drawn again only wh
   - the sample, a dropped file and files added later
   - bookmarks: levels, the filter, ticks, front pages, names from bookmarks, bookmarks kept in each part, and a file without any
   - size: a typed size, parts under it, the parts shown afterwards, a size no page fits under, and a size that is not one
+  - blank pages: the three settings, the three things done at a blank page, and pages turned round by hand
+  - words: pages found, the pages before the first, and words that are nowhere
+  - text in an area: a usual place, typed edges, a dragged area, another page in the picture, a page with nothing there, and names from the text
+  - double pages: halves on the board and in the parts, a cover, a moved cut, and whole pages again
   - several files: a rule for all, a cut for one, a file that cannot be read, folders in the ZIP, only changed files split again, ranges too long for one file, and reading a file that is not shown
   - axe in both themes in every way of splitting, 320 px, control sizes and no external requests
   - the written help
@@ -108,4 +150,4 @@ A split into thousands of parts stays quick: board tiles are drawn again only wh
 
 ## Not planned
 
-OCR, recompressing pictures (a future PDF compressor), separator pages read from barcodes or QR codes (no decoder works in every browser), and splitting by AI.
+Putting a scanned booklet's pages back in reading order (sheets that hold pages 8 and 1, 2 and 7, and so on), OCR, recompressing pictures (a future PDF compressor), separator pages read from barcodes or QR codes (no decoder works in every browser), and splitting by AI.

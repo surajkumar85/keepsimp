@@ -13,7 +13,13 @@ import {
   type OpenedPdf,
 } from "./mupdf-engine"
 import { pageSizes, readPage, searchPage } from "@/lib/pdf-reader/mupdf-read"
-import { splitBySize, splitPart } from "@/lib/pdf-splitter/mupdf-split"
+import {
+  areaTexts,
+  halvePdf,
+  pageInk,
+  splitBySize,
+  splitPart,
+} from "@/lib/pdf-splitter/mupdf-split"
 import { jpegOrientation, quarterTurns } from "./picture"
 import type { Size } from "@/lib/image-compressor/geometry"
 import type { PageText, Quad } from "@/lib/pdf-reader/text"
@@ -48,6 +54,18 @@ class Cancelled extends Error {}
 
 /** Files held open, by the id the page gave them. */
 const files = new Map<string, OpenedPdf>()
+/** Files as they were before their double pages were cut in half. */
+const originals = new Map<string, OpenedPdf>()
+
+/** Let go of a file, and of the file it was cut from. */
+function closeFile(id: string) {
+  const pdf = files.get(id)
+  const original = originals.get(id)
+  if (pdf) closePdf(pdf)
+  if (original && original !== pdf) closePdf(original)
+  files.delete(id)
+  originals.delete(id)
+}
 /** Jobs at or below this number have been called off. */
 let cancelled = 0
 
@@ -107,8 +125,7 @@ async function open(request: Extract<PdfRequest, { type: "open" }>) {
     return
   }
   try {
-    const previous = files.get(request.id)
-    if (previous) closePdf(previous)
+    closeFile(request.id)
     const pdf = request.picture
       ? await picture(mupdf, request.file)
       : openPdf(
@@ -353,6 +370,62 @@ async function splitSize(request: Extract<PdfRequest, { type: "split-size" }>) {
   }
 }
 
+async function halve(request: Extract<PdfRequest, { type: "halve" }>) {
+  const { id } = request
+  const current = files.get(id)
+  if (!current) return
+  const whole = originals.get(id) ?? current
+  try {
+    const mupdf = await engine
+    if (current !== whole) closePdf(current)
+    // Should the cutting fail, the file is whole again.
+    files.set(id, whole)
+    originals.delete(id)
+    if (request.choice) {
+      const halved = await halvePdf(mupdf, whole, request.choice)
+      originals.set(id, whole)
+      files.set(id, halved)
+    }
+    post({ type: "opened", id, facts: files.get(id)!.facts })
+  } catch (error) {
+    post({
+      type: "open-error",
+      id,
+      message: readable(error, "The pages could not be cut in half."),
+    })
+  }
+}
+
+/**
+ * Look at a file page by page for a while, then go to the back of the queue
+ * for the rest, as a search does. `look` is given a page and says what it
+ * found; `tell` posts what a run of pages came to.
+ */
+function scan<Found>(
+  request: { request: number; id: string },
+  look: (pdf: OpenedPdf, page: number) => Found,
+  tell: (from: number, found: Found[], total: number) => void,
+  from = 0
+) {
+  if (forgotten.has(request.request)) {
+    forgotten.delete(request.request)
+    return
+  }
+  const pdf = files.get(request.id)
+  const total = pdf?.pages.length ?? 0
+  const started = performance.now()
+  const found: Found[] = []
+  let at = from
+  while (pdf && at < total && performance.now() - started < SEARCH_SLICE)
+    found.push(look(pdf, at++))
+  tell(from, found, total)
+  if (at < total)
+    enqueue({
+      request: request.request,
+      run: () => scan(request, look, tell, at),
+    })
+}
+
 function layout(request: Extract<PdfRequest, { type: "layout" }>) {
   const pdf = files.get(request.id)
   let found: { sizes: Size[]; bookmarks: Bookmark[] } | null = null
@@ -498,16 +571,43 @@ self.onmessage = (event: MessageEvent<PdfRequest>) => {
     })
   else if (request.type === "search")
     enqueue({ run: () => search(request), request: request.request })
+  else if (request.type === "ink")
+    enqueue({
+      request: request.request,
+      run: async () => {
+        const mupdf = await engine
+        scan(
+          request,
+          (pdf, page) => pageInk(mupdf, pdf, page),
+          (from, shares, total) =>
+            post({ type: "ink", request: request.request, from, shares, total })
+        )
+      },
+    })
+  else if (request.type === "area-text")
+    enqueue({
+      request: request.request,
+      run: () =>
+        scan(
+          request,
+          (pdf, page) => areaTexts(pdf, request.area, page, page + 1)[0],
+          (from, texts, total) =>
+            post({
+              type: "area-text",
+              request: request.request,
+              from,
+              texts,
+              total,
+            })
+        ),
+    })
+  else if (request.type === "halve") enqueue({ run: () => halve(request) })
   else if (request.type === "merge") enqueue({ run: () => merge(request) })
   else if (request.type === "split") enqueue({ run: () => split(request) })
   else if (request.type === "split-size")
     enqueue({ run: () => splitSize(request) })
   else
     enqueue({
-      run: () => {
-        const pdf = files.get(request.id)
-        if (pdf) closePdf(pdf)
-        files.delete(request.id)
-      },
+      run: () => closeFile(request.id),
     })
 }

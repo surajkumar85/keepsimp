@@ -1,7 +1,14 @@
 import { test, expect, type Page } from "@playwright/test"
 import AxeBuilder from "@axe-core/playwright"
 import { unzipSync } from "fflate"
-import { damage, makeSharedPdf, SHARED_PICTURE } from "../tests/pdf-fixtures"
+import {
+  damage,
+  makeDoublePdf,
+  makePlainPdf,
+  makeSharedPdf,
+  SHARED_PICTURE,
+  type PlainPage,
+} from "../tests/pdf-fixtures"
 import { readPdf, storedPictures } from "../tests/pdf-reader"
 import {
   bytesOf,
@@ -22,6 +29,13 @@ async function add(page: Page, ...files: Upload[]) {
     timeout: 60_000,
   })
 }
+
+/** A file of plain pages: lines of text, or nothing at all. */
+const plain = async (name: string, pages: PlainPage[]): Promise<Upload> => ({
+  name,
+  mimeType: "application/pdf",
+  buffer: Buffer.from(await makePlainPdf(pages)),
+})
 
 /** The row of a file, by its name. */
 const row = (page: Page, name: string) =>
@@ -938,6 +952,248 @@ test("splits several files at once, each into a folder of its own", async ({
   await expect(page.getByRole("heading", { name: "1 file" })).toBeVisible()
 })
 
+test("splits a stack of scans at its blank pages", async ({ page }) => {
+  await add(
+    page,
+    await plain("stack.pdf", [
+      { body: "One" },
+      {},
+      { body: "Two" },
+      { body: "Two b" },
+      { speck: true },
+      { body: "Three" },
+    ])
+  )
+  await mode(page, "At blank pages").click()
+  const status = page.getByTestId("blank-status")
+  // An empty page and a page with nothing but a speck are found.
+  await expect(status).toHaveText("2 blank pages of 6.", { timeout: 60_000 })
+  expect(await partsOnBoard(page)).toEqual(["1", "", "2", "2", "", "3"])
+  await expect(tile(page, 2)).toHaveAccessibleName("Page 2, blank")
+  await expect(tile(page, 2)).toHaveAttribute("aria-pressed", "true")
+  const result = await splitToZip(page)
+  expect(result.texts).toEqual([["One"], ["Two", "Two b"], ["Three"]])
+
+  // A strict setting does not take a speck for nothing.
+  const rules = page.getByTestId("split-rules")
+  await rules
+    .getByRole("radio", { name: "Nothing at all", exact: true })
+    .click()
+  await expect(status).toHaveText("1 blank page of 6.")
+  expect(await partsOnBoard(page)).toEqual(["1", "", "2", "2", "2", "2"])
+  await rules
+    .getByRole("radio", { name: "Specks or a page number", exact: true })
+    .click()
+
+  // Blank pages can stay at the end of their part.
+  await rules
+    .getByRole("radio", { name: "Cut after it, and keep it", exact: true })
+    .click()
+  expect(await partsOnBoard(page)).toEqual(["1", "1", "2", "2", "2", "3"])
+  const kept = await splitToZip(page)
+  expect(kept.parts.map((part) => part.pages.length)).toEqual([2, 3, 1])
+
+  // A page found blank can be kept, and another page called blank, by pressing it.
+  await tile(page, 5).click()
+  await expect(status).toHaveText("1 blank page of 6.")
+  await tile(page, 4).click()
+  await expect(status).toHaveText("2 blank pages of 6.")
+  expect(await partsOnBoard(page)).toEqual(["1", "1", "2", "2", "3", "3"])
+
+  // Or they are only removed, and the rest stays one file.
+  await rules
+    .getByRole("radio", { name: "Only remove it", exact: true })
+    .click()
+  const cleaned = await makeOne(page)
+  expect(cleaned.name).toBe("stack-no-blank-pages.pdf")
+  expect(cleaned.pages.map((entry) => entry.text)).toEqual([
+    "One",
+    "Two",
+    "",
+    "Three",
+  ])
+})
+
+test("starts a part at pages that hold certain words", async ({ page }) => {
+  await add(
+    page,
+    await plain("letters.pdf", [
+      { body: "Cover" },
+      { top: "Invoice 1001", body: "Dear A" },
+      { body: "more" },
+      { top: "INVOICE 1002", body: "Dear B" },
+      { top: "Invoice 1003", body: "Dear C" },
+      { body: "end" },
+    ])
+  )
+  await mode(page, "By text").click()
+  await expect(page.getByTestId("result").getByRole("alert")).toContainText(
+    "Type the words that a part starts with."
+  )
+  const rules = page.getByTestId("split-rules")
+  await rules.getByLabel("Words that a part starts with").fill("invoice")
+  await expect(page.getByTestId("text-status")).toHaveText(
+    "Found on 3 pages.",
+    { timeout: 60_000 }
+  )
+  // The cover comes before the first of them, and is a part of its own.
+  expect(await partsOnBoard(page)).toEqual(["1", "2", "2", "3", "4", "4"])
+  await rules
+    .getByRole("radio", { name: "Join the first part", exact: true })
+    .click()
+  expect(await partsOnBoard(page)).toEqual(["1", "1", "1", "2", "3", "3"])
+  const result = await splitToZip(page)
+  expect(result.names).toEqual([
+    "letters-1.pdf",
+    "letters-2.pdf",
+    "letters-3.pdf",
+  ])
+  expect(result.texts.map((part) => part.length)).toEqual([3, 1, 2])
+
+  await rules.getByLabel("Words that a part starts with").fill("zebra")
+  await expect(page.getByTestId("result").getByRole("alert")).toContainText(
+    "No page holds those words.",
+    { timeout: 60_000 }
+  )
+})
+
+test("starts a part where the text in one place changes, and names parts after it", async ({
+  page,
+}) => {
+  await add(
+    page,
+    await plain("bills.pdf", [
+      { top: "No. 1001", body: "first" },
+      { top: "No. 1001", body: "second" },
+      { top: "No. 1002", body: "third" },
+      { body: "no number here" },
+      { top: "No. 1002", body: "fifth" },
+      { top: "No. 1003", body: "sixth" },
+    ])
+  )
+  await mode(page, "By text").click()
+  const rules = page.getByTestId("split-rules")
+  await rules
+    .getByRole("radio", {
+      name: "Where the text in one place changes",
+      exact: true,
+    })
+    .click()
+  await expect(page.getByTestId("result").getByRole("alert")).toContainText(
+    "Mark the area to read on a page."
+  )
+  await expect(page.getByTestId("area-page")).toHaveText("Page 1 of 6")
+  await rules.getByRole("button", { name: "Top strip", exact: true }).click()
+  await expect(page.getByTestId("area-mark")).toBeVisible()
+  await expect(page.getByTestId("area-reads")).toHaveText(
+    "On this page it reads: “No. 1001”",
+    { timeout: 60_000 }
+  )
+  await expect(page.getByTestId("text-status")).toHaveText(
+    "3 different texts found there."
+  )
+  // A page with nothing there stays with the part before it.
+  expect(await partsOnBoard(page)).toEqual(["1", "1", "2", "2", "2", "3"])
+  // The picture shows another page, and says what is read there.
+  await rules.getByRole("button", { name: "Show the next page" }).click()
+  await rules.getByRole("button", { name: "Show the next page" }).click()
+  await rules.getByRole("button", { name: "Show the next page" }).click()
+  await expect(page.getByTestId("area-page")).toHaveText("Page 4 of 6")
+  await expect(page.getByTestId("area-reads")).toHaveText(
+    "On this page there is no text there."
+  )
+
+  const result = await splitToZip(page)
+  expect(result.names).toEqual([
+    "bills-1-No.-1001.pdf",
+    "bills-2-No.-1002.pdf",
+    "bills-3-No.-1003.pdf",
+  ])
+  expect(result.texts.map((part) => part.length)).toEqual([2, 3, 1])
+
+  // The edges can be typed: the lower half of the page holds no numbers.
+  await rules.getByLabel("Top", { exact: true }).fill("50")
+  await rules.getByLabel("Bottom", { exact: true }).fill("100")
+  await rules.getByLabel("Bottom", { exact: true }).press("Enter")
+  await expect(rules.getByLabel("Top", { exact: true })).toHaveValue("50")
+  await expect(page.getByTestId("result").getByRole("alert")).toContainText(
+    "No text was found in that area",
+    { timeout: 60_000 }
+  )
+  // Dragging over the picture marks an area as well.
+  await page.getByTestId("area-stage").scrollIntoViewIfNeeded()
+  const stage = await page.getByTestId("area-stage").boundingBox()
+  await page.mouse.move(stage!.x + 4, stage!.y + 4)
+  await page.mouse.down()
+  await page.mouse.move(stage!.x + stage!.width - 4, stage!.y + 40, {
+    steps: 4,
+  })
+  await page.mouse.up()
+  await expect(page.getByTestId("text-status")).toHaveText(
+    "3 different texts found there.",
+    { timeout: 60_000 }
+  )
+  await rules.getByRole("button", { name: "Clear", exact: true }).click()
+  await expect(page.getByTestId("area-mark")).toHaveCount(0)
+})
+
+test("cuts scans of two pages in half before splitting", async ({ page }) => {
+  await add(page, {
+    name: "book.pdf",
+    mimeType: "application/pdf",
+    buffer: Buffer.from(await makeDoublePdf(3)),
+  })
+  await expect(page.getByTestId("board-page")).toHaveCount(3)
+  const panel = page.getByTestId("halve-panel")
+  await panel
+    .getByRole("switch", { name: "Each page is a scan of two pages" })
+    .click()
+  // Every sheet is now two pages.
+  await expect(page.getByTestId("board-page")).toHaveCount(6, {
+    timeout: 60_000,
+  })
+  await expect(row(page, "book.pdf")).toContainText("6 pages")
+  await page.getByRole("button", { name: "Every page on its own" }).click()
+  const result = await splitToZip(page)
+  expect(result.parts).toHaveLength(6)
+  // Each part is one half of a sheet, 300 points wide.
+  for (const part of result.parts)
+    expect([part.pages[0].width, part.pages[0].height]).toEqual([300, 400])
+
+  // A single cover stays whole, and the cuts that were placed are let go with the old pages.
+  await panel
+    .getByRole("switch", { name: "The first page is a single cover" })
+    .click()
+  await expect(page.getByTestId("board-page")).toHaveCount(5, {
+    timeout: 60_000,
+  })
+  await expect(
+    page.locator("[data-testid=board-cut][aria-pressed=true]")
+  ).toHaveCount(0)
+  await expect(tool(page)).not.toHaveAttribute("data-split", "true")
+  // The cut can be moved with the keyboard.
+  await panel.getByLabel("Where the cut is").focus()
+  await page.keyboard.press("ArrowLeft")
+  await expect(page.getByTestId("cut-at")).toHaveText("49% from the left")
+  await expect(tool(page)).toHaveAttribute("data-ready", "true", {
+    timeout: 60_000,
+  })
+  await page.getByRole("button", { name: "Every page on its own" }).click()
+  const moved = await splitToZip(page)
+  expect(moved.parts.map((part) => part.pages[0].width)).toEqual([
+    600, 294, 306, 294, 306,
+  ])
+
+  // Turned off, the sheets are whole again.
+  await panel
+    .getByRole("switch", { name: "Each page is a scan of two pages" })
+    .click()
+  await expect(page.getByTestId("board-page")).toHaveCount(3, {
+    timeout: 60_000,
+  })
+  await expect(row(page, "book.pdf")).toContainText("3 pages")
+})
+
 test("stays accessible, local and responsive", async ({ page }) => {
   const external: string[] = []
   const errors: string[] = []
@@ -981,6 +1237,8 @@ test("stays accessible, local and responsive", async ({ page }) => {
       "Page ranges",
       "By bookmarks",
       "By size",
+      "At blank pages",
+      "By text",
       "Odd and even",
       "Extract pages",
     ]) {

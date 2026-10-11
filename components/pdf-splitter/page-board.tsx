@@ -41,6 +41,7 @@ function fate(
 ) {
   if (mode === "extract") return picked ? "Taken out" : "Not taken"
   if (mode === "remove") return picked ? "Removed" : "Kept"
+  if (mode === "blank" && picked) return "Blank"
   const written = parts.filter((part) => !leftOut.has(part))
   if (!written.length) return "Left out"
   return `${written.length > 1 ? "Parts" : "Part"} ${written.map((part) => part + 1).join(", ")}`
@@ -226,7 +227,8 @@ export const PageBoard = memo(function PageBoard({
   const list = useRef<HTMLOListElement>(null)
   const [near, setNear] = useState<ReadonlySet<number>>(new Set())
   const [focused, setFocused] = useState(0)
-  const selects = mode === "extract" || mode === "remove"
+  // In these ways of splitting a page is pressed to pick it: to take it out, to remove it, or to call it blank.
+  const selects = mode === "extract" || mode === "remove" || mode === "blank"
 
   // One observer watches every tile; only tiles near the screen draw a picture.
   const observer = useRef<IntersectionObserver | null>(null)
@@ -346,7 +348,11 @@ export const PageBoard = memo(function PageBoard({
               : parts.every((part) => leftOut.has(part))
         }
         // Neighbouring parts take turns with a tint, so their edges show without colour alone.
-        tinted={!selects && parts.length > 0 && parts[0] % 2 === 1}
+        tinted={
+          (!selects || mode === "blank") &&
+          parts.length > 0 &&
+          parts[0] % 2 === 1
+        }
         cut={cutSet.has(page)}
         tabStop={page === tabStop}
         watch={watch}

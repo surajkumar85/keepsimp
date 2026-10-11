@@ -21,7 +21,16 @@ import {
   renderPage,
   type OpenedPdf,
 } from "@/lib/pdf-merger/mupdf-engine"
-import { splitBySize, splitPart, type SizedWritten } from "./mupdf-split"
+import {
+  areaTexts,
+  halvePdf,
+  pageInk,
+  splitBySize,
+  splitPart,
+  type SizedWritten,
+} from "./mupdf-split"
+import { BLANK_BELOW } from "./blank"
+import { defaultHalves, type HalveChoice } from "./halves"
 import {
   cutsEqual,
   cutsEvery,
@@ -465,5 +474,313 @@ describe("splitting by size", () => {
       "notes.txt",
     ])
     expect((await readPdf(parts[1].written.bytes)).attachments).toEqual([])
+  })
+})
+
+describe("looking for blank pages", () => {
+  /** Pages with: nothing, a line of text, a speck, a faint tint all over, and a punch hole. */
+  const scanLike = async () => {
+    const { PDFDocument, StandardFonts, rgb } = await import("@cantoo/pdf-lib")
+    const doc = await PDFDocument.create()
+    const font = await doc.embedFont(StandardFonts.Helvetica)
+    doc.addPage([595, 842])
+    doc.addPage([595, 842]).drawText("One line of text is not a blank page.", {
+      x: 60,
+      y: 700,
+      size: 12,
+      font,
+    })
+    doc.addPage([595, 842]).drawRectangle({
+      x: 300,
+      y: 400,
+      width: 2,
+      height: 2,
+      color: rgb(0, 0, 0),
+    })
+    // Cream paper: a tint over the whole sheet is paper, not ink.
+    doc.addPage([595, 842]).drawRectangle({
+      x: 0,
+      y: 0,
+      width: 595,
+      height: 842,
+      color: rgb(0.96, 0.94, 0.86),
+    })
+    doc.addPage([595, 842]).drawCircle({
+      x: 60,
+      y: 421,
+      size: 9,
+      color: rgb(0.1, 0.1, 0.1),
+    })
+    return open(await doc.save())
+  }
+
+  it("tells empty pages from pages with something on them", async () => {
+    const pdf = await scanLike()
+    const shares = [0, 1, 2, 3, 4].map((page) => pageInk(mupdf, pdf, page))
+    expect(shares[0]).toBe(0)
+    expect(shares[3]).toBe(0)
+    // A line of text is far above any setting.
+    expect(shares[1]).toBeGreaterThan(BLANK_BELOW.loose)
+    // A speck passes for blank unless the setting is strict.
+    expect(shares[2]).toBeGreaterThan(0)
+    expect(shares[2]).toBeLessThan(BLANK_BELOW.normal)
+    // A punch hole passes only for the loose setting.
+    expect(shares[4]).toBeGreaterThan(BLANK_BELOW.normal)
+    expect(shares[4]).toBeLessThan(BLANK_BELOW.loose)
+  })
+
+  it("never takes a scanned page with writing on it for blank", () => {
+    const pdf = open(
+      new Uint8Array(readFileSync("e2e/fixtures/pdf/quartz-scan.pdf"))
+    )
+    for (let page = 0; page < pdf.facts.pages; page++)
+      expect(pageInk(mupdf, pdf, page)).toBeGreaterThan(BLANK_BELOW.loose)
+  })
+})
+
+describe("reading the text in an area", () => {
+  it("reads the same place on every page", async () => {
+    // Every page says "<tag>-P<n>" 40 points in and 120 points down a page of 298 by 420.
+    const pdf = await source("N", { pages: 4 })
+    const where = { left: 0, top: 0.2, right: 0.6, bottom: 0.35 }
+    expect(areaTexts(pdf, where, 0, 4)).toEqual([
+      "N-P1",
+      "N-P2",
+      "N-P3",
+      "N-P4",
+    ])
+    expect(areaTexts(pdf, where, 2, 3)).toEqual(["N-P3"])
+    // Nothing is written lower down.
+    expect(
+      areaTexts(pdf, { left: 0, top: 0.6, right: 1, bottom: 1 }, 0, 2)
+    ).toEqual(["", ""])
+  })
+
+  it("finds no text on a scan", () => {
+    const pdf = open(
+      new Uint8Array(readFileSync("e2e/fixtures/pdf/quartz-scan.pdf"))
+    )
+    expect(
+      areaTexts(pdf, { left: 0, top: 0, right: 1, bottom: 1 }, 0, 1)
+    ).toEqual([""])
+  })
+})
+
+describe("cutting double pages in half", () => {
+  /**
+   * Sheets of 600 by 400 that each hold two pages: "L<n>" on the left and
+   * "R<n>" on the right, with a link on the right half of the first sheet.
+   */
+  const doubles = async (count: number, turned = false) => {
+    const { PDFDocument, PDFName, StandardFonts, rgb, degrees } =
+      await import("@cantoo/pdf-lib")
+    const doc = await PDFDocument.create()
+    const font = await doc.embedFont(StandardFonts.Helvetica)
+    for (let sheet = 1; sheet <= count; sheet++) {
+      // A turned sheet is stored on its side and shown turned a quarter.
+      const page = doc.addPage(turned ? [400, 600] : [600, 400])
+      if (turned) {
+        page.setRotation(degrees(90))
+        page.drawText(`L${sheet}`, {
+          x: 300,
+          y: 60,
+          size: 30,
+          font,
+          rotate: degrees(90),
+        })
+        page.drawText(`R${sheet}`, {
+          x: 300,
+          y: 360,
+          size: 30,
+          font,
+          rotate: degrees(90),
+        })
+        page.drawRectangle({
+          x: 100,
+          y: 330,
+          width: 60,
+          height: 200,
+          color: rgb(0.8, 0.1, 0.1),
+        })
+      } else {
+        page.drawText(`L${sheet}`, { x: 60, y: 300, size: 30, font })
+        page.drawText(`R${sheet}`, { x: 360, y: 300, size: 30, font })
+        page.drawRectangle({
+          x: 330,
+          y: 100,
+          width: 200,
+          height: 60,
+          color: rgb(0.8, 0.1, 0.1),
+        })
+      }
+    }
+    if (!turned)
+      doc.getPage(0).node.set(
+        PDFName.of("Annots"),
+        doc.context.obj([
+          doc.context.register(
+            doc.context.obj({
+              Type: "Annot",
+              Subtype: "Link",
+              Rect: [330, 100, 530, 160],
+              Border: [0, 0, 0],
+              Dest: [doc.getPage(count - 1).ref, PDFName.of("Fit")],
+            } as never)
+          ),
+        ])
+      )
+    doc.setTitle("Scanned book")
+    return open(await doc.save())
+  }
+  const choice = (change: Partial<HalveChoice> = {}): HalveChoice => ({
+    ...defaultHalves,
+    which: "all",
+    cover: false,
+    ...change,
+  })
+  /** Each page's box as pdf-lib reads it: left, bottom, width, height. */
+  const boxes = async (pdf: OpenedPdf) => {
+    const { PDFDocument } = await import("@cantoo/pdf-lib")
+    const bytes = (
+      await splitPart(
+        mupdf,
+        pdf,
+        pdf.pages.map((_, index) => index)
+      )
+    ).bytes
+    const doc = await PDFDocument.load(bytes)
+    return doc.getPages().map((page) => {
+      const { x, y, width, height } = page.getCropBox()
+      return [x, y, width, height]
+    })
+  }
+  const halve = async (pdf: OpenedPdf, how: HalveChoice) => {
+    const halved = await halvePdf(mupdf, pdf, how)
+    opened.push(halved)
+    return halved
+  }
+  /** A part of a picture, as its own picture. */
+  const crop = (
+    picture: { data: Uint8ClampedArray; width: number; height: number },
+    left: number,
+    top: number,
+    width: number,
+    height: number
+  ) => {
+    const data = new Uint8ClampedArray(width * height * 4)
+    for (let y = 0; y < height; y++)
+      data.set(
+        picture.data.subarray(
+          ((top + y) * picture.width + left) * 4,
+          ((top + y) * picture.width + left + width) * 4
+        ),
+        y * width * 4
+      )
+    return data
+  }
+  const same = (a: Uint8ClampedArray, b: Uint8ClampedArray) =>
+    Buffer.from(a).equals(Buffer.from(b))
+
+  it("makes two pages of every sheet, left half first", async () => {
+    const pdf = await doubles(3)
+    const halved = await halve(pdf, choice())
+    expect(halved.facts.pages).toBe(6)
+    expect(halved.facts.title).toBe("Scanned book")
+    expect(await boxes(halved)).toEqual([
+      [0, 0, 300, 400],
+      [300, 0, 300, 400],
+      [0, 0, 300, 400],
+      [300, 0, 300, 400],
+      [0, 0, 300, 400],
+      [300, 0, 300, 400],
+    ])
+    // Each half is drawn exactly as that half of the sheet was.
+    const sheet = renderPage(mupdf, pdf, 1, 600)
+    expect(
+      same(renderPage(mupdf, halved, 2, 400).data, crop(sheet, 0, 0, 300, 400))
+    ).toBe(true)
+    expect(
+      same(
+        renderPage(mupdf, halved, 3, 400).data,
+        crop(sheet, 300, 0, 300, 400)
+      )
+    ).toBe(true)
+  })
+
+  it("reads the right half first when asked, and cuts where it is told", async () => {
+    const pdf = await doubles(1)
+    expect(await boxes(await halve(pdf, choice({ first: "end" })))).toEqual([
+      [300, 0, 300, 400],
+      [0, 0, 300, 400],
+    ])
+    expect(await boxes(await halve(pdf, choice({ at: 0.4 })))).toEqual([
+      [0, 0, 240, 400],
+      [240, 0, 360, 400],
+    ])
+    // One above the other: the top half is the high half of the sheet.
+    expect(
+      await boxes(await halve(pdf, choice({ direction: "down" })))
+    ).toEqual([
+      [0, 200, 600, 200],
+      [0, 0, 600, 200],
+    ])
+  })
+
+  it("cuts a sheet that is stored on its side along the line a reader sees", async () => {
+    const pdf = await doubles(1, true)
+    const halved = await halve(pdf, choice())
+    // Shown, the sheet is 600 wide; its left half is the low half of the stored page.
+    expect(await boxes(halved)).toEqual([
+      [0, 0, 400, 300],
+      [0, 300, 400, 300],
+    ])
+    const sheet = renderPage(mupdf, pdf, 0, 600)
+    expect([sheet.width, sheet.height]).toEqual([600, 400])
+    expect(
+      same(renderPage(mupdf, halved, 0, 400).data, crop(sheet, 0, 0, 300, 400))
+    ).toBe(true)
+    expect(
+      same(
+        renderPage(mupdf, halved, 1, 400).data,
+        crop(sheet, 300, 0, 300, 400)
+      )
+    ).toBe(true)
+  })
+
+  it("keeps a single cover whole, and pages that are not double", async () => {
+    const pdf = await doubles(3)
+    expect((await halve(pdf, choice({ cover: true }))).facts.pages).toBe(5)
+    const mixed = await source("M", {
+      pages: 3,
+      size: (page) => (page === 2 ? [600, 400] : [300, 400]),
+    })
+    const halved = await halve(mixed, choice({ which: "wide" }))
+    expect(await boxes(halved)).toEqual([
+      [0, 0, 300, 400],
+      [0, 0, 300, 400],
+      [300, 0, 300, 400],
+      [0, 0, 300, 400],
+    ])
+  })
+
+  it("leaves a link with the half it lies on", async () => {
+    const pdf = await doubles(2)
+    const halved = await halve(pdf, choice())
+    const bytes = (await splitPart(mupdf, halved, [0, 1, 2, 3])).bytes
+    const read = await readPdf(bytes)
+    // The link is on the right half of the first sheet, and leads to the second sheet's first half.
+    expect(read.pages.map((page) => page.links)).toEqual([[], [3], [], []])
+  })
+
+  it("can be split like any other file afterwards", async () => {
+    const pdf = await doubles(2)
+    const halved = await halve(pdf, choice())
+    const part = (await splitPart(mupdf, halved, [1, 2])).bytes
+    expect(await storedPictures(part)).toBe(0)
+    const read = await readPdf(part)
+    expect(read.pages.map((page) => [page.width, page.height])).toEqual([
+      [300, 400],
+      [300, 400],
+    ])
   })
 })

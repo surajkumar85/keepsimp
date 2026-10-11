@@ -308,6 +308,50 @@ export async function makePdf(tag: string, options: FixtureOptions = {}) {
   return doc.save({ useObjectStreams: false })
 }
 
+/** What one page of a plain test file holds. Nothing at all makes a blank page. */
+export interface PlainPage {
+  /** A line of small print at the top left, as a header or a number would be. */
+  top?: string
+  /** A line of large print in the middle. */
+  body?: string
+  /** A tiny mark, as dust on a scanner's glass leaves. */
+  speck?: boolean
+}
+
+/**
+ * Pages of 298 by 420 points with the lines given: `top` is 12 point print
+ * 30 points from the top, `body` 24 point print 120 points down.
+ */
+export async function makePlainPdf(pages: readonly PlainPage[]) {
+  const doc = await PDFDocument.create()
+  const font = await doc.embedFont(StandardFonts.Helvetica)
+  for (const content of pages) {
+    const page = doc.addPage([298, 420])
+    if (content.top)
+      page.drawText(content.top, { x: 30, y: 390, size: 12, font })
+    if (content.body)
+      page.drawText(content.body, { x: 40, y: 300, size: 24, font })
+    if (content.speck)
+      page.drawRectangle({ x: 150, y: 200, width: 1.5, height: 1.5 })
+  }
+  return doc.save()
+}
+
+/**
+ * Sheets of 600 by 400 points that each hold two pages, as a book laid open
+ * on a scanner does: "L<n>" on the left half and "R<n>" on the right.
+ */
+export async function makeDoublePdf(count: number) {
+  const doc = await PDFDocument.create()
+  const font = await doc.embedFont(StandardFonts.Helvetica)
+  for (let sheet = 1; sheet <= count; sheet++) {
+    const page = doc.addPage([600, 400])
+    page.drawText(`L${sheet}`, { x: 60, y: 300, size: 30, font })
+    page.drawText(`R${sheet}`, { x: 360, y: 300, size: 30, font })
+  }
+  return doc.save()
+}
+
 /** How the pages of a shared-list file use what the list holds. */
 export type SharedHow =
   /** Each page draws its own picture directly. */

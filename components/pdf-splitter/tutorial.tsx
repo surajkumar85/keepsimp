@@ -12,7 +12,7 @@ const content: TutorialContent = {
     },
     {
       title: "Choose how to split",
-      text: "Cut the file into parts, type page ranges, split at bookmarks or by size, part odd pages from even ones, take pages out as one file, or remove pages.",
+      text: "Cut the file into parts, type page ranges, split at bookmarks, by size, at blank pages or by text, part odd pages from even ones, take pages out as one file, or remove pages.",
     },
     {
       title: "Place the cuts",
@@ -51,6 +51,21 @@ const content: TutorialContent = {
       term: "By size",
       detail:
         "Makes parts that each stay under a size, such as 10 MB for email. The only way to know what a set of pages weighs is to write it, so the parts are found by writing them and are shown once the file is split. Each part takes as many pages as fit. Pictures are not made smaller, so a single page that is over the size gets a part to itself and its row says so.",
+    },
+    {
+      term: "At blank pages",
+      detail:
+        "For a stack of scans with a blank sheet between documents. Every page is looked at, and pages with nothing on them are marked. Choose what counts as blank: nothing at all; specks or a lone page number; or also punch holes, a header or a short line. Then choose what happens at a blank page: cut there and leave it out, cut after it and keep it, or only remove it and keep the rest as one file. Press a page to keep one that was found blank, or to call another page blank.",
+    },
+    {
+      term: "By text",
+      detail:
+        "Starts a new part at every page that holds the words you type, such as Invoice; capitals and accents make no difference. Or it reads one place on every page, such as the corner where an invoice number sits, and starts a new part whenever what it reads there changes; each part is then named after it. Mark the place by dragging over the page, by one of the usual places, or by typing its edges. A page with no text there stays with the part before it. This reads the text a PDF holds, so it does not work on scans, which hold pictures of text.",
+    },
+    {
+      term: "Scans of two pages",
+      detail:
+        "A book laid open on a scanner gives two pages on every sheet. Turn on Each page is a scan of two pages to cut every sheet in half first. Choose whether the pages sit side by side or one above the other, which is read first, whether every sheet is cut or only those the shape of a double page, and whether the first is a single cover. Move the cut when the fold is not in the middle. Nothing is drawn or compressed again: the two halves show the two sides of the same sheet. The result can then be split in any way, or saved whole with Extract pages and Select all.",
     },
     {
       term: "Several files at once",

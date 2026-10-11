@@ -1,5 +1,7 @@
 import type { Rotation, Size } from "@/lib/image-compressor/geometry"
 import type { PageText, Quad } from "@/lib/pdf-reader/text"
+import type { HalveChoice } from "@/lib/pdf-splitter/halves"
+import type { Area } from "@/lib/pdf-splitter/text-rule"
 import type { FileFacts } from "./files"
 import type { Bookmark, BookmarkPolicy } from "./outline"
 import type { PictureMargin, PicturePage } from "./picture"
@@ -93,6 +95,15 @@ export type PdfRequest =
     }
   /** Split a file into parts that each stay under a size in bytes. The parts are found as it goes. */
   | { type: "split-size"; job: number; id: string; limit: number }
+  /** How much of each page of a file holds marks, to find its blank pages. Answers come a run of pages at a time. */
+  | { type: "ink"; id: string; request: number }
+  /** The text found in one area of each page of a file, likewise. */
+  | { type: "area-text"; id: string; request: number; area: Area }
+  /**
+   * Cut a file's double pages in half, or, with no choice, put the file back
+   * as it was. The file keeps its id and is answered as newly opened.
+   */
+  | { type: "halve"; id: string; choice: HalveChoice | null }
   | { type: "cancel"; job: number }
 
 export type PdfResponse =
@@ -142,5 +153,20 @@ export type PdfResponse =
       over?: boolean
     }
   | { type: "split-done"; job: number }
+  /** The share of marks on a run of pages, starting at `from`. */
+  | {
+      type: "ink"
+      request: number
+      from: number
+      shares: number[]
+      total: number
+    }
+  | {
+      type: "area-text"
+      request: number
+      from: number
+      texts: string[]
+      total: number
+    }
   | { type: "split-error"; job: number; message: string }
   | { type: "cancelled"; job: number }

@@ -149,6 +149,10 @@ Lists of results to be made (`components/pdf-splitter/parts-list.tsx`) are order
 
 When a document list holds several files and one of them is shown in detail below (`components/pdf-splitter/file-rows.tsx`), the shown row takes the `primary` border and ring and says "shown below"; its name is a button with `aria-pressed`, padded to a 44px hit area without moving the line. Each row carries one muted line saying what will be made of the file, which turns `destructive` and says "It is left out" when the file cannot take part.
 
+Area pickers (`AreaPicker` in `components/pdf-splitter/scan-panel.tsx`) mark part of a picture. The picture sits on the `muted` surface with a crosshair cursor; the marked area is a `primary` 2px border over a `primary/15` fill. Dragging is never the only way: buttons offer the usual places, four labelled fields take the edges in percent and are applied together when the group is left or Enter is pressed, and a line under the fields says so. A line below says what the area holds on the page shown.
+
+A value that is costly to apply (the cut line in `HalvePanel`) uses the adjustment-slider rules with one change: the label shows the value while the slider moves, and the change is applied when the slider is let go, on pointer up, key up or blur.
+
 Lists to tick (the bookmarks in `components/pdf-splitter/rules-panel.tsx`) are a `fieldset` with its count in the legend and "Tick all" and "Untick all" beside it, holding rows of native checkboxes with the `primary` accent. The whole row is the label, at least 44px/36px tall, with the title on the left and a monospace number on the right, inside a `rounded-lg` border that scrolls after 288px.
 
 Crop overlays dim the excluded area with a `background` veil, show rule-of-thirds guides and eight handles with 44px/28px hit areas, and pair the box with exact pixel fields. The image compressor reference is `docs/image-compressor.md`.

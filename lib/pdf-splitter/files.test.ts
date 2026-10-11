@@ -226,3 +226,76 @@ describe("selected pages, names and parts left out", () => {
     expect(file(state, "b").unticked.size).toBe(0)
   })
 })
+
+describe("what is found by looking at pages", () => {
+  it("gathers each page's share of marks as runs of pages arrive", () => {
+    let state = run([{ type: "ink", id: "a", from: 0, shares: [0, 0.5] }], two)
+    state = run([{ type: "ink", id: "a", from: 2, shares: [0.1] }], state)
+    expect(file(state, "a").ink).toEqual([0, 0.5, 0.1])
+    // A run that arrives again replaces what followed it.
+    state = run([{ type: "ink", id: "a", from: 1, shares: [0.9] }], state)
+    expect(file(state, "a").ink).toEqual([0, 0.9])
+  })
+
+  it("does not use a run of pages that does not follow on", () => {
+    const state = run([{ type: "ink", id: "a", from: 3, shares: [0.2] }], two)
+    expect(file(state, "a").ink).toBeUndefined()
+  })
+
+  it("turns a page's blankness round, and back", () => {
+    let state = run([{ type: "flip", id: "a", page: 2 }], two)
+    expect([...file(state, "a").flipped]).toEqual([2])
+    state = run([{ type: "flip", id: "a", page: 2 }], state)
+    expect(file(state, "a").flipped.size).toBe(0)
+  })
+
+  it("remembers the pages that hold some words, and what an area says", () => {
+    const state = run(
+      [
+        { type: "starts", id: "a", key: "invoice", pages: [0, 3] },
+        { type: "texts", id: "b", key: "area", texts: ["A", "A", "B"] },
+      ],
+      two
+    )
+    expect(file(state, "a").starts).toEqual({ key: "invoice", pages: [0, 3] })
+    expect(file(state, "b").texts).toEqual({
+      key: "area",
+      texts: ["A", "A", "B"],
+    })
+  })
+
+  it("lets go of everything chosen and found when a file's pages change", () => {
+    const busy = run(
+      [
+        { type: "cut", id: "a", cuts: [1] },
+        { type: "select", id: "a", selected: new Set([0]) },
+        { type: "name", id: "a", key: "p0", name: "Cover" },
+        { type: "skip", id: "a", key: "p2", skipped: true },
+        { type: "tick", id: "a", pages: [3], ticked: false },
+        { type: "flip", id: "a", page: 1 },
+        { type: "ink", id: "a", from: 0, shares: [0, 1] },
+        { type: "starts", id: "a", key: "x", pages: [0] },
+        { type: "texts", id: "a", key: "y", texts: ["A"] },
+        { type: "headings", id: "a", headings: [] },
+      ],
+      two
+    )
+    const state = run([{ type: "renew", id: "a" }], busy)
+    const renewed = file(state, "a")
+    expect(renewed.status).toBe("reading")
+    expect(renewed.name).toBe("a.pdf")
+    expect(renewed.facts).toBeUndefined()
+    expect(renewed.cuts).toEqual({ past: [], present: [], future: [] })
+    expect(renewed.selected.size).toBe(0)
+    expect(renewed.names).toEqual({})
+    expect(renewed.skipped.size).toBe(0)
+    expect(renewed.unticked.size).toBe(0)
+    expect(renewed.flipped.size).toBe(0)
+    expect(renewed.ink).toBeUndefined()
+    expect(renewed.starts).toBeUndefined()
+    expect(renewed.texts).toBeUndefined()
+    expect(renewed.headings).toBeUndefined()
+    // The other file is not touched.
+    expect(file(state, "b")).toBe(file(busy, "b"))
+  })
+})

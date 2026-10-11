@@ -16,9 +16,19 @@ export interface Part {
  * - remove: everything but the selected pages as one file
  * - bookmarks: a part for each bookmark of a level
  * - size: parts that each stay under a size
+ * - blank: at blank pages, as a stack of scans is parted
+ * - text: at pages that hold some words, or where the text in one place changes
  */
 export type SplitMode =
-  "cuts" | "ranges" | "oddeven" | "extract" | "remove" | "bookmarks" | "size"
+  | "cuts"
+  | "ranges"
+  | "oddeven"
+  | "extract"
+  | "remove"
+  | "bookmarks"
+  | "size"
+  | "blank"
+  | "text"
 
 /** More parts than this from one file is a slip, not a wish. */
 export const MAX_PARTS = 5000
@@ -191,15 +201,18 @@ export function partsOfPages(parts: readonly Part[], count: number) {
 
 /**
  * A name for each part that stays with it while the plan changes, so a name
- * typed for a part, or a part left out, is remembered. Where parts are runs
- * of pages that cannot overlap (cuts, bookmarks, sizes), a part is known by
- * its first page; anywhere else by its place in the list.
+ * typed for a part, or a part left out, is remembered. Where no page can be
+ * in two parts, a part is known by its first page; where ranges may overlap,
+ * or pages are picked out, by its place in the list.
  */
 export const partKeys = (mode: SplitMode, parts: readonly Part[]) =>
   parts.map((part, index) =>
-    mode === "cuts" || mode === "bookmarks" || mode === "size"
-      ? `p${part.pages[0]}`
-      : `n${index}`
+    mode === "ranges" ||
+    mode === "oddeven" ||
+    mode === "extract" ||
+    mode === "remove"
+      ? `n${index}`
+      : `p${part.pages[0]}`
   )
 
 /** Why a plan cannot be carried out as it stands; null when it can. */

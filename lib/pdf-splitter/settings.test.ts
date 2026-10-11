@@ -4,6 +4,7 @@ import {
   admitFiles,
   fileProblem,
   givesOneFile,
+  isWaiting,
   nothingToWrite,
   pagesProblem,
   patternFor,
@@ -11,6 +12,7 @@ import {
   sizeKey,
   splitKey,
   typedCount,
+  WAITING,
   withOverrides,
   type SplitChoices,
 } from "./settings"
@@ -216,6 +218,114 @@ describe("planFor", () => {
     ).toBe("Tick at least one bookmark.")
   })
 
+  it("waits until every page has been looked at for blank pages", () => {
+    expect(shown(planFor(choices({ mode: "blank" }), 4))).toBe(WAITING.blank)
+    expect(shown(planFor(choices({ mode: "blank", ink: [0, 1] }), 4))).toBe(
+      WAITING.blank
+    )
+  })
+
+  it("cuts at blank pages, by the setting, the pages turned round and what is done with them", () => {
+    const ink = [0.5, 0, 0.5, 0.0001, 0.5, 0.5]
+    expect(shown(planFor(choices({ mode: "blank", ink }), 6))).toEqual([
+      [1],
+      [3],
+      [5, 6],
+    ])
+    expect(
+      shown(planFor(choices({ mode: "blank", ink, sensitivity: "strict" }), 6))
+    ).toEqual([[1], [3, 4, 5, 6]])
+    expect(
+      shown(
+        planFor(
+          choices({
+            mode: "blank",
+            ink,
+            flipped: new Set([3]),
+            blankHow: "keep",
+          }),
+          6
+        )
+      )
+    ).toEqual([
+      [1, 2],
+      [3, 4, 5, 6],
+    ])
+    expect(
+      shown(planFor(choices({ mode: "blank", ink, blankHow: "remove" }), 6))
+    ).toEqual([[1, 3, 5, 6]])
+  })
+
+  it("says when there are no blank pages, or nothing but blank pages", () => {
+    expect(
+      shown(planFor(choices({ mode: "blank", ink: [0.5, 0.5] }), 2))
+    ).toMatch(/^No blank pages were found/)
+    expect(shown(planFor(choices({ mode: "blank", ink: [0, 0] }), 2))).toBe(
+      "Every page is blank, so nothing would be left."
+    )
+  })
+
+  it("starts a part at each page that holds the words typed", () => {
+    expect(shown(planFor(choices({ mode: "text" }), 6))).toBe(
+      "Type the words that a part starts with."
+    )
+    expect(shown(planFor(choices({ mode: "text", starts: null }), 6))).toBe(
+      WAITING.starts
+    )
+    expect(shown(planFor(choices({ mode: "text", starts: [] }), 6))).toBe(
+      "No page holds those words."
+    )
+    expect(
+      shown(planFor(choices({ mode: "text", starts: [2, 4] }), 6))
+    ).toEqual([
+      [1, 2],
+      [3, 4],
+      [5, 6],
+    ])
+    expect(
+      shown(
+        planFor(choices({ mode: "text", starts: [2, 4], front: "join" }), 6)
+      )
+    ).toEqual([
+      [1, 2, 3, 4],
+      [5, 6],
+    ])
+  })
+
+  it("starts a part where the text in an area changes", () => {
+    const area = { mode: "text", textKind: "area" } as const
+    expect(shown(planFor(choices(area), 4))).toBe(
+      "Mark the area to read on a page."
+    )
+    expect(shown(planFor(choices({ ...area, texts: null }), 4))).toBe(
+      WAITING.texts
+    )
+    expect(
+      shown(planFor(choices({ ...area, texts: ["", " ", "", ""] }), 4))
+    ).toMatch(/^No text was found in that area/)
+    const plan = planFor(choices({ ...area, texts: ["A", "A", "B", ""] }), 4)
+    expect(shown(plan)).toEqual([
+      [1, 2],
+      [3, 4],
+    ])
+    expect("parts" in plan && plan.parts.map((part) => part.label)).toEqual([
+      "A",
+      "B",
+    ])
+    // Texts for more pages than the file has are not used.
+    expect(
+      shown(planFor(choices({ ...area, texts: ["A", "B", "C"] }), 2))
+    ).toEqual([[1], [2]])
+  })
+
+  it("tells waiting apart from what is wrong", () => {
+    expect(isWaiting(WAITING.blank)).toBe(true)
+    expect(isWaiting(WAITING.starts)).toBe(true)
+    expect(isWaiting(WAITING.texts)).toBe(true)
+    expect(isWaiting("No page holds those words.")).toBe(false)
+    expect(isWaiting(null)).toBe(false)
+  })
+
   it("for sizes gives the parts the last split came to, or none before it has run", () => {
     expect(shown(planFor(choices({ mode: "size" }), 6))).toEqual([])
     expect(
@@ -238,6 +348,10 @@ describe("modes", () => {
     expect(givesOneFile("oddeven")).toBe(false)
     expect(givesOneFile("bookmarks")).toBe(false)
     expect(givesOneFile("size")).toBe(false)
+    expect(givesOneFile("text")).toBe(false)
+    expect(givesOneFile("blank")).toBe(false)
+    expect(givesOneFile("blank", "drop")).toBe(false)
+    expect(givesOneFile("blank", "remove")).toBe(true)
   })
 
   it("has a fitting pattern for each", () => {
@@ -248,6 +362,16 @@ describe("modes", () => {
     expect(patternFor("remove")).toBe("{name}-edited")
     expect(patternFor("bookmarks")).toBe("{name}-{part}-{label}")
     expect(patternFor("size")).toBe("{name}-{part}")
+    expect(patternFor("blank")).toBe("{name}-{part}")
+    expect(patternFor("blank", { blankHow: "keep" })).toBe("{name}-{part}")
+    expect(patternFor("blank", { blankHow: "remove" })).toBe(
+      "{name}-no-blank-pages"
+    )
+    expect(patternFor("text")).toBe("{name}-{part}")
+    expect(patternFor("text", { textKind: "contains" })).toBe("{name}-{part}")
+    expect(patternFor("text", { textKind: "area" })).toBe(
+      "{name}-{part}-{label}"
+    )
   })
 })
 

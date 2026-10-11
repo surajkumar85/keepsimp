@@ -37,6 +37,14 @@ import { sizeLabel } from "@/lib/image-compressor/formats"
 import { createZip } from "@/lib/image-resizer/zip"
 import { PdfClient } from "@/lib/pdf-merger/client"
 import { parseRanges } from "@/lib/pdf-merger/ranges"
+import { needleOf } from "@/lib/pdf-reader/search"
+import {
+  blanksOf,
+  type BlankChoice,
+  type Sensitivity,
+} from "@/lib/pdf-splitter/blank"
+import type { HalveChoice } from "@/lib/pdf-splitter/halves"
+import type { Area } from "@/lib/pdf-splitter/text-rule"
 import { looksLikePdf, megabytes } from "@/lib/pdf-merger/settings"
 import {
   deepestLevel,
@@ -66,6 +74,7 @@ import {
 import {
   admitFiles,
   givesOneFile,
+  isWaiting,
   nothingToWrite,
   pagesProblem,
   patternFor,
@@ -81,6 +90,7 @@ import { FileRows, type FileSummary } from "./file-rows"
 import { PageBoard } from "./page-board"
 import { MOST_ROWS, PartsList, type WrittenPart } from "./parts-list"
 import { RulesPanel, type SizeChoice } from "./rules-panel"
+import { BlankRules, HalvePanel, TextRules } from "./scan-panel"
 
 const INPUT_ID = "split-file"
 const ACCEPT = "application/pdf,.pdf"
@@ -134,6 +144,16 @@ const MODES: { value: SplitMode; label: string; hint: string }[] = [
     hint: "Parts that each stay under a size, for email and uploads.",
   },
   {
+    value: "blank",
+    label: "At blank pages",
+    hint: "For a stack of scans with a blank sheet between documents.",
+  },
+  {
+    value: "text",
+    label: "By text",
+    hint: "A new part at pages with certain words, or where a number or name changes.",
+  },
+  {
     value: "oddeven",
     label: "Odd and even",
     hint: "Odd pages go into one file and even pages into another.",
@@ -165,6 +185,15 @@ export function PdfSplitter() {
   const [size, setSize] = useState<SizeChoice>("10")
   const [sizeText, setSizeText] = useState("15")
   const [sizeUnit, setSizeUnit] = useState<SizeUnit>("MB")
+  const [sensitivity, setSensitivity] = useState<Sensitivity>("normal")
+  const [blankHow, setBlankHow] = useState<BlankChoice>("drop")
+  const [textKind, setTextKind] = useState<"contains" | "area">("contains")
+  const [words, setWords] = useState("")
+  /** The words being looked for, once typing has paused; empty when too short. */
+  const [needle, setNeedle] = useState("")
+  const [area, setArea] = useState<Area | null>(null)
+  /** How double pages are cut in half; null while pages are left whole. */
+  const [halving, setHalving] = useState<HalveChoice | null>(null)
   const [pattern, setPattern] = useState("")
   const [notice, setNotice] = useState("")
   const [progress, setProgress] = useState<{
@@ -199,6 +228,13 @@ export function PdfSplitter() {
   const urls = useRef(new Map<string, string[]>())
   /** Files whose bookmarks have been asked for. */
   const asked = useRef(new Set<string>())
+  /** The cutting in half that is wanted now, and what each file was last cut by. */
+  const wanted = useRef<HalveChoice | null>(null)
+  const applied = useRef(new Map<string, string>())
+  /** Looks through files that are under way: for blank pages, for words, and at an area. */
+  const inking = useRef(new Map<string, () => void>())
+  const seeking = useRef(new Map<string, { key: string; stop: () => void }>())
+  const areas = useRef(new Map<string, { key: string; stop: () => void }>())
   const reader = usePdfReader(client)
   const { pictures, need, forget } = usePagePictures(client)
   const { claims, forget: forgetLayout, readFile, readResult } = reader
@@ -211,9 +247,16 @@ export function PdfSplitter() {
     const instance = new PdfClient((event) => {
       // A part opened only to be read is not a file to split.
       if (claims(event)) return
-      if (event.type === "opened")
+      if (event.type === "opened") {
+        // A file that arrives while double pages are being cut is cut first.
+        const want = wanted.current ? JSON.stringify(wanted.current) : ""
+        if (want !== (applied.current.get(event.id) ?? "")) {
+          applied.current.set(event.id, want)
+          instance.halve(event.id, wanted.current)
+          return
+        }
         dispatch({ type: "opened", id: event.id, facts: event.facts })
-      else if (event.type === "locked")
+      } else if (event.type === "locked")
         dispatch({ type: "locked", id: event.id, wrong: event.wrong })
       else dispatch({ type: "failed", id: event.id, message: event.message })
     })
@@ -277,27 +320,62 @@ export function PdfSplitter() {
     [limits]
   )
 
-  const removeFile = useCallback(
+  /** Let go of everything found out about a file: its pictures, bookmarks, result and what was looked for in it. */
+  const letGo = useCallback(
     (id: string) => {
-      client.current?.close(id)
+      inking.current.get(id)?.()
+      inking.current.delete(id)
+      seeking.current.get(id)?.stop()
+      seeking.current.delete(id)
+      areas.current.get(id)?.stop()
+      areas.current.delete(id)
       forget(id)
       forgetLayout(id)
       asked.current.delete(id)
       dropResult(id)
-      dispatch({ type: "remove", id })
     },
     [dropResult, forget, forgetLayout]
   )
+
+  const removeFile = useCallback(
+    (id: string) => {
+      client.current?.close(id)
+      letGo(id)
+      applied.current.delete(id)
+      dispatch({ type: "remove", id })
+    },
+    [letGo]
+  )
+
+  /** Cut double pages in half, differently, or not at all. Every file's pages change with it. */
+  function changeHalving(next: HalveChoice | null) {
+    wanted.current = next
+    setHalving(next)
+    const key = next ? JSON.stringify(next) : ""
+    for (const file of state.files) {
+      // A file that is still being read, or is locked, is cut when it opens.
+      if (file.status !== "ready") continue
+      applied.current.set(file.id, key)
+      letGo(file.id)
+      dispatch({ type: "renew", id: file.id })
+      client.current?.halve(file.id, next)
+    }
+    focused.current = 0
+    setTypedPages(null)
+    setAnnouncement(
+      next
+        ? "Double pages are cut in half. The pages below show the result."
+        : "Pages are whole again."
+    )
+  }
 
   function clearAll() {
     cancel.current?.()
     for (const file of state.files) {
       client.current?.close(file.id)
-      forgetLayout(file.id)
+      letGo(file.id)
     }
-    asked.current.clear()
-    forget()
-    dropResult()
+    applied.current.clear()
     dispatch({ type: "clear" })
     setRanges("")
     setTypedPages(null)
@@ -347,11 +425,80 @@ export function PdfSplitter() {
     }
   }, [state.files, need])
 
+  useEffect(() => {
+    const timer = setTimeout(() => setNeedle(needleOf(words)), 300)
+    return () => clearTimeout(timer)
+  }, [words])
+
+  // Blank pages are looked for once the way of splitting asks for them.
+  useEffect(() => {
+    if (mode !== "blank") return
+    for (const file of state.files) {
+      const pages = file.facts?.pages ?? 0
+      if (file.status !== "ready" || inking.current.has(file.id)) continue
+      if ((file.ink?.length ?? 0) >= pages) continue
+      const run = client.current?.ink(file.id, (news) =>
+        dispatch({
+          type: "ink",
+          id: file.id,
+          from: news.from,
+          shares: news.found,
+        })
+      )
+      if (run) inking.current.set(file.id, run.stop)
+    }
+  }, [mode, state.files])
+
+  const areaKey = area ? JSON.stringify(area) : ""
+  // Words are looked for, and an area is read, in every file that has not been looked through for them yet.
+  useEffect(() => {
+    if (mode !== "text") return
+    for (const file of state.files) {
+      if (file.status !== "ready") continue
+      const { id } = file
+      if (textKind === "contains") {
+        if (!needle || file.starts?.key === needle) continue
+        const running = seeking.current.get(id)
+        if (running?.key === needle) continue
+        running?.stop()
+        const pages: number[] = []
+        const run = client.current?.search(
+          needle,
+          Array.from({ length: file.facts?.pages ?? 0 }, (_, page) => ({
+            id,
+            page,
+          })),
+          (news) => {
+            for (const found of news.found) pages.push(found.at)
+            if (news.done < news.total) return
+            seeking.current.delete(id)
+            dispatch({ type: "starts", id, key: needle, pages })
+          }
+        )
+        if (run) seeking.current.set(id, { key: needle, stop: run.stop })
+      } else {
+        if (!area || file.texts?.key === areaKey) continue
+        const running = areas.current.get(id)
+        if (running?.key === areaKey) continue
+        running?.stop()
+        const texts: string[] = []
+        const run = client.current?.areaTexts(id, area, (news) => {
+          texts.length = news.from
+          texts.push(...news.found)
+          if (texts.length < news.total) return
+          areas.current.delete(id)
+          dispatch({ type: "texts", id, key: areaKey, texts })
+        })
+        if (run) areas.current.set(id, { key: areaKey, stop: run.stop })
+      }
+    }
+  }, [mode, textKind, needle, area, areaKey, state.files])
+
   const limit =
     size === "custom"
       ? limitBytes(sizeText, sizeUnit)
       : Number(size) * UNIT_BYTES.MB
-  const usedPattern = pattern.trim() || patternFor(mode)
+  const usedPattern = pattern.trim() || patternFor(mode, { blankHow, textKind })
 
   const views = useMemo<FileView[]>(
     () =>
@@ -374,6 +521,21 @@ export function PdfSplitter() {
             front,
             unticked: file.unticked,
             sized,
+            ink: file.ink,
+            sensitivity,
+            flipped: file.flipped,
+            blankHow,
+            textKind,
+            starts: needle
+              ? file.starts?.key === needle
+                ? file.starts.pages
+                : null
+              : undefined,
+            texts: area
+              ? file.texts?.key === areaKey
+                ? file.texts.texts
+                : null
+              : undefined,
           },
           count
         )
@@ -419,6 +581,12 @@ export function PdfSplitter() {
       limits.pages,
       usedPattern,
       results,
+      sensitivity,
+      blankHow,
+      textKind,
+      needle,
+      area,
+      areaKey,
     ]
   )
 
@@ -434,7 +602,7 @@ export function PdfSplitter() {
   const done = workable.length > 0 && workable.every((view) => view.current)
   const canSplit =
     !splitting && !reading && workable.length > 0 && !wrongPattern
-  const one = givesOneFile(mode)
+  const one = givesOneFile(mode, blankHow)
 
   /** Every part that is written and up to date, with the name it has now. */
   const finished = useMemo(
@@ -455,7 +623,9 @@ export function PdfSplitter() {
     const found: Record<string, FileSummary> = {}
     for (const view of views)
       found[view.file.id] = view.problem
-        ? { text: `${view.problem} It is left out.`, problem: true }
+        ? isWaiting(view.problem)
+          ? { text: view.problem, problem: false }
+          : { text: `${view.problem} It is left out.`, problem: true }
         : {
             text:
               mode === "size" && !view.current
@@ -674,6 +844,10 @@ export function PdfSplitter() {
     anchor.current = page
     setTypedPages(null)
   }, [])
+  /** Call a page blank, or not, against what was found. */
+  const flip = useCallback((page: number) => {
+    if (now.current.id) dispatch({ type: "flip", id: now.current.id, page })
+  }, [])
   const nameTyped = useCallback((key: string, name: string) => {
     if (now.current.id)
       dispatch({ type: "name", id: now.current.id, key, name })
@@ -773,6 +947,16 @@ export function PdfSplitter() {
         )
       ),
     [shown]
+  )
+  const shownInk = shown?.file.ink
+  const shownFlipped = shown?.file.flipped
+  /** The pages of the file shown that are treated as blank, once all of them have been looked at. */
+  const blanks = useMemo(
+    () =>
+      shownInk && shownFlipped && shownInk.length >= (shown?.count ?? 0)
+        ? blanksOf(shownInk, sensitivity, shownFlipped)
+        : new Set<number>(),
+    [shownInk, shownFlipped, shown?.count, sensitivity]
   )
 
   const dropHandlers = {
@@ -971,6 +1155,12 @@ export function PdfSplitter() {
 
         {state.files.some((file) => file.status === "ready") && (
           <>
+            <HalvePanel
+              choice={halving}
+              onChoice={changeHalving}
+              disabled={splitting}
+            />
+
             <ChoiceChips
               label="How to split"
               value={mode}
@@ -1089,7 +1279,68 @@ export function PdfSplitter() {
               sizeUnit={sizeUnit}
               onSizeUnit={setSizeUnit}
               sizeWrong={limit === null}
-            />
+            >
+              {mode === "blank" && (
+                <BlankRules
+                  sensitivity={sensitivity}
+                  onSensitivity={setSensitivity}
+                  how={blankHow}
+                  onHow={setBlankHow}
+                  several={several}
+                  status={
+                    !shown || shown.file.status !== "ready"
+                      ? ""
+                      : (shownInk?.length ?? 0) < count
+                        ? `Looked at ${(shownInk?.length ?? 0).toLocaleString("en")} of ${plural(count, "page")}…`
+                        : blanks.size
+                          ? `${plural(blanks.size, "blank page")} of ${count.toLocaleString("en")}.`
+                          : "No blank pages."
+                  }
+                />
+              )}
+              {mode === "text" && (
+                <TextRules
+                  kind={textKind}
+                  onKind={setTextKind}
+                  words={words}
+                  onWords={setWords}
+                  front={front}
+                  onFront={setFront}
+                  hasFront={Boolean(
+                    needle &&
+                    shown?.file.starts?.key === needle &&
+                    shown.file.starts.pages.length &&
+                    Math.min(...shown.file.starts.pages) > 0
+                  )}
+                  several={several}
+                  file={shown?.file.status === "ready" ? shown.file.id : null}
+                  pages={count}
+                  source={reader.source}
+                  area={area}
+                  onArea={setArea}
+                  reads={
+                    area && shown?.file.texts?.key === areaKey
+                      ? shown.file.texts.texts
+                      : null
+                  }
+                  status={
+                    !shown || shown.file.status !== "ready"
+                      ? ""
+                      : textKind === "contains"
+                        ? !needle
+                          ? ""
+                          : shown.file.starts?.key === needle
+                            ? `Found on ${plural(shown.file.starts.pages.length, "page")}.`
+                            : "Looking…"
+                        : !area
+                          ? ""
+                          : shown.file.texts?.key === areaKey
+                            ? `${plural(new Set(shown.file.texts.texts.filter(Boolean)).size, "different text")} found there.`
+                            : "Reading…"
+                  }
+                />
+              )}
+            </RulesPanel>
 
             {shown && shown.file.status === "ready" && (
               <PageBoard
@@ -1101,8 +1352,8 @@ export function PdfSplitter() {
                 mode={mode}
                 cuts={shown.file.cuts.present}
                 onCut={cut}
-                selected={shown.file.selected}
-                onSelect={select}
+                selected={mode === "blank" ? blanks : shown.file.selected}
+                onSelect={mode === "blank" ? flip : select}
                 membership={membership}
                 leftOut={leftOut}
                 onRead={readPage}
@@ -1163,18 +1414,23 @@ export function PdfSplitter() {
                       : `${plural(toWrite.length, "part")} from ${plural(count, "page")}${(shown?.parts.length ?? 0) > toWrite.length ? ` · ${plural((shown?.parts.length ?? 0) - toWrite.length, "part")} left out` : ""}`}
           </p>
 
-          {problem && (
-            <p
-              role="alert"
-              className="flex items-start gap-2 text-sm text-destructive"
-            >
-              <IconAlertCircle
-                className="mt-0.5 size-4 shrink-0"
-                aria-hidden="true"
-              />
-              {problem}
-            </p>
-          )}
+          {problem &&
+            (isWaiting(problem) ? (
+              <p role="status" className="text-sm text-muted-foreground">
+                {problem}
+              </p>
+            ) : (
+              <p
+                role="alert"
+                className="flex items-start gap-2 text-sm text-destructive"
+              >
+                <IconAlertCircle
+                  className="mt-0.5 size-4 shrink-0"
+                  aria-hidden="true"
+                />
+                {problem}
+              </p>
+            ))}
 
           {splitting ? (
             <div className="space-y-3" data-testid="split-progress">

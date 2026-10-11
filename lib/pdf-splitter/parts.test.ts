@@ -242,16 +242,17 @@ describe("partKeys", () => {
   const parts = [{ pages: [0, 1] }, { pages: [2] }]
 
   it("knows a part that is a run of pages by its first page", () => {
-    for (const mode of ["cuts", "bookmarks", "size"] as const)
+    for (const mode of ["cuts", "bookmarks", "size", "blank", "text"] as const)
       expect(partKeys(mode, parts)).toEqual(["p0", "p2"])
   })
 
   it("knows any other part by its place", () => {
-    expect(partKeys("ranges", [...parts, { pages: [0, 1] }])).toEqual([
-      "n0",
-      "n1",
-      "n2",
-    ])
+    for (const mode of ["ranges", "oddeven", "extract", "remove"] as const)
+      expect(partKeys(mode, [...parts, { pages: [0, 1] }])).toEqual([
+        "n0",
+        "n1",
+        "n2",
+      ])
   })
 })
 

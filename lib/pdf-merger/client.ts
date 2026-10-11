@@ -2,6 +2,8 @@
 
 import type { Size } from "@/lib/image-compressor/geometry"
 import type { PageText, Quad } from "@/lib/pdf-reader/text"
+import type { HalveChoice } from "@/lib/pdf-splitter/halves"
+import type { Area } from "@/lib/pdf-splitter/text-rule"
 import type { Bookmark } from "./outline"
 import type { PdfRequest, PdfResponse } from "./protocol"
 
@@ -50,6 +52,13 @@ export interface SplitPart {
   over?: boolean
 }
 
+/** News from a look through a file's pages: what a run of them came to. */
+export interface ScanNews<Found> {
+  from: number
+  found: Found[]
+  total: number
+}
+
 interface SplitJob {
   /** True when every part was written; false when the split was cancelled. */
   resolve: (finished: boolean) => void
@@ -86,6 +95,8 @@ export class PdfClient {
   >()
   private readonly texts = new Map<number, (text: PageText | null) => void>()
   private readonly searches = new Map<number, (news: SearchNews) => void>()
+  /** Looks through files that are under way. Each knows what kind of news it is given. */
+  private readonly scans = new Map<number, (news: ScanNews<never>) => void>()
   private readonly merges = new Map<number, MergeJob>()
   private readonly splits = new Map<number, SplitJob>()
   private requests = 0
@@ -124,6 +135,11 @@ export class PdfClient {
       const { request, found, done, withText, total } = message
       this.searches.get(request)?.({ found, done, withText, total })
       if (done >= total) this.searches.delete(request)
+    } else if (message.type === "ink" || message.type === "area-text") {
+      const { request, from, total } = message
+      const found = message.type === "ink" ? message.shares : message.texts
+      this.scans.get(request)?.({ from, found, total } as ScanNews<never>)
+      if (from + found.length >= total) this.scans.delete(request)
     } else if (message.type === "split-part") {
       const { index, bytes, pages, bookmarks, start, over } = message
       this.splits
@@ -200,6 +216,7 @@ export class PdfClient {
     this.layouts.clear()
     this.texts.clear()
     this.searches.clear()
+    this.scans.clear()
   }
 
   open(
@@ -275,6 +292,41 @@ export class PdfClient {
         if (this.searches.delete(request)) this.forget([request])
       },
     }
+  }
+
+  /**
+   * How much of each page of an open file holds marks, to find its blank
+   * pages. News arrives a run of pages at a time; `stop` ends it early.
+   */
+  ink(id: string, onNews: (news: ScanNews<number>) => void) {
+    const request = ++this.requests
+    this.scans.set(request, onNews)
+    this.send({ type: "ink", id, request })
+    return {
+      stop: () => {
+        if (this.scans.delete(request)) this.forget([request])
+      },
+    }
+  }
+
+  /** The text found in one area of each page of an open file, likewise. */
+  areaTexts(id: string, area: Area, onNews: (news: ScanNews<string>) => void) {
+    const request = ++this.requests
+    this.scans.set(request, onNews)
+    this.send({ type: "area-text", id, request, area })
+    return {
+      stop: () => {
+        if (this.scans.delete(request)) this.forget([request])
+      },
+    }
+  }
+
+  /**
+   * Cut an open file's double pages in half, or, with no choice, put it back
+   * as it was. The file keeps its id; what it now holds arrives as a file event.
+   */
+  halve(id: string, choice: HalveChoice | null) {
+    this.send({ type: "halve", id, choice })
   }
 
   /** Stop waiting for answers that are no longer wanted. */

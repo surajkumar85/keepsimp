@@ -1,6 +1,6 @@
 "use client"
 
-import { useId } from "react"
+import { useId, type ReactNode } from "react"
 import { IconArrowBackUp, IconArrowForwardUp } from "@tabler/icons-react"
 import { Button } from "@/components/ui/button"
 import { ChoiceChips } from "@/components/ui/choice-chips"
@@ -72,6 +72,7 @@ export function RulesPanel({
   sizeUnit,
   onSizeUnit,
   sizeWrong,
+  children,
 }: {
   mode: SplitMode
   /** Pages of the file that is shown. */
@@ -125,6 +126,8 @@ export function RulesPanel({
   sizeUnit: SizeUnit
   onSizeUnit: (unit: SizeUnit) => void
   sizeWrong: boolean
+  /** The controls of a way of splitting that brings its own. */
+  children?: ReactNode
 }) {
   const ids = useId()
   const toAll = several ? " in every file" : ""
@@ -479,6 +482,7 @@ export function RulesPanel({
           </p>
         </>
       )}
+      {children}
     </div>
   )
 }

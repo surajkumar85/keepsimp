@@ -11,12 +11,19 @@ import {
 } from "./parts"
 import { megabytes, refusal, type Limits } from "@/lib/pdf-merger/settings"
 import {
+  blanksOf,
+  partsAtBlanks,
+  type BlankChoice,
+  type Sensitivity,
+} from "./blank"
+import {
   headingsAt,
   partsFromHeadings,
   type FrontChoice,
   type Heading,
 } from "./bookmarks"
 import { DEFAULT_PATTERN } from "./naming"
+import { partsFromStarts, partsFromTexts } from "./text-rule"
 
 /** Why a file cannot be split; null when it can be tried. */
 export function fileProblem(
@@ -80,7 +87,36 @@ export interface SplitChoices {
   front?: FrontChoice
   /** For sizes: the parts the last split by size came to. */
   sized?: readonly Part[]
+  /** For blank pages: each page's share of marks, once every page has been looked at. */
+  ink?: readonly number[]
+  sensitivity?: Sensitivity
+  /** Pages whose blankness was turned round by hand. */
+  flipped?: ReadonlySet<number>
+  blankHow?: BlankChoice
+  /**
+   * For text: the pages that hold the words typed; null while they are being
+   * looked for, and left out when no words are typed.
+   */
+  starts?: readonly number[] | null
+  /**
+   * For text in an area: what each page says there; null while it is being
+   * read, and left out when no area is marked.
+   */
+  texts?: readonly string[] | null
+  /** Which of the two kinds of text rule is used. */
+  textKind?: "contains" | "area"
 }
+
+/** What a plan says while it waits for pages to be looked at. These are not mistakes. */
+export const WAITING = {
+  blank: "Looking for blank pages…",
+  starts: "Looking for those words…",
+  texts: "Reading that area on every page…",
+} as const
+
+/** True when what stands in the way of a plan is only that it is not ready yet. */
+export const isWaiting = (problem: string | null) =>
+  (Object.values(WAITING) as string[]).includes(problem ?? "")
 
 /** Why a file cannot be split at its bookmarks; null when it can. */
 export function bookmarksProblem(
@@ -110,6 +146,41 @@ export function planFor(choices: SplitChoices, count: number): Planned {
     const problem = bookmarksProblem(all, atLevel, chosen)
     if (problem) return { problem }
     parts = partsFromHeadings(chosen, count, choices.front ?? "own")
+  } else if (choices.mode === "blank") {
+    if (!choices.ink || choices.ink.length < count)
+      return { problem: WAITING.blank }
+    const blanks = blanksOf(
+      choices.ink,
+      choices.sensitivity ?? "normal",
+      choices.flipped ?? new Set()
+    )
+    if (!blanks.size)
+      return {
+        problem:
+          "No blank pages were found. Try a looser setting, or press a page to call it blank.",
+      }
+    parts = partsAtBlanks(count, blanks, choices.blankHow ?? "drop")
+    if (!parts.length)
+      return { problem: "Every page is blank, so nothing would be left." }
+  } else if (choices.mode === "text") {
+    if (choices.textKind === "area") {
+      if (choices.texts === undefined)
+        return { problem: "Mark the area to read on a page." }
+      if (choices.texts === null) return { problem: WAITING.texts }
+      if (!choices.texts.some((text) => text.trim()))
+        return {
+          problem:
+            "No text was found in that area. A scan holds pictures of text, which cannot be read here.",
+        }
+      parts = partsFromTexts(choices.texts.slice(0, count))
+    } else {
+      if (choices.starts === undefined)
+        return { problem: "Type the words that a part starts with." }
+      if (choices.starts === null) return { problem: WAITING.starts }
+      if (!choices.starts.length)
+        return { problem: "No page holds those words." }
+      parts = partsFromStarts(choices.starts, count, choices.front ?? "own")
+    }
   } else if (choices.mode === "size")
     // The parts are only known once the file has been split.
     return { parts: [...(choices.sized ?? [])] }
@@ -121,20 +192,26 @@ export function planFor(choices: SplitChoices, count: number): Planned {
 }
 
 /** True for the ways of splitting that always give one file. */
-export const givesOneFile = (mode: SplitMode) =>
-  mode === "extract" || mode === "remove"
+export const givesOneFile = (mode: SplitMode, blankHow?: BlankChoice) =>
+  mode === "extract" ||
+  mode === "remove" ||
+  (mode === "blank" && blankHow === "remove")
 
 /** The pattern a part is named by when none is typed. */
-export const patternFor = (mode: SplitMode) =>
-  mode === "extract"
-    ? "{name}-pages-{pages}"
-    : mode === "remove"
-      ? "{name}-edited"
-      : mode === "oddeven"
-        ? "{name}-{label}"
-        : mode === "bookmarks"
-          ? "{name}-{part}-{label}"
-          : DEFAULT_PATTERN
+export function patternFor(
+  mode: SplitMode,
+  choice: { blankHow?: BlankChoice; textKind?: "contains" | "area" } = {}
+) {
+  if (mode === "extract") return "{name}-pages-{pages}"
+  if (mode === "remove") return "{name}-edited"
+  if (mode === "oddeven") return "{name}-{label}"
+  if (mode === "blank" && choice.blankHow === "remove")
+    return "{name}-no-blank-pages"
+  // Parts that have words of their own are named after them.
+  if (mode === "bookmarks" || (mode === "text" && choice.textKind === "area"))
+    return "{name}-{part}-{label}"
+  return DEFAULT_PATTERN
+}
 
 /** One part as it will be written, or left out. */
 export interface PlannedPart extends Part {

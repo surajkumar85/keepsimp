@@ -432,6 +432,12 @@ export interface MergeOptions {
    * points tall. Without it, such letters are written as "?".
    */
   textPicture?: (text: string, height: number) => Pixels | null
+  /**
+   * A last word on the pages before anything is built around them: called
+   * once every page is in place, with the pages in order. Each page still has
+   * its whole box here, also where two pages share one page's content.
+   */
+  adjust?: (out: MuPDF.PDFDocument, pages: readonly MuPDF.PDFObject[]) => void
   /** Called between pages; it may pause, or throw to stop the merge. */
   checkpoint?: () => Promise<void>
   progress?: (done: number, total: number) => void
@@ -1038,7 +1044,7 @@ function addContents(
 }
 
 /** A page's box as the file stores it: the part that is shown, or the whole sheet. */
-function boxOf(page: Obj): Box {
+export function boxOf(page: Obj): Box {
   let box = page.get("CropBox")
   if (!box.isArray()) box = page.get("MediaBox")
   return [0, 1, 2, 3].map((at) =>
@@ -1046,7 +1052,7 @@ function boxOf(page: Obj): Box {
   ) as Box
 }
 
-const turnOf = (page: Obj) => {
+export const turnOf = (page: Obj) => {
   const turn = page.get("Rotate")
   return turn.isNumber() ? turn.asNumber() : 0
 }
@@ -1295,6 +1301,7 @@ export async function mergePages(
         (file.partial ??= []).push(pages[index])
     })
     for (const file of files) if (file.partial) trimResources(out, file.partial)
+    options.adjust?.(out, pages)
     const grafts = files.map((file) => ({
       map: file.map,
       input: file.source,

@@ -6,11 +6,25 @@
  */
 import type * as MuPDF from "mupdf"
 import {
+  boxOf,
   mergePages,
+  openPdf,
+  renderPage,
+  turnOf,
   type Merged,
   type OpenedPdf,
 } from "@/lib/pdf-merger/mupdf-engine"
+import { pageSizes, readPage } from "@/lib/pdf-reader/mupdf-read"
+import { inkShare } from "./blank"
+import {
+  areaToBox,
+  halfAreas,
+  halvedPages,
+  pagesToHalve,
+  type HalveChoice,
+} from "./halves"
 import { partsBySize, type SizedPart } from "./size"
+import { textInArea, type Area } from "./text-rule"
 
 export interface SplitOptions {
   /** Carry the file's attachments in this part. One part is enough to keep them. */
@@ -101,4 +115,109 @@ export async function splitBySize(
       options.progress?.(part.start + part.length, count)
     }
   )
+}
+
+/** How large a page is drawn to look for marks, in pixels on its longer side. */
+const INK_EDGE = 240
+
+/** The share of a page that holds marks (see `inkShare`); 1 for a page that cannot be drawn, which is then never taken for blank. */
+export function pageInk(mupdf: typeof MuPDF, pdf: OpenedPdf, index: number) {
+  try {
+    return inkShare(renderPage(mupdf, pdf, index, INK_EDGE))
+  } catch {
+    return 1
+  }
+}
+
+/**
+ * The text found in one area of every page of a run, for splitting where it
+ * changes. A page whose text cannot be read counts as having none there.
+ */
+export function areaTexts(
+  pdf: OpenedPdf,
+  area: Area,
+  from: number,
+  to: number
+) {
+  const sizes = pageSizes(pdf)
+  const texts: string[] = []
+  for (let index = from; index < to; index++)
+    try {
+      texts.push(textInArea(readPage(pdf, index).lines, sizes[index], area))
+    } catch {
+      texts.push("")
+    }
+  return texts
+}
+
+/**
+ * A file whose double pages are cut into single ones: each page that is cut
+ * appears twice, shown through one half of its sheet. Nothing is drawn again
+ * or compressed again; the two halves share the page's content. Links and
+ * notes go with the half they lie on.
+ */
+export async function halvePdf(
+  mupdf: typeof MuPDF,
+  pdf: OpenedPdf,
+  choice: HalveChoice
+): Promise<OpenedPdf> {
+  const plan = halvedPages(pagesToHalve(pageSizes(pdf), choice))
+  const areas = halfAreas(choice)
+  const { facts } = pdf
+  const written = await mergePages(
+    mupdf,
+    new Map([["file", { pdf, name: "" }]]),
+    plan.map(({ page }) => ({ source: "file", index: page, rotation: 0 })),
+    {
+      bookmarks: "keep",
+      forms: "keep",
+      // Twice as many pages have no use for the numbers the file gave them.
+      labels: "continuous",
+      attachments: true,
+      details: {
+        title: facts.title,
+        author: facts.author ?? "",
+        subject: facts.subject ?? "",
+        keywords: facts.keywords ?? "",
+      },
+      adjust: (out, pages) =>
+        pages.forEach((page, index) => {
+          const { half } = plan[index]
+          if (half === null) return
+          const box = areaToBox(boxOf(page), turnOf(page), areas[half])
+          const stored = out.newArray()
+          for (const side of box) stored.push(side)
+          page.put("MediaBox", stored)
+          page.put("CropBox", stored)
+          // Narrower boxes that were set for the whole sheet no longer fit.
+          for (const other of ["TrimBox", "BleedBox", "ArtBox"])
+            page.delete(other)
+          const notes = page.get("Annots")
+          if (!notes.isArray()) return
+          for (let at = notes.length - 1; at >= 0; at--) {
+            const place = notes.get(at).get("Rect")
+            if (!place.isArray() || place.length < 4) continue
+            const [left, bottom, right, top] = [0, 1, 2, 3].map((side) =>
+              place.get(side).asNumber()
+            )
+            const x = (left + right) / 2
+            const y = (bottom + top) / 2
+            // A link or note stays with the half its middle lies on.
+            if (x < box[0] || x > box[2] || y < box[1] || y > box[3])
+              notes.delete(at)
+          }
+        }),
+    }
+  )
+  const halved = openPdf(mupdf, written.bytes)
+  // What was true of the file is true of its halves.
+  halved.facts = {
+    ...halved.facts,
+    repaired: facts.repaired,
+    unlocked: facts.unlocked,
+    restricted: facts.restricted,
+    signed: facts.signed,
+    tagged: facts.tagged,
+  }
+  return halved
 }

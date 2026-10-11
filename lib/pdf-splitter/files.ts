@@ -32,6 +32,14 @@ export interface SplitFile {
   skipped: ReadonlySet<string>
   /** Bookmarks not to split at, by the page they open. */
   unticked: ReadonlySet<number>
+  /** Each page's share of marks, as far as the pages have been looked at. */
+  ink?: number[]
+  /** Pages whose blankness was turned round by hand. */
+  flipped: ReadonlySet<number>
+  /** The pages that hold some words, and which words those were. */
+  starts?: { key: string; pages: number[] }
+  /** What each page says in some area, and which area that was. */
+  texts?: { key: string; texts: string[] }
 }
 
 export interface SplitState {
@@ -66,8 +74,29 @@ export type SplitAction =
   | { type: "select-all"; rule: (pages: number) => ReadonlySet<number> }
   | { type: "name"; id: string; key: string; name: string }
   | { type: "skip"; id: string; key: string; skipped: boolean }
+  /** What a run of pages was found to hold of marks, from page `from` on. */
+  | { type: "ink"; id: string; from: number; shares: readonly number[] }
+  /** Call a page blank that was not found to be, or keep one that was. */
+  | { type: "flip"; id: string; page: number }
+  | { type: "starts"; id: string; key: string; pages: number[] }
+  | { type: "texts"; id: string; key: string; texts: string[] }
+  /**
+   * The file's pages are no longer the same pages, as when double pages are
+   * cut in half: everything chosen or found for it is let go, and it is read again.
+   */
+  | { type: "renew"; id: string }
   /** Split at a bookmark, or not; with no page, at every bookmark or none of those given. */
   | { type: "tick"; id: string; pages: readonly number[]; ticked: boolean }
+
+/** Nothing chosen and nothing found, as for a file that was just added. */
+const untouched = () => ({
+  cuts: startHistory<number[]>([]),
+  selected: new Set<number>(),
+  names: {},
+  skipped: new Set<string>(),
+  unticked: new Set<number>(),
+  flipped: new Set<number>(),
+})
 
 const fresh = (item: {
   id: string
@@ -77,11 +106,7 @@ const fresh = (item: {
 }): SplitFile => ({
   ...item,
   status: "reading",
-  cuts: startHistory([]),
-  selected: new Set(),
-  names: {},
-  skipped: new Set(),
-  unticked: new Set(),
+  ...untouched(),
 })
 
 /** A file's pages; none until it has been read. */
@@ -194,6 +219,39 @@ export function splitReducer(
         else skipped.delete(action.key)
         return { ...file, skipped }
       })
+    case "ink":
+      return change(action.id, (file) => {
+        const ink = (file.ink ?? []).slice(0, action.from)
+        // A run that does not follow on from what is known is not used.
+        return ink.length === action.from
+          ? { ...file, ink: [...ink, ...action.shares] }
+          : file
+      })
+    case "flip":
+      return change(action.id, (file) => {
+        const flipped = new Set(file.flipped)
+        if (!flipped.delete(action.page)) flipped.add(action.page)
+        return { ...file, flipped }
+      })
+    case "starts":
+      return change(action.id, (file) => ({
+        ...file,
+        starts: { key: action.key, pages: action.pages },
+      }))
+    case "texts":
+      return change(action.id, (file) => ({
+        ...file,
+        texts: { key: action.key, texts: action.texts },
+      }))
+    case "renew":
+      return change(action.id, (file) => ({
+        id: file.id,
+        file: file.file,
+        name: file.name,
+        size: file.size,
+        status: "reading",
+        ...untouched(),
+      }))
     case "tick":
       return change(action.id, (file) => {
         const unticked = new Set(file.unticked)
