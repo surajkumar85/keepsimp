@@ -4,7 +4,7 @@
  */
 import { sizeLabel } from "@/lib/image-compressor/formats"
 import type { CheckResult } from "./check"
-import type { Mode } from "./settings"
+import type { Mode, ScanChoice } from "./settings"
 
 export type Stage = "reading" | "pictures" | "writing" | "checking"
 
@@ -64,8 +64,19 @@ export function changeLines(report: {
   pictures: { found: number; changed: number; resized: number }
   fontsCut: boolean
   dropped: { thumbnails: number; private: number }
+  scans?: { how: ScanChoice; pictures: number }
 }) {
   const lines: string[] = []
+  if (report.scans?.pictures) {
+    const pages = plural(report.scans.pictures, "scanned page")
+    lines.push(
+      report.scans.how === "layers"
+        ? `${pages} rebuilt as sharp letters over soft paper.`
+        : report.scans.how === "mono"
+          ? `${pages} turned black and white.`
+          : `${pages} turned to greyscale.`
+    )
+  }
   const { found, changed, resized } = report.pictures
   if (changed)
     lines.push(

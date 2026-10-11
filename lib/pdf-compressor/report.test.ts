@@ -87,6 +87,20 @@ describe("changeLines", () => {
     ])
   })
 
+  it("says what became of scanned pages", () => {
+    const scans = (
+      how: "layers" | "mono" | "grey" | "keep",
+      pictures: number
+    ) => changeLines({ ...nothing, scans: { how, pictures } })[0]
+    expect(scans("layers", 12)).toBe(
+      "12 scanned pages rebuilt as sharp letters over soft paper."
+    )
+    expect(scans("mono", 1)).toBe("1 scanned page turned black and white.")
+    expect(scans("grey", 3)).toBe("3 scanned pages turned to greyscale.")
+    // None were found: nothing is said about them.
+    expect(scans("layers", 0)).toBe("The file was tidied and packed tighter.")
+  })
+
   it("counts one picture as one", () => {
     expect(
       changeLines({

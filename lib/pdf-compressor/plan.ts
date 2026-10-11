@@ -12,10 +12,10 @@ export type Space = "grey" | "rgb" | "cmyk" | "other"
 
 /**
  * How a picture is stored: as a JPEG, as JPEG 2000, without loss ("plain":
- * deflated or not packed at all), in a black-and-white packing, or in a way
- * that is left alone.
+ * deflated or not packed at all), in one of the two black-and-white packings
+ * (fax or JBIG2), or in a way that is left alone.
  */
-export type Stored = "jpeg" | "jpx" | "plain" | "bitonal" | "other"
+export type Stored = "jpeg" | "jpx" | "plain" | "fax" | "jbig2" | "other"
 
 export interface PictureFacts extends Size {
   /** Bits per colour channel, as stored. */
@@ -26,6 +26,8 @@ export interface PictureFacts extends Size {
   bytes: number
   /** It is a stencil: one bit per pixel that says where to paint. */
   stencil: boolean
+  /** Each pixel is one stored value: a shade of grey, a place in a palette, or a stencil's bit. */
+  single: boolean
   /** One of its colours is see-through by a colour key, which any change of colour would break. */
   keyed: boolean
   /** It is blended with a soft mask ahead of time, so picture and mask must change together. */
@@ -56,6 +58,8 @@ export type Step =
   | { do: "repack"; size: Size | null }
   /** Save it again, with loss allowed, at `size` if that is set, with a JPEG quality of at most `top`. */
   | { do: "encode"; size: Size | null; top: number }
+  /** Pack its one bit a pixel with JBIG2, which loses nothing. */
+  | { do: "bitonal" }
 
 /** Pictures with fewer pixels or bytes than this are not worth the work. */
 export const SMALL_PIXELS = 64 * 64
@@ -78,13 +82,30 @@ export function planPicture(
   maxPixels: number
 ): Step {
   const pixels = facts.width * facts.height
-  if (facts.stencil || facts.bits === 1 || facts.stored === "bitonal")
-    return leave("bitonal")
+  const tiny = pixels < SMALL_PIXELS || facts.bytes < SMALL_BYTES
+  if (
+    facts.stencil ||
+    facts.bits === 1 ||
+    facts.stored === "fax" ||
+    facts.stored === "jbig2"
+  ) {
+    // The stored bits are packed again as they are, so what they stand for
+    // (grey, a palette, a stencil, either way up) does not come into it.
+    if (
+      facts.bits !== 1 ||
+      !facts.single ||
+      (facts.stored !== "plain" && facts.stored !== "fax")
+    )
+      return leave("bitonal")
+    if (tiny) return leave("small")
+    if (pixels > maxPixels) return leave("large")
+    return { do: "bitonal" }
+  }
   if (facts.space === "other" || facts.stored === "other")
     return leave("colours")
   if (facts.bits > 8) return leave("deep")
   if (facts.keyed || facts.matte) return leave("masked")
-  if (pixels < SMALL_PIXELS || facts.bytes < SMALL_BYTES) return leave("small")
+  if (tiny) return leave("small")
   if (pixels > maxPixels) return leave("large")
   const plain = facts.stored === "plain"
   if (!plan) return plain ? { do: "repack", size: null } : leave("kept")

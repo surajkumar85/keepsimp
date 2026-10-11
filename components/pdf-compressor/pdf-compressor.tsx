@@ -65,10 +65,12 @@ import {
   defaultSettings,
   outcome,
   resultName,
+  scansFor,
   settingsKey,
   settingsProblem,
   type CompressSettings,
   type Mode,
+  type ScanChoice,
 } from "@/lib/pdf-compressor/settings"
 import { mostWrites, stepCount } from "@/lib/pdf-compressor/target"
 import { limitBytes, type SizeUnit } from "@/lib/pdf-splitter/size"
@@ -112,6 +114,7 @@ export function PdfCompressor() {
   const [sizeText, setSizeText] = useState("300")
   const [sizeUnit, setSizeUnit] = useState<SizeUnit>("KB")
   const [further, setFurther] = useState(false)
+  const [scans, setScans] = useState<ScanChoice>(defaultSettings.scans)
   const [progress, setProgress] = useState<{
     /** Which file is being compressed, from 1, of how many. */
     file: number
@@ -305,8 +308,9 @@ export function PdfCompressor() {
       target:
         size === CUSTOM_SIZE ? limitBytes(sizeText, sizeUnit) : Number(size),
       further,
+      scans,
     }),
-    [mode, size, sizeText, sizeUnit, further]
+    [mode, size, sizeText, sizeUnit, further, scans]
   )
   const key = settingsKey(settings)
   const problem = settingsProblem(settings)
@@ -375,6 +379,7 @@ export function PdfCompressor() {
           file.file,
           {
             how,
+            scans: scansFor(settings),
             password: file.password,
             maxPixels: pixelLimit(limits.fileBytes < desktopLimits.fileBytes),
           },
@@ -729,6 +734,8 @@ export function PdfCompressor() {
           sizeWrong={mode === "size" && settings.target === null}
           further={further}
           onFurther={setFurther}
+          scans={scans}
+          onScans={setScans}
           disabled={compressing}
         />
 

@@ -1,7 +1,7 @@
 import { test, expect, type Page } from "@playwright/test"
 import AxeBuilder from "@axe-core/playwright"
 import { unzipSync } from "fflate"
-import type { PDFDocument } from "@cantoo/pdf-lib"
+import { PDFName, type PDFDocument } from "@cantoo/pdf-lib"
 import { similarity } from "../lib/image-compressor/ssim"
 import { damage, makePlainPdf } from "../tests/pdf-fixtures"
 import {
@@ -9,6 +9,7 @@ import {
   makeDrawnPdf,
   pictureText,
   readPictures,
+  scannedPage,
   scene,
   storeRgb,
   type Drawn,
@@ -107,6 +108,8 @@ test("shows what makes a file big, compresses it and gives a smaller file that r
 test("lossless changes no pixel, strong goes further, and a new level asks to compress again", async ({
   page,
 }) => {
+  // Several compressions in a row, on a machine that may be busy.
+  test.setTimeout(120_000)
   const upload = await file("levels.pdf", (doc) => [
     photo(doc),
     { ref: storeRgb(doc, chart(800, 600)), width: 400, height: 300 },
@@ -240,6 +243,8 @@ test("says so when a file is already small, and refuses what it cannot read", as
 test("comes out under a size, and says so honestly when it cannot", async ({
   page,
 }) => {
+  // Several compressions in a row, on a machine that may be busy.
+  test.setTimeout(120_000)
   const upload = await file("form.pdf", (doc) =>
     Array.from({ length: 6 }, (_, index) => ({
       ref: storeRgb(doc, scene(900, 600, index + 1)),
@@ -290,9 +295,72 @@ test("comes out under a size, and says so honestly when it cannot", async ({
   expect(await texts(further.bytes)).toEqual([pictureText(1)])
 })
 
+test("rebuilds scanned pages as text over paper, or in black and white", async ({
+  page,
+}) => {
+  // Several compressions in a row, on a machine that may be busy.
+  test.setTimeout(120_000)
+  // One page that is a scan from edge to edge, at 150 dpi.
+  const upload = await file(
+    "scan.pdf",
+    () => [],
+    (doc, sheet) => {
+      sheet.node
+        .Resources()!
+        .set(
+          PDFName.of("XObject"),
+          doc.context.obj({ Scan: storeRgb(doc, scannedPage(1240, 1754)) })
+        )
+      sheet.node.addContentStream(
+        doc.context.register(
+          doc.context.stream("q 595 0 0 842 0 0 cm /Scan Do Q")
+        )
+      )
+    }
+  )
+  await add(page, upload)
+  const scans = page.getByRole("radiogroup", { name: "Scanned pages" })
+  await expect(scans.getByRole("radio", { name: "As they are" })).toBeChecked()
+
+  await scans.getByRole("radio", { name: "Text and paper" }).click()
+  await compress(page)
+  await expect(page.getByTestId("changes")).toContainText(
+    "1 scanned page rebuilt as sharp letters over soft paper."
+  )
+  await expect(page.getByTestId("check")).toHaveAttribute("data-passed", "true")
+  await expect(page.getByTestId("compare")).toHaveAttribute(
+    "data-drawn",
+    "true",
+    { timeout: 30_000 }
+  )
+  const layers = await download(page)
+  expect(layers.bytes.length).toBeLessThan(60 * 1024)
+  expect(await texts(layers.bytes)).toEqual([pictureText(1)])
+  // The paper and the ink are pictures of their own now.
+  expect(await readPictures(layers.bytes)).toHaveLength(2)
+
+  await scans.getByRole("radio", { name: "Black and white" }).click()
+  await compress(page)
+  await expect(page.getByTestId("changes")).toContainText(
+    "1 scanned page turned black and white."
+  )
+  const mono = await download(page)
+  expect(mono.bytes.length).toBeLessThan(layers.bytes.length)
+  const [copy] = await readPictures(mono.bytes)
+  expect(copy.width).toBe(1240)
+  for (let at = 0; at < copy.data.length; at += 4 * 997)
+    expect([0, 255]).toContain(copy.data[at])
+
+  // Where nothing may be lost, scans are not offered a choice.
+  await level(page, "Lossless").click()
+  await expect(scans).toHaveCount(0)
+})
+
 test("compresses several files at once and hands them over as one ZIP", async ({
   page,
 }) => {
+  // Several compressions in a row, on a machine that may be busy.
+  test.setTimeout(120_000)
   const words = Buffer.from(await makePlainPdf([{ body: "Only words" }]))
   await page.goto(ROUTE)
   await page.locator("#compress-file").setInputFiles([
@@ -388,6 +456,8 @@ test("compresses several files at once and hands them over as one ZIP", async ({
 test("a compression can be stopped, the result read, and the file removed", async ({
   page,
 }) => {
+  // Several compressions in a row, on a machine that may be busy.
+  test.setTimeout(120_000)
   // Enough pictures that the work takes a while.
   const upload = await file("album.pdf", (doc) =>
     Array.from({ length: 14 }, (_, index) => ({

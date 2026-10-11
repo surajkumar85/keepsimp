@@ -22,15 +22,19 @@ import {
   jpegOf,
   makeDrawnPdf,
   makePicturePdf,
+  makeScanPdf,
   noiseBytes,
   pictureDict,
   pictureText,
   pngOf,
   readPictures,
+  scannedPage,
+  scanText,
   scene,
   type Placed,
 } from "@/tests/pdf-pictures"
 import { readPdf, texts } from "@/tests/pdf-reader"
+import { drawPage } from "@/lib/pdf-merger/mupdf-engine"
 import { codecs } from "./codecs"
 import { auditPdf } from "./mupdf-audit"
 import {
@@ -311,7 +315,7 @@ describe("unusual pictures", () => {
     expect([...after[0].data]).toEqual([...before[0].data])
   }, 60_000)
 
-  it("leaves pictures it is not sure of exactly as they are", async () => {
+  it("leaves the pixels of pictures it is not sure of exactly as they are", async () => {
     const bits = new Uint8Array((WIDTH / 8) * HEIGHT).map((_, at) =>
       at % 3 ? 0xf0 : 0x3c
     )
@@ -349,9 +353,14 @@ describe("unusual pictures", () => {
         height: 30,
       },
     ])
-    expect(report.pictures).toEqual({ found: 3, changed: 0, resized: 0 })
-    // The file itself is packed tighter; the pictures are untouched.
+    // The one-bit picture is packed again without loss; the other two are untouched.
+    expect(report.pictures).toEqual({ found: 3, changed: 1, resized: 0 })
     expect(bytes).not.toBeNull()
+    expect((await stored(bytes!)).map((picture) => picture.filter)).toEqual([
+      "/JBIG2Decode",
+      "/FlateDecode",
+      "/FlateDecode",
+    ])
     expect(after.map((picture) => [...picture.data])).toEqual(
       before.map((picture) => [...picture.data])
     )
@@ -398,6 +407,290 @@ describe("unusual pictures", () => {
     for (let channel = 0; channel < 3; channel++)
       expect(Math.abs(was[channel] - is[channel])).toBeLessThan(4)
   }, 60_000)
+})
+
+describe("black-and-white pictures", () => {
+  const WIDTH = 1240
+  const HEIGHT = 900
+
+  /** A page of marks like print, one bit a pixel with 1 for white, rows padded to whole bytes. */
+  function marks(seed = 5) {
+    const stride = Math.ceil(WIDTH / 8)
+    const packed = new Uint8Array(stride * HEIGHT).fill(0xff)
+    let state = seed
+    const random = (below: number) => {
+      state = (Math.imul(state, 1103515245) + 12345) >>> 0
+      return (state >>> 8) % below
+    }
+    for (let line = 20; line < HEIGHT - 20; line += 28)
+      for (let x = 20; x < WIDTH - 20; x += 3 + random(9)) {
+        const tall = 4 + random(14)
+        const wide = 1 + random(4)
+        for (let dy = 0; dy < tall; dy++)
+          for (let dx = 0; dx < wide; dx++)
+            packed[(line + dy) * stride + ((x + dx) >> 3)] &= ~(
+              0x80 >>
+              ((x + dx) & 7)
+            )
+      }
+    return packed
+  }
+  const drawn = { width: 500, height: 363 }
+
+  it("packs a one-bit picture with JBIG2 at every level, pixel for pixel", async () => {
+    const input = await makeDrawnPdf((doc) => [
+      {
+        ref: doc.context.register(
+          doc.context.stream(marks(), {
+            ...pictureDict(WIDTH, HEIGHT, 1),
+            ColorSpace: "DeviceGray",
+          })
+        ),
+        ...drawn,
+      },
+    ])
+    const [before] = await readPictures(input)
+    for (const level of LEVELS) {
+      const { bytes, report } = await compress(input, level)
+      expect(report.pictures).toEqual({ found: 1, changed: 1, resized: 0 })
+      expect(await stored(bytes!)).toEqual([
+        { space: "/DeviceGray", filter: "/JBIG2Decode", width: WIDTH },
+      ])
+      // A tenth of what the bits take raw.
+      expect(bytes!.length).toBeLessThan(input.length / 10)
+      const [after] = await readPictures(bytes!)
+      expect(similarity(before, after).mean).toBe(1)
+    }
+  }, 60_000)
+
+  it("beats fax packing, and keeps a palette of two colours", async () => {
+    const raw = await makeDrawnPdf((doc) => [
+      {
+        ref: doc.context.register(
+          doc.context.stream(marks(9), {
+            ...pictureDict(WIDTH, HEIGHT, 1),
+            ColorSpace: [
+              "Indexed",
+              "DeviceRGB",
+              1,
+              PDFHexString.of("0044aaffffee"),
+            ],
+          })
+        ),
+        ...drawn,
+      },
+      {
+        ref: doc.context.register(
+          doc.context.stream(marks(3), {
+            ...pictureDict(WIDTH, HEIGHT, 1),
+            ColorSpace: "DeviceGray",
+          })
+        ),
+        ...drawn,
+      },
+    ])
+    // The engine's own writer packs raw one-bit pictures as fax.
+    const fax = new mupdf.PDFDocument(raw)
+    const input = fax.saveToBuffer({ compress: "yes" }).asUint8Array().slice()
+    fax.destroy()
+    expect((await stored(input)).map((picture) => picture.filter)).toContain(
+      "/CCITTFaxDecode"
+    )
+    const before = await readPictures(input)
+    const { bytes, report } = await compress(input, "lossless")
+    expect(report.pictures.changed).toBe(2)
+    expect((await stored(bytes!)).map((picture) => picture.filter)).toEqual([
+      "/JBIG2Decode",
+      "/JBIG2Decode",
+    ])
+    expect(bytes!.length).toBeLessThan(input.length * 0.9)
+    const after = await readPictures(bytes!)
+    // The first is blue on cream, not black on white.
+    expect([...after[0].data.subarray(0, 3)]).toEqual([255, 255, 238])
+    for (const [index, picture] of after.entries())
+      expect(similarity(before[index], picture).mean).toBe(1)
+  }, 60_000)
+
+  it("keeps a stencil painting where it painted, either way up", async () => {
+    const input = await makeDrawnPdf(
+      () => [],
+      (doc, page) => {
+        const stencil = (decode?: number[]) =>
+          doc.context.register(
+            doc.context.stream(marks(4), {
+              Type: "XObject",
+              Subtype: "Image",
+              Width: WIDTH,
+              Height: HEIGHT,
+              ImageMask: true,
+              ...(decode ? { Decode: decode } : null),
+            })
+          )
+        page.node
+          .Resources()!
+          .set(
+            PDFName.of("XObject"),
+            doc.context.obj({ Up: stencil(), Down: stencil([1, 0]) })
+          )
+        page.node.addContentStream(
+          doc.context.register(
+            doc.context.stream(
+              "q 0 0.4 0.6 rg 500 0 0 363 40 400 cm /Up Do Q q 0.7 0 0 rg 500 0 0 363 40 20 cm /Down Do Q"
+            )
+          )
+        )
+      }
+    )
+    const { bytes, report } = await compress(input, "lossless")
+    expect(report.pictures).toEqual({ found: 2, changed: 2, resized: 0 })
+    expect(report.check.low).toEqual([])
+    // Drawn by the engine before and after, the page is the same to the pixel.
+    const was = new mupdf.PDFDocument(input)
+    const is = new mupdf.PDFDocument(bytes!)
+    const picture = (doc: mupdf.PDFDocument) =>
+      doc
+        .loadPage(0)
+        .toPixmap(mupdf.Matrix.scale(2, 2), mupdf.ColorSpace.DeviceRGB, false)
+        .getPixels()
+        .slice()
+    const first = picture(was)
+    expect([...picture(is)]).toEqual([...first])
+    // Both colours are on the page: the stencils paint, one the other way up.
+    expect(first.some((value, at) => at % 3 === 0 && value > 170)).toBe(true)
+    was.destroy()
+    is.destroy()
+  }, 60_000)
+})
+
+describe("scanned pages", () => {
+  /** Two pages scanned at 150 dpi: 1,240 by 1,754 pixels each. */
+  const scan = async () =>
+    makeScanPdf([
+      await jpegOf(scannedPage(1240, 1754, 1), 88),
+      await jpegOf(scannedPage(1240, 1754, 2), 88),
+    ])
+  const words = [scanText(1), scanText(2)]
+  /** How alike the engine draws a page of two files (mean SSIM). */
+  const alike = (a: Uint8Array, b: Uint8Array, page = 0) => {
+    const first = new mupdf.PDFDocument(a)
+    const second = new mupdf.PDFDocument(b)
+    try {
+      return similarity(
+        drawPage(mupdf, first, page, 1000),
+        drawPage(mupdf, second, page, 1000)
+      ).mean
+    } finally {
+      first.destroy()
+      second.destroy()
+    }
+  }
+
+  it("rebuilds a scan as sharp letters over soft paper, far smaller than a picture of it", async () => {
+    const input = await scan()
+    const usual = await compress(input, "balanced")
+    const { bytes, report } = await compress(input, "balanced", {
+      scans: "layers",
+    })
+    expect(report.scans).toEqual({ how: "layers", pictures: 2 })
+    expect(report.check.low).toEqual([])
+    // At 150 dpi already, the usual way finds little to take.
+    expect(bytes!.length).toBeLessThan((usual.bytes ?? input).length / 4)
+    expect(bytes!.length).toBeLessThan(input.length / 6)
+    console.info(
+      `scan of ${input.length} bytes: usual ${(usual.bytes ?? input).length}, layers ${bytes!.length}`
+    )
+    // The hidden words are where they were.
+    expect(await texts(bytes!)).toEqual(words)
+    // Each page is now a mask, soft paper as a JPEG, and the ink's colours without loss.
+    const filters = (await stored(bytes!)).map((picture) => picture.filter)
+    for (const filter of ["/JBIG2Decode", "/DCTDecode", "/FlateDecode"])
+      expect(filters.filter((found) => found === filter)).toHaveLength(2)
+    expect(alike(input, bytes!)).toBeGreaterThan(0.9)
+    // The stamp is still red: pdf.js reads the ink's colours through the mask.
+    const pictures = await readPictures(bytes!)
+    expect(pictures.filter((picture) => picture.page === 1)).toHaveLength(2)
+  }, 120_000)
+
+  it("turns a scan black and white, like a photocopy", async () => {
+    const input = await scan()
+    const { bytes, report } = await compress(input, "balanced", {
+      scans: "mono",
+    })
+    expect(report.scans).toEqual({ how: "mono", pictures: 2 })
+    expect(report.check.low).toEqual([])
+    expect(bytes!.length).toBeLessThan(input.length / 15)
+    expect(await texts(bytes!)).toEqual(words)
+    expect(await stored(bytes!)).toEqual([
+      { space: "/DeviceGray", filter: "/JBIG2Decode", width: 1240 },
+      { space: "/DeviceGray", filter: "/JBIG2Decode", width: 1240 },
+    ])
+    const [page] = await readPictures(bytes!)
+    // Only black and white, with far more paper than ink, and ink where the print is.
+    let black = 0
+    for (let at = 0; at < page.data.length; at += 4) {
+      expect(page.data[at] === 0 || page.data[at] === 255).toBe(true)
+      if (page.data[at] === 0) black++
+    }
+    const share = black / (page.width * page.height)
+    expect(share).toBeGreaterThan(0.05)
+    expect(share).toBeLessThan(0.3)
+  }, 120_000)
+
+  it("takes the colour out of a scan", async () => {
+    const input = await scan()
+    const usual = await compress(input, "balanced")
+    const { bytes, report } = await compress(input, "balanced", {
+      scans: "grey",
+    })
+    expect(report.scans).toEqual({ how: "grey", pictures: 2 })
+    expect(report.check.low).toEqual([])
+    expect(bytes!.length).toBeLessThan((usual.bytes ?? input).length)
+    expect((await stored(bytes!)).map((picture) => picture.space)).toEqual([
+      "/DeviceGray",
+      "/DeviceGray",
+    ])
+    const [page] = await readPictures(bytes!)
+    expect(page.data[0]).toBe(page.data[1])
+    expect(await texts(bytes!)).toEqual(words)
+  }, 120_000)
+
+  it("leaves a scan with no print in it to the usual way, and scans alone where nothing may be lost", async () => {
+    // A photograph from edge to edge has no letters to keep sharp.
+    const photo = await makeScanPdf([await jpegOf(scene(1240, 1754), 90)])
+    const rebuilt = await compress(photo, "balanced", { scans: "layers" })
+    expect(rebuilt.report.scans).toBeUndefined()
+    expect(rebuilt.report.pictures.changed).toBe(1)
+    expect((await stored(rebuilt.bytes!))[0].filter).toBe("/DCTDecode")
+    const input = await scan()
+    const lossless = await compress(input, "lossless", { scans: "mono" })
+    expect(lossless.report.scans).toBeUndefined()
+    expect(lossless.report.pictures.changed).toBe(0)
+  }, 120_000)
+
+  it("does not take a small picture on a page for a scan", async () => {
+    const input = await makePicturePdf([
+      { bytes: await jpegOf(scannedPage(800, 600)), type: "jpeg", width: 200 },
+    ])
+    const { bytes, report } = await compress(input, "balanced", {
+      scans: "mono",
+    })
+    expect(report.scans).toBeUndefined()
+    expect((await stored(bytes!))[0].filter).toBe("/DCTDecode")
+  }, 120_000)
+
+  it("brings a scan under a size with its letters still sharp", async () => {
+    const input = await scan()
+    const { bytes, report } = await compressToSize(mupdf, input, {
+      codecs,
+      target: 60_000,
+      further: false,
+      scans: "layers",
+    })
+    expect(report.target!.met).toBe(true)
+    expect(bytes!.length).toBeLessThanOrEqual(60_000)
+    expect(report.scans).toEqual({ how: "layers", pictures: 2 })
+    expect(await texts(bytes!)).toEqual(words)
+  }, 120_000)
 })
 
 describe("what is kept", () => {

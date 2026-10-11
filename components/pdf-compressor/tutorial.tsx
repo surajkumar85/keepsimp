@@ -58,6 +58,16 @@ const content: TutorialContent = {
         "For forms and inboxes with a limit. Choose 100 KB, 200 KB, 500 KB, 1, 2, 5, 10 or 25 MB, or type a size in KB or MB. The only way to know what a file weighs at some setting is to write it, so the file is written up to six times, from gentle to harsh, and the gentlest result that fits is kept. It stops where pictures are still easy to read (72 dpi). If the size cannot be reached, you get the smallest readable result and are told how far over it is. “Go further” lets pictures get blurry when the size matters more.",
     },
     {
+      term: "Scanned pages",
+      detail:
+        "A page that is one large picture is a scan. “Text and paper” takes it apart: the letters are kept in black and white at the scan's own sharpness, the paper behind them becomes a soft, small colour picture, and the ink keeps its colour, so a red stamp stays red. This is usually several times smaller than a picture of the whole page, and easier to read. Words hidden over the scan by a text recogniser stay where they are. A scan with no print in it is treated like any other picture. “Greyscale” takes the colour out. “Black and white” makes a photocopy: smallest of all, right for plain text, but photographs and shading are lost.",
+    },
+    {
+      term: "Black-and-white pictures",
+      detail:
+        "Pictures with one bit a pixel are packed with JBIG2 at every level, without changing a pixel. Only the lossless kind of JBIG2 is written. The other kind stores one shape for letters that look alike and can put the wrong letter on a page; it is never used here.",
+    },
+    {
       term: "Several files",
       detail:
         "Every file gets a row with what it came to. What is chosen applies to all of them. Press a file's name to see its breakdown and its pages before and after. One file that cannot be read does not stop the others. “Download all” makes one ZIP on your device; a file that could not be made smaller is in it as it was.",
@@ -70,7 +80,7 @@ const content: TutorialContent = {
     {
       term: "Pictures that are left alone",
       detail:
-        "Black-and-white pictures, pictures with more than eight bits per colour, pictures in unusual colour spaces and pictures whose see-through parts depend on exact colours are not touched. CMYK pictures stay CMYK. A picture is only ever swapped for one that is smaller.",
+        "Pictures with more than eight bits per colour, pictures in unusual colour spaces and pictures whose see-through parts depend on exact colours are not touched. CMYK pictures stay CMYK. A picture is only ever swapped for one that is smaller.",
     },
     {
       term: "The check",

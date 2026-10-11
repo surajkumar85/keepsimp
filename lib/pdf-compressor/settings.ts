@@ -52,6 +52,70 @@ export const pageMarks: Record<Level, number> = {
 /** The mark for a file squeezed under a size, where some loss is the point. */
 export const TARGET_MARK = 0.88
 
+/**
+ * What to do with scanned pages: pages that are one large picture.
+ * - keep: treat them like any other picture
+ * - layers: sharp black-and-white letters over soft paper
+ * - grey: take the colour out
+ * - mono: black and white, as a photocopy
+ */
+export type ScanChoice = "keep" | "layers" | "grey" | "mono"
+
+export const scanChoices: readonly {
+  value: ScanChoice
+  label: string
+  note: string
+}[] = [
+  {
+    value: "keep",
+    label: "As they are",
+    note: "A scanned page is treated like any other picture.",
+  },
+  {
+    value: "layers",
+    label: "Text and paper",
+    note: "Letters are kept sharp in black and white, over soft paper in colour. Much smaller than a picture of the whole page, and easier to read.",
+  },
+  {
+    value: "grey",
+    label: "Greyscale",
+    note: "Colour is taken out of scanned pages.",
+  },
+  {
+    value: "mono",
+    label: "Black and white",
+    note: "Like a photocopy: ink is black, paper is white. Smallest, and right for plain text. Photographs and shading are lost.",
+  },
+]
+
+/** How a rebuilt scan may differ from the picture it was, drawn small (mean SSIM). Black and white differs by design. */
+export const scanMarks: Record<Exclude<ScanChoice, "keep">, number | null> = {
+  layers: 0.85,
+  grey: null,
+  mono: 0.35,
+}
+
+/** A picture that covers this share of a page is a scan of that page. */
+export const SCAN_COVERS = 0.75
+
+/**
+ * How many pixels of a scan, each way, one pixel of a soft layer stands for,
+ * so that the layer has at most `wanted` pixels per inch. A scan a hair
+ * under a whole step counts as on it: 149.98 dpi is 150.
+ */
+export const layerStep = (dpi: number, wanted: number) =>
+  Math.max(1, Math.ceil(dpi / wanted - 0.05))
+
+/** The resolutions and qualities of a scan's layers, at a level. */
+export function scanSettings(plan: LevelPlan) {
+  return {
+    /** Letters keep up to this many pixels per inch. */
+    maskDpi: Math.min(300, plan.dpi * 2),
+    paperDpi: Math.round((plan.dpi * 2) / 3),
+    paperQuality: Math.max(30, (plan.fixed ?? plan.floor) - 15),
+  }
+}
+
 export const levelChoices: readonly {
   value: Level
   label: string
@@ -91,6 +155,8 @@ export const modeNote = (mode: Mode) =>
 
 export interface CompressSettings {
   mode: Mode
+  /** What to do with scanned pages; nothing at the level that loses nothing. */
+  scans: ScanChoice
   /** For "To a size": the size to stay within, in bytes; null while what is typed is not a size. */
   target: number | null
   /** For "To a size": go on past what is easy to read, if the size takes it. */
@@ -99,15 +165,24 @@ export interface CompressSettings {
 
 export const defaultSettings: CompressSettings = {
   mode: "balanced",
+  scans: "keep",
   target: 1024 * 1024,
   further: false,
 }
 
 /** Two settings with the same key give the same result. */
-export const settingsKey = (settings: CompressSettings) =>
-  settings.mode === "size"
-    ? `size:${settings.target}:${settings.further}`
-    : settings.mode
+export function settingsKey(settings: CompressSettings) {
+  if (settings.mode === "lossless") return settings.mode
+  const how =
+    settings.mode === "size"
+      ? `size:${settings.target}:${settings.further}`
+      : settings.mode
+  return settings.scans === "keep" ? how : `${how}:${settings.scans}`
+}
+
+/** What is done with scanned pages at these settings. */
+export const scansFor = (settings: CompressSettings): ScanChoice =>
+  settings.mode === "lossless" ? "keep" : settings.scans
 
 /** Why nothing can be compressed with these settings; null when it can. */
 export const settingsProblem = (settings: CompressSettings) =>

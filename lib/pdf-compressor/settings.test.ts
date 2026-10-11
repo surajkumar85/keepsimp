@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest"
 import {
   defaultSettings,
+  layerStep,
   levelChoices,
   levelPlans,
   modeChoices,
@@ -8,6 +9,11 @@ import {
   outcome,
   pageMarks,
   resultName,
+  SCAN_COVERS,
+  scanChoices,
+  scanMarks,
+  scanSettings,
+  scansFor,
   settingsKey,
   settingsProblem,
   SIZE_NOTE,
@@ -35,6 +41,9 @@ describe("levels", () => {
     )
     const sized = { ...defaultSettings, mode: "size" as const }
     expect(settingsKey(sized)).toBe("size:1048576:false")
+    expect(settingsKey({ ...sized, scans: "layers" })).toBe(
+      "size:1048576:false:layers"
+    )
     expect(settingsKey({ ...sized, further: true })).not.toBe(
       settingsKey(sized)
     )
@@ -58,6 +67,53 @@ describe("levels", () => {
       settingsProblem({ ...defaultSettings, mode: "size", target: null })
     ).toContain("Type a size")
     expect(settingsProblem({ ...defaultSettings, target: null })).toBeNull()
+  })
+})
+
+describe("scanned pages", () => {
+  it("can be rebuilt three ways, or left as they are", () => {
+    expect(scanChoices.map((choice) => choice.value)).toEqual([
+      "keep",
+      "layers",
+      "grey",
+      "mono",
+    ])
+    expect(Object.keys(scanMarks).sort()).toEqual(["grey", "layers", "mono"])
+    expect(SCAN_COVERS).toBeGreaterThan(0.5)
+  })
+
+  it("count as part of the settings, except where nothing may be lost", () => {
+    const mono = { ...defaultSettings, scans: "mono" as const }
+    expect(settingsKey(mono)).toBe("balanced:mono")
+    expect(scansFor(mono)).toBe("mono")
+    const lossless = { ...mono, mode: "lossless" as const }
+    expect(settingsKey(lossless)).toBe("lossless")
+    expect(scansFor(lossless)).toBe("keep")
+  })
+
+  it("give soft layers whole steps of the scan's pixels", () => {
+    expect(layerStep(300, 100)).toBe(3)
+    expect(layerStep(149.98, 100)).toBe(2)
+    expect(layerStep(150.05, 100)).toBe(2)
+    expect(layerStep(104, 100)).toBe(1)
+    expect(layerStep(60, 100)).toBe(1)
+  })
+
+  it("keep letters at twice the level's resolution, and paper softer than pictures", () => {
+    expect(scanSettings(levelPlans.balanced!)).toEqual({
+      maskDpi: 300,
+      paperDpi: 100,
+      paperQuality: 65,
+    })
+    expect(scanSettings(levelPlans.strong!)).toMatchObject({
+      maskDpi: 192,
+      paperDpi: 64,
+      paperQuality: 50,
+    })
+    // A file squeezed hard keeps a quality a JPEG can still be written at.
+    expect(
+      scanSettings({ ...levelPlans.strong!, dpi: 36, fixed: 26 })
+    ).toMatchObject({ maskDpi: 72, paperDpi: 24, paperQuality: 30 })
   })
 })
 

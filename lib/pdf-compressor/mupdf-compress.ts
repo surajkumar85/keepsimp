@@ -28,6 +28,8 @@ import {
   type CheckResult,
   type PageScore,
 } from "./check"
+import { bitsFromSamples, encodeJbig2 } from "./jbig2"
+import { inkMask, inkShare, rebuild, splitLayers } from "./layers"
 import { readJpeg, tagJpeg } from "./jpeg"
 import { auditPdf, eachObject, type Audit } from "./mupdf-audit"
 import {
@@ -42,6 +44,7 @@ import {
 } from "./pixels"
 import {
   planPicture,
+  TOP_QUALITY,
   worthIt,
   type Change,
   type PictureFacts,
@@ -52,15 +55,26 @@ import {
 import { filterUp, greyPalette, readPng, samplesOf } from "./png"
 import type { Stage } from "./report"
 import {
+  layerStep,
   levelPlans,
   outcome,
   pageMarks,
+  SCAN_COVERS,
+  scanMarks,
+  scanSettings,
   TARGET_MARK,
   type Level,
   type LevelPlan,
+  type ScanChoice,
 } from "./settings"
 import { fitTarget, stepCount, stepPlan } from "./target"
-import { drawnSize, largest, type DrawMatrix } from "./usage"
+import {
+  drawnSize,
+  largest,
+  resolution,
+  sizeFor,
+  type DrawMatrix,
+} from "./usage"
 
 type Engine = typeof MuPDF
 type Doc = MuPDF.PDFDocument
@@ -87,6 +101,8 @@ export interface CompressOptions {
   pristine?: Doc
   /** Pictures with more pixels than this are left as they are. */
   maxPixels?: number
+  /** What to do with scanned pages; they are treated like any picture when left out. */
+  scans?: ScanChoice
   /** The most pages to draw before and after. */
   checkBudget?: number
   /** Called between pages and pictures; it may pause, or throw to stop. */
@@ -128,6 +144,8 @@ export interface CompressReport {
   check: CheckResult
   /** What the result's bytes are spent on; null when there is no result. */
   audit: Audit | null
+  /** Scanned pages that were rebuilt, and how. */
+  scans?: { how: ScanChoice; pictures: number }
   /** For a file that was to come out under a size: the size, and whether it did. */
   target?: {
     wanted: number
@@ -185,6 +203,8 @@ interface Entry {
   pages: Set<number>
   mask: boolean
   matte: boolean
+  /** The largest share of a page it covers where it is drawn, from 0 to 1. */
+  covers: number
 }
 
 const PLAIN_FILTERS = new Set([
@@ -210,8 +230,8 @@ function storedAs(ref: Obj): Stored {
   const last = names.at(-1)
   if (last === "DCTDecode" || last === "DCT") return "jpeg"
   if (last === "JPXDecode") return "jpx"
-  if (last === "CCITTFaxDecode" || last === "CCF" || last === "JBIG2Decode")
-    return "bitonal"
+  if (last === "CCITTFaxDecode" || last === "CCF") return "fax"
+  if (last === "JBIG2Decode") return "jbig2"
   return names.every((name) => PLAIN_FILTERS.has(name)) ? "plain" : "other"
 }
 
@@ -250,6 +270,15 @@ function spaceOf(space: Obj): { space: Space; base: Obj } {
   return other
 }
 
+/** True when a colour space stores one value a pixel: a grey, or a place in a palette. */
+function onePerPixel(space: Obj) {
+  if (space.isArray() && space.length > 1) {
+    const kind = nameOf(space.get(0))
+    if (kind === "Indexed" || kind === "I") return true
+  }
+  return spaceOf(space).space === "grey"
+}
+
 const CHANNELS: Record<Exclude<Space, "other">, 1 | 3 | 4> = {
   grey: 1,
   rgb: 3,
@@ -281,6 +310,7 @@ function factsOf(entry: Entry): PictureFacts {
     stored,
     bytes: numberOf(ref.get("Length")),
     stencil,
+    single: stencil || onePerPixel(ref.get("ColorSpace")),
     keyed: ref.get("Mask").isArray(),
     matte: entry.matte,
     mask: entry.mask,
@@ -304,6 +334,7 @@ function findPictures(doc: Doc) {
         pages: new Set(),
         mask: false,
         matte: false,
+        covers: 0,
       })
     } catch {
       // A picture the engine cannot read is left as it is.
@@ -330,14 +361,18 @@ async function measureUse(
   for (let index = 0; index < total; index++) {
     await options.checkpoint?.()
     options.progress?.("reading", index, total, attempt)
+    let sheet = 0
     const note = (image: MuPDF.Image, matrix: number[]) => {
       const entry = byImage.get(image.pointer as unknown as number)
       if (!entry) return
-      entry.drawn = largest(
-        entry.drawn ?? undefined,
-        drawnSize(matrix as unknown as DrawMatrix)
-      )
+      const size = drawnSize(matrix as unknown as DrawMatrix)
+      entry.drawn = largest(entry.drawn ?? undefined, size)
       entry.pages.add(index)
+      if (sheet > 0)
+        entry.covers = Math.max(
+          entry.covers,
+          Math.min(1, (size.width * size.height) / sheet)
+        )
     }
     const device = new mupdf.Device({
       fillImage: (image, matrix) => note(image, matrix),
@@ -346,6 +381,8 @@ async function measureUse(
     try {
       const page = doc.loadPage(index)
       try {
+        const [left, top, right, bottom] = page.getBounds()
+        sheet = (right - left) * (bottom - top)
         page.run(device, mupdf.Matrix.identity)
         device.close()
       } finally {
@@ -377,7 +414,8 @@ function decode(image: MuPDF.Image) {
     const width = pixmap.getWidth()
     const height = pixmap.getHeight()
     const channels = pixmap.getNumberOfComponents()
-    if (pixmap.getAlpha()) return null
+    // A stencil comes as coverage alone, which is one channel like any other.
+    if (pixmap.getAlpha() && channels !== 1) return null
     return {
       width,
       height,
@@ -751,7 +789,7 @@ function holds(work: Work, entry: Entry, to: Described, truth: Decoded) {
 async function shrink(
   work: Work,
   entry: Entry,
-  step: Exclude<Step, { do: "leave" }>
+  step: Exclude<Step, { do: "leave" | "bitonal" }>
 ) {
   const facts = spaceOf(entry.ref.get("ColorSpace"))
   if (facts.space === "other") return null
@@ -827,6 +865,298 @@ async function shrink(
   for (const key of ["DecodeParms", "Decode", "DL"]) entry.ref.delete(key)
   describe(work.doc, entry.ref, to, base)
   return to.change
+}
+
+/** A scan with a smaller share of ink than this holds no print worth layering. */
+const LEAST_INK = 0.0005
+/** With more ink than this, it is not print on paper. */
+const MOST_INK = 0.35
+/** How alike the layers, put back together, must be to the scan (mean SSIM). */
+const LAYERS_MARK = 0.9
+/** Scans smaller than this each way are not worth rebuilding. */
+const SMALLEST_SCAN = 400
+/** What a picture keeps of its description when it becomes a drawing of layers. */
+const KEPT_BY_A_FORM = new Set(["Type", "OC", "StructParent", "Name"])
+
+/** True for a picture that is a scan of a whole page, and plain enough to rebuild. */
+function isScan(entry: Entry, facts: PictureFacts, maxPixels: number) {
+  const { ref } = entry
+  return (
+    entry.covers >= SCAN_COVERS &&
+    !entry.mask &&
+    !facts.stencil &&
+    !facts.keyed &&
+    !facts.matte &&
+    facts.bits === 8 &&
+    (facts.space === "grey" || facts.space === "rgb") &&
+    (facts.stored === "jpeg" ||
+      facts.stored === "plain" ||
+      facts.stored === "jpx") &&
+    facts.width >= SMALLEST_SCAN &&
+    facts.height >= SMALLEST_SCAN &&
+    facts.width * facts.height <= maxPixels &&
+    ref.get("SMask").isNull() &&
+    ref.get("Mask").isNull()
+  )
+}
+
+/** A colour picture with its colour taken out. */
+function greyOf(from: Decoded): Decoded {
+  const count = from.size.width * from.size.height
+  const bytes = new Uint8Array(count)
+  for (let index = 0; index < count; index++) {
+    const at = index * 3
+    bytes[index] =
+      (from.bytes[at] * 77 +
+        from.bytes[at + 1] * 150 +
+        from.bytes[at + 2] * 29 +
+        128) >>
+      8
+  }
+  return {
+    size: from.size,
+    channels: 1,
+    bytes,
+    rgba: toRgba(bytes, from.size.width, from.size.height, 1),
+  }
+}
+
+/** True when a stored picture reads back with this size and, if given, exactly these one-channel bytes. */
+function readsBack(doc: Doc, ref: Obj, size: Size, bytes?: Uint8Array) {
+  try {
+    const image = doc.loadImage(ref)
+    try {
+      const seen = decode(image)
+      return Boolean(
+        seen &&
+        seen.width === size.width &&
+        seen.height === size.height &&
+        (!bytes || sameBytes(seen.bytes, bytes))
+      )
+    } finally {
+      image.destroy()
+    }
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Rebuild a scanned page: in greyscale, in black and white, or as sharp
+ * letters over soft paper. Returns what was done, or null when the scan is
+ * better left to the usual way with pictures.
+ */
+async function rebuildScan(
+  work: Work,
+  entry: Entry,
+  how: Exclude<ScanChoice, "keep">
+): Promise<Change | null> {
+  const { doc, codecs } = work
+  const plan = work.plan!
+  const { ref } = entry
+  const found = spaceOf(ref.get("ColorSpace"))
+  const seen = decode(entry.image)
+  if (!seen || (seen.channels !== 1 && seen.channels !== 3)) return null
+  if (found.space !== (seen.channels === 1 ? "grey" : "rgb")) return null
+  const size = { width: seen.width, height: seen.height }
+  const original: Decoded = {
+    size,
+    channels: seen.channels,
+    bytes: seen.bytes,
+    rgba: toRgba(seen.bytes, size.width, size.height, seen.channels),
+  }
+  const before = numberOf(ref.get("Length"))
+  const settings = scanSettings(plan)
+
+  if (how === "grey") {
+    // A scan that is grey already goes the usual way.
+    if (original.channels === 1) return null
+    const smaller = sizeFor(size, entry.drawn, plan.dpi, plan.slack)
+    const grey = greyOf(original)
+    const from = smaller ? await resized(work, grey, smaller, false) : grey
+    const to = await asJpeg(work, from, "photo", TOP_QUALITY, "resized", true)
+    if (!to || !worthIt(before, to.bytes.length, "resized")) return null
+    const described = { ...to, space: doc.newName("DeviceGray") }
+    if (!holds(work, entry, described, from)) return null
+    ref.writeRawStream(described.bytes)
+    for (const key of ["DecodeParms", "Decode", "DL"]) ref.delete(key)
+    describe(doc, ref, described, found.base)
+    return "resized"
+  }
+
+  // Letters are kept at the scan's own sharpness, up to a limit.
+  const sharp = sizeFor(size, entry.drawn, settings.maskDpi, 1.1)
+  const at = sharp ? await resized(work, original, sharp, false) : original
+  const dpi =
+    (entry.drawn && resolution(at.size, entry.drawn)) ?? settings.maskDpi
+  const picture = (bytes: Uint8Array, extra: Record<string, unknown>) =>
+    doc.addRawStream(bytes, {
+      Type: doc.newName("XObject"),
+      Subtype: doc.newName("Image"),
+      ...extra,
+    })
+
+  if (how === "mono") {
+    const mask = inkMask(at.rgba, true)
+    const coded = encodeJbig2(mask, at.size.width, at.size.height)
+    if (!worthIt(before, coded.length, "resized")) return null
+    const expected = new Uint8Array(mask.length)
+    for (let index = 0; index < mask.length; index++)
+      expected[index] = mask[index] ? 0 : 255
+    const trial = picture(coded, {
+      Width: at.size.width,
+      Height: at.size.height,
+      BitsPerComponent: 1,
+      ColorSpace: doc.newName("DeviceGray"),
+      Filter: doc.newName("JBIG2Decode"),
+    })
+    const good = readsBack(doc, trial, at.size, expected)
+    trial.writeRawStream(new Uint8Array(0))
+    if (!good) return null
+    ref.writeRawStream(coded)
+    for (const key of ["DecodeParms", "Decode", "DL"]) ref.delete(key)
+    ref.put("Width", at.size.width)
+    ref.put("Height", at.size.height)
+    ref.put("BitsPerComponent", 1)
+    ref.put("ColorSpace", doc.newName("DeviceGray"))
+    ref.put("Filter", doc.newName("JBIG2Decode"))
+    return "resized"
+  }
+
+  const paperStep = layerStep(dpi, settings.paperDpi)
+  const layers = splitLayers(at.rgba, paperStep, paperStep * 3)
+  const share = inkShare(layers.mask)
+  if (share < LEAST_INK || share > MOST_INK) return null
+  if (similarity(at.rgba, rebuild(layers)).mean < LAYERS_MARK) return null
+  const grey = at.channels === 1
+  const mask = encodeJbig2(layers.mask, layers.width, layers.height)
+  const paper = tagJpeg(
+    await codecs.jpeg(layers.paper, settings.paperQuality, grey)
+  )
+  // The ink's colours are stored without loss: there are few of them, and a
+  // JPEG would smear one letter's colour into the next.
+  const channels = grey ? 1 : 3
+  const colours = fromRgba(layers.ink, channels)
+  const [plain, filtered] = await Promise.all([
+    codecs.deflate(colours),
+    codecs.deflate(filterUp(colours, layers.ink.width * channels)),
+  ])
+  const ink = filtered.length < plain.length ? filtered : plain
+  if (
+    !worthIt(before, mask.length + paper.length + ink.length + 200, "resized")
+  )
+    return null
+  const soft = (bytes: Uint8Array, of: Pixels, extra = {}) =>
+    picture(bytes, {
+      Width: of.width,
+      Height: of.height,
+      BitsPerComponent: 8,
+      ColorSpace: found.base,
+      ...extra,
+    })
+  const maskRef = picture(mask, {
+    Width: layers.width,
+    Height: layers.height,
+    ImageMask: true,
+    BitsPerComponent: 1,
+    Filter: doc.newName("JBIG2Decode"),
+  })
+  const paperRef = soft(paper, layers.paper, {
+    Filter: doc.newName("DCTDecode"),
+    // Few pixels drawn large: a viewer should blend them, not show squares.
+    Interpolate: true,
+  })
+  const parms = doc.newDictionary()
+  parms.put("Predictor", 15)
+  parms.put("Colors", channels)
+  parms.put("BitsPerComponent", 8)
+  parms.put("Columns", layers.ink.width)
+  const inkRef = soft(ink, layers.ink, {
+    Filter: doc.newName("FlateDecode"),
+    ...(ink === filtered ? { DecodeParms: parms } : null),
+    Mask: maskRef,
+  })
+  if (
+    !readsBack(doc, maskRef, layers) ||
+    !readsBack(doc, paperRef, layers.paper) ||
+    !readsBack(doc, inkRef, layers.ink, colours)
+  ) {
+    for (const made of [maskRef, paperRef, inkRef])
+      made.writeRawStream(new Uint8Array(0))
+    return null
+  }
+  // The picture becomes a drawing of its layers. It keeps its number, so the
+  // page that shows it needs no change, and text hidden over it stays put.
+  const keys: string[] = []
+  ref.forEach((_value, key) => void keys.push(String(key)))
+  for (const key of keys) if (!KEPT_BY_A_FORM.has(key)) ref.delete(key)
+  ref.put("Type", doc.newName("XObject"))
+  ref.put("Subtype", doc.newName("Form"))
+  ref.put("BBox", [0, 0, 1, 1])
+  const names = doc.newDictionary()
+  names.put("Paper", paperRef)
+  names.put("Ink", inkRef)
+  const resources = doc.newDictionary()
+  resources.put("XObject", names)
+  ref.put("Resources", resources)
+  ref.writeStream(new TextEncoder().encode("/Paper Do /Ink Do"))
+  return "resized"
+}
+
+const KEYS_OF_A_PACKING = new Set(["Length", "Filter", "DecodeParms", "DL"])
+
+/**
+ * Pack a one-bit picture with JBIG2. The stored bits are coded as they are,
+ * so nothing about what they stand for changes: only the packing does.
+ */
+function toJbig2(work: Work, entry: Entry): Change | null {
+  const { doc } = work
+  const { ref } = entry
+  const width = numberOf(ref.get("Width"))
+  const height = numberOf(ref.get("Height"))
+  const truth = decode(entry.image)
+  if (!truth) return null
+  let coded: Uint8Array
+  const stream = ref.readStream()
+  try {
+    const packed = stream.asUint8Array()
+    if (packed.length < Math.ceil(width / 8) * height) return null
+    coded = encodeJbig2(bitsFromSamples(packed, width, height), width, height)
+  } finally {
+    stream.destroy()
+  }
+  if (!worthIt(numberOf(ref.get("Length")), coded.length, "repacked"))
+    return null
+  const dict = doc.newDictionary()
+  ref.forEach((value, key) => {
+    if (!KEYS_OF_A_PACKING.has(String(key))) dict.put(String(key), value)
+  })
+  dict.put("Filter", doc.newName("JBIG2Decode"))
+  const trial = doc.addRawStream(coded, dict)
+  try {
+    const image = doc.loadImage(trial)
+    try {
+      const seen = decode(image)
+      if (
+        !seen ||
+        seen.width !== truth.width ||
+        seen.height !== truth.height ||
+        !sameBytes(seen.bytes, truth.bytes)
+      )
+        return null
+    } finally {
+      image.destroy()
+    }
+  } catch {
+    return null
+  } finally {
+    trial.writeRawStream(new Uint8Array(0))
+  }
+  ref.writeRawStream(coded)
+  ref.delete("DecodeParms")
+  ref.delete("DL")
+  ref.put("Filter", doc.newName("JBIG2Decode"))
+  return "repacked"
 }
 
 /** How many bytes of fonts a file stores whole, with every letter they have. */
@@ -961,6 +1291,9 @@ interface Written {
   fontsCut: boolean
   dropped: CompressReport["dropped"]
   changedPages: number[]
+  /** How many scanned pages were rebuilt, and the pages they are. */
+  scans: number
+  scanPages: number[]
 }
 
 /** Change a fresh copy of the file by a plan and write it out. */
@@ -983,15 +1316,29 @@ async function write(
     const work: Work = { mupdf, doc, codecs: options.codecs, plan }
     const pictures = { found: entries.size, changed: 0, resized: 0 }
     const changedPages = new Set<number>()
+    const scanPages = new Set<number>()
+    const how = plan && options.scans !== "keep" ? options.scans : undefined
+    let scans = 0
     let done = 0
     for (const entry of entries.values()) {
       await options.checkpoint?.()
       options.progress?.("pictures", done++, entries.size, attempt)
-      const step = planPicture(factsOf(entry), plan, maxPixels)
-      if (step.do === "leave") continue
+      const facts = factsOf(entry)
       let change: Change | null = null
       try {
-        change = await shrink(work, entry, step)
+        if (how && isScan(entry, facts, maxPixels)) {
+          change = await rebuildScan(work, entry, how)
+          if (change) {
+            scans++
+            for (const page of entry.pages) scanPages.add(page)
+          }
+        }
+        // A scan that could not be rebuilt goes the usual way.
+        if (!change) {
+          const step = planPicture(facts, plan, maxPixels)
+          if (step.do === "bitonal") change = toJbig2(work, entry)
+          else if (step.do !== "leave") change = await shrink(work, entry, step)
+        }
       } catch (error) {
         // Running out of memory ends the job; any other trouble with one
         // picture leaves that picture as it is.
@@ -1022,6 +1369,8 @@ async function write(
         fontsCut: cut.cut,
         dropped,
         changedPages: [...changedPages],
+        scans,
+        scanPages: [...scanPages],
       }
     } finally {
       buffer.destroy()
@@ -1049,6 +1398,14 @@ async function verify(
   attempt?: number
 ): Promise<Compressed> {
   const { out } = written
+  const how = options.scans && options.scans !== "keep" ? options.scans : null
+  const scans =
+    how && written.scans ? { how, pictures: written.scans } : undefined
+  // A rebuilt scan is held to a mark of its own: it differs by design.
+  const rebuilt = new Set(written.scanPages)
+  const scanMark = how ? scanMarks[how] : null
+  const markOf = (page: number) =>
+    scanMark !== null && rebuilt.has(page) ? Math.min(mark, scanMark) : mark
   const unchanged = (check: CheckResult): Compressed => ({
     bytes: null,
     report: {
@@ -1060,6 +1417,7 @@ async function verify(
       dropped: written.dropped,
       check,
       audit: null,
+      scans,
     },
   })
   if (!outcome(before, out.length).smaller)
@@ -1077,7 +1435,7 @@ async function verify(
     const check = checkResult(
       await compare(mupdf, pristine, result, pages, options, attempt),
       written.changedPages.length,
-      mark
+      markOf
     )
     // A result that lost a page, or a lossless one that looks different, is not handed over.
     if (!pages.length || (strict && check.low.length)) return unchanged(check)
@@ -1092,6 +1450,7 @@ async function verify(
         dropped: written.dropped,
         check,
         audit: auditPdf(result, out.length),
+        scans,
       },
     }
   } finally {

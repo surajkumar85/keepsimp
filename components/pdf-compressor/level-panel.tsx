@@ -4,7 +4,13 @@ import { useId } from "react"
 import { ToggleRow } from "@/components/image-batch/controls"
 import { ChoiceChips } from "@/components/ui/choice-chips"
 import { Input } from "@/components/ui/input"
-import { modeChoices, modeNote, type Mode } from "@/lib/pdf-compressor/settings"
+import {
+  modeChoices,
+  modeNote,
+  scanChoices,
+  type Mode,
+  type ScanChoice,
+} from "@/lib/pdf-compressor/settings"
 import { targetSizes } from "@/lib/pdf-compressor/target"
 import type { SizeUnit } from "@/lib/pdf-splitter/size"
 
@@ -29,6 +35,8 @@ export function LevelPanel({
   sizeWrong,
   further,
   onFurther,
+  scans,
+  onScans,
   disabled,
 }: {
   mode: Mode
@@ -43,6 +51,9 @@ export function LevelPanel({
   sizeWrong: boolean
   further: boolean
   onFurther: (further: boolean) => void
+  /** What to do with pages that are one large picture. */
+  scans: ScanChoice
+  onScans: (scans: ScanChoice) => void
   disabled: boolean
 }) {
   const ids = useId()
@@ -111,6 +122,18 @@ export function LevelPanel({
             onCheckedChange={onFurther}
           />
         </>
+      )}
+      {mode !== "lossless" && (
+        <div className="border-t pt-4">
+          <ChoiceChips
+            label="Scanned pages"
+            value={scans}
+            onValueChange={onScans}
+            options={scanChoices.map(({ value, label }) => ({ value, label }))}
+            hint={scanChoices.find((choice) => choice.value === scans)!.note}
+            disabled={disabled}
+          />
+        </div>
       )}
     </section>
   )

@@ -418,6 +418,7 @@ async function compress(request: Extract<PdfRequest, { type: "compress" }>) {
     const bytes = new Uint8Array(await request.file.arrayBuffer())
     const options = {
       codecs,
+      scans: request.scans,
       password: request.password,
       pristine: pdf.doc,
       maxPixels: request.maxPixels,

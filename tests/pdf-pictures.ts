@@ -197,6 +197,69 @@ export function noiseBytes(length: number, seed = 7) {
   return out
 }
 
+/**
+ * A page as a scanner hands it over: cream paper that gets darker towards
+ * one side, grain all over, lines of dark print with soft rims, and a red
+ * stamp. The same for the same seed.
+ */
+export function scannedPage(width: number, height: number, seed = 1): Pixels {
+  const data = new Uint8ClampedArray(width * height * 4)
+  let state = seed * 7919
+  const paper = [244, 238, 222]
+  for (let y = 0; y < height; y++)
+    for (let x = 0; x < width; x++) {
+      state = (Math.imul(state, 1103515245) + 12345) | 0
+      const grain = ((state >>> 16) % 13) - 6
+      const shade = 1 - 0.1 * (x / width)
+      // Print keeps clear of the margins, in lines with gaps between words.
+      const inside =
+        x > width * 0.1 &&
+        x < width * 0.9 &&
+        y > height * 0.08 &&
+        y < height * 0.92
+      const column = (x + seed * 5) % 13
+      const line = y % 36
+      const word = Math.floor(x / 91) % 5 !== 4
+      const mark = inside && word && line < 18 && column < 4
+      const rim = inside && word && line < 19 && column < 5 && !mark ? 0.55 : 1
+      const ring = Math.hypot(x - width * 0.72, y - height * 0.24)
+      const stamp = ring > width * 0.07 && ring < width * 0.08
+      const at = (y * width + x) * 4
+      for (let channel = 0; channel < 3; channel++) {
+        const ink = stamp ? [196, 36, 48][channel] : 36
+        const value = mark || stamp ? ink : paper[channel] * shade * rim
+        data[at + channel] = value + grain
+      }
+      data[at + 3] = 255
+    }
+  return { data, width, height }
+}
+
+/** The words hidden over each scanned page, as a text recogniser would leave them. */
+export const scanText = (page: number) => `scan-P${page}`
+
+/**
+ * A4 pages that are each one picture from edge to edge, with words over
+ * them that cannot be seen.
+ */
+export async function makeScanPdf(pictures: readonly Uint8Array[]) {
+  const doc = await PDFDocument.create()
+  const font = await doc.embedFont(StandardFonts.Helvetica)
+  for (const [index, bytes] of pictures.entries()) {
+    const page = doc.addPage([595, 842])
+    const image = await doc.embedJpg(bytes)
+    page.drawImage(image, { x: 0, y: 0, width: 595, height: 842 })
+    page.drawText(scanText(index + 1), {
+      x: 60,
+      y: 760,
+      size: 14,
+      font,
+      opacity: 0,
+    })
+  }
+  return doc.save({ useObjectStreams: false })
+}
+
 export interface ReadPicture extends Pixels {
   /** Page number from 1. */
   page: number

@@ -3,7 +3,7 @@
 import type { Size } from "@/lib/image-compressor/geometry"
 import type { Audit } from "@/lib/pdf-compressor/mupdf-audit"
 import type { CompressReport, Stage } from "@/lib/pdf-compressor/mupdf-compress"
-import type { Level } from "@/lib/pdf-compressor/settings"
+import type { Level, ScanChoice } from "@/lib/pdf-compressor/settings"
 import type { PageText, Quad } from "@/lib/pdf-reader/text"
 import type { HalveChoice } from "@/lib/pdf-splitter/halves"
 import type { Area } from "@/lib/pdf-splitter/text-rule"
@@ -467,6 +467,7 @@ export class PdfClient {
     order: {
       /** A level, or a size in bytes to come out under. */
       how: Level | { target: number; further: boolean }
+      scans: ScanChoice
       password?: string
       maxPixels: number
     },

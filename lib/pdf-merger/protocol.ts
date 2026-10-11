@@ -1,7 +1,7 @@
 import type { Rotation, Size } from "@/lib/image-compressor/geometry"
 import type { Audit } from "@/lib/pdf-compressor/mupdf-audit"
 import type { CompressReport, Stage } from "@/lib/pdf-compressor/mupdf-compress"
-import type { Level } from "@/lib/pdf-compressor/settings"
+import type { Level, ScanChoice } from "@/lib/pdf-compressor/settings"
 import type { PageText, Quad } from "@/lib/pdf-reader/text"
 import type { HalveChoice } from "@/lib/pdf-splitter/halves"
 import type { Area } from "@/lib/pdf-splitter/text-rule"
@@ -138,6 +138,8 @@ export type PdfRequest =
       password?: string
       /** A level, or a size in bytes to come out under and whether to go past what is easy to read. */
       how: Level | { target: number; further: boolean }
+      /** What to do with scanned pages. */
+      scans: ScanChoice
       /** Pictures with more pixels than this are left as they are. */
       maxPixels: number
     }

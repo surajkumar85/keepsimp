@@ -48,6 +48,16 @@ describe("checkResult", () => {
     })
   })
 
+  it("can hold each page to a mark of its own", () => {
+    const scores = [
+      { page: 0, score: 0.9 },
+      { page: 1, score: 0.9 },
+    ]
+    expect(
+      checkResult(scores, 2, (page) => (page === 1 ? 0.95 : 0.5)).low
+    ).toEqual([{ page: 1, score: 0.9 }])
+  })
+
   it("passes a file whose pages all reach the mark", () => {
     expect(checkResult([{ page: 0, score: 1 }], 1, 0.97).low).toEqual([])
   })

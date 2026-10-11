@@ -52,16 +52,21 @@ export interface CheckResult {
   low: PageScore[]
 }
 
+/**
+ * @param mark How alike a page must look before and after: one number for
+ *   every page, or a rule that gives each page's own.
+ */
 export function checkResult(
   scores: readonly PageScore[],
   changed: number,
-  mark: number
+  mark: number | ((page: number) => number)
 ): CheckResult {
+  const markOf = typeof mark === "number" ? () => mark : mark
   return {
     checked: scores.length,
     changed,
     low: scores
-      .filter((entry) => entry.score < mark)
+      .filter((entry) => entry.score < markOf(entry.page))
       .sort((a, b) => a.score - b.score || a.page - b.page),
   }
 }

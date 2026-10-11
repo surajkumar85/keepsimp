@@ -20,6 +20,7 @@ const photo: PictureFacts = {
   stored: "jpeg",
   bytes: 900_000,
   stencil: false,
+  single: false,
   keyed: false,
   matte: false,
   mask: false,
@@ -32,10 +33,49 @@ const plan = (change: Partial<PictureFacts>, level = balanced) =>
   planPicture({ ...photo, ...change }, level, MAX)
 
 describe("planPicture", () => {
-  it("leaves black-and-white pictures for now", () => {
-    expect(plan({ stencil: true })).toEqual({ do: "leave", why: "bitonal" })
-    expect(plan({ bits: 1 })).toEqual({ do: "leave", why: "bitonal" })
-    expect(plan({ stored: "bitonal" })).toEqual({ do: "leave", why: "bitonal" })
+  const mono = { bits: 1, single: true, stored: "plain" as const }
+
+  it("packs black-and-white pictures with JBIG2, at every level", () => {
+    expect(plan(mono)).toEqual({ do: "bitonal" })
+    expect(plan(mono, null)).toEqual({ do: "bitonal" })
+    expect(plan({ ...mono, stored: "fax" })).toEqual({ do: "bitonal" })
+    expect(plan({ ...mono, stencil: true, keyed: true })).toEqual({
+      do: "bitonal",
+    })
+  })
+
+  it("leaves black-and-white pictures it cannot pack again as they are", () => {
+    // Already JBIG2, which may share shapes between letters and be smaller than ours.
+    expect(plan({ ...mono, stored: "jbig2" })).toEqual({
+      do: "leave",
+      why: "bitonal",
+    })
+    expect(plan({ ...mono, stored: "other" })).toEqual({
+      do: "leave",
+      why: "bitonal",
+    })
+    // Three one-bit channels a pixel are not one bit a pixel.
+    expect(plan({ ...mono, single: false })).toEqual({
+      do: "leave",
+      why: "bitonal",
+    })
+    // A stencil or a fax picture that claims more than one bit is not trusted.
+    expect(plan({ stencil: true, single: true, stored: "plain" })).toEqual({
+      do: "leave",
+      why: "bitonal",
+    })
+    expect(plan({ stored: "fax", single: true })).toEqual({
+      do: "leave",
+      why: "bitonal",
+    })
+    expect(plan({ ...mono, bytes: SMALL_BYTES - 1 })).toEqual({
+      do: "leave",
+      why: "small",
+    })
+    expect(plan({ ...mono, width: 9000, height: 9000 })).toEqual({
+      do: "leave",
+      why: "large",
+    })
   })
 
   it("leaves colours it cannot be sure of", () => {
