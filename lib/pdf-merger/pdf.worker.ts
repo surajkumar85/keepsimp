@@ -22,7 +22,11 @@ import {
 } from "@/lib/pdf-splitter/mupdf-split"
 import { codecs } from "@/lib/pdf-compressor/codecs"
 import { auditPdf, type Audit } from "@/lib/pdf-compressor/mupdf-audit"
-import { compressPdf } from "@/lib/pdf-compressor/mupdf-compress"
+import type { Stage } from "@/lib/pdf-compressor/report"
+import {
+  compressPdf,
+  compressToSize,
+} from "@/lib/pdf-compressor/mupdf-compress"
 import { jpegOrientation, quarterTurns } from "./picture"
 import type { Size } from "@/lib/image-compressor/geometry"
 import type { PageText, Quad } from "@/lib/pdf-reader/text"
@@ -410,35 +414,37 @@ async function compress(request: Extract<PdfRequest, { type: "compress" }>) {
     let last = 0
     let stage = ""
     let paused = performance.now()
-    const result = await compressPdf(
-      mupdf,
-      new Uint8Array(await request.file.arrayBuffer()),
-      {
-        level: request.level,
-        codecs,
-        password: request.password,
-        pristine: pdf.doc,
-        maxPixels: request.maxPixels,
-        checkpoint: async () => {
-          if (performance.now() - paused < 16) return
-          await new Promise((resolve) => setTimeout(resolve, 0))
-          paused = performance.now()
-          if (job <= cancelled) throw new Cancelled()
-        },
-        progress: (now, done, total) => {
-          const time = performance.now()
-          // Every new part of the work is told at once; steps within it now and then.
-          if (now === stage && time - last <= 80) return
-          stage = now
-          last = time
-          post({ type: "stage", job, stage: now, done, total })
-        },
-      }
-    )
-    const bytes = result.bytes ? (result.bytes.buffer as ArrayBuffer) : null
+    const { how } = request
+    const bytes = new Uint8Array(await request.file.arrayBuffer())
+    const options = {
+      codecs,
+      password: request.password,
+      pristine: pdf.doc,
+      maxPixels: request.maxPixels,
+      checkpoint: async () => {
+        if (performance.now() - paused < 16) return
+        await new Promise((resolve) => setTimeout(resolve, 0))
+        paused = performance.now()
+        if (job <= cancelled) throw new Cancelled()
+      },
+      progress: (now: Stage, done: number, total: number, attempt?: number) => {
+        const time = performance.now()
+        // Every new part of the work is told at once; steps within it now and then.
+        const part = `${attempt}/${now}`
+        if (part === stage && time - last <= 80) return
+        stage = part
+        last = time
+        post({ type: "stage", job, stage: now, done, total, attempt })
+      },
+    }
+    const result =
+      typeof how === "string"
+        ? await compressPdf(mupdf, bytes, { ...options, level: how })
+        : await compressToSize(mupdf, bytes, { ...options, ...how })
+    const out = result.bytes ? (result.bytes.buffer as ArrayBuffer) : null
     post(
-      { type: "compressed", job, bytes, report: result.report },
-      bytes ? [bytes] : []
+      { type: "compressed", job, bytes: out, report: result.report },
+      out ? [out] : []
     )
   } catch (error) {
     if (error instanceof Cancelled) post({ type: "cancelled", job })

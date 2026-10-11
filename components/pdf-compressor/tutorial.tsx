@@ -3,12 +3,12 @@ import { ToolTutorial, type TutorialContent } from "@/components/tool-tutorial"
 const content: TutorialContent = {
   name: "How to use the KeepSimp PDF compressor",
   description:
-    "Make a PDF smaller in your browser: see what its size is spent on, bring its pictures down to the size they are shown at, and compare any page before and after. Text stays text, and nothing is uploaded.",
+    "Make PDFs smaller in your browser: see what their size is spent on, bring pictures down to the size they are shown at, reach a size such as 200 KB, and compare any page before and after. Text stays text, and nothing is uploaded.",
   intro: "Follow the steps below. Every option is explained underneath.",
   steps: [
     {
-      title: "Add your PDF",
-      text: "Drop a PDF, choose it from your device or paste it. A locked file asks for its password; a damaged one is repaired where possible.",
+      title: "Add your PDFs",
+      text: "Drop one PDF or several, choose them from your device or paste them. A locked file asks for its password; a damaged one is repaired where possible.",
     },
     {
       title: "See what makes it big",
@@ -16,7 +16,7 @@ const content: TutorialContent = {
     },
     {
       title: "Choose how much to compress",
-      text: "Lossless changes nothing you can see. Balanced makes pictures smaller so that they still look the same. Strong goes further, for screens and email.",
+      text: "Lossless changes nothing you can see. Balanced makes pictures smaller so that they still look the same. Strong goes further, for screens and email. Or name a size the file has to come out under.",
     },
     {
       title: "Compress",
@@ -28,7 +28,7 @@ const content: TutorialContent = {
     },
     {
       title: "Download",
-      text: "Read the result in the reader if you like, then download it. If the file cannot be made smaller, the page says so and keeps your original.",
+      text: "Read the result in the reader if you like, then download it, or all files as one ZIP. If a file cannot be made smaller, the page says so and keeps your original.",
     },
   ],
   options: [
@@ -51,6 +51,16 @@ const content: TutorialContent = {
       term: "Strong",
       detail:
         "As Balanced, down to 96 pixels per inch and a lower quality. Good for reading on a screen and for sending by email. Fine print inside photographs may soften, so compare a page before you download. Not meant for printing.",
+    },
+    {
+      term: "To a size",
+      detail:
+        "For forms and inboxes with a limit. Choose 100 KB, 200 KB, 500 KB, 1, 2, 5, 10 or 25 MB, or type a size in KB or MB. The only way to know what a file weighs at some setting is to write it, so the file is written up to six times, from gentle to harsh, and the gentlest result that fits is kept. It stops where pictures are still easy to read (72 dpi). If the size cannot be reached, you get the smallest readable result and are told how far over it is. “Go further” lets pictures get blurry when the size matters more.",
+    },
+    {
+      term: "Several files",
+      detail:
+        "Every file gets a row with what it came to. What is chosen applies to all of them. Press a file's name to see its breakdown and its pages before and after. One file that cannot be read does not stop the others. “Download all” makes one ZIP on your device; a file that could not be made smaller is in it as it was.",
     },
     {
       term: "What is never changed",

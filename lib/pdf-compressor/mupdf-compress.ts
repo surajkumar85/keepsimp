@@ -55,9 +55,11 @@ import {
   levelPlans,
   outcome,
   pageMarks,
+  TARGET_MARK,
   type Level,
   type LevelPlan,
 } from "./settings"
+import { fitTarget, stepCount, stepPlan } from "./target"
 import { drawnSize, largest, type DrawMatrix } from "./usage"
 
 type Engine = typeof MuPDF
@@ -89,7 +91,21 @@ export interface CompressOptions {
   checkBudget?: number
   /** Called between pages and pictures; it may pause, or throw to stop. */
   checkpoint?: () => Promise<void>
-  progress?: (stage: Stage, done: number, total: number) => void
+  /** `attempt` counts from 1 when the file is written several times to reach a size. */
+  progress?: (
+    stage: Stage,
+    done: number,
+    total: number,
+    attempt?: number
+  ) => void
+}
+
+/** A size to come out under, for `compressToSize`. */
+export interface TargetOptions extends Omit<CompressOptions, "level"> {
+  /** The size to stay within, in bytes. */
+  target: number
+  /** Go on past what is easy to read, if that is what the size takes. */
+  further: boolean
 }
 
 export interface CompressReport {
@@ -112,6 +128,13 @@ export interface CompressReport {
   check: CheckResult
   /** What the result's bytes are spent on; null when there is no result. */
   audit: Audit | null
+  /** For a file that was to come out under a size: the size, and whether it did. */
+  target?: {
+    wanted: number
+    met: boolean
+    /** How many times the file was written to find out. */
+    writes: number
+  }
 }
 
 export interface Compressed {
@@ -297,7 +320,8 @@ async function measureUse(
   mupdf: Engine,
   doc: Doc,
   entries: Map<number, Entry>,
-  options: CompressOptions
+  options: Omit<CompressOptions, "level">,
+  attempt?: number
 ) {
   const byImage = new Map<number, Entry>()
   for (const entry of entries.values())
@@ -305,7 +329,7 @@ async function measureUse(
   const total = doc.countPages()
   for (let index = 0; index < total; index++) {
     await options.checkpoint?.()
-    options.progress?.("reading", index, total)
+    options.progress?.("reading", index, total, attempt)
     const note = (image: MuPDF.Image, matrix: number[]) => {
       const entry = byImage.get(image.pointer as unknown as number)
       if (!entry) return
@@ -627,6 +651,21 @@ async function asJpeg(
     "jpeg",
     kind
   )
+  const described = (bytes: Uint8Array): Described => ({
+    bytes: tagJpeg(bytes),
+    size: from.size,
+    bits: 8,
+    filter: "DCTDecode",
+    predictor: null,
+    space: null,
+    change,
+    exact: false,
+  })
+  // When the file has to come out under a size, the size decides the quality.
+  if (plan.fixed !== undefined)
+    return described(
+      await encode(from.rgba, from.bytes, Math.min(top, plan.fixed))
+    )
   const found = await searchQuality({
     min: range.min,
     max: top,
@@ -658,16 +697,7 @@ async function asJpeg(
     )
       return null
   }
-  return {
-    bytes: tagJpeg(bytes),
-    size: from.size,
-    bits: 8,
-    filter: "DCTDecode",
-    predictor: null,
-    space: null,
-    change,
-    exact: false,
-  }
+  return described(bytes)
 }
 
 const smallest = (candidates: (Described | null)[]) =>
@@ -855,7 +885,7 @@ function cutFonts(
   mupdf: Engine,
   bytes: Uint8Array,
   pristine: Doc,
-  options: CompressOptions
+  options: Omit<CompressOptions, "level">
 ) {
   const doc = open(mupdf, bytes, options.password)
   const root = doc.getTrailer().get("Root")
@@ -902,12 +932,13 @@ async function compare(
   before: Doc,
   after: Doc,
   pages: readonly number[],
-  options: CompressOptions
+  options: Omit<CompressOptions, "level">,
+  attempt?: number
 ) {
   const scores: PageScore[] = []
   for (const [done, page] of pages.entries()) {
     await options.checkpoint?.()
-    options.progress?.("checking", done, pages.length)
+    options.progress?.("checking", done, pages.length, attempt)
     let score = 0
     try {
       const was = drawPage(mupdf, before, page, CHECK_EDGE)
@@ -922,35 +953,40 @@ async function compare(
   return scores
 }
 
-/**
- * Compress a PDF.
- * @throws PasswordNeeded when the file is locked and the password is missing or wrong.
- */
-export async function compressPdf(
+/** A file as one attempt left it, before anyone has looked at the result. */
+interface Written {
+  out: Uint8Array
+  pages: number
+  pictures: CompressReport["pictures"]
+  fontsCut: boolean
+  dropped: CompressReport["dropped"]
+  changedPages: number[]
+}
+
+/** Change a fresh copy of the file by a plan and write it out. */
+async function write(
   mupdf: Engine,
   bytes: Uint8Array,
-  options: CompressOptions
-): Promise<Compressed> {
-  const plan = levelPlans[options.level]
+  pristine: Doc,
+  plan: LevelPlan | null,
+  options: Omit<CompressOptions, "level">,
+  attempt?: number
+): Promise<Written> {
   const maxPixels = options.maxPixels ?? DEFAULT_MAX_PIXELS
-  const own = options.pristine ? null : open(mupdf, bytes, options.password)
-  const pristine = options.pristine ?? own!
-  let doc: Doc | null = null
-  let result: Doc | null = null
   const entries = new Map<number, Entry>()
+  const cut = cutFonts(mupdf, bytes, pristine, options)
+  const doc = cut.doc
   try {
-    const cut = cutFonts(mupdf, bytes, pristine, options)
-    doc = cut.doc
-    const total = doc.countPages()
+    const pages = doc.countPages()
     for (const [number, entry] of findPictures(doc)) entries.set(number, entry)
-    await measureUse(mupdf, doc, entries, options)
+    await measureUse(mupdf, doc, entries, options, attempt)
     const work: Work = { mupdf, doc, codecs: options.codecs, plan }
     const pictures = { found: entries.size, changed: 0, resized: 0 }
     const changedPages = new Set<number>()
     let done = 0
     for (const entry of entries.values()) {
       await options.checkpoint?.()
-      options.progress?.("pictures", done++, entries.size)
+      options.progress?.("pictures", done++, entries.size, attempt)
       const step = planPicture(factsOf(entry), plan, maxPixels)
       if (step.do === "leave") continue
       let change: Change | null = null
@@ -969,7 +1005,7 @@ export async function compressPdf(
     for (const entry of entries.values()) entry.image.destroy()
     entries.clear()
     const dropped = dropHidden(doc)
-    options.progress?.("writing", 0, 1)
+    options.progress?.("writing", 0, 1, attempt)
     await options.checkpoint?.()
     // Objects nothing points at are dropped, identical ones are stored once,
     // and the rest is packed into compressed streams. A locked file stays locked.
@@ -978,62 +1014,168 @@ export async function compressPdf(
       compress: "yes",
       objstms: "yes",
     })
-    let out: Uint8Array
     try {
-      out = buffer.asUint8Array().slice()
-    } finally {
-      buffer.destroy()
-    }
-    doc.destroy()
-    doc = null
-    const gain = outcome(bytes.length, out.length)
-    const unchanged = (check: CheckResult): Compressed => ({
-      bytes: null,
-      report: {
-        before: bytes.length,
-        after: bytes.length,
-        smaller: false,
+      return {
+        out: buffer.asUint8Array().slice(),
+        pages,
         pictures,
         fontsCut: cut.cut,
         dropped,
-        check,
-        audit: null,
-      },
-    })
-    if (!gain.smaller) return unchanged(checkResult([], changedPages.size, 0))
-    result = open(mupdf, out, options.password)
+        changedPages: [...changedPages],
+      }
+    } finally {
+      buffer.destroy()
+    }
+  } finally {
+    for (const entry of entries.values()) entry.image.destroy()
+    doc.destroy()
+  }
+}
+
+/**
+ * Look at what was written: is it smaller, does it have every page, and do
+ * its pages look as they did?
+ * @param mark How alike a page must look before and after.
+ * @param strict A result with any page under the mark is not handed over.
+ */
+async function verify(
+  mupdf: Engine,
+  before: number,
+  pristine: Doc,
+  written: Written,
+  mark: number,
+  strict: boolean,
+  options: Omit<CompressOptions, "level">,
+  attempt?: number
+): Promise<Compressed> {
+  const { out } = written
+  const unchanged = (check: CheckResult): Compressed => ({
+    bytes: null,
+    report: {
+      before,
+      after: before,
+      smaller: false,
+      pictures: written.pictures,
+      fontsCut: written.fontsCut,
+      dropped: written.dropped,
+      check,
+      audit: null,
+    },
+  })
+  if (!outcome(before, out.length).smaller)
+    return unchanged(checkResult([], written.changedPages.length, 0))
+  const result = open(mupdf, out, options.password)
+  try {
     const pages =
-      result.countPages() === total
+      result.countPages() === written.pages
         ? pagesToCheck(
-            [...changedPages],
-            total,
+            written.changedPages,
+            written.pages,
             options.checkBudget ?? DEFAULT_CHECK_BUDGET
           )
         : []
     const check = checkResult(
-      await compare(mupdf, pristine, result, pages, options),
-      changedPages.size,
-      pageMarks[options.level]
+      await compare(mupdf, pristine, result, pages, options, attempt),
+      written.changedPages.length,
+      mark
     )
     // A result that lost a page, or a lossless one that looks different, is not handed over.
-    if (!pages.length || (!plan && check.low.length)) return unchanged(check)
+    if (!pages.length || (strict && check.low.length)) return unchanged(check)
     return {
       bytes: out,
       report: {
-        before: bytes.length,
+        before,
         after: out.length,
         smaller: true,
-        pictures,
-        fontsCut: cut.cut,
-        dropped,
+        pictures: written.pictures,
+        fontsCut: written.fontsCut,
+        dropped: written.dropped,
         check,
         audit: auditPdf(result, out.length),
       },
     }
   } finally {
-    for (const entry of entries.values()) entry.image.destroy()
-    doc?.destroy()
-    result?.destroy()
+    result.destroy()
+  }
+}
+
+/**
+ * Compress a PDF.
+ * @throws PasswordNeeded when the file is locked and the password is missing or wrong.
+ */
+export async function compressPdf(
+  mupdf: Engine,
+  bytes: Uint8Array,
+  options: CompressOptions
+): Promise<Compressed> {
+  const plan = levelPlans[options.level]
+  const own = options.pristine ? null : open(mupdf, bytes, options.password)
+  const pristine = options.pristine ?? own!
+  try {
+    return await verify(
+      mupdf,
+      bytes.length,
+      pristine,
+      await write(mupdf, bytes, pristine, plan, options),
+      pageMarks[options.level],
+      !plan,
+      options
+    )
+  } finally {
+    own?.destroy()
+  }
+}
+
+/**
+ * Compress a PDF so that it comes out under a size, losing as little as that
+ * takes. The file is written a few times at different strengths; the
+ * gentlest one that fits is kept. When none fits, the smallest is handed
+ * back and the report says the size was missed.
+ * @throws PasswordNeeded when the file is locked and the password is missing or wrong.
+ */
+export async function compressToSize(
+  mupdf: Engine,
+  bytes: Uint8Array,
+  options: TargetOptions
+): Promise<Compressed> {
+  const own = options.pristine ? null : open(mupdf, bytes, options.password)
+  const pristine = options.pristine ?? own!
+  try {
+    let writes = 0
+    const fit = await fitTarget(
+      stepCount(options.further),
+      options.target,
+      async (step) => {
+        const written = await write(
+          mupdf,
+          bytes,
+          pristine,
+          stepPlan(step),
+          options,
+          ++writes
+        )
+        // A step that grows the file leaves the file as it was.
+        return { ...written, bytes: Math.min(written.out.length, bytes.length) }
+      }
+    )
+    const checked = await verify(
+      mupdf,
+      bytes.length,
+      pristine,
+      fit.result,
+      fit.step ? TARGET_MARK : pageMarks.lossless,
+      !fit.step,
+      options,
+      writes
+    )
+    return {
+      ...checked,
+      report: {
+        ...checked.report,
+        target: { wanted: options.target, met: fit.met, writes },
+      },
+    }
+  } finally {
     own?.destroy()
   }
 }

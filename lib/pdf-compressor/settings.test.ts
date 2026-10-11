@@ -3,10 +3,14 @@ import {
   defaultSettings,
   levelChoices,
   levelPlans,
+  modeChoices,
+  modeNote,
   outcome,
   pageMarks,
   resultName,
   settingsKey,
+  settingsProblem,
+  SIZE_NOTE,
 } from "./settings"
 
 describe("levels", () => {
@@ -20,11 +24,40 @@ describe("levels", () => {
     expect(pageMarks.balanced).toBeGreaterThan(pageMarks.strong)
   })
 
-  it("starts balanced, and tells levels apart by their key", () => {
-    expect(defaultSettings.level).toBe("balanced")
-    expect(settingsKey({ level: "strong" })).not.toBe(
+  it("starts balanced, and tells settings apart by their key", () => {
+    expect(defaultSettings.mode).toBe("balanced")
+    expect(settingsKey({ ...defaultSettings, mode: "strong" })).not.toBe(
       settingsKey(defaultSettings)
     )
+    // The size only matters when the file is compressed to a size.
+    expect(settingsKey({ ...defaultSettings, target: 5 })).toBe(
+      settingsKey(defaultSettings)
+    )
+    const sized = { ...defaultSettings, mode: "size" as const }
+    expect(settingsKey(sized)).toBe("size:1048576:false")
+    expect(settingsKey({ ...sized, further: true })).not.toBe(
+      settingsKey(sized)
+    )
+  })
+
+  it("offers a size as a fourth choice, with a note of its own", () => {
+    expect(modeChoices.map((choice) => choice.value)).toEqual([
+      "lossless",
+      "balanced",
+      "strong",
+      "size",
+    ])
+    expect(modeNote("size")).toBe(SIZE_NOTE)
+    expect(modeNote("lossless")).toContain("Nothing you can see changes")
+  })
+
+  it("needs a size before it compresses to one", () => {
+    expect(settingsProblem(defaultSettings)).toBeNull()
+    expect(settingsProblem({ ...defaultSettings, mode: "size" })).toBeNull()
+    expect(
+      settingsProblem({ ...defaultSettings, mode: "size", target: null })
+    ).toContain("Type a size")
+    expect(settingsProblem({ ...defaultSettings, target: null })).toBeNull()
   })
 })
 

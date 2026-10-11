@@ -114,6 +114,10 @@ describe("planPicture", () => {
 
   it("leaves a JPEG it wrote itself on an earlier run, unless it must be smaller", () => {
     expect(plan({ ...fits, ours: true })).toEqual({ do: "leave", why: "fine" })
+    // Unless the file has to come out under a size.
+    expect(
+      plan({ ...fits, ours: true }, { ...balanced!, again: true })
+    ).toEqual({ do: "encode", size: null, top: 87 })
     expect(plan({ ours: true })).toEqual({
       do: "encode",
       size: small,

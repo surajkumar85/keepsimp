@@ -2,8 +2,9 @@
  * What the page says about a compression: how far it is, what was done and
  * what the check found, in plain sentences.
  */
+import { sizeLabel } from "@/lib/image-compressor/formats"
 import type { CheckResult } from "./check"
-import type { Level } from "./settings"
+import type { Mode } from "./settings"
 
 export type Stage = "reading" | "pictures" | "writing" | "checking"
 
@@ -15,24 +16,47 @@ const SHARES: Record<Stage, readonly [number, number]> = {
   checking: [0.85, 1],
 }
 
-/** How far a compression is, as a whole percent. */
-export function stagePercent(stage: Stage, done: number, total: number) {
+/**
+ * How far a compression is, as a whole percent.
+ * @param attempt When the file is written several times to reach a size: which time this is, from 1.
+ * @param attempts The most times it may be written.
+ */
+export function stagePercent(
+  stage: Stage,
+  done: number,
+  total: number,
+  attempt = 1,
+  attempts = 1
+) {
   const [from, to] = SHARES[stage]
   const part = total > 0 ? Math.min(1, Math.max(0, done / total)) : 0
-  return Math.round((from + (to - from) * part) * 100)
+  const within = from + (to - from) * part
+  const tries = Math.max(attempts, attempt)
+  return Math.round(((attempt - 1 + within) / tries) * 100)
 }
 
 const count = (value: number) => value.toLocaleString("en")
 const plural = (value: number, word: string) =>
   `${count(value)} ${word}${value === 1 ? "" : "s"}`
 
-export function stageText(stage: Stage, done: number, total: number) {
+export function stageText(
+  stage: Stage,
+  done: number,
+  total: number,
+  attempt?: number
+) {
   // Work on the next one has begun when `done` are finished.
   const now = count(Math.min(done + 1, Math.max(total, 1)))
-  if (stage === "reading") return `Looking at page ${now} of ${count(total)}`
-  if (stage === "pictures") return `Picture ${now} of ${count(total)}`
-  if (stage === "writing") return "Writing the file"
-  return `Checking page ${now} of ${count(total)}`
+  const doing =
+    stage === "reading"
+      ? `Looking at page ${now} of ${count(total)}`
+      : stage === "pictures"
+        ? `Picture ${now} of ${count(total)}`
+        : stage === "writing"
+          ? "Writing the file"
+          : `Checking page ${now} of ${count(total)}`
+  // Checking comes once, after the last try.
+  return attempt && stage !== "checking" ? `Try ${attempt}: ${doing}` : doing
 }
 
 /** What was done to a file, one plain sentence each. */
@@ -84,13 +108,100 @@ export function checkLine(check: CheckResult): CheckLine | null {
   }
 }
 
-/** What to say when a file came out no smaller. */
-export function alreadySmall(level: Level) {
+/**
+ * What to say when a file came out no smaller.
+ * @param target For a file that was to come out under a size: that size, and whether it is under it.
+ */
+export function alreadySmall(
+  mode: Mode,
+  target?: { wanted: number; met: boolean }
+) {
+  if (mode === "size" && target)
+    return target.met
+      ? `This file is already under ${sizeLabel(target.wanted)}, and nothing can be taken out without changing how it looks.`
+      : `This file is over ${sizeLabel(target.wanted)}, and nothing in it can be made smaller. Splitting it into parts with the PDF splitter makes each part smaller.`
   const start = "This file is already as small as this level can make it."
-  if (level === "lossless")
+  if (mode === "lossless")
     return `${start} Balanced also makes its pictures smaller.`
-  if (level === "balanced") return `${start} Strong goes further.`
+  if (mode === "balanced") return `${start} Strong goes further.`
   return `${start} Nothing more can come out without making it hard to read.`
+}
+
+export interface TargetLine {
+  text: string
+  met: boolean
+  /** What would help when the size was missed. */
+  advice: string[]
+}
+
+/**
+ * What came of compressing a file to a size.
+ * @param after The size of the result in bytes.
+ * @param rest What everything but its pictures weighs in the result.
+ */
+export function targetLine(
+  target: { wanted: number; met: boolean },
+  after: number,
+  rest: number,
+  further: boolean
+): TargetLine {
+  if (target.met)
+    return {
+      met: true,
+      text: `Fits: ${sizeLabel(after)} is under ${sizeLabel(target.wanted)}.`,
+      advice: [],
+    }
+  const advice: string[] = []
+  if (rest > target.wanted)
+    advice.push(
+      `Its text, fonts and structure alone take ${sizeLabel(rest)}, so no picture setting can reach this size.`
+    )
+  else if (!further)
+    advice.push(
+      "Turn on “Go further” to let pictures get blurry, if the size matters more than how they look."
+    )
+  advice.push(
+    "Splitting the file into parts with the PDF splitter makes each part smaller."
+  )
+  return {
+    met: false,
+    text: `Could not get under ${sizeLabel(target.wanted)}. ${further ? "This is the smallest it can be made" : "This is the smallest that is still easy to read"}: ${sizeLabel(after)}, ${sizeLabel(after - target.wanted)} over.`,
+    advice,
+  }
+}
+
+/** Several files compressed: what they came to together. */
+export function batchLine(
+  results: readonly { before: number; after: number }[]
+) {
+  const before = results.reduce((sum, result) => sum + result.before, 0)
+  const after = results.reduce((sum, result) => sum + result.after, 0)
+  const percent = before > 0 ? Math.round((1 - after / before) * 100) : 0
+  return {
+    before,
+    after,
+    percent,
+    text: `${plural(results.length, "file")} · ${sizeLabel(before)} → ${sizeLabel(after)}`,
+  }
+}
+
+/** A row's few words about a file that has been compressed. */
+export function rowSummary(report: {
+  before: number
+  after: number
+  smaller: boolean
+  target?: { wanted: number; met: boolean }
+}) {
+  if (!report.smaller)
+    return report.target && !report.target.met
+      ? `Could not get under ${sizeLabel(report.target.wanted)}`
+      : "Already small: left as it is"
+  const percent = Math.round((1 - report.after / report.before) * 100)
+  const missed =
+    report.target && !report.target.met
+      ? ` · over ${sizeLabel(report.target.wanted)}`
+      : ""
+  return `${sizeLabel(report.before)} → ${sizeLabel(report.after)} · ${percent}% smaller${missed}`
 }
 
 /** What the page says about a file before it is compressed. */

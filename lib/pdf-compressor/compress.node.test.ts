@@ -33,7 +33,12 @@ import {
 import { readPdf, texts } from "@/tests/pdf-reader"
 import { codecs } from "./codecs"
 import { auditPdf } from "./mupdf-audit"
-import { compressPdf, type CompressOptions } from "./mupdf-compress"
+import {
+  compressPdf,
+  compressToSize,
+  type CompressOptions,
+} from "./mupdf-compress"
+import { mostWrites, stepCount } from "./target"
 import type { Level } from "./settings"
 
 installNodeCodecShims()
@@ -611,6 +616,83 @@ describe("the job itself", () => {
     expect(pristine.countPages()).toBe(1)
     pristine.destroy()
   }, 60_000)
+})
+
+describe("reaching a size", () => {
+  const toSize = (bytes: Uint8Array, target: number, further = false) =>
+    compressToSize(mupdf, bytes, { codecs, target, further })
+  const album = async () =>
+    makePicturePdf(
+      [
+        { bytes: await jpegOf(scene(1600, 1200)), type: "jpeg", width: 400 },
+        {
+          bytes: await jpegOf(scene(1600, 1200, 2)),
+          type: "jpeg",
+          width: 400,
+          page: 2,
+        },
+      ],
+      2
+    )
+
+  it("comes out under the size, losing no more than that takes", async () => {
+    const input = await album()
+    const roomy = await toSize(input, 60_000)
+    expect(roomy.report.target).toMatchObject({ wanted: 60_000, met: true })
+    expect(roomy.bytes!.length).toBeLessThanOrEqual(60_000)
+    expect(roomy.report.target!.writes).toBeLessThanOrEqual(
+      mostWrites(stepCount(false))
+    )
+    expect(await texts(roomy.bytes!)).toEqual([pictureText(1), pictureText(2)])
+    const tight = await toSize(input, 25_000)
+    expect(tight.report.target!.met).toBe(true)
+    expect(tight.bytes!.length).toBeLessThanOrEqual(25_000)
+    // The roomier size keeps more of the pictures.
+    const [large] = await readPictures(roomy.bytes!)
+    const [small] = await readPictures(tight.bytes!)
+    expect(large.width).toBeGreaterThan(small.width)
+    // And uses most of the room it was given.
+    expect(roomy.bytes!.length).toBeGreaterThan(30_000)
+  }, 120_000)
+
+  it("stops at what is easy to read, and says the size was missed", async () => {
+    const input = await album()
+    const readable = await toSize(input, 4000)
+    expect(readable.report.target).toMatchObject({ met: false, writes: 2 })
+    expect(readable.bytes!.length).toBeGreaterThan(4000)
+    // 72 dpi over 5.56 inches.
+    expect((await readPictures(readable.bytes!))[0].width).toBe(400)
+    const further = await toSize(input, 4000, true)
+    expect(further.bytes!.length).toBeLessThan(readable.bytes!.length)
+    expect((await readPictures(further.bytes!))[0].width).toBe(200)
+    expect(await texts(further.bytes!)).toEqual([
+      pictureText(1),
+      pictureText(2),
+    ])
+  }, 120_000)
+
+  it("writes once when the file already fits", async () => {
+    const input = await makePlainPdf([{ body: "Only words" }])
+    const { bytes, report } = await toSize(input, 1_000_000)
+    expect(bytes).toBeNull()
+    expect(report.target).toEqual({ wanted: 1_000_000, met: true, writes: 1 })
+  })
+
+  it("squeezes its own earlier result further, and counts its attempts", async () => {
+    const first = await compress(await album(), "balanced")
+    const attempts = new Set<number>()
+    const { bytes, report } = await compressToSize(mupdf, first.bytes!, {
+      codecs,
+      target: 20_000,
+      further: false,
+      progress: (_stage, _done, _total, attempt) => attempts.add(attempt!),
+    })
+    expect(report.target!.met).toBe(true)
+    expect(bytes!.length).toBeLessThanOrEqual(20_000)
+    expect([...attempts]).toEqual(
+      Array.from({ length: report.target!.writes }, (_, index) => index + 1)
+    )
+  }, 120_000)
 })
 
 describe("many files of many kinds", () => {

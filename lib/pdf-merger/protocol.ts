@@ -136,7 +136,8 @@ export type PdfRequest =
       id: string
       file: Blob
       password?: string
-      level: Level
+      /** A level, or a size in bytes to come out under and whether to go past what is easy to read. */
+      how: Level | { target: number; further: boolean }
       /** Pictures with more pixels than this are left as they are. */
       maxPixels: number
     }
@@ -208,7 +209,15 @@ export type PdfResponse =
   /** Null when the file is not open or cannot be gone through. */
   | { type: "audit"; request: number; audit: Audit | null }
   /** How far a compression is, and in which part of the work. */
-  | { type: "stage"; job: number; stage: Stage; done: number; total: number }
+  | {
+      type: "stage"
+      job: number
+      stage: Stage
+      done: number
+      total: number
+      /** When the file is written several times to reach a size: which time this is, from 1. */
+      attempt?: number
+    }
   /** `bytes` is null when the file is already as small: the original is the answer. */
   | {
       type: "compressed"

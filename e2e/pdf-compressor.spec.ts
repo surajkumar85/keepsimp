@@ -1,5 +1,6 @@
 import { test, expect, type Page } from "@playwright/test"
 import AxeBuilder from "@axe-core/playwright"
+import { unzipSync } from "fflate"
 import type { PDFDocument } from "@cantoo/pdf-lib"
 import { similarity } from "../lib/image-compressor/ssim"
 import { damage, makePlainPdf } from "../tests/pdf-fixtures"
@@ -122,7 +123,7 @@ test("lossless changes no pixel, strong goes further, and a new level asks to co
     expect(similarity(original[index], picture).mean).toBe(1)
 
   await level(page, "Balanced").click()
-  await expect(page.getByText("Not compressed at this level yet")).toBeVisible()
+  await expect(page.getByText("Not compressed this way yet")).toBeVisible()
   await expect(page.getByRole("link", { name: "Download PDF" })).toHaveCount(0)
   await compress(page)
   const balanced = await download(page)
@@ -199,57 +200,189 @@ test("says so when a file is already small, and refuses what it cannot read", as
   await expect(page.getByRole("link", { name: "Download PDF" })).toHaveCount(0)
   await expect(page.getByTestId("compare")).toHaveCount(0)
 
-  // A text file is refused; the file that is there stays.
+  // What is not a PDF is refused; the file that is there stays.
   await page.locator("#compress-file").setInputFiles({
-    name: "notes.pdf",
+    name: "holiday.mov",
     mimeType: "application/pdf",
     buffer: Buffer.from("just some notes"),
   })
   await expect(tool(page).getByRole("alert")).toContainText(
-    "notes.pdf is not a PDF"
+    "holiday.mov is not a PDF."
   )
-  await expect(page.getByTestId("file-row")).toContainText("words.pdf")
+  await expect(page.getByTestId("file-row")).toHaveCount(1)
 
-  // A damaged file is repaired and says so; of several dropped at once, the first is taken.
-  const broken = Buffer.from(damage(new Uint8Array(words), "table"))
-  const transfer = await page.evaluateHandle(
-    ([first, second]) => {
-      const dropped = new DataTransfer()
-      for (const [name, data] of [
-        ["broken.pdf", first],
-        ["second.pdf", second],
-      ] as const)
-        dropped.items.add(
-          new File([new Uint8Array(data)], name, { type: "application/pdf" })
-        )
-      return dropped
-    },
-    [[...broken], [...words]]
-  )
-  await tool(page).dispatchEvent("drop", { dataTransfer: transfer })
-  await expect(tool(page)).toHaveAttribute("data-ready", "true", {
+  // A damaged file is repaired and says so.
+  await page.locator("#compress-file").setInputFiles({
+    name: "broken.pdf",
+    mimeType: "application/pdf",
+    buffer: Buffer.from(damage(new Uint8Array(words), "table")),
+  })
+  const broken = page.getByTestId("file-row").filter({ hasText: "broken.pdf" })
+  await expect(broken).toHaveAttribute("data-status", "ready", {
     timeout: 60_000,
   })
-  await expect(page.getByTestId("file-row")).toContainText("broken.pdf")
-  await expect(page.getByTestId("file-note")).toContainText("repaired")
-  await expect(tool(page).getByRole("alert")).toContainText(
-    "One file at a time"
-  )
+  await expect(broken.getByTestId("file-note")).toContainText("repaired")
 
-  // What cannot be read at all says so in its row.
+  // What cannot be read at all says so in its row, and is left out.
   await page.locator("#compress-file").setInputFiles({
     name: "cut.pdf",
     mimeType: "application/pdf",
     buffer: Buffer.from("%PDF-1.7\n1 0 obj\n<< >>\nendobj\n"),
   })
-  await expect(page.getByTestId("file-row")).toHaveAttribute(
-    "data-status",
-    "error",
-    { timeout: 60_000 }
+  const cut = page.getByTestId("file-row").filter({ hasText: "cut.pdf" })
+  await expect(cut).toHaveAttribute("data-status", "error", {
+    timeout: 60_000,
+  })
+  await expect(cut.getByRole("alert")).toContainText("It is left out.")
+  await expect(page.getByRole("button", { name: "Compress PDF" })).toBeEnabled()
+})
+
+test("comes out under a size, and says so honestly when it cannot", async ({
+  page,
+}) => {
+  const upload = await file("form.pdf", (doc) =>
+    Array.from({ length: 6 }, (_, index) => ({
+      ref: storeRgb(doc, scene(900, 600, index + 1)),
+      width: 240,
+      height: 160,
+    }))
   )
+  await add(page, upload)
+  await level(page, "To a size").click()
+  const sizes = page.getByRole("radiogroup", { name: "Come out under" })
+  await sizes.getByRole("radio", { name: "100 KB" }).click()
+  await compress(page)
+  const fits = page.getByTestId("target")
+  await expect(fits).toHaveAttribute("data-met", "true")
+  await expect(fits).toContainText(/Fits: [\d.]+ KB is under 100\.0 KB\./)
+  const roomy = await download(page)
+  expect(roomy.bytes.length).toBeLessThanOrEqual(100 * 1024)
+  // Most of the room is used: no more is lost than the size takes.
+  expect(roomy.bytes.length).toBeGreaterThan(50 * 1024)
+  expect(await texts(roomy.bytes)).toEqual([pictureText(1)])
+  expect(await readPictures(roomy.bytes)).toHaveLength(6)
+
+  // What is typed has to be a size.
+  await sizes.getByRole("radio", { name: "Another size" }).click()
+  const typed = page.getByLabel("Size", { exact: true })
+  await typed.fill("small")
+  await expect(tool(page).getByRole("alert")).toContainText("Type a size")
   await expect(
     page.getByRole("button", { name: "Compress PDF" })
   ).toBeDisabled()
+
+  // A size it cannot reach while pictures stay easy to read.
+  await typed.fill("12")
+  await compress(page)
+  const missed = page.getByTestId("target")
+  await expect(missed).toHaveAttribute("data-met", "false")
+  await expect(missed).toContainText(
+    "Could not get under 12.0 KB. This is the smallest that is still easy to read"
+  )
+  await expect(missed).toContainText("Go further")
+  const readable = await download(page)
+  expect(readable.bytes.length).toBeGreaterThan(12 * 1024)
+
+  await page.getByRole("switch", { name: "Go further if it takes it" }).click()
+  await compress(page)
+  const further = await download(page)
+  expect(further.bytes.length).toBeLessThan(readable.bytes.length)
+  expect(await texts(further.bytes)).toEqual([pictureText(1)])
+})
+
+test("compresses several files at once and hands them over as one ZIP", async ({
+  page,
+}) => {
+  const words = Buffer.from(await makePlainPdf([{ body: "Only words" }]))
+  await page.goto(ROUTE)
+  await page.locator("#compress-file").setInputFiles([
+    await file("photos.pdf", (doc) => [photo(doc)]),
+    { name: "words.pdf", mimeType: "application/pdf", buffer: words },
+    await file("more photos.pdf", (doc) => [photo(doc, 2), photo(doc, 3)]),
+    {
+      name: "cut.pdf",
+      mimeType: "application/pdf",
+      buffer: Buffer.from("%PDF-1.7\n1 0 obj\n<< >>\nendobj\n"),
+    },
+  ])
+  await expect(tool(page)).toHaveAttribute("data-ready", "true", {
+    timeout: 60_000,
+  })
+  const row = (name: string) =>
+    page.getByTestId("file-row").filter({ hasText: name })
+  await expect(page.getByTestId("file-row")).toHaveCount(4)
+  await expect(row("cut.pdf")).toHaveAttribute("data-status", "error")
+  await expect(row("photos.pdf").first()).toHaveAttribute("data-shown", "true")
+
+  // One file that cannot be read does not stop the others.
+  await page.getByRole("button", { name: "Compress 3 files" }).click()
+  await expect(tool(page)).toHaveAttribute("data-compressed", "true", {
+    timeout: 120_000,
+  })
+  await expect(page.getByTestId("batch-saving")).toHaveText(/^\d+% smaller$/)
+  await expect(page.getByTestId("batch")).toContainText("3 files")
+  await expect(row("words.pdf").getByTestId("file-result")).toHaveText(
+    "Already small: left as it is"
+  )
+  await expect(row("more photos.pdf").getByTestId("file-result")).toContainText(
+    "% smaller"
+  )
+
+  // Another file's details are a press away.
+  await page
+    .getByRole("button", { name: "Show the details of more photos.pdf" })
+    .click()
+  await expect(row("more photos.pdf")).toHaveAttribute("data-shown", "true")
+  await expect(page.getByTestId("audit-before")).toContainText(
+    "What makes more photos.pdf big"
+  )
+  await expect(page.getByTestId("compare")).toHaveAttribute(
+    "data-drawn",
+    "true",
+    { timeout: 30_000 }
+  )
+  await page
+    .getByRole("button", { name: "Show the details of words.pdf" })
+    .click()
+  await expect(page.getByTestId("already-small")).toContainText("words.pdf")
+
+  // Each compressed file can be had from its row.
+  const one = page.waitForEvent("download")
+  await page
+    .getByRole("link", { name: "Download photos-compressed.pdf", exact: true })
+    .click()
+  expect((await one).suggestedFilename()).toBe("photos-compressed.pdf")
+
+  const pending = page.waitForEvent("download")
+  await page.getByRole("button", { name: "Download all (.zip)" }).click()
+  const got = await pending
+  expect(got.suggestedFilename()).toBe("compressed-pdfs.zip")
+  const files = unzipSync(await bytesOf(got))
+  // The file that could not be made smaller is in the ZIP as it was.
+  expect(Object.keys(files).sort()).toEqual([
+    "more photos-compressed.pdf",
+    "photos-compressed.pdf",
+    "words.pdf",
+  ])
+  expect(Buffer.from(files["words.pdf"]).equals(words)).toBe(true)
+  expect(await readPictures(files["more photos-compressed.pdf"])).toHaveLength(
+    2
+  )
+  expect(await texts(files["photos-compressed.pdf"])).toEqual([pictureText(1)])
+
+  // A file added afterwards is the only one left to compress.
+  await page
+    .locator("#compress-file")
+    .setInputFiles(await file("late.pdf", (doc) => [photo(doc, 4)]))
+  await expect(page.getByRole("button", { name: "Compress PDF" })).toBeEnabled({
+    timeout: 60_000,
+  })
+  await expect(page.getByTestId("plan")).toHaveText("1 file to compress")
+
+  await page.getByRole("button", { name: "Clear all" }).click()
+  await expect(
+    page.getByRole("heading", { name: "Drop PDFs to compress" })
+  ).toBeVisible()
 })
 
 test("a compression can be stopped, the result read, and the file removed", async ({
@@ -298,7 +431,7 @@ test("a compression can be stopped, the result read, and the file removed", asyn
 
   await page.getByRole("button", { name: "Remove album.pdf" }).click()
   await expect(
-    page.getByRole("heading", { name: "Drop a PDF to compress" })
+    page.getByRole("heading", { name: "Drop PDFs to compress" })
   ).toBeVisible()
 })
 
@@ -365,6 +498,14 @@ test("stays accessible, local and responsive", async ({ page }) => {
     timeout: 60_000,
   })
   expect((await scan()).violations).toEqual([])
+  // The size options are checked too, then put away again.
+  await level(page, "To a size").click()
+  await page
+    .getByRole("radiogroup", { name: "Come out under" })
+    .getByRole("radio", { name: "Another size" })
+    .click()
+  expect((await scan()).violations).toEqual([])
+  await level(page, "Balanced").click()
   await compress(page)
   await expect(page.getByTestId("compare")).toHaveAttribute(
     "data-drawn",

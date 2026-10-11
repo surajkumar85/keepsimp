@@ -80,7 +80,7 @@ interface CompressJob {
   /** Null when the compression was cancelled. */
   resolve: (result: CompressResult | null) => void
   reject: (error: Error) => void
-  onStage: (stage: Stage, done: number, total: number) => void
+  onStage: (stage: Stage, done: number, total: number, attempt?: number) => void
 }
 
 interface MergeJob {
@@ -164,7 +164,7 @@ export class PdfClient {
     } else if (message.type === "stage") {
       this.compressions
         .get(message.job)
-        ?.onStage(message.stage, message.done, message.total)
+        ?.onStage(message.stage, message.done, message.total, message.attempt)
     } else if (
       message.type === "compressed" ||
       message.type === "compress-error"
@@ -464,8 +464,18 @@ export class PdfClient {
   compress(
     id: string,
     file: Blob,
-    order: { level: Level; password?: string; maxPixels: number },
-    onStage: (stage: Stage, done: number, total: number) => void
+    order: {
+      /** A level, or a size in bytes to come out under. */
+      how: Level | { target: number; further: boolean }
+      password?: string
+      maxPixels: number
+    },
+    onStage: (
+      stage: Stage,
+      done: number,
+      total: number,
+      attempt?: number
+    ) => void
   ) {
     const job = ++this.jobs
     const promise = new Promise<CompressResult | null>((resolve, reject) => {

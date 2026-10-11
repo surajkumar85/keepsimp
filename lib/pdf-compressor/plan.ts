@@ -95,7 +95,7 @@ export function planPicture(
     return size ? { do: "encode", size, top: TOP_QUALITY } : leave("kept")
   if (facts.stored === "jpeg" && !size) {
     // Its quality was chosen by measuring against the picture it came from.
-    if (facts.ours) return leave("fine")
+    if (facts.ours && !plan.again) return leave("fine")
     if (facts.quality === null)
       return { do: "encode", size: null, top: TOP_QUALITY }
     if (facts.quality <= plan.keepBelow) return leave("fine")

@@ -23,6 +23,13 @@ export interface LevelPlan {
    * notices.
    */
   floor: number
+  /**
+   * Write JPEGs at exactly this quality, with no measuring. Used when the
+   * file has to come out under a size: the size decides, not the likeness.
+   */
+  fixed?: number
+  /** Also save JPEGs again that this compressor wrote on an earlier run. */
+  again?: boolean
 }
 
 /** Null for the level that changes nothing you can see. */
@@ -42,6 +49,8 @@ export const pageMarks: Record<Level, number> = {
   balanced: 0.97,
   strong: 0.93,
 }
+/** The mark for a file squeezed under a size, where some loss is the point. */
+export const TARGET_MARK = 0.88
 
 export const levelChoices: readonly {
   value: Level
@@ -65,14 +74,46 @@ export const levelChoices: readonly {
   },
 ]
 
+/** A level, or a size the file has to come out under. */
+export type Mode = Level | "size"
+
+export const SIZE_NOTE =
+  "The file is written a few times to find the best quality that fits. Pictures give way first; text stays sharp."
+
+export const modeChoices: readonly { value: Mode; label: string }[] = [
+  ...levelChoices.map(({ value, label }) => ({ value, label })),
+  { value: "size", label: "To a size" },
+]
+
+/** What a mode does, in a sentence or two. */
+export const modeNote = (mode: Mode) =>
+  levelChoices.find((choice) => choice.value === mode)?.note ?? SIZE_NOTE
+
 export interface CompressSettings {
-  level: Level
+  mode: Mode
+  /** For "To a size": the size to stay within, in bytes; null while what is typed is not a size. */
+  target: number | null
+  /** For "To a size": go on past what is easy to read, if the size takes it. */
+  further: boolean
 }
 
-export const defaultSettings: CompressSettings = { level: "balanced" }
+export const defaultSettings: CompressSettings = {
+  mode: "balanced",
+  target: 1024 * 1024,
+  further: false,
+}
 
 /** Two settings with the same key give the same result. */
-export const settingsKey = (settings: CompressSettings) => settings.level
+export const settingsKey = (settings: CompressSettings) =>
+  settings.mode === "size"
+    ? `size:${settings.target}:${settings.further}`
+    : settings.mode
+
+/** Why nothing can be compressed with these settings; null when it can. */
+export const settingsProblem = (settings: CompressSettings) =>
+  settings.mode === "size" && settings.target === null
+    ? "Type a size of 10 KB or more, such as 300."
+    : null
 
 /** The name the result is saved under: the file's own, marked as compressed. */
 export function resultName(name: string) {

@@ -1,12 +1,15 @@
 import { describe, expect, it } from "vitest"
 import {
   alreadySmall,
+  batchLine,
   changeLines,
   checkLine,
   fileNotes,
   pixelLimit,
+  rowSummary,
   stagePercent,
   stageText,
+  targetLine,
 } from "./report"
 
 describe("stagePercent", () => {
@@ -26,7 +29,26 @@ describe("stagePercent", () => {
   })
 })
 
+describe("stagePercent, when a file is written several times", () => {
+  it("gives each try an equal share", () => {
+    expect(stagePercent("reading", 0, 10, 1, 4)).toBe(0)
+    expect(stagePercent("pictures", 2, 4, 2, 4)).toBe(36)
+    expect(stagePercent("checking", 3, 3, 4, 4)).toBe(100)
+  })
+
+  it("never runs past the end when there are more tries than expected", () => {
+    expect(stagePercent("writing", 0, 1, 5, 4)).toBe(96)
+  })
+})
+
 describe("stageText", () => {
+  it("says which try it is, except while checking", () => {
+    expect(stageText("pictures", 0, 3, 2)).toBe("Try 2: Picture 1 of 3")
+    expect(stageText("writing", 0, 1, 1)).toBe("Try 1: Writing the file")
+    expect(stageText("reading", 4, 9, 3)).toBe("Try 3: Looking at page 5 of 9")
+    expect(stageText("checking", 0, 2, 3)).toBe("Checking page 1 of 2")
+  })
+
   it("says what is being worked on", () => {
     expect(stageText("reading", 0, 1200)).toBe("Looking at page 1 of 1,200")
     expect(stageText("pictures", 2, 5)).toBe("Picture 3 of 5")
@@ -126,6 +148,16 @@ describe("alreadySmall", () => {
     expect(alreadySmall("balanced")).toContain("Strong")
     expect(alreadySmall("strong")).toContain("Nothing more")
   })
+
+  it("says a file is already under the size it was to reach", () => {
+    expect(alreadySmall("size", { wanted: 204_800, met: true })).toBe(
+      "This file is already under 200.0 KB, and nothing can be taken out without changing how it looks."
+    )
+    expect(alreadySmall("size", { wanted: 204_800, met: false })).toContain(
+      "This file is over 200.0 KB, and nothing in it can be made smaller."
+    )
+    expect(alreadySmall("size")).toContain("Nothing more")
+  })
 })
 
 describe("fileNotes", () => {
@@ -148,5 +180,132 @@ describe("fileNotes", () => {
 describe("pixelLimit", () => {
   it("is lower on a phone", () => {
     expect(pixelLimit(true)).toBeLessThan(pixelLimit(false))
+  })
+})
+
+describe("targetLine", () => {
+  const KB = 1024
+
+  it("says the file fits", () => {
+    expect(
+      targetLine({ wanted: 200 * KB, met: true }, 180 * KB, 20 * KB, false)
+    ).toEqual({
+      met: true,
+      text: "Fits: 180.0 KB is under 200.0 KB.",
+      advice: [],
+    })
+  })
+
+  it("says how far off it is, and offers to go further", () => {
+    const line = targetLine(
+      { wanted: 100 * KB, met: false },
+      340 * KB,
+      30 * KB,
+      false
+    )
+    expect(line.text).toBe(
+      "Could not get under 100.0 KB. This is the smallest that is still easy to read: 340.0 KB, 240.0 KB over."
+    )
+    expect(line.advice).toHaveLength(2)
+    expect(line.advice[0]).toContain("Go further")
+    expect(line.advice[1]).toContain("PDF splitter")
+  })
+
+  it("does not offer to go further twice", () => {
+    const line = targetLine(
+      { wanted: 100 * KB, met: false },
+      150 * KB,
+      30 * KB,
+      true
+    )
+    expect(line.text).toContain("This is the smallest it can be made")
+    expect(line.advice).toHaveLength(1)
+  })
+
+  it("says so when the text alone is over the size", () => {
+    const line = targetLine(
+      { wanted: 100 * KB, met: false },
+      400 * KB,
+      380 * KB,
+      false
+    )
+    expect(line.advice[0]).toBe(
+      "Its text, fonts and structure alone take 380.0 KB, so no picture setting can reach this size."
+    )
+    expect(line.advice).toHaveLength(2)
+  })
+})
+
+describe("batchLine", () => {
+  it("adds several files up", () => {
+    expect(
+      batchLine([
+        { before: 1000 * 1024, after: 400 * 1024 },
+        { before: 1000 * 1024, after: 600 * 1024 },
+      ])
+    ).toEqual({
+      before: 2000 * 1024,
+      after: 1000 * 1024,
+      percent: 50,
+      text: "2 files · 1.95 MB → 1000.0 KB",
+    })
+  })
+
+  it("has nothing to divide by when there are no files", () => {
+    expect(batchLine([])).toMatchObject({
+      percent: 0,
+      text: "0 files · 0 B → 0 B",
+    })
+  })
+})
+
+describe("rowSummary", () => {
+  const KB = 1024
+
+  it("says what a file came to", () => {
+    expect(
+      rowSummary({ before: 400 * KB, after: 100 * KB, smaller: true })
+    ).toBe("400.0 KB → 100.0 KB · 75% smaller")
+    expect(
+      rowSummary({
+        before: 400 * KB,
+        after: 100 * KB,
+        smaller: true,
+        target: { wanted: 200 * KB, met: true },
+      })
+    ).toBe("400.0 KB → 100.0 KB · 75% smaller")
+  })
+
+  it("says when a size was missed", () => {
+    expect(
+      rowSummary({
+        before: 400 * KB,
+        after: 300 * KB,
+        smaller: true,
+        target: { wanted: 200 * KB, met: false },
+      })
+    ).toBe("400.0 KB → 300.0 KB · 25% smaller · over 200.0 KB")
+    expect(
+      rowSummary({
+        before: 400 * KB,
+        after: 400 * KB,
+        smaller: false,
+        target: { wanted: 200 * KB, met: false },
+      })
+    ).toBe("Could not get under 200.0 KB")
+  })
+
+  it("says when a file was left as it is", () => {
+    expect(rowSummary({ before: 9, after: 9, smaller: false })).toBe(
+      "Already small: left as it is"
+    )
+    expect(
+      rowSummary({
+        before: 9,
+        after: 9,
+        smaller: false,
+        target: { wanted: 100, met: true },
+      })
+    ).toBe("Already small: left as it is")
   })
 })
