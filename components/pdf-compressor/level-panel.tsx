@@ -65,7 +65,10 @@ export function LevelPanel({
 }) {
   const ids = useId()
   return (
-    <section className="space-y-4 rounded-xl border bg-card p-4 sm:p-5">
+    <section
+      className="space-y-4 rounded-xl border bg-card p-4 sm:p-5"
+      data-testid="level-panel"
+    >
       <ChoiceChips
         label="How much to compress"
         value={mode}

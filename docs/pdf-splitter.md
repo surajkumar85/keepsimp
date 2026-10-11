@@ -142,7 +142,7 @@ A split into thousands of parts stays quick: board tiles are drawn again only wh
 
   The page sets `data-settled` on its root when nothing is being read, looked through or split; the recorder waits on it. If the length changes, update `video.duration` in `components/pdf-splitter/tutorial.tsx`.
 
-- The journal article "Just the pages you need, without the upload." (`lib/blog.ts`) is the written guide the help section links to. Its artwork is `public/images/pdf-split-guide.svg` and its social image comes from `scripts/social-images.mjs`.
+- The blog article "Just the pages you need, without the upload." (`lib/blog.ts`) is the written guide the help section links to. Its artwork is `public/images/pdf-split-guide.svg` and its social image comes from `scripts/social-images.mjs`.
 
 ## Tests
 

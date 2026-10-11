@@ -2,7 +2,7 @@
 
 Makes PDFs smaller in the browser. Nothing is uploaded: the file is read, changed and written by MuPDF as WebAssembly in the worker the PDF merger and splitter use, and pictures are saved again by the image tools' codecs. Live at `/dashboard/pdf-compressor/`.
 
-Phases 1 to 3 and the controls of phase 4 are built. A benchmark against other tools, encoding on several cores, the tutorial video and the guide are still to come.
+All four planned phases are built, but for two things: a benchmark against other tools, and picture encoding on several cores. Both are listed under "Still to do".
 
 ## What it does
 
@@ -91,7 +91,7 @@ The only way to know what a file weighs at some setting is to write it. So the s
 - At a fixed quality there is no measuring, so every writing is quick, and a JPEG the compressor wrote on an earlier run is saved again (`again`): the size decides here, not the likeness.
 - Only the result that is kept is checked page by page, with a mark of 0.88.
 
-On the sample, "100 KB" takes about 5 seconds and gives 93.7 KB.
+On the sample, "100 KB" takes about 5 seconds and gives 94 KB.
 
 ### The check
 
@@ -99,7 +99,7 @@ After writing, the result is opened again and pages are drawn from the original 
 
 ## Speed
 
-On an M-series laptop, the sample (three pictures, 493 KB) takes about 2 seconds at Balanced and comes out at 61 KB; at Strong, 26 KB. The 25 real-engine tests, which compress some thirty files, take 17 seconds.
+On an M-series laptop, the sample (three pictures, 589 KB) takes about 2 seconds at Balanced and comes out at 60 KB; at Strong, 26 KB. The 25 real-engine tests, which compress some thirty files, take 17 seconds.
 
 ## Limits
 
@@ -126,15 +126,24 @@ Up to 100 files, each of up to 300 MB and 500 MB together on a computer; 100 MB 
 - The worker (`lib/pdf-merger/pdf.worker.ts`) has two more requests: `audit`, and `compress`, which is sent the file once more. The copy that is open must stay untouched, because "before" is drawn from it.
 - `components/pdf-compressor/`: the screen, the breakdown card, and the before and after view, which reuses the image compressor's `CompareSlider` on pages drawn by the worker.
 
-## Sample
+## Samples, tutorial video and guide
 
-`public/samples/keepsimp-brochure.pdf` (493 KB, three pages) is written by `npm run samples:pdfs`: two painted photographs with far more pixels than the pages show, and a chart stored without loss.
+- `public/samples/keepsimp-brochure.pdf` (589 KB, three pages) is behind "Try a sample": two painted photographs with far more pixels than the pages show, a chart stored without loss, and 96 KB of private data such as a design app leaves behind. It comes out at 60 KB at Balanced.
+- `public/samples/keepsimp-scan.pdf` (375 KB, one page) is behind "Try a scanned page": a letter drawn at 150 dpi on cream paper with grain, a shadow towards one side and a red stamp, with its words laid over it unseen. Both are written by `npm run samples:pdfs`.
+- The tutorial video (66 seconds) is recorded from the real app by `scripts/tutorial/pdf-compressor.mjs`: `npm run build`, serve `out` on port 4180, then `KEEPSIMP_PREVIEW_URL=http://127.0.0.1:4180 npm run tutorial:video -- pdf-compressor`. Keep the duration in `components/pdf-compressor/tutorial.tsx` in step with it.
+- The guide is the blog article `compress-pdfs-without-uploading` in `lib/blog.ts`, with `public/images/pdf-compress-guide.svg`.
 
 ## Tests
 
 - **Unit** (`lib/pdf-compressor/*.test.ts`): every pure module at 100%.
 - **Real engine in Node** (`compress.node.test.ts`): files are written by pdf-lib with pictures from mozjpeg and oxipng, and results are read back by pdf.js and pdf-lib. Photographs are sized for where they are drawn largest; drawings and palette pictures come back pixel for pixel; soft masks are kept exactly; inverted, 1-bit, 16-bit and colour-keyed pictures are untouched; CMYK stays CMYK with its colours in place; links, bookmarks, fields, notes, tags, page numbers and attachments survive; a locked file stays locked; thumbnails and private data go; a whole font is cut and the text still reads; a second run finds nothing more; one-bit pictures, palettes of two colours, fax-packed pictures and stencils either way up come back exactly from JBIG2; scans are rebuilt as layers, in black and white and in grey with their hidden words in place, and a scan with no print is left to the usual way; custom settings give the resolution and greyscale that were set; each thing is taken out alone with the rest left in, forms are flattened with what was filled in still on the page, and scripts go; a password locks even a file that cannot shrink, limits a reader and replaces an old password; a size is met without losing more than it takes, missed honestly, and reached on the compressor's own earlier result; six seeded files of random pictures never grow, lose a page, a word or a picture.
 - **Browser** (`e2e/pdf-compressor.spec.ts`, five profiles): the breakdown, each level, downloads read back with pdf.js, a size that is met with most of its room used, a size that is missed and then got closer to by going further, a scan rebuilt as text and paper and in black and white, custom settings with things taken out and a password, several files with one unreadable among them and the ZIP unpacked, a locked file, an already small file, refused and damaged files, cancel, the reader, the sample, the divider on the keyboard, axe in both themes, 320 px, reduced motion and no outside requests. The compressor also runs with the network off in `e2e/offline.spec.ts`.
+
+## Still to do
+
+- **A benchmark** against Ghostscript and qpdf on a set of varied real files, with sizes and measured likeness. Neither tool is installed on the development machine, and the level numbers above come from simulated scans and painted photographs, not from a corpus of real documents.
+- **Encoding on several cores.** Pictures are saved one after another in the one PDF worker. A file of many large photographs takes a few seconds a picture.
+- **One resolution for all pictures in Custom.** The plan had separate ones for colour, grey and black-and-white pictures; black-and-white pictures are never resized.
 
 ## Not planned
 

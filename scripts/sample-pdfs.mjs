@@ -487,10 +487,142 @@ async function brochure() {
     "Rooms near the station cost less and suit an early train.",
     "Book ahead in June and September, when the fairs are on.",
   ])
+  // What a design app leaves behind: data to reopen its own file with, which
+  // no reader uses, and a small preview of the first page.
+  let state = 20261012
+  const leftover = new Uint8Array(96 * 1024)
+  for (let index = 0; index < leftover.length; index++) {
+    state = (Math.imul(state, 1103515245) + 12345) >>> 0
+    leftover[index] = state >>> 24
+  }
+  cover.page.node.set(
+    PDFName.of("PieceInfo"),
+    doc.context.obj({
+      DesignApp: {
+        Private: doc.context.register(doc.context.stream(leftover)),
+      },
+    })
+  )
+  return doc.save()
+}
+
+/**
+ * A page as a scanner hands it over: a letter drawn at 150 dots per inch
+ * on cream paper that darkens towards one side, a little
+ * soft, with grain and a red stamp. The words are laid over it unseen, as a
+ * text recogniser leaves them.
+ */
+async function scan() {
+  // The page that was "scanned": a letter with a heading and a column of text.
+  const letter = await PDFDocument.create()
+  const heading = await letter.embedFont(StandardFonts.TimesRomanBold)
+  const body = await letter.embedFont(StandardFonts.TimesRoman)
+  const sheet = letter.addPage([width, height])
+  sheet.drawText("Rental agreement", {
+    x: 72,
+    y: height - 110,
+    size: 24,
+    font: heading,
+    color: ink,
+  })
+  sheet.drawText("Flat 4, 12 Harbour Street", {
+    x: 72,
+    y: height - 136,
+    size: 12,
+    font: body,
+    color: ink,
+  })
+  const clauses = [
+    "1. The tenancy begins on the first day of March and runs for twelve months.",
+    "2. Rent is due on the first working day of each month, by bank transfer.",
+    "3. A deposit of one month's rent is held and returned within ten days of",
+    "    the end of the tenancy, less the cost of any damage beyond fair wear.",
+    "4. The tenant keeps the flat clean and reports faults as soon as they show.",
+    "5. The landlord carries out repairs to the structure, heating and wiring,",
+    "    and gives at least a day's notice before visiting, except in emergencies.",
+    "6. Pets are welcome with the landlord's agreement, given in writing.",
+    "7. The flat is let to the people named here and may not be let on to others.",
+    "8. Either side may end the tenancy after six months with two months' notice.",
+    "9. Changes to this agreement are made in writing and signed by both sides.",
+    "",
+    "Signed on behalf of the landlord:",
+    "",
+    "",
+    "Signed by the tenant:",
+  ]
+  clauses.forEach((line, index) =>
+    sheet.drawText(line, {
+      x: 72,
+      y: height - 190 - index * 26,
+      size: 13,
+      font: body,
+      color: ink,
+    })
+  )
+  const source = new mupdf.PDFDocument(await letter.save())
+  const drawn = source
+    .loadPage(0)
+    .toPixmap(
+      mupdf.Matrix.scale(150 / 72, 150 / 72),
+      mupdf.ColorSpace.DeviceRGB,
+      false,
+      true
+    )
+  const pixelWidth = drawn.getWidth()
+  const pixelHeight = drawn.getHeight()
+  const from = drawn.getPixels().slice()
+  const stride = drawn.getStride()
+  const pixels = drawn.getPixels()
+  const paper = [244, 238, 222]
+  let state = 20261013
+  for (let y = 0; y < pixelHeight; y++)
+    for (let x = 0; x < pixelWidth; x++) {
+      state = (Math.imul(state, 1103515245) + 12345) >>> 0
+      const grain = ((state >>> 16) % 13) - 6
+      const shade = 1 - 0.1 * (x / pixelWidth)
+      const ring = Math.hypot(x - pixelWidth * 0.72, y - pixelHeight * 0.78)
+      const stamp = ring > pixelWidth * 0.07 && ring < pixelWidth * 0.08
+      for (let channel = 0; channel < 3; channel++) {
+        // A little of each neighbour, as the lens of a scanner blurs.
+        let sum = 0
+        let count = 0
+        for (let dy = -1; dy <= 1; dy++)
+          for (let dx = -1; dx <= 1; dx++) {
+            const nx = Math.min(pixelWidth - 1, Math.max(0, x + dx))
+            const ny = Math.min(pixelHeight - 1, Math.max(0, y + dy))
+            const weight = dx === 0 && dy === 0 ? 4 : 1
+            sum += from[ny * stride + nx * 3 + channel] * weight
+            count += weight
+          }
+        const ink = sum / count / 255
+        pixels[y * stride + x * 3 + channel] = stamp
+          ? [196, 36, 48][channel] + grain
+          : ink * paper[channel] * shade + grain
+      }
+    }
+  const doc = await PDFDocument.create()
+  const plain = await doc.embedFont(StandardFonts.Helvetica)
+  doc.setTitle("Scanned page")
+  doc.setAuthor("KeepSimp")
+  doc.setCreationDate(written)
+  doc.setModificationDate(written)
+  const page = doc.addPage([width, height])
+  const image = await doc.embedJpg(drawn.asJPEG(88, false))
+  drawn.destroy()
+  source.destroy()
+  page.drawImage(image, { x: 0, y: 0, width, height })
+  page.drawText("Rental agreement. Flat 4, 12 Harbour Street.", {
+    x: 56,
+    y: height - 110,
+    size: 12,
+    font: plain,
+    opacity: 0,
+  })
   return doc.save()
 }
 
 await writeFile("public/samples/keepsimp-brochure.pdf", await brochure())
+await writeFile("public/samples/keepsimp-scan.pdf", await scan())
 console.log(
-  "Wrote public/samples/keepsimp-report.pdf, keepsimp-appendix.pdf, keepsimp-handbook.pdf and keepsimp-brochure.pdf"
+  "Wrote public/samples/keepsimp-report.pdf, keepsimp-appendix.pdf, keepsimp-handbook.pdf, keepsimp-brochure.pdf and keepsimp-scan.pdf"
 )

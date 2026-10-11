@@ -5,7 +5,7 @@ Updated 10 October 2026. KeepSimp can be added to a phone's home screen and open
 ## What is configured
 
 - **Manifest:** `app/manifest.ts` exports `/manifest.webmanifest`, built by `webManifest()` in `lib/pwa.ts`. Next.js links it from every page.
-  - The installed app opens on `/dashboard/`, with the whole site in scope so journal and privacy links stay inside the window.
+  - The installed app opens on `/dashboard/`, with the whole site in scope so blog and privacy links stay inside the window.
   - `display` is `standalone`.
   - Shortcuts (long-press the icon on Android) are the tools marked available in `lib/catalogue.ts`. Planned tools never appear.
 - **Icons,** in `public/icons/`:
@@ -25,7 +25,7 @@ Updated 10 October 2026. KeepSimp can be added to a phone's home screen and open
 
 ## Offline use
 
-After one visit to the tools, the whole site works without a connection: every tool, the journal and the privacy page.
+After one visit to the tools, the whole site works without a connection: every tool, the blog and the privacy page.
 
 ### What is saved
 
@@ -37,9 +37,9 @@ After one visit to the tools, the whole site works without a connection: every t
 
 Both files in `service-worker/` are plain JavaScript with JSDoc types, because their text is copied into the worker as it is. There is no bundler and no step after the build, so any host that serves the export serves the worker. An earlier version wrote `out/sw.js` after `next build`; Vercel did not publish that file.
 
-- **Saved:** every page, the build files in `.next/static` (scripts, styles, fonts, WebAssembly codecs), and the files in `public/` (images, icons, tutorial posters and captions). This is about 29 MB in 163 files on disk and about 10 MB to download with Brotli compression; the PDF engine, which the merger and the splitter share, is 10.4 MB of that on disk and 3.6 MB of the download. The animation converter's caption font is a second copy of the Outfit file (32 KB), because the worker loads it by its own address.
+- **Saved:** every page, the build files in `.next/static` (scripts, styles, fonts, WebAssembly codecs), and the files in `public/` (images, icons, tutorial posters and captions). This is about 29 MB in 168 files on disk and about 10 MB to download with Brotli compression; the PDF engine, which the merger, the splitter and the compressor share, is 10.4 MB of that on disk and 3.6 MB of the download. The animation converter's caption font is a second copy of the Outfit file (32 KB), because the worker loads it by its own address.
 - **Not saved:**
-  - tutorial videos (52 MB), which stream on demand
+  - tutorial videos (56 MB), which stream on demand
   - link-preview images, which only other sites read
   - the data Next.js fetches for page transitions, whose file names only exist after the build
 

@@ -93,6 +93,7 @@ import { OptionsPanel } from "./options-panel"
 const INPUT_ID = "compress-file"
 const ACCEPT = "application/pdf,.pdf"
 const SAMPLE = "keepsimp-brochure.pdf"
+const SCAN_SAMPLE = "keepsimp-scan.pdf"
 const ZIP_NAME = "compressed-pdfs.zip"
 /** Results opened in the worker to be compared begin with this. */
 const AFTER_ID = "after-"
@@ -304,12 +305,12 @@ export function PdfCompressor() {
     return () => document.removeEventListener("paste", paste)
   }, [addFiles])
 
-  async function loadSample() {
+  async function loadSample(name = SAMPLE) {
     try {
-      const response = await fetch(`/samples/${SAMPLE}`)
+      const response = await fetch(`/samples/${name}`)
       if (!response.ok) throw new Error()
       const blob = await response.blob()
-      await addFiles([new File([blob], SAMPLE, { type: "application/pdf" })])
+      await addFiles([new File([blob], name, { type: "application/pdf" })])
     } catch {
       setNotice("The sample could not be loaded. Add a file of your own.")
     }
@@ -585,6 +586,16 @@ export function PdfCompressor() {
             accept={ACCEPT}
             icon={IconFileTypePdf}
           />
+          <p className="text-sm text-muted-foreground">
+            No scan at hand?{" "}
+            <Button
+              variant="link"
+              className="px-0"
+              onClick={() => void loadSample(SCAN_SAMPLE)}
+            >
+              Try a scanned page
+            </Button>
+          </p>
           {notice && (
             <p role="alert" className="text-sm text-destructive">
               {notice}
@@ -784,6 +795,7 @@ export function PdfCompressor() {
         <section
           className="space-y-4 rounded-xl border bg-card p-4 sm:p-5"
           aria-labelledby="compress-result"
+          data-testid="result-card"
         >
           <h2 id="compress-result" className="section-title">
             {several ? "Results" : "Result"}

@@ -361,7 +361,7 @@ test("shows the latest page online and the saved one when the network fails", as
   started = Date.now()
   await page
     .getByRole("contentinfo")
-    .getByRole("link", { name: "Journal", exact: true })
+    .getByRole("link", { name: "Blog", exact: true })
     .click()
   await expect(page).toHaveURL(/\/blog\/$/, { timeout: 18_000 })
   await expect(heading).toBeVisible()

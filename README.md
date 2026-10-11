@@ -1,6 +1,6 @@
 # KeepSimp
 
-A free, browser-first utility platform. The homepage introduces the tools with an interactive image-compression example. `/dashboard/` contains four working tools: image compressor, resizer, converter and JSON formatter. Other catalogue tools remain marked as coming soon. The journal contains practical, statically rendered guides.
+A free, browser-first utility platform. The homepage introduces the tools with an interactive image-compression example. `/dashboard/` contains four working tools: image compressor, resizer, converter and JSON formatter. Other catalogue tools remain marked as coming soon. The blog contains practical, statically rendered guides.
 
 ## Run locally
 
@@ -15,13 +15,13 @@ Open http://localhost:3000. The visual reference lives at `/design-system/`.
 
 ## Pages and SEO
 
-The landing page is `/`, the dashboard is `/dashboard/`, and the journal is `/blog/`. Available tools have individual static routes under `/dashboard/`; article pages link directly to them. `/privacy/` documents actual file and preference handling.
+The landing page is `/`, the dashboard is `/dashboard/`, and the blog is `/blog/`. Available tools have individual static routes under `/dashboard/`; article pages link directly to them. `/privacy/` documents actual file and preference handling.
 
 The production domain is `https://keepsimp.vercel.app`. Set `NEXT_PUBLIC_SITE_URL` before building when moving to a different canonical origin. Pages include canonical URLs, descriptions and Open Graph/Twitter previews. `sitemap.xml` contains public pages and completed tools; `robots.txt` references it. Vercel preview builds use noindex. BlogPosting, BreadcrumbList, WebSite/Organization and WebApplication JSON-LD match visible content without invented ratings.
 
 Re-export sharing graphics with `node scripts/social-images.mjs`; it renders standalone cards from local assets and fonts without a preview server. Pass article slugs to export a subset. Original image prompts and saved assets are in [the marketing phase report](docs/phase-two.md).
 
-The [JSON workspace reference](docs/json-workspace.md) records the researched features, local worker architecture, precision rules and limits. Its six workflows include editing, tree/table exploration, JSONPath/Pointer queries, JSON Patch comparison, schema validation and conversions. Five journal guides explain the actual behavior with examples and source links.
+The [JSON workspace reference](docs/json-workspace.md) records the researched features, local worker architecture, precision rules and limits. Its six workflows include editing, tree/table exploration, JSONPath/Pointer queries, JSON Patch comparison, schema validation and conversions. Five blog guides explain the actual behavior with examples and source links.
 
 ## Verify
 

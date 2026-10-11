@@ -6,8 +6,8 @@ import { absoluteUrl, pageMetadata } from "@/lib/site"
 import { StructuredData } from "@/components/structured-data"
 
 export const metadata = pageMetadata(
-  "The journal — Practical image and JSON guides",
-  "Practical image and JSON guides: formatting, JSONPath, JSON Pointer, repair, JSON Patch, JSON Schema and YAML/CSV conversion. Learn, then try a free KeepSimp tool.",
+  "Blog: free guides for PDFs, images, GIFs and JSON",
+  "Plain guides to everyday file jobs: compress, merge and split PDFs, compress, resize and convert images, convert GIFs, and format JSON. Learn how, then do it with a free KeepSimp tool that never uploads your files.",
   "/blog/"
 )
 export default function BlogIndex() {
@@ -17,7 +17,7 @@ export default function BlogIndex() {
         data={{
           "@context": "https://schema.org",
           "@type": "Blog",
-          name: "The KeepSimp journal",
+          name: "The KeepSimp blog",
           url: absoluteUrl("/blog/"),
           blogPost: posts.map((post) => ({
             "@type": "BlogPosting",
@@ -28,14 +28,14 @@ export default function BlogIndex() {
       />
       <section className="border-b bg-marketing-surface">
         <div className="marketing-container py-16 sm:py-20">
-          <p className="eyebrow mb-4 text-primary">The KeepSimp journal</p>
+          <p className="eyebrow mb-4 text-primary">The KeepSimp blog</p>
           <h1 className="marketing-title">
             A little know-how.
             <br />A lot less guesswork.
           </h1>
           <p className="mt-5 max-w-xl text-base leading-7 text-muted-foreground">
-            Practical notes on lighter images, clearer data, and the small
-            choices that make your everyday work easier.
+            Plain guides to smaller PDFs, lighter images, clearer data, and the
+            small choices that make everyday file jobs easier.
           </p>
         </div>
       </section>

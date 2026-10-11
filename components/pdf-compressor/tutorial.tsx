@@ -1,10 +1,16 @@
 import { ToolTutorial, type TutorialContent } from "@/components/tool-tutorial"
 
 const content: TutorialContent = {
+  video: {
+    file: "pdf-compressor-tutorial",
+    duration: { iso: "PT1M6S", label: "1 min 6 s" },
+    uploadDate: "2026-10-12",
+  },
   name: "How to use the KeepSimp PDF compressor",
   description:
     "Make PDFs smaller in your browser: see what their size is spent on, bring pictures down to the size they are shown at, reach a size such as 200 KB, and compare any page before and after. Text stays text, and nothing is uploaded.",
-  intro: "Follow the steps below. Every option is explained underneath.",
+  intro:
+    "Watch the tour, or follow the same steps below. Every option is explained underneath.",
   steps: [
     {
       title: "Add your PDFs",
@@ -123,6 +129,7 @@ const content: TutorialContent = {
         "The file is read and compressed on your device. Nothing is uploaded, there is no account and there are no limits on how many files you compress. Once the page has loaded, it works offline.",
     },
   ],
+  guideHref: "/blog/compress-pdfs-without-uploading/",
 }
 
 export function PdfCompressorTutorial() {

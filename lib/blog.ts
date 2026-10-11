@@ -1,11 +1,20 @@
 export type BlogPost = {
   slug: string
+  /** The heading of the article, in the site's own voice. */
   title: string
+  /**
+   * The page title search engines and browser tabs show: the question a
+   * person types, in plain words. The heading is used when this is left out.
+   */
+  searchTitle?: string
   description: string
+  /** What the article is about, as the phrases people search for. Shown as its topics. */
+  keywords?: string[]
   category: string
   readingTime: string
   image: string
   imageAlt: string
+  /** The tool the article goes with, by its id; empty for an article about all of them. */
   tool: string
   toolAnchor?: string
   intro: string
@@ -14,13 +23,26 @@ export type BlogPost = {
     title: string
     paragraphs: string[]
     example?: { label: string; code: string }
+    /** Where to go from here: a tool or another article on this site, or a page elsewhere. */
+    links?: { label: string; href: string }[]
   }[]
   sources: { title: string; url: string }[]
 }
 
 export const posts: readonly BlogPost[] = [
+  overviewPost,
   {
     slug: "compress-images-without-uploading",
+    searchTitle: "How to compress images online without uploading them",
+    keywords: [
+      "compress image",
+      "image compressor",
+      "reduce image size",
+      "compress JPEG",
+      "compress PNG",
+      "compress photo online free",
+      "no upload",
+    ],
     title: "A lighter image, without the upload.",
     description:
       "How to compress an image in your browser, choose useful settings, and compare the result before replacing your original.",
@@ -82,8 +104,19 @@ export const posts: readonly BlogPost[] = [
       },
     ],
   },
+  resizePost,
   {
     slug: "jpeg-png-webp-which-format",
+    searchTitle: "JPEG, PNG or WebP: which image format to use and when",
+    keywords: [
+      "JPEG vs PNG",
+      "WebP vs JPEG",
+      "AVIF",
+      "image format",
+      "convert image",
+      "HEIC to JPG",
+      "PNG to WebP",
+    ],
     title: "JPEG, PNG or WebP? Pick the right fit.",
     description:
       "A practical guide to choosing an image format for photos, transparent graphics and everyday browser sharing.",
@@ -145,6 +178,16 @@ export const posts: readonly BlogPost[] = [
   },
   {
     slug: "gif-webp-apng-or-video",
+    searchTitle: "GIF, WebP, APNG or video: which to use for animations",
+    keywords: [
+      "GIF converter",
+      "GIF to MP4",
+      "video to GIF",
+      "animated WebP",
+      "APNG",
+      "compress GIF",
+      "GIF for Discord",
+    ],
     title: "GIF, WebP, APNG or video? Choose how it moves.",
     description:
       "A practical guide to choosing a format for an animation: where it will play, what it shows, and how large the file may be.",
@@ -242,6 +285,16 @@ export const posts: readonly BlogPost[] = [
   },
   {
     slug: "merge-pdfs-without-uploading",
+    searchTitle: "How to merge PDF files online for free, without uploading",
+    keywords: [
+      "merge PDF",
+      "combine PDF",
+      "join PDF files",
+      "PDF merger",
+      "merge PDF online free",
+      "rearrange PDF pages",
+      "no upload",
+    ],
     title: "One PDF from many, without the upload.",
     description:
       "How to merge PDF files in your browser: put them in order, arrange single pages, keep links and bookmarks, and decide what a merge should carry over.",
@@ -323,6 +376,16 @@ export const posts: readonly BlogPost[] = [
   },
   {
     slug: "split-pdfs-without-uploading",
+    searchTitle: "How to split a PDF online for free, without uploading",
+    keywords: [
+      "split PDF",
+      "PDF splitter",
+      "extract pages from PDF",
+      "remove pages from PDF",
+      "split PDF by size",
+      "split scanned PDF",
+      "no upload",
+    ],
     title: "Just the pages you need, without the upload.",
     description:
       "How to split a PDF in your browser: cut it where you can see, at bookmarks, by size or at blank pages, and get parts that are no larger than they should be.",
@@ -412,7 +475,125 @@ export const posts: readonly BlogPost[] = [
     ],
   },
   {
+    slug: "compress-pdfs-without-uploading",
+    searchTitle: "How to compress a PDF online without losing quality",
+    keywords: [
+      "compress PDF",
+      "PDF compressor",
+      "reduce PDF size",
+      "compress PDF online free",
+      "compress scanned PDF",
+      "PDF without losing quality",
+      "no upload",
+    ],
+    title: "A smaller PDF, with its words still sharp.",
+    description:
+      "How to make a PDF smaller in your browser: find out what makes it big, shrink its pictures without blurring its text, reach a size limit, and handle scans properly.",
+    category: "A little know-how",
+    readingTime: "7 min read",
+    image: "/images/pdf-compress-guide.svg",
+    imageAlt:
+      "A bar showing that most of a PDF is pictures, and the same file after compressing at a fifth of its size",
+    tool: "pdf-compressor",
+    intro:
+      "A PDF is too big when it bounces off an inbox, or a form says 200 KB and yours is 3 MB. The quick fix many tools reach for is to turn every page into a picture, which makes the file smaller and the text fuzzy, and leaves nothing to select or search. There are better ways. This guide goes through them with the KeepSimp PDF compressor, which does the work in your browser.",
+    sections: [
+      {
+        id: "why-local",
+        title: "Why compress on your own device?",
+        paragraphs: [
+          "The files people need to shrink are often the ones they would least like to hand over: a passport scan for a visa form, payslips for a landlord, a signed contract. An upload service receives the whole document to give a smaller one back.",
+          "A PDF can be compressed entirely in the browser. The file is read from your disk into the page's memory, changed there, and saved back to your disk. Nothing crosses the network, there is no limit on size or number, and it works without a connection once the page has loaded.",
+        ],
+      },
+      {
+        id: "where",
+        title: "First, find out where the size is.",
+        paragraphs: [
+          "A PDF is a container. It holds the text and drawings of its pages, the fonts they are set in, pictures, and often things nobody sees: small previews of every page, data the design app stored so it could reopen its own file, attachments. Which of these is large decides what will help.",
+          "The compressor shows this as soon as a file is added: one bar cut into pictures, fonts, text and the rest, with the heaviest pictures and the pages they are on. In most large files the pictures are nine tenths of the size. In a file saved from a design app with its editing data kept, half the file can be data that no reader ever uses, and it comes out with no visible change at all.",
+          "A file that is mostly text is already small. Text and drawings are stored as instructions, not pixels, and compress very well. If the bar shows almost no pictures, expect little.",
+        ],
+      },
+      {
+        id: "pictures",
+        title: "Shrink the pictures, not the pages.",
+        paragraphs: [
+          "A picture in a PDF has two sizes: how many pixels it holds, and how large it is drawn on the page. A phone photograph has thousands of pixels each way; placed at the width of a column it shows perhaps 150 of them per inch on a screen and could use 300 on a good printer. The rest is weight that cannot be seen.",
+          "So the first step is to bring each picture down to the size it is shown at, and no further. 150 pixels per inch suits screens and office printers. 96 is enough for reading on a screen. A picture drawn in two places has to serve the larger one.",
+          "The second step is how the picture is saved. Photographs are saved as JPEG, and the question is at what quality. Too high wastes space; too low shows blocks and bands, first in skies and soft backgrounds. The compressor measures how alike the result is to the original and uses the lowest quality that still measures the same, with a floor under it for the smooth areas that measuring alone gets wrong.",
+          "Charts, logos and screenshots are different. They have flat colour and hard edges, and JPEG leaves a haze round every edge. They are kept without loss, which for flat colour is often smaller than a JPEG anyway.",
+        ],
+      },
+      {
+        id: "text",
+        title: "Keep text as text.",
+        paragraphs: [
+          "If a compressed PDF comes back with words you can no longer select, the tool turned its pages into pictures. The text is now a photograph of text: blurry when you zoom, invisible to search, silent to a screen reader, and useless for copying a number out of.",
+          "There is no need. Compressing pictures leaves the text exactly where it was, as sharp at any zoom as before. Links keep working, bookmarks keep their places, and form fields can still be filled in. Check for this in whatever tool you use: select a word in the result.",
+        ],
+      },
+      {
+        id: "size",
+        title: "When a form names a size.",
+        paragraphs: [
+          "Upload forms set limits such as 100 KB, 200 KB or 2 MB. The only way to know what a file will weigh at some setting is to write it. So the compressor writes it a few times, from gentle settings to harsh ones, and keeps the gentlest result that fits. You lose as little as the limit takes, not as much as the tool's strongest setting does.",
+          "Some limits cannot be met with pictures that are still easy to read. Then you are told how far over the result is, and can choose to go further and accept blurry pictures, or split the file. If the text and fonts alone are over the limit, no picture setting will get there, and the page says so.",
+        ],
+      },
+      {
+        id: "scans",
+        title: "Scans are a case of their own.",
+        paragraphs: [
+          "A scanned page is one large picture of paper with print on it. Saved as a JPEG it is heavy, and making it smaller blurs the print first, which is the one thing on the page that has to stay sharp.",
+          "The better way takes the page apart. The print becomes a black-and-white layer at the scan's full sharpness, which packs very small. The paper behind it becomes a soft, low-resolution colour picture: paper has no fine detail to lose. The ink keeps its colour, so a red stamp stays red. Put back together the page looks like the scan, at a fraction of its size, and the letters are crisper than a JPEG would leave them. This is how archives store millions of scanned books.",
+          "For plain text, black and white alone is smaller still, like a photocopy. Photographs and shading are lost that way, so it is a choice, not a default.",
+          "One caution. Black-and-white pictures in PDFs are often packed with a method that, in one of its modes, stores a single shape for letters that look alike. Scanners using it have been caught swapping one digit for another on real documents. The compressor only ever uses the mode that stores every pixel as it is.",
+        ],
+      },
+      {
+        id: "check",
+        title: "Look before you send.",
+        paragraphs: [
+          "A smaller file is only useful if it still says what it said. Compare a page of the result with the original at full size, and look where loss shows first: small print inside pictures, faces, skies, signatures. The compressor draws pages both ways and compares them for you, and puts any page side by side under a divider you can drag.",
+          "Keep the original. Compression that loses detail cannot be undone, and compressing a compressed file again loses a little more each time. A careful tool leaves a picture alone once it has saved it, and tells you when a file is already as small as it will get.",
+          "Two things do not survive any change to a file. A digital signature covers the exact bytes it was made for, so it stops being valid. And a file made to an archive standard may no longer pass that standard's check. If either matters, compress first and sign or certify afterwards.",
+        ],
+      },
+    ],
+    sources: [
+      {
+        title: "Optimizing PDFs, Adobe Acrobat help",
+        url: "https://helpx.adobe.com/acrobat/current/optimizing-pdfs-acrobat-pro.html",
+      },
+      {
+        title: "Internet Archive PDF tools: mixed raster content",
+        url: "https://archive-pdf-tools.readthedocs.io/",
+      },
+      {
+        title:
+          "Xerox scanners and photocopiers randomly alter numbers in scanned documents, D. Kriesel",
+        url: "https://www.dkriesel.com/en/blog/2013/0802_xerox-workcentres_are_switching_written_numbers_when_scanning",
+      },
+      {
+        title: "PDF write options: compression and encryption, MuPDF",
+        url: "https://mupdf.readthedocs.io/en/1.28.0/reference/common/pdf-write-options.html",
+      },
+    ],
+  },
+  targetSizePost,
+  {
     slug: "format-json-without-losing-precision",
+    searchTitle:
+      "JSON formatter online: format and validate without losing big numbers",
+    keywords: [
+      "JSON formatter",
+      "JSON validator",
+      "format JSON online",
+      "JSON viewer",
+      "JSON big numbers",
+      "pretty print JSON",
+    ],
     title: "Make JSON readable. Keep the details.",
     description:
       "Format and minify JSON locally while preserving large numbers, escaped strings and the order of your keys.",
@@ -491,3 +672,4 @@ export function findPost(slug: string) {
   return posts.find((post) => post.slug === slug)
 }
 import { jsonPosts } from "./json-blog"
+import { overviewPost, resizePost, targetSizePost } from "./tool-blog"

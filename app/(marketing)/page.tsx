@@ -352,12 +352,12 @@ export default function LandingPage() {
           </div>
         </div>
       </section>
-      <section className="marketing-section" aria-labelledby="journal-heading">
+      <section className="marketing-section" aria-labelledby="blog-heading">
         <div className="marketing-container">
           <div className="mb-9 flex flex-wrap items-end justify-between gap-5">
             <div>
               <p className="eyebrow mb-3 text-primary">A little know-how</p>
-              <h2 id="journal-heading" className="marketing-heading">
+              <h2 id="blog-heading" className="marketing-heading">
                 Good to know. Easy to do.
               </h2>
               <p className="mt-3 text-base text-muted-foreground">
@@ -369,7 +369,7 @@ export default function LandingPage() {
               href="/blog/"
               className="inline-flex min-h-11 items-center gap-2 text-sm font-medium"
             >
-              Visit the journal{" "}
+              Visit the blog{" "}
               <IconArrowUpRight className="size-4" aria-hidden="true" />
             </Link>
           </div>

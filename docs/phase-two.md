@@ -1,12 +1,12 @@
-# Phase two: landing page, journal and working tools
+# Phase two: landing page, blog and working tools
 
 Implemented 10 October 2026. The user confirmed `https://keepsimp.vercel.app/` as the production origin. This phase is built and tested locally; it does not deploy changes to that hosted site.
 
-This report records the original marketing delivery. The later JSON upgrade replaces its initial formatter with six workflows and expands the journal to seven articles; current behavior, limits and verification live in [the JSON workspace reference](json-workspace.md).
+This report records the original marketing delivery. The later JSON upgrade replaces its initial formatter with six workflows and expands the blog to seven articles; current behavior, limits and verification live in [the JSON workspace reference](json-workspace.md).
 
 ## Visitor experience
 
-The homepage now introduces KeepSimp with clear calls to action into `/dashboard/`, an original illustrated identity, a live image-compression demonstration, available tools, a three-step explanation, privacy information, journal previews, keyboard-operable FAQs and a closing action. Marketing uses separate route-group layouts and the version-3 design reference. The dashboard retains the compact single sidebar.
+The homepage now introduces KeepSimp with clear calls to action into `/dashboard/`, an original illustrated identity, a live image-compression demonstration, available tools, a three-step explanation, privacy information, blog previews, keyboard-operable FAQs and a closing action. Marketing uses separate route-group layouts and the version-3 design reference. The dashboard retains the compact single sidebar.
 
 Animations are finite and honor reduced motion. Entry motion keeps text fully opaque, so readability and contrast are preserved during movement. Marketing links load their destination when clicked, avoiding eager tool-bundle downloads and Safari errors when background prefetches are interrupted. Responsive AVIF sources, WebP fallbacks and high-priority hero delivery keep the static site light. The live demo processes an actual sample locally and reports measured sizes rather than invented savings. It exports WebP where canvas export is supported and JPEG otherwise. Browser capability detection disables unavailable WebP export options in the image tools; actual output MIME types are checked before download.
 
@@ -27,11 +27,11 @@ Animations are finite and honor reduced motion. Entry motion keeps text fully op
 
 These are initial tools, not a finished library. Canvas exports can remove metadata, color profiles and animation. Users should keep original files; physical-device media testing and specialist archival/print workflows remain later work.
 
-## Journal and SEO
+## Blog and SEO
 
 Three original articles cover image compression, JPEG/PNG/WebP choices and precision-preserving JSON formatting. They include an author, publication date, reading time, images, table of contents, technical sources, related articles and direct links to the relevant working tools. Their content is statically rendered for readers and crawlers.
 
-Every public page has a distinct title and description, canonical URL, Open Graph metadata and Twitter card. Four 1200 × 630 PNG sharing graphics ship locally. JSON-LD describes WebSite/Organization, BlogPosting, BreadcrumbList and real WebApplication pages; it does not invent ratings, reviews or unsupported functionality. `sitemap.xml` includes only the landing, dashboard, privacy, journal and completed tool/article routes. The noindex design gallery is excluded. `robots.txt` references the sitemap. Vercel preview builds use noindex and disallow crawling; the canonical origin can change through `NEXT_PUBLIC_SITE_URL`.
+Every public page has a distinct title and description, canonical URL, Open Graph metadata and Twitter card. Four 1200 × 630 PNG sharing graphics ship locally. JSON-LD describes WebSite/Organization, BlogPosting, BreadcrumbList and real WebApplication pages; it does not invent ratings, reviews or unsupported functionality. `sitemap.xml` includes only the landing, dashboard, privacy, blog and completed tool/article routes. The noindex design gallery is excluded. `robots.txt` references the sitemap. Vercel preview builds use noindex and disallow crawling; the canonical origin can change through `NEXT_PUBLIC_SITE_URL`.
 
 The implementation follows Google's emphasis on useful content, clear organization and descriptive metadata. SEO work improves crawlability and relevance; rankings and rich-result appearances are not guaranteed. Search Console property ownership, sitemap submission and real visitor performance monitoring require the user's account and deployment. [Google SEO starter guide](https://developers.google.com/search/docs/fundamentals/seo-starter-guide), [Google Article markup](https://developers.google.com/search/docs/appearance/structured-data/article)
 
@@ -42,7 +42,7 @@ Technical article references include [MDN canvas exports](https://developer.mozi
 Two original images were created with the built-in image-generation tool. They illustrate the product; the coast is a generated sample, not a claim about a real photographed location. Web exports are saved in the repository:
 
 - `public/images/coastline.jpg`: full sample used for actual image processing. `coastline-display.webp` is the 960px fallback used on visible pages, with 640px and 960px AVIF sources.
-- `public/images/private-workspace.webp`: an optimized 1400px editorial feature and journal image, with 640px and 1400px AVIF sources.
+- `public/images/private-workspace.webp`: an optimized 1400px editorial feature and blog image, with 640px and 1400px AVIF sources.
 - `public/images/json-guide.svg`: a native vector explanation of JSON indentation, authored directly to match the established brand.
 - `public/images/social/`: four branded PNG sharing graphics exported with the local fonts by `scripts/social-images.mjs`.
 

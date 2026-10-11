@@ -33,7 +33,7 @@ const cards = [
   [
     "compress-images-without-uploading",
     "A lighter image, without the upload.",
-    "Practical notes from the KeepSimp journal",
+    "Practical notes from the KeepSimp blog",
     "/images/coastline.jpg",
   ],
   [
@@ -71,6 +71,30 @@ const cards = [
     "Just the pages you need.",
     "Split a PDF where you can see, without the upload.",
     "/images/pdf-split-guide.svg",
+  ],
+  [
+    "compress-pdfs-without-uploading",
+    "A smaller PDF, still sharp.",
+    "Compress a PDF without blurring its words.",
+    "/images/pdf-compress-guide.svg",
+  ],
+  [
+    "free-online-tools-no-upload",
+    "Eight free tools. No uploads.",
+    "PDFs, images, GIFs and JSON, all in your browser.",
+    "/images/tools-overview.svg",
+  ],
+  [
+    "resize-images-without-uploading",
+    "The right size, every time.",
+    "Resize images in pixels, cm or for print.",
+    "/images/image-resize-guide.svg",
+  ],
+  [
+    "compress-pdf-to-200kb",
+    "Under 200 KB. Still readable.",
+    "Compress a PDF to the size a form asks for.",
+    "/images/pdf-size-guide.svg",
   ],
   [
     "repair-compare-json-patch",

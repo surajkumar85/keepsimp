@@ -3,6 +3,14 @@ import type { BlogPost } from "./blog"
 export const jsonPosts: readonly BlogPost[] = [
   {
     slug: "jsonpath-json-pointer-find-data",
+    searchTitle: "JSONPath and JSON Pointer explained, with an online tester",
+    keywords: [
+      "JSONPath",
+      "JSON Pointer",
+      "JSONPath tester",
+      "query JSON online",
+      "JSON search",
+    ],
     title: "Find the JSON you need with JSONPath and Pointer.",
     description:
       "Query nested JSON with JSONPath, select an exact value with JSON Pointer, and export results without rounding large IDs.",
@@ -62,6 +70,15 @@ export const jsonPosts: readonly BlogPost[] = [
   },
   {
     slug: "repair-compare-json-patch",
+    searchTitle:
+      "Repair broken JSON, compare two files and apply JSON Patch online",
+    keywords: [
+      "repair JSON",
+      "fix invalid JSON",
+      "JSON diff",
+      "compare JSON",
+      "JSON Patch",
+    ],
     title: "Repair, compare and patch JSON with a preview.",
     description:
       "Review JSON repairs, compare values instead of whitespace, and generate or apply all six JSON Patch operations locally.",
@@ -124,6 +141,15 @@ export const jsonPosts: readonly BlogPost[] = [
   },
   {
     slug: "validate-json-schema-locally",
+    searchTitle:
+      "JSON Schema validator online that keeps your data on your device",
+    keywords: [
+      "JSON Schema validator",
+      "validate JSON",
+      "JSON Schema online",
+      "Ajv",
+      "schema errors",
+    ],
     title: "Check your JSON against a schema, locally.",
     description:
       "Validate JSON Schema draft-07, 2019-09 and 2020-12, inspect error paths, use local references, and infer a starting schema.",
@@ -183,6 +209,15 @@ export const jsonPosts: readonly BlogPost[] = [
   },
   {
     slug: "convert-json-yaml-csv-typescript",
+    searchTitle:
+      "Convert JSON to YAML, CSV, JSON Lines or TypeScript types online",
+    keywords: [
+      "JSON to YAML",
+      "JSON to CSV",
+      "JSON to TypeScript",
+      "JSON Lines",
+      "convert JSON online",
+    ],
     title: "Take JSON into YAML, CSV, JSON Lines and TypeScript.",
     description:
       "Convert JSON locally, keep CSV identifiers as strings, review spreadsheet formula protection, and generate sample types and schemas.",

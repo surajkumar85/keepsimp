@@ -18,14 +18,16 @@ export async function generateMetadata({
 }) {
   const post = findPost((await params).slug)
   if (!post) notFound()
+  // The tab and search results get the question a person types; the page keeps its own heading.
   const base = pageMetadata(
-    post.title,
+    post.searchTitle ?? post.title,
     post.description,
     `/blog/${post.slug}/`,
     `/images/social/${post.slug}.png`
   )
   return {
     ...base,
+    keywords: post.keywords,
     openGraph: {
       ...base.openGraph,
       type: "article",
@@ -53,7 +55,9 @@ export default async function ArticlePage({
               "@type": "BlogPosting",
               "@id": `${url}#article`,
               headline: post.title,
+              alternativeHeadline: post.searchTitle,
               description: post.description,
+              keywords: post.keywords?.join(", "),
               image: [absoluteUrl(`/images/social/${post.slug}.png`)],
               datePublished: site.updated,
               dateModified: site.updated,
@@ -84,7 +88,7 @@ export default async function ArticlePage({
                 {
                   "@type": "ListItem",
                   position: 2,
-                  name: "Journal",
+                  name: "Blog",
                   item: absoluteUrl("/blog/"),
                 },
                 {
@@ -106,7 +110,7 @@ export default async function ArticlePage({
             className="mb-6 inline-flex min-h-11 items-center gap-2 text-sm text-muted-foreground"
           >
             <IconArrowLeft className="size-4" aria-hidden="true" /> Back to the
-            journal
+            blog
           </Link>
           <div className="max-w-3xl">
             <p className="eyebrow mb-4 text-primary">{post.category}</p>
@@ -173,6 +177,39 @@ export default async function ArticlePage({
                 {section.paragraphs.map((paragraph) => (
                   <p key={paragraph}>{paragraph}</p>
                 ))}
+                {section.links && (
+                  <ul className="mt-4 space-y-1 text-base">
+                    {section.links.map((link) => (
+                      <li key={link.href}>
+                        {link.href.startsWith("/") ? (
+                          <Link
+                            prefetch={false}
+                            href={link.href}
+                            className="inline-flex min-h-11 items-center gap-1.5 md:min-h-9"
+                          >
+                            {link.label}
+                            <IconArrowUpRight
+                              className="size-4 shrink-0"
+                              aria-hidden="true"
+                            />
+                          </Link>
+                        ) : (
+                          <a
+                            href={link.href}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex min-h-11 items-center md:min-h-9"
+                          >
+                            {link.label}{" "}
+                            <span className="sr-only">
+                              (opens in a new tab)
+                            </span>
+                          </a>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                )}
                 {section.example && (
                   <figure className="my-6 min-w-0 rounded-lg border bg-marketing-surface p-4">
                     <figcaption className="mb-3 text-sm font-medium">
@@ -202,6 +239,12 @@ export default async function ArticlePage({
                 ))}
               </ul>
             </section>
+            {post.keywords && (
+              <p className="mt-8! text-sm!" data-testid="topics">
+                <span className="font-medium text-foreground">Topics:</span>{" "}
+                {post.keywords.join(" · ")}
+              </p>
+            )}
             <div className="mt-10 rounded-xl border bg-marketing-surface p-6">
               <h2 className="mt-0! text-2xl!">
                 A little less theory. A little more doing.
@@ -211,13 +254,17 @@ export default async function ArticlePage({
               </p>
               <Link
                 prefetch={false}
-                href={`/dashboard/${post.tool}/${post.toolAnchor ? `#${post.toolAnchor}` : ""}`}
+                href={
+                  post.tool
+                    ? `/dashboard/${post.tool}/${post.toolAnchor ? `#${post.toolAnchor}` : ""}`
+                    : "/dashboard/"
+                }
                 className={buttonVariants({
                   size: "lg",
                   className: "mt-4 gap-2",
                 })}
               >
-                Try the tool{" "}
+                {post.tool ? "Try the tool" : "Open the tools"}{" "}
                 <IconArrowUpRight className="size-4" aria-hidden="true" />
               </Link>
             </div>

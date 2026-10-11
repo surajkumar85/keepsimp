@@ -94,7 +94,7 @@ test("JSON formatting validates input and preserves precision in the download", 
   await expect(input.locator(".cm-placeholder")).toBeVisible()
 })
 
-test("journal articles have crawlable content, accurate metadata and working tool links", async ({
+test("blog articles have crawlable content, accurate metadata and working tool links", async ({
   page,
 }) => {
   test.setTimeout(90_000)
@@ -103,6 +103,14 @@ test("journal articles have crawlable content, accurate metadata and working too
   for (const post of posts) {
     await page.goto(`/blog/${post.slug}/`, { waitUntil: "domcontentloaded" })
     await expect(page.getByRole("heading", { level: 1 })).toHaveText(post.title)
+    // The tab says what people search for, where an article has such a title.
+    await expect(page).toHaveTitle(
+      new RegExp(
+        (post.searchTitle ?? post.title).replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+      )
+    )
+    if (post.keywords)
+      await expect(page.getByTestId("topics")).toContainText(post.keywords[0])
     await expect(page.locator('link[rel="canonical"]')).toHaveAttribute(
       "href",
       `https://keepsimp.vercel.app/blog/${post.slug}/`
@@ -127,11 +135,24 @@ test("journal articles have crawlable content, accurate metadata and working too
       .first()
       .click()
     await expect(page).toHaveURL(new RegExp(`#${post.sections[0].id}$`))
-    await page.getByRole("link", { name: "Try the tool", exact: true }).click()
+    // Links inside the article lead to pages of this site that are there.
+    const inside = page.locator(".article-copy section ul a[href^='/']")
+    for (const href of await inside.evaluateAll((links) =>
+      links.map((link) => link.getAttribute("href")!)
+    ))
+      expect((await page.request.get(href)).ok(), href).toBe(true)
+    await page
+      .getByRole("link", {
+        name: post.tool ? "Try the tool" : "Open the tools",
+        exact: true,
+      })
+      .click()
     await expect(page).toHaveURL(
-      new RegExp(
-        `/dashboard/${post.tool}/${post.toolAnchor ? `#${post.toolAnchor}` : ""}$`
-      )
+      post.tool
+        ? new RegExp(
+            `/dashboard/${post.tool}/${post.toolAnchor ? `#${post.toolAnchor}` : ""}$`
+          )
+        : /\/dashboard\/$/
     )
     if (post.toolAnchor)
       await expect(

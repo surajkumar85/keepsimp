@@ -710,11 +710,77 @@ test("stays accessible, local and responsive", async ({ page }) => {
   expect(errors).toEqual([])
 })
 
-test("the written help is there", async ({ page }) => {
+test("the tutorial video, captions, written help and guide are available", async ({
+  page,
+  request,
+}) => {
   await page.goto(ROUTE)
   const help = page.getByRole("region", { name: "A little help along the way" })
+  const video = help.locator("video")
+  await expect(video).toHaveAttribute(
+    "poster",
+    "/videos/pdf-compressor-tutorial-poster.webp"
+  )
+  await expect(video).toHaveAttribute("preload", "none")
+  for (const [path, type] of [
+    ["/videos/pdf-compressor-tutorial.mp4", "video/mp4"],
+    ["/videos/pdf-compressor-tutorial-poster.webp", "image/webp"],
+    ["/videos/pdf-compressor-tutorial.vtt", "text/vtt"],
+  ]) {
+    const response = await request.get(path)
+    expect(response.ok()).toBe(true)
+    expect(response.headers()["content-type"]).toContain(type)
+  }
+  const captions = await (
+    await request.get("/videos/pdf-compressor-tutorial.vtt")
+  ).text()
+  expect(captions.startsWith("WEBVTT")).toBe(true)
+  expect(captions).toContain("Step 2 of 6: See what makes it big")
+  expect(captions).toContain("Step 6 of 6: Download")
   await expect(help.locator("#tutorial-steps > li")).toHaveCount(6)
   await help.getByText("Every option explained").click()
   await expect(help).toContainText("Pages are not turned into pictures.")
   await expect(help).toContainText("Nothing is uploaded")
+  const guide = help.getByRole("link", { name: /guide/i })
+  await expect(guide).toHaveAttribute(
+    "href",
+    "/blog/compress-pdfs-without-uploading/"
+  )
+  await page.goto("/blog/compress-pdfs-without-uploading/")
+  await expect(
+    page.getByRole("heading", {
+      level: 1,
+      name: "A smaller PDF, with its words still sharp.",
+    })
+  ).toBeVisible()
+  // The guide leads back to the tool.
+  await expect(
+    page.locator('a[href="/dashboard/pdf-compressor/"]').first()
+  ).toBeVisible()
+})
+
+test("the scanned sample is rebuilt with its letters sharp and its words in place", async ({
+  page,
+}) => {
+  await page.goto(ROUTE)
+  await page.getByRole("button", { name: "Try a scanned page" }).click()
+  await expect(tool(page)).toHaveAttribute("data-ready", "true", {
+    timeout: 60_000,
+  })
+  await expect(page.getByTestId("file-row")).toContainText("keepsimp-scan.pdf")
+  await page
+    .getByRole("radiogroup", { name: "Scanned pages" })
+    .getByRole("radio", { name: "Text and paper" })
+    .click()
+  await compress(page)
+  await expect(page.getByTestId("changes")).toContainText(
+    "1 scanned page rebuilt as sharp letters over soft paper."
+  )
+  const saved = Number.parseInt(
+    await page.getByTestId("saving").innerText(),
+    10
+  )
+  expect(saved).toBeGreaterThanOrEqual(85)
+  const got = await download(page)
+  expect((await texts(got.bytes))[0]).toContain("Rental agreement")
 })

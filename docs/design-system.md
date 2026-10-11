@@ -65,7 +65,7 @@ The search (`components/tool-search.tsx`) lives in the middle of the header on e
 
 ### Marketing pages
 
-The homepage is a separate landing page, with the workspace moved to `/dashboard/`. Landing, journal and privacy routes use a shared marketing header/footer without a sidebar. Width is capped at 1152px, with 24px desktop gutters and 16px mobile gutters. The header is 72px high. Sections use 88px vertical padding on desktop and 56px on mobile; this storytelling layout does not change workspace density.
+The homepage is a separate landing page, with the workspace moved to `/dashboard/`. Landing, blog and privacy routes use a shared marketing header/footer without a sidebar. Width is capped at 1152px, with 24px desktop gutters and 16px mobile gutters. The header is 72px high. Sections use 88px vertical padding on desktop and 56px on mobile; this storytelling layout does not change workspace density.
 
 Use `marketing-surface` for a quiet warm background in light mode and a subdued teal charcoal in dark mode. Outfit display headings use 72/76px desktop and 44/48px mobile. Marketing section headings use 40/46px desktop and 32/38px mobile. Explanatory text uses 16px and supporting copy 14px. Hero actions use the existing 48px large button; header actions retain 44px targets.
 

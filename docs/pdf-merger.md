@@ -184,7 +184,7 @@ npx serve out --listen tcp://127.0.0.1:4180
 KEEPSIMP_PREVIEW_URL=http://127.0.0.1:4180 npm run tutorial:video -- pdf-merger
 ```
 
-The page sets `data-settled` on its root when nothing is being read or merged; the recorder waits on it. If the length changes, update `video.duration` in `components/pdf-merger/tutorial.tsx` and the tutorial test. The journal article "One PDF from many, without the upload." (`lib/blog.ts`) is the written guide the help section links to; its artwork is `public/images/pdf-merge-guide.svg`.
+The page sets `data-settled` on its root when nothing is being read or merged; the recorder waits on it. If the length changes, update `video.duration` in `components/pdf-merger/tutorial.tsx` and the tutorial test. The blog article "One PDF from many, without the upload." (`lib/blog.ts`) is the written guide the help section links to; its artwork is `public/images/pdf-merge-guide.svg`.
 
 ## Other documents as pages
 

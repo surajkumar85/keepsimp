@@ -22,7 +22,7 @@ export interface TutorialContent {
   intro: string
   steps: { title: string; text: string }[]
   options: { term: string; detail: string }[]
-  /** The journal article that goes with the tool, once it is written. */
+  /** The blog article that goes with the tool, once it is written. */
   guideHref?: string
 }
 

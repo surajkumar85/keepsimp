@@ -31,7 +31,7 @@ export function MarketingShell({ children }: { children: React.ReactNode }) {
               How it works
             </Link>
             <Link prefetch={false} href="/blog/" className="nav-link">
-              The journal
+              Blog
             </Link>
           </nav>
           <div className="flex items-center gap-2">
@@ -74,7 +74,7 @@ export function MarketingShell({ children }: { children: React.ReactNode }) {
                 All tools
               </Link>
               <Link prefetch={false} href="/blog/" className="nav-link">
-                Journal
+                Blog
               </Link>
               <Link prefetch={false} href="/privacy/" className="nav-link">
                 Privacy

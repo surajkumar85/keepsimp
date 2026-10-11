@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 600" role="img" aria-labelledby="title desc">
+  <title id="title">Resize an image</title><desc id="desc">One wide photograph and three smaller copies of it in different shapes, each keeping the same subject in view.</desc>
+  <rect width="900" height="600" rx="24" fill="#f5f5f0"/>
+  <defs><linearGradient id="sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3f73c4"/><stop offset="1" stop-color="#f3cf9c"/></linearGradient><clipPath id="a"><rect x="60" y="70" width="460" height="300" rx="14"/></clipPath><clipPath id="b"><rect x="570" y="70" width="270" height="270" rx="14"/></clipPath><clipPath id="c"><rect x="570" y="380" width="150" height="150" rx="12"/></clipPath><clipPath id="d"><rect x="60" y="410" width="460" height="120" rx="12"/></clipPath></defs>
+  <g clip-path="url(#a)"><rect x="60" y="70" width="460" height="300" fill="url(#sky)"/><circle cx="330" cy="190" r="46" fill="#fff3d6"/><path d="M60 290 q90 -70 180 -20 t170 -10 t110 20 v90 h-460z" fill="#3f7a66"/><path d="M60 330 q110 -50 230 -10 t230 -10 v60 h-460z" fill="#1f4d40"/></g>
+  <g clip-path="url(#b)"><rect x="570" y="70" width="270" height="270" fill="url(#sky)"/><circle cx="705" cy="180" r="42" fill="#fff3d6"/><path d="M500 262 q90 -64 180 -18 t170 -10 t110 18 v90 h-460z" fill="#3f7a66"/><path d="M500 298 q110 -46 230 -10 t230 -8 v60 h-460z" fill="#1f4d40"/></g>
+  <g clip-path="url(#c)"><rect x="570" y="380" width="150" height="150" fill="url(#sky)"/><circle cx="645" cy="442" r="23" fill="#fff3d6"/><path d="M530 488 q50 -36 100 -10 t95 -6 t60 10 v50 h-255z" fill="#3f7a66"/><path d="M530 508 q62 -26 128 -6 t128 -4 v34 h-256z" fill="#1f4d40"/></g>
+  <g clip-path="url(#d)"><rect x="60" y="410" width="460" height="120" fill="url(#sky)"/><circle cx="330" cy="462" r="24" fill="#fff3d6"/><path d="M60 496 q90 -34 180 -10 t170 -6 t110 10 v50 h-460z" fill="#3f7a66"/><path d="M60 514 q110 -24 230 -6 t230 -4 v30 h-460z" fill="#1f4d40"/></g>
+  <g fill="none" stroke="#00786f" stroke-width="2"><rect x="570" y="70" width="270" height="270" rx="14"/><rect x="570" y="380" width="150" height="150" rx="12"/><rect x="60" y="410" width="460" height="120" rx="12"/></g>
+  <g font-family="monospace" font-size="16" fill="#0a0a0a"><text x="60" y="58">4000 × 2600</text><text x="570" y="58">1080 × 1080</text><text x="734" y="462">512 × 512</text><text x="60" y="398">1500 × 400</text></g>
+  <g font-family="sans-serif" font-size="14" fill="#525252"><text x="734" y="486">icon</text></g>
+</svg>

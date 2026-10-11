@@ -177,7 +177,7 @@ KEEPSIMP_PREVIEW_URL=http://127.0.0.1:4180 npm run tutorial:video -- animation-c
 
 The recorder asks for reduced motion, so the preview stays on single frames and nothing moves on its own between screenshots. If the length changes, update `video.duration` in `components/animation-converter/tutorial.tsx` and the tutorial test. A frame-by-frame scan of this render found no pulses in static text.
 
-The journal article "GIF, WebP, APNG or video?" (`lib/blog.ts`) is the written guide the help section links to.
+The blog article "GIF, WebP, APNG or video?" (`lib/blog.ts`) is the written guide the help section links to.
 
 ## Samples
 
