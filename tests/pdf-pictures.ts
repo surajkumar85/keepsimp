@@ -1,0 +1,271 @@
+/**
+ * Pictures for PDF tests, and a way to read them back out of a file with
+ * pdf.js, which shares no code with the engine that compresses them.
+ */
+import {
+  PDFDocument,
+  PDFName,
+  StandardFonts,
+  type PDFPage,
+  type PDFRef,
+} from "@cantoo/pdf-lib"
+import { getDocument, OPS } from "pdfjs-dist/legacy/build/pdf.mjs"
+import { encodeImage } from "@/lib/image-compressor/codecs"
+import type { Pixels } from "@/lib/image-compressor/ssim"
+
+/** A picture like a photograph: soft shapes with grain all over. */
+export function scene(width: number, height: number, seed = 1): Pixels {
+  const data = new Uint8ClampedArray(width * height * 4)
+  let state = seed * 2654435761
+  for (let y = 0; y < height; y++)
+    for (let x = 0; x < width; x++) {
+      state = (Math.imul(state, 1103515245) + 12345) | 0
+      const grain = ((state >>> 16) % 8) - 4
+      const at = (y * width + x) * 4
+      data[at] = 128 + 90 * Math.sin(x / 37 + seed) + grain
+      data[at + 1] = 128 + 90 * Math.sin(y / 29 + x / 113) + grain
+      data[at + 2] = 128 + 90 * Math.cos((x + y) / 53) + grain
+      data[at + 3] = 255
+    }
+  return { data, width, height }
+}
+
+/** A picture like a chart: flat blocks of a few colours with hard edges. */
+export function chart(width: number, height: number): Pixels {
+  const data = new Uint8ClampedArray(width * height * 4)
+  const colours = [
+    [255, 255, 255],
+    [20, 110, 120],
+    [230, 90, 40],
+    [40, 40, 40],
+  ]
+  for (let y = 0; y < height; y++)
+    for (let x = 0; x < width; x++) {
+      const band = Math.floor((x * 8) / width)
+      const tall = height * (0.2 + 0.1 * band)
+      const colour = y > height - tall ? colours[1 + (band % 3)] : colours[0]
+      data.set([...colour, 255], (y * width + x) * 4)
+    }
+  return { data, width, height }
+}
+
+/** A picture in shades of grey only. */
+export function greyScene(width: number, height: number, seed = 1): Pixels {
+  const pixels = scene(width, height, seed)
+  for (let at = 0; at < pixels.data.length; at += 4)
+    pixels.data[at + 1] = pixels.data[at + 2] = pixels.data[at]
+  return pixels
+}
+
+const settings = (quality: number) => ({
+  quality,
+  lossless: true,
+  effort: "fast" as const,
+  chroma444: false,
+  progressive: false,
+  colors: 256,
+  dithering: false,
+})
+
+export const jpegOf = async (pixels: Pixels, quality = 92) =>
+  new Uint8Array(await encodeImage("jpeg", pixels, settings(quality)))
+
+export const pngOf = async (pixels: Pixels) =>
+  new Uint8Array(await encodeImage("png", pixels, settings(100)))
+
+export interface Placed {
+  bytes: Uint8Array
+  type: "jpeg" | "png"
+  /** How wide it is drawn, in points; its height follows its shape. */
+  width: number
+  /** Page number from 1; the first page when left out. */
+  page?: number
+  /** Draw it a second time, this wide. */
+  again?: number
+}
+
+/** The text every page of a picture file carries. */
+export const pictureText = (page: number) => `pictures-P${page}`
+
+/** A4 pages that each say `pictureText`, with the pictures drawn where asked. */
+export async function makePicturePdf(
+  pictures: readonly Placed[],
+  pages = 1,
+  password?: string
+) {
+  const doc = await PDFDocument.create()
+  const font = await doc.embedFont(StandardFonts.Helvetica)
+  const sheets = Array.from({ length: pages }, (_, index) => {
+    const page = doc.addPage([595, 842])
+    page.drawText(pictureText(index + 1), { x: 40, y: 800, size: 14, font })
+    return { page, top: 780 }
+  })
+  for (const picture of pictures) {
+    const image =
+      picture.type === "jpeg"
+        ? await doc.embedJpg(picture.bytes)
+        : await doc.embedPng(picture.bytes)
+    const sheet = sheets[(picture.page ?? 1) - 1]
+    const height = (picture.width * image.height) / image.width
+    sheet.top -= height + 10
+    sheet.page.drawImage(image, {
+      x: 40,
+      y: sheet.top,
+      width: picture.width,
+      height,
+    })
+    if (picture.again)
+      sheet.page.drawImage(image, {
+        x: 300,
+        y: 20,
+        width: picture.again,
+        height: (picture.again * image.height) / image.width,
+      })
+  }
+  if (password)
+    doc.encrypt({ userPassword: password, ownerPassword: `${password}-owner` })
+  return doc.save({ useObjectStreams: false })
+}
+
+/** A picture stored in a file by hand, and how large it is drawn in points. */
+export interface Drawn {
+  ref: PDFRef
+  width: number
+  height: number
+}
+
+/**
+ * One A4 page that says `pictureText(1)` and draws pictures built straight
+ * from PDF objects, for the kinds of picture pdf-lib does not make itself.
+ * @param after A last word on the document and its page.
+ */
+export async function makeDrawnPdf(
+  build: (doc: PDFDocument) => Drawn[],
+  after?: (doc: PDFDocument, page: PDFPage) => void
+) {
+  const doc = await PDFDocument.create()
+  const font = await doc.embedFont(StandardFonts.Helvetica)
+  const page = doc.addPage([595, 842])
+  page.drawText(pictureText(1), { x: 40, y: 800, size: 14, font })
+  const names: Record<string, PDFRef> = {}
+  let content = ""
+  let top = 780
+  for (const [index, picture] of build(doc).entries()) {
+    top -= picture.height + 10
+    names[`P${index}`] = picture.ref
+    content += `q ${picture.width} 0 0 ${picture.height} 40 ${top} cm /P${index} Do Q\n`
+  }
+  page.node.Resources()!.set(PDFName.of("XObject"), doc.context.obj(names))
+  page.node.addContentStream(doc.context.register(doc.context.stream(content)))
+  after?.(doc, page)
+  return doc.save({ useObjectStreams: false })
+}
+
+/** What every picture's description starts with. */
+export const pictureDict = (width: number, height: number, bits = 8) => ({
+  Type: "XObject",
+  Subtype: "Image",
+  Width: width,
+  Height: height,
+  BitsPerComponent: bits,
+})
+
+/**
+ * A colour picture stored in a document without loss, as a design app or a
+ * scanner's software would leave it. No picture codec is needed to make it.
+ */
+export function storeRgb(doc: PDFDocument, pixels: Pixels) {
+  const rgb = new Uint8Array(pixels.width * pixels.height * 3)
+  for (let index = 0; index < pixels.width * pixels.height; index++)
+    rgb.set(pixels.data.subarray(index * 4, index * 4 + 3), index * 3)
+  return doc.context.register(
+    doc.context.flateStream(rgb, {
+      ...pictureDict(pixels.width, pixels.height),
+      ColorSpace: "DeviceRGB",
+    })
+  )
+}
+
+/** Bytes that do not compress, the same for the same seed. */
+export function noiseBytes(length: number, seed = 7) {
+  const out = new Uint8Array(length)
+  let state = seed
+  for (let index = 0; index < length; index++) {
+    state = (Math.imul(state, 1103515245) + 12345) >>> 0
+    out[index] = state >>> 24
+  }
+  return out
+}
+
+export interface ReadPicture extends Pixels {
+  /** Page number from 1. */
+  page: number
+}
+
+type PdfImage = {
+  width: number
+  height: number
+  kind: number
+  data: Uint8Array | Uint8ClampedArray
+}
+
+/** pdf.js's three ways of handing pixels over, as RGBA. */
+function toRgba(image: PdfImage) {
+  const { width, height, data, kind } = image
+  const out = new Uint8ClampedArray(width * height * 4)
+  for (let index = 0; index < width * height; index++) {
+    const to = index * 4
+    if (kind === 3) out.set(data.subarray(to, to + 4), to)
+    else if (kind === 2) {
+      out.set(data.subarray(index * 3, index * 3 + 3), to)
+      out[to + 3] = 255
+    } else {
+      // One bit a pixel, rows padded to whole bytes.
+      const row = Math.floor(index / width)
+      const column = index % width
+      const byte = data[row * Math.ceil(width / 8) + (column >> 3)]
+      const value = (byte >> (7 - (column & 7))) & 1 ? 255 : 0
+      out[to] = out[to + 1] = out[to + 2] = value
+      out[to + 3] = 255
+    }
+  }
+  return out
+}
+
+/** Every picture the pages of a file paint, in order, as pdf.js decodes them. */
+export async function readPictures(bytes: Uint8Array, password?: string) {
+  const doc = await getDocument({
+    data: bytes.slice(),
+    password,
+    verbosity: 0,
+    useSystemFonts: false,
+    isOffscreenCanvasSupported: false,
+    isImageDecoderSupported: false,
+    // Black-and-white packings are decoded by a module pdf.js loads from here.
+    wasmUrl: "node_modules/pdfjs-dist/wasm/",
+  }).promise
+  try {
+    const pictures: ReadPicture[] = []
+    for (let number = 1; number <= doc.numPages; number++) {
+      const page = await doc.getPage(number)
+      const operators = await page.getOperatorList()
+      for (const [index, operator] of operators.fnArray.entries()) {
+        if (operator !== OPS.paintImageXObject) continue
+        const name = operators.argsArray[index][0] as string
+        const store = name.startsWith("g_") ? page.commonObjs : page.objs
+        const image = await new Promise<PdfImage>((resolve) =>
+          store.get(name, resolve)
+        )
+        pictures.push({
+          page: number,
+          width: image.width,
+          height: image.height,
+          data: toRgba(image),
+        })
+      }
+    }
+    return pictures
+  } finally {
+    await doc.loadingTask.destroy()
+  }
+}

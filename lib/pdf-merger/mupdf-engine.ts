@@ -333,13 +333,21 @@ export function openPicture(
 }
 
 /** One page as a picture, at most `maxEdge` pixels on its longer side. */
-export function renderPage(
+export const renderPage = (
   mupdf: Engine,
   opened: OpenedPdf,
   index: number,
   maxEdge: number
+) => drawPage(mupdf, opened.doc, index, maxEdge)
+
+/** One page of any document the engine holds, as a picture. */
+export function drawPage(
+  mupdf: Engine,
+  doc: Doc,
+  index: number,
+  maxEdge: number
 ) {
-  const page = opened.doc.loadPage(index)
+  const page = doc.loadPage(index)
   try {
     const [left, top, right, bottom] = page.getBounds()
     const scale = maxEdge / Math.max(right - left, bottom - top, 1)

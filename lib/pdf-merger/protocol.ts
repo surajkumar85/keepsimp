@@ -1,4 +1,7 @@
 import type { Rotation, Size } from "@/lib/image-compressor/geometry"
+import type { Audit } from "@/lib/pdf-compressor/mupdf-audit"
+import type { CompressReport, Stage } from "@/lib/pdf-compressor/mupdf-compress"
+import type { Level } from "@/lib/pdf-compressor/settings"
 import type { PageText, Quad } from "@/lib/pdf-reader/text"
 import type { HalveChoice } from "@/lib/pdf-splitter/halves"
 import type { Area } from "@/lib/pdf-splitter/text-rule"
@@ -121,6 +124,22 @@ export type PdfRequest =
    * as it was. The file keeps its id and is answered as newly opened.
    */
   | { type: "halve"; id: string; choice: HalveChoice | null }
+  /** What an open file's bytes are spent on. `size` is the file's size in bytes. */
+  | { type: "audit"; id: string; request: number; size: number }
+  /**
+   * Compress a file. It is sent once more as it is: the copy that is open
+   * must stay untouched, since "before" is drawn from it.
+   */
+  | {
+      type: "compress"
+      job: number
+      id: string
+      file: Blob
+      password?: string
+      level: Level
+      /** Pictures with more pixels than this are left as they are. */
+      maxPixels: number
+    }
   | { type: "cancel"; job: number }
 
 export type PdfResponse =
@@ -186,4 +205,16 @@ export type PdfResponse =
       total: number
     }
   | { type: "split-error"; job: number; message: string }
+  /** Null when the file is not open or cannot be gone through. */
+  | { type: "audit"; request: number; audit: Audit | null }
+  /** How far a compression is, and in which part of the work. */
+  | { type: "stage"; job: number; stage: Stage; done: number; total: number }
+  /** `bytes` is null when the file is already as small: the original is the answer. */
+  | {
+      type: "compressed"
+      job: number
+      bytes: ArrayBuffer | null
+      report: CompressReport
+    }
+  | { type: "compress-error"; job: number; message: string }
   | { type: "cancelled"; job: number }

@@ -165,6 +165,10 @@ Area pickers (`AreaPicker` in `components/pdf-splitter/scan-panel.tsx`) mark par
 
 A value that is costly to apply (the cut line in `HalvePanel`) uses the adjustment-slider rules with one change: the label shows the value while the slider moves, and the change is applied when the slider is let go, on pointer up, key up or blur.
 
+Breakdowns (`components/pdf-compressor/audit-card.tsx`) show what a whole is made of: one 12px bar with a pill radius, cut into parts with a hairline gap, and under it a list with a dot of the same shade, the name, the size in tabular figures and the share in medium weight. Parts are shaded with `chart-5` to `chart-1`, darkest for the largest; what cannot be told apart is `muted-foreground` at 40%. The bar is an image whose name lists every part with its percentage, so the list and the bar say the same thing. Category colours are not used here.
+
+A page compared before and after (`components/pdf-compressor/compare-view.tsx`) reuses the comparison slider of the image compressor, with ghost icon buttons to step through pages around "Page 2 of 14" in tabular figures. Pages that need a look are offered as chips with `aria-pressed`. A headline number (the saving) is set in the heading face at `text-3xl`, with the sizes it is made of on the line below.
+
 Lists to tick (the bookmarks in `components/pdf-splitter/rules-panel.tsx`) are a `fieldset` with its count in the legend and "Tick all" and "Untick all" beside it, holding rows of native checkboxes with the `primary` accent. The whole row is the label, at least 44px/36px tall, with the title on the left and a monospace number on the right, inside a `rounded-lg` border that scrolls after 288px.
 
 Crop overlays dim the excluded area with a `background` veil, show rule-of-thirds guides and eight handles with 44px/28px hit areas, and pair the box with exact pixel fields. The image compressor reference is `docs/image-compressor.md`.

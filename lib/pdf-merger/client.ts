@@ -1,6 +1,9 @@
 "use client"
 
 import type { Size } from "@/lib/image-compressor/geometry"
+import type { Audit } from "@/lib/pdf-compressor/mupdf-audit"
+import type { CompressReport, Stage } from "@/lib/pdf-compressor/mupdf-compress"
+import type { Level } from "@/lib/pdf-compressor/settings"
 import type { PageText, Quad } from "@/lib/pdf-reader/text"
 import type { HalveChoice } from "@/lib/pdf-splitter/halves"
 import type { Area } from "@/lib/pdf-splitter/text-rule"
@@ -67,6 +70,19 @@ interface SplitJob {
   onProgress: (done: number, total: number) => void
 }
 
+/** A compressed file: `bytes` is null when the original is already as small. */
+export interface CompressResult {
+  bytes: ArrayBuffer | null
+  report: CompressReport
+}
+
+interface CompressJob {
+  /** Null when the compression was cancelled. */
+  resolve: (result: CompressResult | null) => void
+  reject: (error: Error) => void
+  onStage: (stage: Stage, done: number, total: number) => void
+}
+
 interface MergeJob {
   resolve: (result: MergeResult | null) => void
   reject: (error: Error) => void
@@ -99,6 +115,8 @@ export class PdfClient {
   private readonly scans = new Map<number, (news: ScanNews<never>) => void>()
   private readonly merges = new Map<number, MergeJob>()
   private readonly splits = new Map<number, SplitJob>()
+  private readonly audits = new Map<number, (audit: Audit | null) => void>()
+  private readonly compressions = new Map<number, CompressJob>()
   private requests = 0
   private jobs = 0
   private answered = false
@@ -140,6 +158,22 @@ export class PdfClient {
       const found = message.type === "ink" ? message.shares : message.texts
       this.scans.get(request)?.({ from, found, total } as ScanNews<never>)
       if (from + found.length >= total) this.scans.delete(request)
+    } else if (message.type === "audit") {
+      this.audits.get(message.request)?.(message.audit)
+      this.audits.delete(message.request)
+    } else if (message.type === "stage") {
+      this.compressions
+        .get(message.job)
+        ?.onStage(message.stage, message.done, message.total)
+    } else if (
+      message.type === "compressed" ||
+      message.type === "compress-error"
+    ) {
+      const job = this.compressions.get(message.job)
+      this.compressions.delete(message.job)
+      if (message.type === "compressed")
+        job?.resolve({ bytes: message.bytes, report: message.report })
+      else job?.reject(new Error(message.message))
     } else if (message.type === "split-part") {
       const { index, bytes, pages, bookmarks, start, over } = message
       this.splits
@@ -169,6 +203,12 @@ export class PdfClient {
         split.resolve(false)
         return
       }
+      const compression = this.compressions.get(message.job)
+      if (compression && message.type === "cancelled") {
+        this.compressions.delete(message.job)
+        compression.resolve(null)
+        return
+      }
       const job = this.merges.get(message.job)
       this.merges.delete(message.job)
       if (!job) return
@@ -192,6 +232,9 @@ export class PdfClient {
     this.merges.clear()
     for (const job of this.splits.values()) job.reject(new Error(ENGINE_FAILED))
     this.splits.clear()
+    for (const job of this.compressions.values())
+      job.reject(new Error(ENGINE_FAILED))
+    this.compressions.clear()
     // Offline, some browsers fail to load a worker's scripts the first time (see WorkerPool).
     if (!this.answered && this.restarts < 2) {
       this.restarts++
@@ -217,6 +260,8 @@ export class PdfClient {
     this.texts.clear()
     this.searches.clear()
     this.scans.clear()
+    for (const done of this.audits.values()) done(null)
+    this.audits.clear()
   }
 
   open(
@@ -403,10 +448,42 @@ export class PdfClient {
     }
   }
 
+  /** What an open file's bytes are spent on; null when it cannot be told. */
+  audit(id: string, size: number) {
+    return new Promise<Audit | null>((resolve) => {
+      const request = ++this.requests
+      this.audits.set(request, resolve)
+      this.send({ type: "audit", id, request, size })
+    })
+  }
+
+  /**
+   * Compress an open file. The file is handed over once more, so the open
+   * copy stays as it was. The promise gives null when it was cancelled.
+   */
+  compress(
+    id: string,
+    file: Blob,
+    order: { level: Level; password?: string; maxPixels: number },
+    onStage: (stage: Stage, done: number, total: number) => void
+  ) {
+    const job = ++this.jobs
+    const promise = new Promise<CompressResult | null>((resolve, reject) => {
+      this.compressions.set(job, { resolve, reject, onStage })
+      this.send({ type: "compress", job, id, file, ...order })
+    })
+    return {
+      promise,
+      cancel: () => this.worker?.postMessage({ type: "cancel", job }),
+    }
+  }
+
   dispose() {
     this.worker?.terminate()
     this.worker = null
     this.dropReading()
+    for (const job of this.compressions.values()) job.resolve(null)
+    this.compressions.clear()
     for (const job of this.merges.values()) job.resolve(null)
     this.merges.clear()
     for (const job of this.splits.values()) job.resolve(false)

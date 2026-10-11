@@ -6,8 +6,9 @@ import {
   rgb,
   StandardFonts,
 } from "@cantoo/pdf-lib"
+import * as mupdf from "mupdf"
 
-// The two files behind "Try a sample" in the PDF merger.
+// The files behind "Try a sample" in the PDF tools.
 // Run with `npm run samples:pdfs` after changing them.
 await mkdir("public/samples", { recursive: true })
 
@@ -326,6 +327,170 @@ await writeFile(
     },
   ])
 )
+/**
+ * A picture painted by a function of where each pixel is (0 to 1 across and
+ * down), with a little grain, as a photograph has. The same every run.
+ */
+function paint(pixelWidth, pixelHeight, colour, grainy = true) {
+  const pixmap = new mupdf.Pixmap(
+    mupdf.ColorSpace.DeviceRGB,
+    [0, 0, pixelWidth, pixelHeight],
+    false
+  )
+  const pixels = pixmap.getPixels()
+  const stride = pixmap.getStride()
+  let state = 20261011
+  for (let y = 0; y < pixelHeight; y++)
+    for (let x = 0; x < pixelWidth; x++) {
+      state = (Math.imul(state, 1103515245) + 12345) >>> 0
+      const grain = grainy ? ((state >>> 16) % 9) - 4 : 0
+      const [red, green, blue] = colour(x / pixelWidth, y / pixelHeight)
+      const at = y * stride + x * 3
+      pixels[at] = red + grain
+      pixels[at + 1] = green + grain
+      pixels[at + 2] = blue + grain
+    }
+  return pixmap
+}
+
+const mix = (from, to, share) =>
+  from.map((value, index) => value + (to[index] - value) * share)
+
+/** Hills under an evening sky. */
+function landscape(u, v) {
+  const sun = Math.hypot((u - 0.72) * 1.5, v - 0.3)
+  let colour = mix([52, 110, 190], [250, 205, 150], Math.min(1, v / 0.62))
+  if (sun < 0.25) colour = mix([255, 244, 210], colour, sun / 0.25)
+  const hills = [
+    [0.52, 0.05, 5, 0.3, [96, 132, 150]],
+    [0.62, 0.06, 8, 1.7, [62, 110, 96]],
+    [0.76, 0.05, 13, 0.9, [34, 78, 62]],
+  ]
+  for (const [base, tall, waves, shift, hill] of hills) {
+    const ridge =
+      base +
+      tall * Math.sin(u * waves + shift) +
+      0.012 * Math.sin(u * waves * 5.3)
+    if (v > ridge)
+      colour = mix(hill, [18, 40, 36], Math.min(1, (v - ridge) / 0.5))
+  }
+  return colour
+}
+
+/** A street at night: lit windows in dark blocks. */
+function street(u, v) {
+  const block = Math.floor(u * 9)
+  const roof = 0.18 + 0.22 * Math.abs(Math.sin(block * 12.9898))
+  if (v < roof) return mix([14, 20, 48], [70, 60, 110], v / roof)
+  const column = Math.floor(u * 9 * 6) % 6
+  const row = Math.floor((v - roof) * 40)
+  const lit = Math.sin(block * 7.1 + column * 3.7 + row * 5.3) > 0.35
+  const edge = column === 0 || row % 3 === 0
+  if (lit && !edge) return [248, 214, 130]
+  return mix([36, 40, 62], [16, 18, 30], v)
+}
+
+/** A bar chart: flat colours and hard edges, stored without loss. */
+function chart(u, v) {
+  if (u < 0.06 || v > 0.9) return [255, 255, 255]
+  const bar = Math.floor((u - 0.06) / 0.118)
+  const inBar = (u - 0.06) % 0.118 < 0.08
+  const tall = [0.35, 0.5, 0.42, 0.68, 0.6, 0.82, 0.74, 0.9][bar] ?? 0
+  if (inBar && v > 0.9 - tall * 0.8)
+    return bar % 2 ? [0, 120, 111] : [0, 86, 80]
+  return Math.abs((v * 10) % 1) < 0.012 ? [222, 226, 226] : [255, 255, 255]
+}
+
+async function brochure() {
+  const doc = await PDFDocument.create()
+  const bold = await doc.embedFont(StandardFonts.HelveticaBold)
+  const plain = await doc.embedFont(StandardFonts.Helvetica)
+  const title = "City guide"
+  doc.setTitle(title)
+  doc.setAuthor("KeepSimp")
+  doc.setCreationDate(written)
+  doc.setModificationDate(written)
+  const jpeg = async (pixmap) => {
+    const image = await doc.embedJpg(pixmap.asJPEG(90, false))
+    pixmap.destroy()
+    return image
+  }
+  const png = async (pixmap) => {
+    const image = await doc.embedPng(pixmap.asPNG())
+    pixmap.destroy()
+    return image
+  }
+  // Far more pixels than the pages show: what a camera or a design app hands over.
+  const hills = await jpeg(paint(1800, 1200, landscape))
+  const night = await jpeg(paint(1200, 800, street))
+  const bars = await png(paint(1600, 900, chart, false))
+  const sheet = (heading, lines) => {
+    const page = doc.addPage([width, height])
+    page.drawRectangle({ x: 0, y: height - 14, width, height: 14, color: teal })
+    page.drawText(heading, {
+      x: 56,
+      y: height - 110,
+      size: 28,
+      font: bold,
+      color: ink,
+    })
+    let y = height - 150
+    for (const line of lines) {
+      page.drawText(line, { x: 56, y, size: 12, font: plain, color: ink })
+      y -= 20
+    }
+    page.drawText(`${title} · page ${doc.getPageCount()}`, {
+      x: 56,
+      y: 40,
+      size: 9,
+      font: plain,
+      color: muted,
+    })
+    return { page, y }
+  }
+  const cover = sheet(title, [
+    "A sample document for the KeepSimp PDF compressor.",
+    "Its photographs hold far more pixels than the pages show,",
+    "as pictures from a camera or a design app usually do.",
+  ])
+  cover.page.drawImage(hills, {
+    x: 56,
+    y: cover.y - 322,
+    width: 483,
+    height: 322,
+  })
+  const around = sheet("Getting around", [
+    "Trams run every six minutes until midnight.",
+    "A day ticket covers trams, buses and the river ferry.",
+  ])
+  around.page.drawImage(night, {
+    x: 56,
+    y: around.y - 160,
+    width: 240,
+    height: 160,
+  })
+  around.page.drawText("Visitors by month, in thousands", {
+    x: 56,
+    y: around.y - 200,
+    size: 11,
+    font: bold,
+    color: ink,
+  })
+  around.page.drawImage(bars, {
+    x: 56,
+    y: around.y - 480,
+    width: 483,
+    height: 272,
+  })
+  sheet("Where to stay", [
+    "The old town is quiet at night and close to the river.",
+    "Rooms near the station cost less and suit an early train.",
+    "Book ahead in June and September, when the fairs are on.",
+  ])
+  return doc.save()
+}
+
+await writeFile("public/samples/keepsimp-brochure.pdf", await brochure())
 console.log(
-  "Wrote public/samples/keepsimp-report.pdf, keepsimp-appendix.pdf and keepsimp-handbook.pdf"
+  "Wrote public/samples/keepsimp-report.pdf, keepsimp-appendix.pdf, keepsimp-handbook.pdf and keepsimp-brochure.pdf"
 )

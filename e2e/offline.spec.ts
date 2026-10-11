@@ -121,7 +121,7 @@ test("every tool works offline after one visit", async ({ page }) => {
 
   // A full page load, then a move between tools from a link.
   await page.reload()
-  await expect(page.getByTestId("tool-card")).toHaveCount(13)
+  await expect(page.getByTestId("tool-card")).toHaveCount(14)
   await page
     .getByTestId("tool-card")
     .getByRole("link", { name: "Image compressor" })
@@ -263,6 +263,26 @@ test("every tool works offline after one visit", async ({ page }) => {
     .click()
   const part = await readPdf(new Uint8Array(await bytesOf(await pending)))
   expect(part.pages).toHaveLength(1)
+
+  // The PDF compressor adds the picture codecs to the same engine.
+  await page.goto(`${site.origin}/dashboard/pdf-compressor/`)
+  await page.getByRole("button", { name: "Try a sample" }).click()
+  await expect(page.getByTestId("pdf-compressor")).toHaveAttribute(
+    "data-ready",
+    "true",
+    { timeout: 150_000 }
+  )
+  await page.getByRole("button", { name: "Compress PDF" }).click()
+  await expect(page.getByTestId("pdf-compressor")).toHaveAttribute(
+    "data-compressed",
+    "true",
+    { timeout: 150_000 }
+  )
+  await expect(page.getByTestId("saving")).toHaveText(/^\d+% smaller$/)
+  pending = page.waitForEvent("download")
+  await page.getByRole("link", { name: "Download PDF" }).click()
+  const smaller = await readPdf(new Uint8Array(await bytesOf(await pending)))
+  expect(smaller.pages).toHaveLength(3)
 
   await page.goto(`${site.origin}/dashboard/json-formatter/`)
   await replaceEditor(

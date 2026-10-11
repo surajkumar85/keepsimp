@@ -20,6 +20,9 @@ import {
   splitBySize,
   splitPart,
 } from "@/lib/pdf-splitter/mupdf-split"
+import { codecs } from "@/lib/pdf-compressor/codecs"
+import { auditPdf, type Audit } from "@/lib/pdf-compressor/mupdf-audit"
+import { compressPdf } from "@/lib/pdf-compressor/mupdf-compress"
 import { jpegOrientation, quarterTurns } from "./picture"
 import type { Size } from "@/lib/image-compressor/geometry"
 import type { PageText, Quad } from "@/lib/pdf-reader/text"
@@ -45,6 +48,9 @@ const FAILED =
 
 const SPLIT_FAILED =
   "The file could not be split. Try again, or add the file once more."
+
+const COMPRESS_FAILED =
+  "The file could not be compressed. Try again, or add the file once more."
 
 const TOO_LARGE =
   "This is more than this device can handle at once. Remove some files, reload the page and try again."
@@ -384,6 +390,67 @@ async function splitSize(request: Extract<PdfRequest, { type: "split-size" }>) {
   }
 }
 
+function audit(request: Extract<PdfRequest, { type: "audit" }>) {
+  const pdf = files.get(request.id)
+  let found: Audit | null = null
+  try {
+    if (pdf) found = auditPdf(pdf.doc, request.size)
+  } catch {
+    // The page goes without the breakdown.
+  }
+  post({ type: "audit", request: request.request, audit: found })
+}
+
+async function compress(request: Extract<PdfRequest, { type: "compress" }>) {
+  const { job } = request
+  try {
+    const pdf = files.get(request.id)
+    if (!pdf) throw new Error(COMPRESS_FAILED)
+    const mupdf = await engine
+    let last = 0
+    let stage = ""
+    let paused = performance.now()
+    const result = await compressPdf(
+      mupdf,
+      new Uint8Array(await request.file.arrayBuffer()),
+      {
+        level: request.level,
+        codecs,
+        password: request.password,
+        pristine: pdf.doc,
+        maxPixels: request.maxPixels,
+        checkpoint: async () => {
+          if (performance.now() - paused < 16) return
+          await new Promise((resolve) => setTimeout(resolve, 0))
+          paused = performance.now()
+          if (job <= cancelled) throw new Cancelled()
+        },
+        progress: (now, done, total) => {
+          const time = performance.now()
+          // Every new part of the work is told at once; steps within it now and then.
+          if (now === stage && time - last <= 80) return
+          stage = now
+          last = time
+          post({ type: "stage", job, stage: now, done, total })
+        },
+      }
+    )
+    const bytes = result.bytes ? (result.bytes.buffer as ArrayBuffer) : null
+    post(
+      { type: "compressed", job, bytes, report: result.report },
+      bytes ? [bytes] : []
+    )
+  } catch (error) {
+    if (error instanceof Cancelled) post({ type: "cancelled", job })
+    else
+      post({
+        type: "compress-error",
+        job,
+        message: readable(error, COMPRESS_FAILED),
+      })
+  }
+}
+
 async function halve(request: Extract<PdfRequest, { type: "halve" }>) {
   const { id } = request
   const current = files.get(id)
@@ -616,6 +683,9 @@ self.onmessage = (event: MessageEvent<PdfRequest>) => {
         ),
     })
   else if (request.type === "halve") enqueue({ run: () => halve(request) })
+  else if (request.type === "audit") enqueue({ run: () => audit(request) })
+  else if (request.type === "compress")
+    enqueue({ run: () => compress(request) })
   else if (request.type === "merge") enqueue({ run: () => merge(request) })
   else if (request.type === "split") enqueue({ run: () => split(request) })
   else if (request.type === "split-size")

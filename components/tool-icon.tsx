@@ -1,4 +1,5 @@
 import {
+  IconArrowsDiagonalMinimize2,
   IconArrowsMinimize,
   IconArrowsSplit2,
   IconBraces,
@@ -31,6 +32,7 @@ const icons: Record<string, typeof IconBraces> = {
   "animation-converter": IconGif,
   "pdf-merger": IconLayersUnion,
   "pdf-splitter": IconArrowsSplit2,
+  "pdf-compressor": IconArrowsDiagonalMinimize2,
   "json-formatter": IconBraces,
 }
 

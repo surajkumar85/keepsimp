@@ -159,6 +159,15 @@ export async function encodeImage(
   return encodePng(pixels, settings)
 }
 
+/** A JPEG written with every one of the encoder's options chosen by the caller. */
+export async function encodeJpegWith(
+  pixels: Pixels,
+  options: ReturnType<typeof jpegOptions>
+): Promise<ArrayBuffer> {
+  const { default: encode } = await jpegEncoder()
+  return encode(toImageData(pixels), options)
+}
+
 /** Decode our own output so it can be compared with the reference pixels. */
 export async function decodeOutput(
   format: OutputFormat,
