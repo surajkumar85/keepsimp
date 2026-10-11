@@ -101,6 +101,23 @@ describe("changeLines", () => {
     expect(scans("layers", 0)).toBe("The file was tidied and packed tighter.")
   })
 
+  it("says what was taken out and that a password was put on", () => {
+    expect(
+      changeLines({
+        ...nothing,
+        taken: ["tags", "bookmarks", "flatten"],
+        locked: true,
+      })
+    ).toEqual([
+      "The file was tidied and packed tighter.",
+      "Taken out because you asked: bookmarks, accessibility tags, form fields (what was filled in stays).",
+      "Locked with your password.",
+    ])
+    expect(changeLines({ ...nothing, taken: [], locked: false })).toHaveLength(
+      1
+    )
+  })
+
   it("counts one picture as one", () => {
     expect(
       changeLines({
@@ -134,6 +151,15 @@ describe("checkLine", () => {
     )
   })
 
+  it("does not call pages the same that were remade on purpose", () => {
+    expect(checkLine({ checked: 1, changed: 1, low: [] }, true)!.text).toBe(
+      "Checked: 1 page compared with the original. It differs only as you asked."
+    )
+    expect(checkLine({ checked: 3, changed: 9, low: [] }, true)!.text).toBe(
+      "Checked: 3 pages out of 9 with changed pictures compared with the original. They differ only as you asked."
+    )
+  })
+
   it("names the pages that changed too much", () => {
     expect(
       checkLine({ checked: 5, changed: 5, low: [{ page: 2, score: 0.8 }] })
@@ -161,6 +187,7 @@ describe("alreadySmall", () => {
     expect(alreadySmall("lossless")).toContain("Balanced")
     expect(alreadySmall("balanced")).toContain("Strong")
     expect(alreadySmall("strong")).toContain("Nothing more")
+    expect(alreadySmall("custom")).toContain("lower resolution or quality")
   })
 
   it("says a file is already under the size it was to reach", () => {
@@ -265,6 +292,10 @@ describe("batchLine", () => {
     })
   })
 
+  it("does not count a file that grew as a saving below nothing", () => {
+    expect(batchLine([{ before: 1000, after: 1100 }]).percent).toBe(0)
+  })
+
   it("has nothing to divide by when there are no files", () => {
     expect(batchLine([])).toMatchObject({
       percent: 0,
@@ -288,6 +319,15 @@ describe("rowSummary", () => {
         target: { wanted: 200 * KB, met: true },
       })
     ).toBe("400.0 KB → 100.0 KB · 75% smaller")
+  })
+
+  it("gives only the sizes of a file that is no smaller", () => {
+    expect(rowSummary({ before: 2048, after: 2048, smaller: true })).toBe(
+      "2.0 KB → 2.0 KB"
+    )
+    expect(rowSummary({ before: 2048, after: 3072, smaller: true })).toBe(
+      "2.0 KB → 3.0 KB"
+    )
   })
 
   it("says when a size was missed", () => {

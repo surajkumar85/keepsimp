@@ -138,8 +138,52 @@ export const levelChoices: readonly {
   },
 ]
 
-/** A level, or a size the file has to come out under. */
-export type Mode = Level | "size"
+/** A level, a size the file has to come out under, or settings of one's own. */
+export type Mode = Level | "size" | "custom"
+
+/** Settings of one's own, for those who know what they want. */
+export interface CustomChoice {
+  /** Pictures are brought down to this many pixels per inch. */
+  dpi: number
+  /** The JPEG quality photographs are saved at, as it is. */
+  quality: number
+  /** Take the colour out of every picture. */
+  grey: boolean
+  /** Cut fonts stored whole down to the letters in use. */
+  fonts: boolean
+}
+
+export const defaultCustom: CustomChoice = {
+  dpi: 150,
+  quality: 75,
+  grey: false,
+  fonts: true,
+}
+
+export const customDpis: readonly number[] = [72, 96, 120, 150, 200, 300]
+export const customQuality = { min: 20, max: 92 } as const
+
+export const CUSTOM_NOTE =
+  "You choose the resolution and the quality. Nothing is measured: pictures are saved exactly as set."
+
+/** What custom settings do to pictures. */
+export function customPlan(custom: CustomChoice): LevelPlan {
+  const quality = Math.min(
+    customQuality.max,
+    Math.max(customQuality.min, Math.round(custom.quality))
+  )
+  return {
+    dpi: custom.dpi,
+    slack: 1.25,
+    look: "smallest",
+    keepBelow: quality,
+    floor: quality,
+    fixed: quality,
+  }
+}
+
+/** The mark for the page check with settings of one's own: loss is chosen, so the check is lenient. */
+export const CUSTOM_MARK = 0.85
 
 export const SIZE_NOTE =
   "The file is written a few times to find the best quality that fits. Pictures give way first; text stays sharp."
@@ -147,11 +191,13 @@ export const SIZE_NOTE =
 export const modeChoices: readonly { value: Mode; label: string }[] = [
   ...levelChoices.map(({ value, label }) => ({ value, label })),
   { value: "size", label: "To a size" },
+  { value: "custom", label: "Custom" },
 ]
 
 /** What a mode does, in a sentence or two. */
 export const modeNote = (mode: Mode) =>
-  levelChoices.find((choice) => choice.value === mode)?.note ?? SIZE_NOTE
+  levelChoices.find((choice) => choice.value === mode)?.note ??
+  (mode === "size" ? SIZE_NOTE : CUSTOM_NOTE)
 
 export interface CompressSettings {
   mode: Mode
@@ -161,6 +207,8 @@ export interface CompressSettings {
   target: number | null
   /** For "To a size": go on past what is easy to read, if the size takes it. */
   further: boolean
+  /** For "Custom". */
+  custom: CustomChoice
 }
 
 export const defaultSettings: CompressSettings = {
@@ -168,15 +216,19 @@ export const defaultSettings: CompressSettings = {
   scans: "keep",
   target: 1024 * 1024,
   further: false,
+  custom: defaultCustom,
 }
 
 /** Two settings with the same key give the same result. */
 export function settingsKey(settings: CompressSettings) {
   if (settings.mode === "lossless") return settings.mode
+  const { custom } = settings
   const how =
     settings.mode === "size"
       ? `size:${settings.target}:${settings.further}`
-      : settings.mode
+      : settings.mode === "custom"
+        ? `custom:${custom.dpi}:${custom.quality}:${custom.grey}:${custom.fonts}`
+        : settings.mode
   return settings.scans === "keep" ? how : `${how}:${settings.scans}`
 }
 

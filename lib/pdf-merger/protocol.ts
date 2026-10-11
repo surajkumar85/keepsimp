@@ -1,7 +1,12 @@
 import type { Rotation, Size } from "@/lib/image-compressor/geometry"
 import type { Audit } from "@/lib/pdf-compressor/mupdf-audit"
 import type { CompressReport, Stage } from "@/lib/pdf-compressor/mupdf-compress"
-import type { Level, ScanChoice } from "@/lib/pdf-compressor/settings"
+import type { Lock, Removal } from "@/lib/pdf-compressor/options"
+import type {
+  CustomChoice,
+  Level,
+  ScanChoice,
+} from "@/lib/pdf-compressor/settings"
 import type { PageText, Quad } from "@/lib/pdf-reader/text"
 import type { HalveChoice } from "@/lib/pdf-splitter/halves"
 import type { Area } from "@/lib/pdf-splitter/text-rule"
@@ -10,6 +15,10 @@ import type { Bookmark, BookmarkPolicy } from "./outline"
 import type { PictureMargin, PicturePage } from "./picture"
 import type { FooterPlace, NumberStyle, SheetChoice } from "./print"
 import type { ContentsChoice, FormsChoice, LabelsChoice } from "./settings"
+
+/** How a file is to be compressed. */
+export type CompressHow =
+  Level | { target: number; further: boolean } | { custom: CustomChoice }
 
 /** One page of the result, as the worker is asked for it. */
 export type WantedPage =
@@ -136,8 +145,11 @@ export type PdfRequest =
       id: string
       file: Blob
       password?: string
-      /** A level, or a size in bytes to come out under and whether to go past what is easy to read. */
-      how: Level | { target: number; further: boolean }
+      /** A level, a size in bytes to come out under and whether to go past what is easy to read, or settings of one's own. */
+      how: CompressHow
+      /** Things to take out besides, and a password for the result; null for none. */
+      remove: Removal | null
+      lock: Lock | null
       /** What to do with scanned pages. */
       scans: ScanChoice
       /** Pictures with more pixels than this are left as they are. */

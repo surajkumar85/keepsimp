@@ -15,7 +15,14 @@ import {
   type Drawn,
 } from "../tests/pdf-pictures"
 import { readPdf, texts } from "../tests/pdf-reader"
-import { bytesOf, drawnPage, reader, readerReady, type Upload } from "./pdf"
+import {
+  bytesOf,
+  drawnPage,
+  pdf,
+  reader,
+  readerReady,
+  type Upload,
+} from "./pdf"
 
 const ROUTE = "/dashboard/pdf-compressor/"
 const tool = (page: Page) => page.getByTestId("pdf-compressor")
@@ -356,6 +363,91 @@ test("rebuilds scanned pages as text over paper, or in black and white", async (
   await expect(scans).toHaveCount(0)
 })
 
+test("uses settings of one's own, takes out what is asked, and locks the result", async ({
+  page,
+}) => {
+  // Several compressions in a row, on a machine that may be busy.
+  test.setTimeout(120_000)
+  const upload = await pdf("report.pdf", "R", {
+    pages: 2,
+    bookmarks: [{ title: "Start", page: 1 }],
+    notes: [{ page: 2, text: "Check this" }],
+    picture: true,
+    title: "Quarterly report",
+  })
+  await add(page, upload)
+  await level(page, "Custom").click()
+  await page
+    .getByRole("radiogroup", { name: "Resolution of pictures" })
+    .getByRole("radio", { name: "72 dpi" })
+    .click()
+  await page.getByLabel("Quality of photographs").fill("40")
+  await page.getByRole("switch", { name: "Pictures in greyscale" }).click()
+
+  const options = page.getByTestId("compress-options")
+  await options.getByRole("switch", { name: "Bookmarks" }).click()
+  await options
+    .getByRole("switch", { name: "Title, author and other details" })
+    .click()
+  // A lock needs a password before anything is compressed.
+  await options
+    .getByRole("switch", { name: "Lock the result with a password" })
+    .click()
+  await expect(tool(page).getByRole("alert")).toContainText(
+    "Enter a password for the result"
+  )
+  await expect(
+    page.getByRole("button", { name: "Compress PDF" })
+  ).toBeDisabled()
+  await options.getByLabel("Password to open the file").fill("keep out")
+
+  await compress(page)
+  const changes = page.getByTestId("changes")
+  await expect(changes).toContainText(
+    "Taken out because you asked: document details, bookmarks."
+  )
+  await expect(changes).toContainText("Locked with your password.")
+  await expect(page.getByTestId("check")).toContainText(
+    "They differ only as you asked."
+  )
+  // The locked result can be compared and read here before it is downloaded.
+  await expect(page.getByTestId("compare")).toHaveAttribute(
+    "data-drawn",
+    "true",
+    { timeout: 30_000 }
+  )
+  await page.getByRole("button", { name: "Read the result" }).click()
+  await readerReady(page)
+  await expect(drawnPage(page, 1)).toBeVisible({ timeout: 30_000 })
+  await page.keyboard.press("Escape")
+
+  const got = await download(page)
+  await expect(texts(got.bytes)).rejects.toThrow()
+  const read = await readPdf(got.bytes, "keep out")
+  expect(read.pages.map((entry) => entry.text)).toEqual(["R-P1", "R-P2"])
+  expect(read.bookmarks).toEqual([])
+  expect(read.info.Title).toBeUndefined()
+  // The note was not asked to go, and is still there.
+  expect(read.pages[1].notes).toEqual(["Check this"])
+  const [picture] = await readPictures(got.bytes, "keep out")
+  expect(picture.data[0]).toBe(picture.data[1])
+  expect(picture.data[1]).toBe(picture.data[2])
+
+  // With the switches off again, the file is compressed as it came.
+  await options.getByRole("switch", { name: "Bookmarks" }).click()
+  await options
+    .getByRole("switch", { name: "Title, author and other details" })
+    .click()
+  await options
+    .getByRole("switch", { name: "Lock the result with a password" })
+    .click()
+  await level(page, "Lossless").click()
+  await compress(page)
+  const plain = await readPdf((await download(page)).bytes)
+  expect(plain.bookmarks).toHaveLength(1)
+  expect(plain.info.Title).toBe("Quarterly report")
+})
+
 test("compresses several files at once and hands them over as one ZIP", async ({
   page,
 }) => {
@@ -575,6 +667,15 @@ test("stays accessible, local and responsive", async ({ page }) => {
     .getByRole("radio", { name: "Another size" })
     .click()
   expect((await scan()).violations).toEqual([])
+  // So are settings of one's own, and the password fields.
+  await level(page, "Custom").click()
+  await page
+    .getByRole("switch", { name: "Lock the result with a password" })
+    .click()
+  expect((await scan()).violations).toEqual([])
+  await page
+    .getByRole("switch", { name: "Lock the result with a password" })
+    .click()
   await level(page, "Balanced").click()
   await compress(page)
   await expect(page.getByTestId("compare")).toHaveAttribute(

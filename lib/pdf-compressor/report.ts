@@ -4,6 +4,7 @@
  */
 import { sizeLabel } from "@/lib/image-compressor/formats"
 import type { CheckResult } from "./check"
+import { removalChoices, type Removal } from "./options"
 import type { Mode, ScanChoice } from "./settings"
 
 export type Stage = "reading" | "pictures" | "writing" | "checking"
@@ -65,6 +66,8 @@ export function changeLines(report: {
   fontsCut: boolean
   dropped: { thumbnails: number; private: number }
   scans?: { how: ScanChoice; pictures: number }
+  taken?: readonly (keyof Removal)[]
+  locked?: boolean
 }) {
   const lines: string[] = []
   if (report.scans?.pictures) {
@@ -90,7 +93,26 @@ export function changeLines(report: {
   if (report.dropped.private)
     lines.push("Private data of the app that made the file taken out.")
   lines.push("The file was tidied and packed tighter.")
+  if (report.taken?.length)
+    lines.push(
+      `Taken out because you asked: ${removalChoices
+        .filter((choice) => report.taken!.includes(choice.key))
+        .map((choice) => TAKEN[choice.key])
+        .join(", ")}.`
+    )
+  if (report.locked) lines.push("Locked with your password.")
   return lines
+}
+
+/** What each thing that can be taken out is called in a list of them. */
+const TAKEN: Record<keyof Removal, string> = {
+  details: "document details",
+  attachments: "attached files",
+  bookmarks: "bookmarks",
+  comments: "notes and highlights",
+  scripts: "scripts",
+  tags: "accessibility tags",
+  flatten: "form fields (what was filled in stays)",
 }
 
 export interface CheckLine {
@@ -99,8 +121,15 @@ export interface CheckLine {
   passed: boolean
 }
 
-/** What the comparison of pages before and after came to; null when no page was compared. */
-export function checkLine(check: CheckResult): CheckLine | null {
+/**
+ * What the comparison of pages before and after came to; null when no page was compared.
+ * @param remade Pages were rebuilt in a way that changes how they look on
+ *   purpose (black and white, grey): they are compared, but not called the same.
+ */
+export function checkLine(
+  check: CheckResult,
+  remade = false
+): CheckLine | null {
   if (!check.checked) return null
   if (check.low.length) {
     const pages = check.low.map((entry) => entry.page + 1)
@@ -115,7 +144,9 @@ export function checkLine(check: CheckResult): CheckLine | null {
       : ""
   return {
     passed: true,
-    text: `Checked: ${plural(check.checked, "page")}${sampled} ${check.checked === 1 ? "looks" : "look"} the same before and after.`,
+    text: remade
+      ? `Checked: ${plural(check.checked, "page")}${sampled} compared with the original. ${check.checked === 1 ? "It differs" : "They differ"} only as you asked.`
+      : `Checked: ${plural(check.checked, "page")}${sampled} ${check.checked === 1 ? "looks" : "look"} the same before and after.`,
   }
 }
 
@@ -135,6 +166,8 @@ export function alreadySmall(
   if (mode === "lossless")
     return `${start} Balanced also makes its pictures smaller.`
   if (mode === "balanced") return `${start} Strong goes further.`
+  if (mode === "custom")
+    return "These settings do not make this file smaller. Try a lower resolution or quality."
   return `${start} Nothing more can come out without making it hard to read.`
 }
 
@@ -187,7 +220,9 @@ export function batchLine(
 ) {
   const before = results.reduce((sum, result) => sum + result.before, 0)
   const after = results.reduce((sum, result) => sum + result.after, 0)
-  const percent = before > 0 ? Math.round((1 - after / before) * 100) : 0
+  // Files that grew a little, for a password's sake, are not a negative saving.
+  const percent =
+    before > 0 ? Math.max(0, Math.round((1 - after / before) * 100)) : 0
   return {
     before,
     after,
@@ -207,12 +242,15 @@ export function rowSummary(report: {
     return report.target && !report.target.met
       ? `Could not get under ${sizeLabel(report.target.wanted)}`
       : "Already small: left as it is"
+  const sizes = `${sizeLabel(report.before)} → ${sizeLabel(report.after)}`
+  // A file that was only locked, or had things taken out, may be no smaller.
+  if (report.after >= report.before) return sizes
   const percent = Math.round((1 - report.after / report.before) * 100)
   const missed =
     report.target && !report.target.met
       ? ` · over ${sizeLabel(report.target.wanted)}`
       : ""
-  return `${sizeLabel(report.before)} → ${sizeLabel(report.after)} · ${percent}% smaller${missed}`
+  return `${sizes} · ${percent}% smaller${missed}`
 }
 
 /** What the page says about a file before it is compressed. */

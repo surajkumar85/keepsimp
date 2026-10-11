@@ -5,9 +5,12 @@ import { ToggleRow } from "@/components/image-batch/controls"
 import { ChoiceChips } from "@/components/ui/choice-chips"
 import { Input } from "@/components/ui/input"
 import {
+  customDpis,
+  customQuality,
   modeChoices,
   modeNote,
   scanChoices,
+  type CustomChoice,
   type Mode,
   type ScanChoice,
 } from "@/lib/pdf-compressor/settings"
@@ -37,6 +40,8 @@ export function LevelPanel({
   onFurther,
   scans,
   onScans,
+  custom,
+  onCustom,
   disabled,
 }: {
   mode: Mode
@@ -54,6 +59,8 @@ export function LevelPanel({
   /** What to do with pages that are one large picture. */
   scans: ScanChoice
   onScans: (scans: ScanChoice) => void
+  custom: CustomChoice
+  onCustom: (change: Partial<CustomChoice>) => void
   disabled: boolean
 }) {
   const ids = useId()
@@ -120,6 +127,62 @@ export function LevelPanel({
             hint="Past the point where pictures are easy to read. Off, the smallest readable result is given when the size cannot be reached."
             checked={further}
             onCheckedChange={onFurther}
+          />
+        </>
+      )}
+      {mode === "custom" && (
+        <>
+          <ChoiceChips
+            label="Resolution of pictures"
+            value={String(custom.dpi)}
+            onValueChange={(dpi) => onCustom({ dpi: Number(dpi) })}
+            options={customDpis.map((dpi) => ({
+              value: String(dpi),
+              label: `${dpi} dpi`,
+            }))}
+            hint="Pictures with more pixels than this, at the size they are shown, are brought down to it. 150 suits screens and office printers; 300 suits print."
+            disabled={disabled}
+          />
+          <div>
+            <label
+              htmlFor={`${ids}-quality`}
+              className="mb-2 flex justify-between text-sm font-medium"
+            >
+              <span>Quality of photographs</span>
+              <span className="font-mono">{custom.quality}</span>
+            </label>
+            <input
+              id={`${ids}-quality`}
+              type="range"
+              min={customQuality.min}
+              max={customQuality.max}
+              value={custom.quality}
+              disabled={disabled}
+              onChange={(event) =>
+                onCustom({ quality: Number(event.target.value) })
+              }
+              aria-describedby={`${ids}-quality-hint`}
+              className="min-h-11 w-full accent-primary md:min-h-9"
+            />
+            <p
+              id={`${ids}-quality-hint`}
+              className="text-xs text-muted-foreground"
+            >
+              The JPEG quality, as it is. Around 80 is hard to tell from the
+              original; below 50 shows.
+            </p>
+          </div>
+          <ToggleRow
+            label="Pictures in greyscale"
+            hint="Colour is taken out of every picture. Text and drawings keep theirs."
+            checked={custom.grey}
+            onCheckedChange={(grey) => onCustom({ grey })}
+          />
+          <ToggleRow
+            label="Cut fonts to the letters in use"
+            hint="Saves the most in files that store whole fonts. Turn it off if the text will be edited later."
+            checked={custom.fonts}
+            onCheckedChange={(fonts) => onCustom({ fonts })}
           />
         </>
       )}

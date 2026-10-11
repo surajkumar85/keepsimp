@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest"
 import {
+  CUSTOM_MARK,
+  CUSTOM_NOTE,
+  customDpis,
+  customPlan,
+  customQuality,
+  defaultCustom,
   defaultSettings,
   layerStep,
   levelChoices,
@@ -55,8 +61,10 @@ describe("levels", () => {
       "balanced",
       "strong",
       "size",
+      "custom",
     ])
     expect(modeNote("size")).toBe(SIZE_NOTE)
+    expect(modeNote("custom")).toBe(CUSTOM_NOTE)
     expect(modeNote("lossless")).toContain("Nothing you can see changes")
   })
 
@@ -67,6 +75,52 @@ describe("levels", () => {
       settingsProblem({ ...defaultSettings, mode: "size", target: null })
     ).toContain("Type a size")
     expect(settingsProblem({ ...defaultSettings, target: null })).toBeNull()
+  })
+})
+
+describe("settings of one's own", () => {
+  it("save pictures exactly as set", () => {
+    expect(customPlan(defaultCustom)).toEqual({
+      dpi: 150,
+      slack: 1.25,
+      look: "smallest",
+      keepBelow: 75,
+      floor: 75,
+      fixed: 75,
+    })
+    expect(customDpis).toContain(defaultCustom.dpi)
+    expect(CUSTOM_MARK).toBeLessThan(pageMarks.strong)
+  })
+
+  it("keep the quality within what can be written", () => {
+    expect(customPlan({ ...defaultCustom, quality: 3 }).fixed).toBe(
+      customQuality.min
+    )
+    expect(customPlan({ ...defaultCustom, quality: 99.6 }).fixed).toBe(
+      customQuality.max
+    )
+    expect(customPlan({ ...defaultCustom, quality: 60.4 }).fixed).toBe(60)
+  })
+
+  it("count as part of the settings, each of them", () => {
+    const custom = { ...defaultSettings, mode: "custom" as const }
+    expect(settingsKey(custom)).toBe("custom:150:75:false:true")
+    for (const change of [
+      { dpi: 96 },
+      { quality: 50 },
+      { grey: true },
+      { fonts: false },
+    ])
+      expect(
+        settingsKey({ ...custom, custom: { ...defaultCustom, ...change } })
+      ).not.toBe(settingsKey(custom))
+    // They do not matter at a level.
+    expect(
+      settingsKey({
+        ...defaultSettings,
+        custom: { ...defaultCustom, grey: true },
+      })
+    ).toBe("balanced")
   })
 })
 

@@ -44,6 +44,7 @@ import {
 } from "./pixels"
 import {
   planPicture,
+  SMALL_PIXELS,
   TOP_QUALITY,
   worthIt,
   type Change,
@@ -52,9 +53,12 @@ import {
   type Step,
   type Stored,
 } from "./plan"
+import type { Lock, Removal } from "./options"
 import { filterUp, greyPalette, readPng, samplesOf } from "./png"
 import type { Stage } from "./report"
 import {
+  CUSTOM_MARK,
+  customPlan,
   layerStep,
   levelPlans,
   outcome,
@@ -63,6 +67,7 @@ import {
   scanMarks,
   scanSettings,
   TARGET_MARK,
+  type CustomChoice,
   type Level,
   type LevelPlan,
   type ScanChoice,
@@ -103,6 +108,10 @@ export interface CompressOptions {
   maxPixels?: number
   /** What to do with scanned pages; they are treated like any picture when left out. */
   scans?: ScanChoice
+  /** Things to take out of the file besides. */
+  remove?: Removal
+  /** A password for the result, in place of any the file has. */
+  lock?: Lock
   /** The most pages to draw before and after. */
   checkBudget?: number
   /** Called between pages and pictures; it may pause, or throw to stop. */
@@ -114,6 +123,11 @@ export interface CompressOptions {
     total: number,
     attempt?: number
   ) => void
+}
+
+/** Settings of one's own, for `compressCustom`. */
+export interface CustomOptions extends Omit<CompressOptions, "level"> {
+  custom: CustomChoice
 }
 
 /** A size to come out under, for `compressToSize`. */
@@ -146,6 +160,10 @@ export interface CompressReport {
   audit: Audit | null
   /** Scanned pages that were rebuilt, and how. */
   scans?: { how: ScanChoice; pictures: number }
+  /** What was taken out because it was asked for. */
+  taken?: (keyof Removal)[]
+  /** The result has a password that was asked for. */
+  locked?: boolean
   /** For a file that was to come out under a size: the size, and whether it did. */
   target?: {
     wanted: number
@@ -942,6 +960,64 @@ function readsBack(doc: Doc, ref: Obj, size: Size, bytes?: Uint8Array) {
 }
 
 /**
+ * Save a colour picture as a grey JPEG, at the size the level allows.
+ * Returns null for a picture that is grey already, or that gains nothing.
+ */
+async function greyPicture(
+  work: Work,
+  entry: Entry,
+  original: Decoded,
+  base: Obj
+): Promise<Change | null> {
+  if (original.channels !== 3) return null
+  const { doc } = work
+  const plan = work.plan!
+  const { ref } = entry
+  const smaller = sizeFor(original.size, entry.drawn, plan.dpi, plan.slack)
+  const grey = greyOf(original)
+  const from = smaller ? await resized(work, grey, smaller, false) : grey
+  const to = await asJpeg(work, from, "photo", TOP_QUALITY, "resized", true)
+  if (!to || !worthIt(numberOf(ref.get("Length")), to.bytes.length, "resized"))
+    return null
+  const described = { ...to, space: doc.newName("DeviceGray") }
+  if (!holds(work, entry, described, from)) return null
+  ref.writeRawStream(described.bytes)
+  for (const key of ["DecodeParms", "Decode", "DL"]) ref.delete(key)
+  describe(doc, ref, described, base)
+  return "resized"
+}
+
+/** Take the colour out of a picture that is plain enough for it. Null when it is left for the usual way. */
+async function greyed(work: Work, entry: Entry, facts: PictureFacts) {
+  if (
+    facts.space !== "rgb" ||
+    facts.bits !== 8 ||
+    facts.stencil ||
+    facts.keyed ||
+    facts.matte ||
+    entry.mask ||
+    facts.width * facts.height < SMALL_PIXELS ||
+    !["jpeg", "plain", "jpx"].includes(facts.stored)
+  )
+    return null
+  const found = spaceOf(entry.ref.get("ColorSpace"))
+  const seen = decode(entry.image)
+  if (!seen || seen.channels !== 3) return null
+  const size = { width: seen.width, height: seen.height }
+  return greyPicture(
+    work,
+    entry,
+    {
+      size,
+      channels: 3,
+      bytes: seen.bytes,
+      rgba: toRgba(seen.bytes, size.width, size.height, 3),
+    },
+    found.base
+  )
+}
+
+/**
  * Rebuild a scanned page: in greyscale, in black and white, or as sharp
  * letters over soft paper. Returns what was done, or null when the scan is
  * better left to the usual way with pictures.
@@ -968,21 +1044,7 @@ async function rebuildScan(
   const before = numberOf(ref.get("Length"))
   const settings = scanSettings(plan)
 
-  if (how === "grey") {
-    // A scan that is grey already goes the usual way.
-    if (original.channels === 1) return null
-    const smaller = sizeFor(size, entry.drawn, plan.dpi, plan.slack)
-    const grey = greyOf(original)
-    const from = smaller ? await resized(work, grey, smaller, false) : grey
-    const to = await asJpeg(work, from, "photo", TOP_QUALITY, "resized", true)
-    if (!to || !worthIt(before, to.bytes.length, "resized")) return null
-    const described = { ...to, space: doc.newName("DeviceGray") }
-    if (!holds(work, entry, described, from)) return null
-    ref.writeRawStream(described.bytes)
-    for (const key of ["DecodeParms", "Decode", "DL"]) ref.delete(key)
-    describe(doc, ref, described, found.base)
-    return "resized"
-  }
+  if (how === "grey") return greyPicture(work, entry, original, found.base)
 
   // Letters are kept at the scan's own sharpness, up to a limit.
   const sharp = sizeFor(size, entry.drawn, settings.maskDpi, 1.1)
@@ -1215,9 +1277,11 @@ function cutFonts(
   mupdf: Engine,
   bytes: Uint8Array,
   pristine: Doc,
-  options: Omit<CompressOptions, "level">
+  options: Omit<CompressOptions, "level">,
+  allowed: boolean
 ) {
   const doc = open(mupdf, bytes, options.password)
+  if (!allowed) return { doc, cut: false }
   const root = doc.getTrailer().get("Root")
   const fields = root.get("AcroForm", "Fields")
   // A field someone types into needs every letter of its font.
@@ -1256,6 +1320,65 @@ function dropHidden(doc: Doc) {
   return dropped
 }
 
+/** Take out of a document what its owner asked to have taken out. */
+function takeOut(doc: Doc, remove: Removal) {
+  const trailer = doc.getTrailer()
+  const root = trailer.get("Root")
+  // What is filled in becomes part of the page, and the fields go.
+  if (remove.flatten) doc.bake(false, true)
+  const pages = doc.countPages()
+  if (remove.comments || remove.attachments)
+    for (let index = 0; index < pages; index++) {
+      const notes = doc.findPage(index).get("Annots")
+      if (!notes.isArray()) continue
+      for (let at = notes.length - 1; at >= 0; at--) {
+        const kind = nameOf(notes.get(at).get("Subtype"))
+        const attached = kind === "FileAttachment"
+        const keep = kind === "Link" || kind === "Widget"
+        if (attached ? remove.attachments : remove.comments && !keep)
+          notes.delete(at)
+      }
+    }
+  if (remove.attachments)
+    for (const name of Object.keys(doc.getEmbeddedFiles()))
+      doc.deleteEmbeddedFile(name)
+  if (remove.bookmarks) {
+    root.delete("Outlines")
+    if (nameOf(root.get("PageMode")) === "UseOutlines") root.delete("PageMode")
+  }
+  if (remove.tags) {
+    root.delete("StructTreeRoot")
+    root.delete("MarkInfo")
+  }
+  if (remove.details) {
+    trailer.delete("Info")
+    root.delete("Metadata")
+  }
+  if (remove.scripts) {
+    const names = root.get("Names")
+    if (names.isDictionary()) names.delete("JavaScript")
+    if (nameOf(root.get("OpenAction").get("S")) === "JavaScript")
+      root.delete("OpenAction")
+  }
+  if (remove.scripts || remove.tags || remove.details)
+    eachObject(doc, (ref) => {
+      if (remove.scripts) {
+        // What runs when something happens to a page, a field or the document.
+        ref.delete("AA")
+        const action = ref.get("A")
+        if (action.isDictionary() && nameOf(action.get("S")) === "JavaScript")
+          ref.delete("A")
+      }
+      if (remove.tags) {
+        ref.delete("StructParents")
+        ref.delete("StructParent")
+      }
+      // Pictures and pages can carry details of their own.
+      if (remove.details && nameOf(ref.get("Type")) !== "Catalog")
+        ref.delete("Metadata")
+    })
+}
+
 /** Draw pages before and after and say how alike they are. */
 async function compare(
   mupdf: Engine,
@@ -1265,14 +1388,16 @@ async function compare(
   options: Omit<CompressOptions, "level">,
   attempt?: number
 ) {
+  // Notes that were taken out on purpose are not drawn for either side.
+  const extras = !options.remove?.comments
   const scores: PageScore[] = []
   for (const [done, page] of pages.entries()) {
     await options.checkpoint?.()
     options.progress?.("checking", done, pages.length, attempt)
     let score = 0
     try {
-      const was = drawPage(mupdf, before, page, CHECK_EDGE)
-      const is = drawPage(mupdf, after, page, CHECK_EDGE)
+      const was = drawPage(mupdf, before, page, CHECK_EDGE, extras)
+      const is = drawPage(mupdf, after, page, CHECK_EDGE, extras)
       if (was.width === is.width && was.height === is.height)
         score = similarity(was, is).mean
     } catch {
@@ -1303,11 +1428,13 @@ async function write(
   pristine: Doc,
   plan: LevelPlan | null,
   options: Omit<CompressOptions, "level">,
-  attempt?: number
+  attempt?: number,
+  /** Settings of one's own: every picture in grey, and whether fonts may be cut. */
+  own: { grey: boolean; fonts: boolean } = { grey: false, fonts: true }
 ): Promise<Written> {
   const maxPixels = options.maxPixels ?? DEFAULT_MAX_PIXELS
   const entries = new Map<number, Entry>()
-  const cut = cutFonts(mupdf, bytes, pristine, options)
+  const cut = cutFonts(mupdf, bytes, pristine, options, own.fonts)
   const doc = cut.doc
   try {
     const pages = doc.countPages()
@@ -1333,6 +1460,8 @@ async function write(
             for (const page of entry.pages) scanPages.add(page)
           }
         }
+        if (!change && own.grey && plan)
+          change = await greyed(work, entry, facts)
         // A scan that could not be rebuilt goes the usual way.
         if (!change) {
           const step = planPicture(facts, plan, maxPixels)
@@ -1352,14 +1481,24 @@ async function write(
     for (const entry of entries.values()) entry.image.destroy()
     entries.clear()
     const dropped = dropHidden(doc)
+    if (options.remove) takeOut(doc, options.remove)
     options.progress?.("writing", 0, 1, attempt)
     await options.checkpoint?.()
     // Objects nothing points at are dropped, identical ones are stored once,
     // and the rest is packed into compressed streams. A locked file stays locked.
+    const { lock } = options
     const buffer = doc.saveToBuffer({
       garbage: 4,
       compress: "yes",
       objstms: "yes",
+      ...(lock
+        ? {
+            encrypt: "aes-256",
+            "user-password": lock.password,
+            "owner-password": lock.ownerPassword,
+            permissions: lock.permissions,
+          }
+        : null),
     })
     try {
       return {
@@ -1406,6 +1545,18 @@ async function verify(
   const scanMark = how ? scanMarks[how] : null
   const markOf = (page: number) =>
     scanMark !== null && rebuilt.has(page) ? Math.min(mark, scanMark) : mark
+  const taken = options.remove
+    ? (Object.keys(options.remove) as (keyof Removal)[]).filter(
+        (key) => options.remove![key]
+      )
+    : []
+  const locked = Boolean(options.lock)
+  // Something asked for by name is done even when it saves nothing.
+  const wanted = locked || taken.length > 0
+  const asked = {
+    ...(taken.length ? { taken } : null),
+    ...(locked ? { locked } : null),
+  }
   const unchanged = (check: CheckResult): Compressed => ({
     bytes: null,
     report: {
@@ -1420,9 +1571,13 @@ async function verify(
       scans,
     },
   })
-  if (!outcome(before, out.length).smaller)
+  if (!wanted && !outcome(before, out.length).smaller)
     return unchanged(checkResult([], written.changedPages.length, 0))
-  const result = open(mupdf, out, options.password)
+  const result = open(
+    mupdf,
+    out,
+    options.lock ? options.lock.password : options.password
+  )
   try {
     const pages =
       result.countPages() === written.pages
@@ -1451,6 +1606,7 @@ async function verify(
         check,
         audit: auditPdf(result, out.length),
         scans,
+        ...asked,
       },
     }
   } finally {
@@ -1534,6 +1690,46 @@ export async function compressToSize(
         target: { wanted: options.target, met: fit.met, writes },
       },
     }
+  } finally {
+    own?.destroy()
+  }
+}
+
+/**
+ * Compress a PDF with settings of one's own: a resolution, a JPEG quality
+ * written as it is, and whether pictures lose their colour and fonts are cut.
+ * @throws PasswordNeeded when the file is locked and the password is missing or wrong.
+ */
+export async function compressCustom(
+  mupdf: Engine,
+  bytes: Uint8Array,
+  options: CustomOptions
+): Promise<Compressed> {
+  const own = options.pristine ? null : open(mupdf, bytes, options.password)
+  const pristine = options.pristine ?? own!
+  const { custom } = options
+  try {
+    return await verify(
+      mupdf,
+      bytes.length,
+      pristine,
+      await write(
+        mupdf,
+        bytes,
+        pristine,
+        customPlan(custom),
+        options,
+        undefined,
+        {
+          grey: custom.grey,
+          fonts: custom.fonts,
+        }
+      ),
+      // Grey pages are held to the look of grey, which the mark allows for.
+      CUSTOM_MARK,
+      false,
+      options
+    )
   } finally {
     own?.destroy()
   }

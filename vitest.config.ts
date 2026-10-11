@@ -8,6 +8,10 @@ export default defineConfig({
     environment: "jsdom",
     setupFiles: ["./tests/setup.ts"],
     include: ["**/*.test.{ts,tsx}"],
+    // The real-engine tests of the PDF tools run side by side and slow one
+    // another down; five seconds is too tight for the longer ones on a
+    // machine with few cores.
+    testTimeout: 20_000,
     coverage: {
       provider: "v8",
       include: [
@@ -53,6 +57,7 @@ export default defineConfig({
         "lib/pdf-compressor/jbig2.ts",
         "lib/pdf-compressor/jpeg.ts",
         "lib/pdf-compressor/layers.ts",
+        "lib/pdf-compressor/options.ts",
         "lib/pdf-compressor/pixels.ts",
         "lib/pdf-compressor/plan.ts",
         "lib/pdf-compressor/png.ts",

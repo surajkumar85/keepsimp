@@ -50,6 +50,15 @@ import {
 } from "@/lib/pdf-compressor/files"
 import type { CompressReport } from "@/lib/pdf-compressor/mupdf-compress"
 import {
+  defaultExtras,
+  extrasKey,
+  extrasProblem,
+  lockOf,
+  removalOf,
+  removesAnything,
+  type Extras,
+} from "@/lib/pdf-compressor/options"
+import {
   alreadySmall,
   batchLine,
   changeLines,
@@ -79,6 +88,7 @@ import { AuditCard } from "./audit-card"
 import { CompareView } from "./compare-view"
 import { FileRows, type RowResult } from "./file-rows"
 import { CUSTOM_SIZE, LevelPanel, type SizeChoice } from "./level-panel"
+import { OptionsPanel } from "./options-panel"
 
 const INPUT_ID = "compress-file"
 const ACCEPT = "application/pdf,.pdf"
@@ -95,6 +105,8 @@ interface Result {
   data: ArrayBuffer | null
   url: string | null
   name: string
+  /** The password that opens the result, when it has one. */
+  password?: string
   /** The name the result goes by in the worker, where it is opened to be compared. */
   opening: string | null
   /** That name again, once the worker has the result open. */
@@ -115,6 +127,13 @@ export function PdfCompressor() {
   const [sizeUnit, setSizeUnit] = useState<SizeUnit>("KB")
   const [further, setFurther] = useState(false)
   const [scans, setScans] = useState<ScanChoice>(defaultSettings.scans)
+  const [custom, setCustom] = useState(defaultSettings.custom)
+  const [extras, setExtras] = useState<Extras>(defaultExtras)
+  const updateExtras = useCallback(
+    (change: Partial<Extras>) =>
+      setExtras((before) => ({ ...before, ...change })),
+    []
+  )
   const [progress, setProgress] = useState<{
     /** Which file is being compressed, from 1, of how many. */
     file: number
@@ -309,11 +328,14 @@ export function PdfCompressor() {
         size === CUSTOM_SIZE ? limitBytes(sizeText, sizeUnit) : Number(size),
       further,
       scans,
+      custom,
     }),
-    [mode, size, sizeText, sizeUnit, further, scans]
+    [mode, size, sizeText, sizeUnit, further, scans, custom]
   )
-  const key = settingsKey(settings)
-  const problem = settingsProblem(settings)
+  // What is taken out and locked is part of what a result was made from.
+  const taken = extrasKey(extras)
+  const key = `${settingsKey(settings)}|${taken}`
+  const problem = settingsProblem(settings) ?? extrasProblem(extras)
   const several = state.files.length > 1
   const shown =
     state.files.find((file) => file.id === state.active) ?? state.files[0]
@@ -358,7 +380,14 @@ export function PdfCompressor() {
     const how =
       settings.mode === "size"
         ? { target: settings.target!, further: settings.further }
-        : settings.mode
+        : settings.mode === "custom"
+          ? { custom: settings.custom }
+          : settings.mode
+    const removal = removalOf(extras)
+    const lock = lockOf(extras, () => crypto.randomUUID())
+    // A result is opened with the password it was given, or the file's own.
+    const opens = (file: { password?: string }) =>
+      lock ? lock.password : file.password
     let stopped = false
     setFailure("")
     setAnnouncement(
@@ -380,6 +409,8 @@ export function PdfCompressor() {
           {
             how,
             scans: scansFor(settings),
+            remove: removesAnything(removal) ? removal : null,
+            lock,
             password: file.password,
             maxPixels: pixelLimit(limits.fileBytes < desktopLimits.fileBytes),
           },
@@ -421,7 +452,7 @@ export function PdfCompressor() {
           // Open the result in the worker too, so pages can be compared.
           opening = `${AFTER_ID}${++counter.current}`
           instance.open(opening, new Blob([out.bytes]), {
-            password: file.password,
+            password: opens(file),
           })
         }
         const next: Result = {
@@ -435,6 +466,7 @@ export function PdfCompressor() {
               )
             : null,
           name: resultName(file.name),
+          password: opens(file),
           opening,
           // The handler above fills this in once the worker has it open.
           after: null,
@@ -495,7 +527,7 @@ export function PdfCompressor() {
   }
 
   const rows = useMemo(() => {
-    const chosen = settingsKey(settings)
+    const chosen = `${settingsKey(settings)}|${extrasKey(extras)}`
     const out: Record<string, RowResult> = {}
     for (const file of state.files) {
       const result = results[slot(file.id, chosen)]
@@ -511,7 +543,7 @@ export function PdfCompressor() {
         }
     }
     return out
-  }, [state.files, results, failures, settings])
+  }, [state.files, results, failures, settings, extras])
 
   const dropHandlers = {
     onDragEnter: (event: DragEvent) => {
@@ -614,7 +646,13 @@ export function PdfCompressor() {
   const gain = current
     ? outcome(current.report.before, current.report.after)
     : null
-  const check = current?.data ? checkLine(current.report.check) : null
+  // Pages made grey or black and white are compared, but not called the same.
+  const remade = Boolean(
+    current &&
+    ((current.report.scans && current.report.scans.how !== "layers") ||
+      (current.mode === "custom" && custom.grey))
+  )
+  const check = current?.data ? checkLine(current.report.check, remade) : null
   const target =
     current?.report.target && current.data && current.report.audit
       ? targetLine(
@@ -736,6 +774,10 @@ export function PdfCompressor() {
           onFurther={setFurther}
           scans={scans}
           onScans={setScans}
+          custom={custom}
+          onCustom={(change) =>
+            setCustom((before) => ({ ...before, ...change }))
+          }
           disabled={compressing}
         />
 
@@ -875,7 +917,7 @@ export function PdfCompressor() {
                           className="font-heading text-3xl font-medium tracking-tight"
                           data-testid="saving"
                         >
-                          {gain.percent}% smaller
+                          {gain.smaller ? `${gain.percent}% smaller` : "Ready"}
                         </p>
                         <p
                           className="mt-1 text-sm text-muted-foreground"
@@ -966,7 +1008,7 @@ export function PdfCompressor() {
                             {
                               title: current.name,
                               subtitle: `${plural(pages, "page")} · ${sizeLabel(current.report.after)} · not yet downloaded`,
-                              password: shown.password,
+                              password: current.password,
                               label: (number) =>
                                 `Page ${number} of ${current.name}`,
                               failure:
@@ -1055,6 +1097,9 @@ export function PdfCompressor() {
             audit={current.report.audit}
             testId="audit-after"
           />
+        )}
+        {ready.length > 0 && (
+          <OptionsPanel extras={extras} update={updateExtras} />
         )}
       </div>
 

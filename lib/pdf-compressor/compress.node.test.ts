@@ -38,10 +38,13 @@ import { drawPage } from "@/lib/pdf-merger/mupdf-engine"
 import { codecs } from "./codecs"
 import { auditPdf } from "./mupdf-audit"
 import {
+  compressCustom,
   compressPdf,
   compressToSize,
   type CompressOptions,
 } from "./mupdf-compress"
+import { defaultExtras, lockOf, removalOf, type Removal } from "./options"
+import { defaultCustom } from "./settings"
 import { mostWrites, stepCount } from "./target"
 import type { Level } from "./settings"
 
@@ -986,6 +989,179 @@ describe("reaching a size", () => {
       Array.from({ length: report.target!.writes }, (_, index) => index + 1)
     )
   }, 120_000)
+})
+
+describe("settings of one's own", () => {
+  const custom = (bytes: Uint8Array, change: Partial<typeof defaultCustom>) =>
+    compressCustom(mupdf, bytes, {
+      codecs,
+      custom: { ...defaultCustom, ...change },
+    })
+  const album = async () =>
+    makePicturePdf([
+      { bytes: await jpegOf(scene(1600, 1200)), type: "jpeg", width: 400 },
+    ])
+
+  it("saves pictures at the resolution and quality that are set", async () => {
+    const input = await album()
+    const fine = await custom(input, { dpi: 200, quality: 85 })
+    const coarse = await custom(input, { dpi: 96, quality: 40 })
+    // 400 points at 200 dpi, and at 96.
+    expect((await readPictures(fine.bytes!))[0].width).toBe(1111)
+    expect((await readPictures(coarse.bytes!))[0].width).toBe(533)
+    expect(coarse.bytes!.length).toBeLessThan(fine.bytes!.length / 3)
+    expect(await texts(coarse.bytes!)).toEqual([pictureText(1)])
+  }, 60_000)
+
+  it("takes the colour out of every picture when asked", async () => {
+    const input = await makePicturePdf([
+      { bytes: await jpegOf(scene(1600, 1200)), type: "jpeg", width: 400 },
+      { bytes: await pngOf(chart(800, 600)), type: "png", width: 300 },
+    ])
+    const { bytes, report } = await custom(input, { grey: true })
+    expect(report.pictures.changed).toBe(2)
+    expect((await stored(bytes!)).map((picture) => picture.space)).toEqual([
+      "/DeviceGray",
+      "/DeviceGray",
+    ])
+    for (const picture of await readPictures(bytes!))
+      expect(picture.data[0]).toBe(picture.data[2])
+  }, 60_000)
+})
+
+describe("what is taken out on request", () => {
+  const everything = async () =>
+    makePdf("extras", {
+      pages: 3,
+      bookmarks: [{ title: "Start", page: 1 }],
+      fields: [{ name: "who", value: "Ada", page: 2 }],
+      notes: [{ page: 3, text: "Check this" }],
+      links: [{ from: 1, to: 3 }],
+      tagged: true,
+      attachments: { "data.txt": "attached" },
+      title: "Private title",
+      author: "Someone",
+    })
+  const taking = (bytes: Uint8Array, removal: Partial<Removal>) =>
+    compress(bytes, "lossless", {
+      remove: { ...removalOf(defaultExtras), ...removal },
+    })
+
+  it("takes out one thing at a time and leaves the rest", async () => {
+    const input = await everything()
+    const before = await readPdf(input)
+    expect(before.attachments).toEqual(["data.txt"])
+
+    const bookmarks = await taking(input, { bookmarks: true })
+    expect(bookmarks.report.taken).toEqual(["bookmarks"])
+    let after = await readPdf(bookmarks.bytes!)
+    expect(after.bookmarks).toEqual([])
+    expect(after.attachments).toEqual(["data.txt"])
+    expect(after.pages).toEqual(before.pages)
+    expect(after.info.Title).toBe("Private title")
+
+    after = await readPdf((await taking(input, { attachments: true })).bytes!)
+    expect(after.attachments).toEqual([])
+    expect(after.bookmarks).toEqual(before.bookmarks)
+
+    after = await readPdf((await taking(input, { details: true })).bytes!)
+    expect(after.info.Title).toBeUndefined()
+    expect(after.info.Author).toBeUndefined()
+    expect(after.bookmarks).toEqual(before.bookmarks)
+
+    after = await readPdf((await taking(input, { comments: true })).bytes!)
+    // The note is gone; the link and the field stay.
+    expect(after.pages.map((page) => page.kinds)).toEqual([
+      ["Link"],
+      ["Widget"],
+      [],
+    ])
+    expect(after.pages[0].links).toEqual(before.pages[0].links)
+
+    const tags = (await taking(input, { tags: true })).bytes!
+    const untagged = await PDFDocument.load(tags)
+    expect(untagged.catalog.get(PDFName.of("MarkInfo"))).toBeUndefined()
+    expect(await texts(tags)).toEqual(await texts(input))
+  }, 60_000)
+
+  it("flattens form fields: what was filled in stays, the fields go", async () => {
+    const input = await everything()
+    const { bytes, report } = await taking(input, { flatten: true })
+    expect(report.taken).toEqual(["flatten"])
+    const after = await readPdf(bytes!)
+    expect(after.fields).toEqual([])
+    expect(after.pages[1].kinds).toEqual([])
+    expect(after.pages[1].text).toContain("Ada")
+    // A lossless result with nothing else changed still looks the same.
+    expect(report.check.low).toEqual([])
+  }, 60_000)
+
+  it("takes out scripts that run by themselves", async () => {
+    const doc = await PDFDocument.load(await everything())
+    const script = doc.context.obj({
+      Type: "Action",
+      S: "JavaScript",
+      JS: PDFHexString.fromText("app.alert('hello')"),
+    })
+    doc.catalog.set(PDFName.of("OpenAction"), script)
+    doc.catalog.set(PDFName.of("AA"), doc.context.obj({ WC: script }))
+    const input = await doc.save({ useObjectStreams: false })
+    const kept = await PDFDocument.load(
+      (await compress(input, "lossless")).bytes ?? input
+    )
+    expect(kept.catalog.get(PDFName.of("OpenAction"))).toBeDefined()
+    const { bytes } = await taking(input, { scripts: true })
+    const after = await PDFDocument.load(bytes!)
+    expect(after.catalog.get(PDFName.of("OpenAction"))).toBeUndefined()
+    expect(after.catalog.get(PDFName.of("AA"))).toBeUndefined()
+    expect(await texts(bytes!)).toEqual(await texts(input))
+  }, 60_000)
+})
+
+describe("a password on the result", () => {
+  const lock = (change: Partial<typeof defaultExtras> = {}) =>
+    lockOf(
+      { ...defaultExtras, protect: true, password: "new one", ...change },
+      () => "nobody keeps this"
+    )!
+
+  it("locks a file, even one that cannot be made smaller", async () => {
+    const input = await makePlainPdf([{ body: "Only words" }])
+    const { bytes, report } = await compress(input, "lossless", {
+      lock: lock(),
+    })
+    expect(report.locked).toBe(true)
+    expect(bytes).not.toBeNull()
+    await expect(texts(bytes!)).rejects.toThrow()
+    expect(await texts(bytes!, "new one")).toEqual(["Only words"])
+  }, 60_000)
+
+  it("limits what a reader may do", async () => {
+    const input = await makePlainPdf([{ body: "Only words" }])
+    const { bytes } = await compress(input, "lossless", {
+      lock: lock({ allowPrint: false, allowCopy: false }),
+    })
+    const read = await readPdf(bytes!, "new one")
+    expect(read.encrypted).toBe(true)
+    // pdf.js names the things a reader may do; printing and copying are not among them.
+    expect(read.permissions).not.toContain(4)
+    expect(read.permissions).not.toContain(16)
+  }, 60_000)
+
+  it("replaces the password a file already has", async () => {
+    const input = await makePicturePdf(
+      [{ bytes: await jpegOf(scene(1600, 1200)), type: "jpeg", width: 300 }],
+      1,
+      "old one"
+    )
+    const { bytes } = await compress(input, "balanced", {
+      password: "old one",
+      lock: lock(),
+    })
+    await expect(texts(bytes!, "old one")).rejects.toThrow()
+    expect(await texts(bytes!, "new one")).toEqual([pictureText(1)])
+    expect(bytes!.length).toBeLessThan(input.length / 2)
+  }, 60_000)
 })
 
 describe("many files of many kinds", () => {

@@ -58,6 +58,21 @@ const content: TutorialContent = {
         "For forms and inboxes with a limit. Choose 100 KB, 200 KB, 500 KB, 1, 2, 5, 10 or 25 MB, or type a size in KB or MB. The only way to know what a file weighs at some setting is to write it, so the file is written up to six times, from gentle to harsh, and the gentlest result that fits is kept. It stops where pictures are still easy to read (72 dpi). If the size cannot be reached, you get the smallest readable result and are told how far over it is. “Go further” lets pictures get blurry when the size matters more.",
     },
     {
+      term: "Custom",
+      detail:
+        "For those who know what they want. Choose the resolution pictures are brought down to (72 to 300 dpi) and the JPEG quality photographs are saved at, which is used exactly as set, with no measuring. Pictures can lose their colour, and fonts can be left whole for a file whose text will be edited later.",
+    },
+    {
+      term: "Take out",
+      detail:
+        "Things a file can do without, each by a switch that is off until you turn it on: its title and other details, attached files, bookmarks, notes and highlights, scripts, and accessibility tags. “Flatten form fields” makes what is filled in part of the page and takes the fields away. What is taken out is gone from the result for good, and the result is made even when it is no smaller.",
+    },
+    {
+      term: "Password",
+      detail:
+        "The result can be locked with AES-256, with limits on printing, copying and changes and an optional second password that lifts them. A file that came with a password keeps it unless you set a new one.",
+    },
+    {
       term: "Scanned pages",
       detail:
         "A page that is one large picture is a scan. “Text and paper” takes it apart: the letters are kept in black and white at the scan's own sharpness, the paper behind them becomes a soft, small colour picture, and the ink keeps its colour, so a red stamp stays red. This is usually several times smaller than a picture of the whole page, and easier to read. Words hidden over the scan by a text recogniser stay where they are. A scan with no print in it is treated like any other picture. “Greyscale” takes the colour out. “Black and white” makes a photocopy: smallest of all, right for plain text, but photographs and shading are lost.",

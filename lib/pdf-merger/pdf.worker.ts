@@ -24,6 +24,7 @@ import { codecs } from "@/lib/pdf-compressor/codecs"
 import { auditPdf, type Audit } from "@/lib/pdf-compressor/mupdf-audit"
 import type { Stage } from "@/lib/pdf-compressor/report"
 import {
+  compressCustom,
   compressPdf,
   compressToSize,
 } from "@/lib/pdf-compressor/mupdf-compress"
@@ -419,6 +420,8 @@ async function compress(request: Extract<PdfRequest, { type: "compress" }>) {
     const options = {
       codecs,
       scans: request.scans,
+      remove: request.remove ?? undefined,
+      lock: request.lock ?? undefined,
       password: request.password,
       pristine: pdf.doc,
       maxPixels: request.maxPixels,
@@ -441,7 +444,9 @@ async function compress(request: Extract<PdfRequest, { type: "compress" }>) {
     const result =
       typeof how === "string"
         ? await compressPdf(mupdf, bytes, { ...options, level: how })
-        : await compressToSize(mupdf, bytes, { ...options, ...how })
+        : "custom" in how
+          ? await compressCustom(mupdf, bytes, { ...options, ...how })
+          : await compressToSize(mupdf, bytes, { ...options, ...how })
     const out = result.bytes ? (result.bytes.buffer as ArrayBuffer) : null
     post(
       { type: "compressed", job, bytes: out, report: result.report },

@@ -340,12 +340,16 @@ export const renderPage = (
   maxEdge: number
 ) => drawPage(mupdf, opened.doc, index, maxEdge)
 
-/** One page of any document the engine holds, as a picture. */
+/**
+ * One page of any document the engine holds, as a picture.
+ * @param extras Draw notes and form fields too, as a viewer does.
+ */
 export function drawPage(
   mupdf: Engine,
   doc: Doc,
   index: number,
-  maxEdge: number
+  maxEdge: number,
+  extras = true
 ) {
   const page = doc.loadPage(index)
   try {
@@ -355,7 +359,7 @@ export function drawPage(
       mupdf.Matrix.scale(scale, scale),
       mupdf.ColorSpace.DeviceRGB,
       false,
-      true
+      extras
     )
     try {
       const width = pixmap.getWidth()
