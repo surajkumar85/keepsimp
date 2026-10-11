@@ -777,44 +777,6 @@ test("works the Pages view from the keyboard, and by dragging", async ({
   )
 })
 
-test("shows a page large, and steps to the pages beside it", async ({
-  page,
-}) => {
-  await page.goto(ROUTE)
-  await upload(page, await pdf("A.pdf", "A", { pages: 3 }))
-  await openPages(page)
-  await tile(page, 1).click()
-  await page.getByRole("button", { name: "Add a blank page" }).click()
-  await page.getByRole("button", { name: "Look at the page closely" }).click()
-  const sheet = page.getByRole("dialog")
-  await expect(sheet.getByRole("heading")).toHaveText("Page 2 of 4")
-  await expect(sheet).toContainText("A.pdf, page 2")
-  const stage = page.getByTestId("page-preview")
-  await expect(stage).toHaveAttribute("data-state", "drawn", {
-    timeout: 30_000,
-  })
-  // The picture is far larger than a tile's.
-  expect(
-    await stage
-      .locator("canvas")
-      .evaluate((canvas: HTMLCanvasElement) => canvas.height)
-  ).toBeGreaterThan(1000)
-  await sheet.getByRole("button", { name: "Next" }).click()
-  await expect(sheet.getByRole("heading")).toHaveText("Page 3 of 4")
-  await expect(sheet).toContainText("Blank page")
-  await sheet.getByRole("button", { name: "Previous" }).click()
-  await sheet.getByRole("button", { name: "Previous" }).click()
-  await expect(sheet.getByRole("heading")).toHaveText("Page 1 of 4")
-  await expect(sheet.getByRole("button", { name: "Previous" })).toBeDisabled()
-  await page.keyboard.press("Escape")
-  await expect(sheet).toBeHidden()
-  // A double click on a page opens it too.
-  await tile(page, 3).dblclick()
-  await expect(page.getByRole("dialog").getByRole("heading")).toHaveText(
-    "Page 4 of 4"
-  )
-})
-
 test("alternates the pages of two files, for fronts and backs", async ({
   page,
 }) => {

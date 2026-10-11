@@ -12,7 +12,12 @@ import {
   type MergeSource,
   type OpenedPdf,
 } from "./mupdf-engine"
+import { pageSizes, readPage, searchPage } from "@/lib/pdf-reader/mupdf-read"
+import { splitPart } from "@/lib/pdf-splitter/mupdf-split"
 import { jpegOrientation, quarterTurns } from "./picture"
+import type { Size } from "@/lib/image-compressor/geometry"
+import type { PageText, Quad } from "@/lib/pdf-reader/text"
+import type { Bookmark } from "./outline"
 import type { PdfRequest, PdfResponse } from "./protocol"
 
 declare const self: DedicatedWorkerGlobalScope
@@ -30,6 +35,9 @@ const ENGINE_FAILED =
 
 const FAILED =
   "The files could not be merged. Try again, or remove the last file you added."
+
+const SPLIT_FAILED =
+  "The file could not be split. Try again, or add the file once more."
 
 const TOO_LARGE =
   "This is more than this device can handle at once. Remove some files, reload the page and try again."
@@ -230,8 +238,169 @@ async function merge(request: Extract<PdfRequest, { type: "merge" }>) {
   }
 }
 
+async function split(request: Extract<PdfRequest, { type: "split" }>) {
+  const { job } = request
+  try {
+    const pdf = files.get(request.id)
+    if (!pdf) throw new Error(SPLIT_FAILED)
+    const total = request.parts.reduce((sum, part) => sum + part.length, 0)
+    let before = 0
+    let last = 0
+    let paused = performance.now()
+    for (const [index, pages] of request.parts.entries()) {
+      const result = await splitPart(await engine, pdf, pages, {
+        // One part carries the attachments; every part would carry them many times over.
+        attachments: index === 0,
+        checkpoint: async () => {
+          if (performance.now() - paused < 16) return
+          await new Promise((resolve) => setTimeout(resolve, 0))
+          paused = performance.now()
+          if (job <= cancelled) throw new Cancelled()
+        },
+        progress: (done) => {
+          const now = performance.now()
+          if (now - last > 80) {
+            last = now
+            post({ type: "progress", job, done: before + done, total })
+          }
+        },
+      })
+      before += pages.length
+      // A cancel that arrived while the part was being written counts from here.
+      await new Promise((resolve) => setTimeout(resolve, 0))
+      if (job <= cancelled) throw new Cancelled()
+      const bytes = result.bytes.buffer as ArrayBuffer
+      post(
+        {
+          type: "split-part",
+          job,
+          index,
+          bytes,
+          pages: result.pages,
+          bookmarks: result.bookmarks,
+        },
+        [bytes]
+      )
+      post({ type: "progress", job, done: before, total })
+    }
+    post({ type: "split-done", job })
+  } catch (error) {
+    if (error instanceof Cancelled) post({ type: "cancelled", job })
+    else
+      post({
+        type: "split-error",
+        job,
+        message: readable(error, SPLIT_FAILED),
+      })
+  }
+}
+
+function layout(request: Extract<PdfRequest, { type: "layout" }>) {
+  const pdf = files.get(request.id)
+  let found: { sizes: Size[]; bookmarks: Bookmark[] } | null = null
+  try {
+    if (pdf) found = { sizes: pageSizes(pdf), bookmarks: pdf.bookmarks }
+  } catch {
+    // The reader says the file cannot be shown.
+  }
+  post({ type: "layout", request: request.request, layout: found })
+}
+
+function text(request: Extract<PdfRequest, { type: "text" }>) {
+  const pdf = files.get(request.id)
+  let found: PageText | null = null
+  try {
+    if (pdf) found = readPage(pdf, request.page)
+  } catch {
+    // A page whose text cannot be read is still shown; it just cannot be selected.
+  }
+  post({ type: "text", request: request.request, text: found })
+}
+
+/** How long a search may hold the engine before letting other work in, in milliseconds. */
+const SEARCH_SLICE = 24
+
+/**
+ * Search some pages, then go to the back of the queue for the rest, so that
+ * pages being read are still drawn while a long file is searched.
+ */
+function search(
+  request: Extract<PdfRequest, { type: "search" }>,
+  from = 0,
+  withText = 0
+) {
+  if (forgotten.has(request.request)) {
+    forgotten.delete(request.request)
+    return
+  }
+  const started = performance.now()
+  const found: { at: number; hits: Quad[][] }[] = []
+  let at = from
+  while (
+    at < request.pages.length &&
+    performance.now() - started < SEARCH_SLICE
+  ) {
+    const { id, page } = request.pages[at]
+    const pdf = files.get(id)
+    try {
+      if (pdf) {
+        const result = searchPage(pdf, page, request.needle)
+        if (result.text) withText++
+        if (result.hits.length) found.push({ at, hits: result.hits })
+      }
+    } catch {
+      // A page that cannot be read has no matches.
+    }
+    at++
+  }
+  post({
+    type: "found",
+    request: request.request,
+    found,
+    done: at,
+    withText,
+    total: request.pages.length,
+  })
+  if (at < request.pages.length)
+    enqueue({
+      request: request.request,
+      run: () => search(request, at, withText),
+    })
+}
+
+interface Task {
+  run: () => Promise<void> | void
+  /** Done before anything that is not urgent. */
+  urgent?: boolean
+  /** The request it answers, so it can be dropped when the answer is no longer wanted. */
+  request?: number
+}
+
 // One thing at a time: the engine is a single body of memory.
-let queue: Promise<void> = Promise.resolve()
+const waiting: Task[] = []
+/** Searches called off while they were between two slices. */
+const forgotten = new Set<number>()
+let busy = false
+
+async function work() {
+  if (busy) return
+  busy = true
+  while (waiting.length) {
+    const urgent = waiting.findIndex((task) => task.urgent)
+    const [task] = waiting.splice(Math.max(urgent, 0), 1)
+    try {
+      await task.run()
+    } catch {
+      // Each kind of work reports its own failures.
+    }
+  }
+  busy = false
+}
+
+function enqueue(task: Task) {
+  waiting.push(task)
+  void work()
+}
 
 self.onmessage = (event: MessageEvent<PdfRequest>) => {
   const request = event.data
@@ -240,12 +409,45 @@ self.onmessage = (event: MessageEvent<PdfRequest>) => {
     cancelled = Math.max(cancelled, request.job)
     return
   }
-  queue = queue.then(() => {
-    if (request.type === "open") return open(request)
-    if (request.type === "thumbnail") return thumbnail(request)
-    if (request.type === "merge") return merge(request)
-    const pdf = files.get(request.id)
-    if (pdf) closePdf(pdf)
-    files.delete(request.id)
-  })
+  if (request.type === "forget") {
+    // The page has already stopped waiting for these, so nothing is answered.
+    const gone = new Set(request.requests)
+    for (let at = waiting.length - 1; at >= 0; at--) {
+      const task = waiting[at]
+      if (task.request !== undefined && gone.has(task.request)) {
+        waiting.splice(at, 1)
+        gone.delete(task.request)
+      }
+    }
+    // What is left is running now; only a search looks here before it goes on.
+    for (const left of gone) forgotten.add(left)
+    return
+  }
+  if (request.type === "open") enqueue({ run: () => open(request) })
+  else if (request.type === "thumbnail")
+    enqueue({
+      run: () => thumbnail(request),
+      urgent: request.urgent,
+      request: request.request,
+    })
+  else if (request.type === "layout")
+    enqueue({ run: () => layout(request), urgent: true })
+  else if (request.type === "text")
+    enqueue({
+      run: () => text(request),
+      urgent: true,
+      request: request.request,
+    })
+  else if (request.type === "search")
+    enqueue({ run: () => search(request), request: request.request })
+  else if (request.type === "merge") enqueue({ run: () => merge(request) })
+  else if (request.type === "split") enqueue({ run: () => split(request) })
+  else
+    enqueue({
+      run: () => {
+        const pdf = files.get(request.id)
+        if (pdf) closePdf(pdf)
+        files.delete(request.id)
+      },
+    })
 }

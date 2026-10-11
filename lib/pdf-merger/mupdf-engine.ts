@@ -40,6 +40,7 @@ import {
   type NumberStyle,
   type SheetChoice,
 } from "./print"
+import { keepsEntry, namesIn, RESOURCE_KINDS } from "./resources"
 import type { ContentsChoice, FormsChoice, LabelsChoice } from "./settings"
 
 type Engine = typeof MuPDF
@@ -472,6 +473,110 @@ function duplicatePage(out: Doc, page: Obj) {
   })
   if (annotations.length) copy.put("Annots", annotations)
   return copy
+}
+
+/** Add the names in a stream's drawing commands to `names`. Throws when the stream cannot be read. */
+function readNames(stream: Obj, names: Set<string>) {
+  const buffer = stream.readStream()
+  try {
+    namesIn(buffer.asUint8Array(), names)
+  } finally {
+    buffer.destroy()
+  }
+}
+
+/** True for something drawn with commands of its own that names no resources of its own, and so uses the page's. */
+const leansOnPage = (kind: string, entry: Obj) => {
+  if (!entry.isDictionary() || !entry.get("Resources").isNull()) return false
+  if (kind === "XObject") return nameOf(entry.get("Subtype")) === "Form"
+  if (kind === "Font") return nameOf(entry.get("Subtype")) === "Type3"
+  // A tiling pattern is a stream; a shading pattern has no commands.
+  return kind === "Pattern" && entry.isStream()
+}
+
+/**
+ * Give pages taken out of a larger file only the fonts, pictures and other
+ * resources their own content names. Many files hand every page one shared
+ * list of everything in the file; without this, a single copied page would
+ * bring every picture of the file with it.
+ *
+ * Nothing is dropped unless it is certain the page does without it: a page
+ * whose content cannot be read, or that draws something which leans on the
+ * page's resources in turn, is left as it is.
+ */
+function trimResources(out: Doc, pages: readonly Obj[]) {
+  /** Trimmed lists already made, so pages that shared a list still share one. */
+  const made = new Map<string, Obj>()
+  pages.forEach((page, at) => {
+    const resources = page.get("Resources")
+    if (!resources.isDictionary()) return
+    const names = new Set<string>()
+    try {
+      const contents = page.get("Contents")
+      if (contents.isArray())
+        for (let index = 0; index < contents.length; index++)
+          readNames(contents.get(index), names)
+      else if (contents.isStream()) readNames(contents, names)
+      // A note or field drawn without resources of its own may fall back on the page's.
+      const annotations = page.get("Annots")
+      if (annotations.isArray())
+        for (let index = 0; index < annotations.length; index++) {
+          const looks = annotations.get(index).get("AP")
+          if (!looks.isDictionary()) continue
+          looks.forEach((look) => {
+            const drawn: Obj[] = []
+            if (look.isStream()) drawn.push(look)
+            else if (look.isDictionary())
+              look.forEach((state) => {
+                if (state.isStream()) drawn.push(state)
+              })
+            for (const stream of drawn)
+              if (stream.get("Resources").isNull()) readNames(stream, names)
+          })
+        }
+    } catch {
+      return
+    }
+    const kept = new Map<string, string[]>()
+    let dropped = 0
+    let leaning = false
+    for (const kind of RESOURCE_KINDS) {
+      const list = resources.get(kind)
+      if (!list.isDictionary()) continue
+      const keys: string[] = []
+      list.forEach((entry, key) => {
+        if (!keepsEntry(String(key), names)) {
+          dropped++
+          return
+        }
+        keys.push(String(key))
+        if (leansOnPage(kind, entry)) leaning = true
+      })
+      kept.set(kind, keys)
+    }
+    if (!dropped || leaning) return
+    const origin = resources.isIndirect()
+      ? `object ${resources.asIndirect()}`
+      : `page ${at}`
+    const key = `${origin}|${JSON.stringify([...kept])}`
+    let trimmed = made.get(key)
+    if (!trimmed) {
+      const next = out.newDictionary()
+      resources.forEach((value, name) => {
+        const keys = kept.get(String(name))
+        if (!keys) {
+          next.put(String(name), value)
+          return
+        }
+        const list = out.newDictionary()
+        for (const entry of keys) list.put(entry, value.get(entry))
+        next.put(String(name), list)
+      })
+      trimmed = out.addObject(next)
+      made.set(key, trimmed)
+    }
+    page.put("Resources", trimmed)
+  })
 }
 
 /** Call `visit` with every annotation on the pages, last to first, so one can be removed. */
@@ -1108,6 +1213,8 @@ export async function mergePages(
         placed: Map<number, number>
         first: number
         picture: Obj | null
+        /** Its pages in the result, when only some of the file's pages were taken. */
+        partial?: Obj[]
       }
     >()
     /** The size of the last page that is not a picture, for pictures to take. */
@@ -1177,6 +1284,17 @@ export async function mergePages(
       options.progress?.(pages.length, total)
     }
     const files = [...taken.values()]
+    // A file that went in whole keeps its lists as they are; pages taken out of one are trimmed.
+    wanted.forEach((want, index) => {
+      if ("blank" in want) return
+      const file = taken.get(want.source)!
+      if (
+        !file.source.pdf.picture &&
+        file.copies.size < file.source.pdf.pages.length
+      )
+        (file.partial ??= []).push(pages[index])
+    })
+    for (const file of files) if (file.partial) trimResources(out, file.partial)
     const grafts = files.map((file) => ({
       map: file.map,
       input: file.source,

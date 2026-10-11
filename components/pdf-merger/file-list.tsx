@@ -5,6 +5,7 @@ import {
   IconAlertCircle,
   IconArrowDown,
   IconArrowUp,
+  IconBook2,
   IconCopy,
   IconInfoCircle,
   IconLock,
@@ -36,9 +37,14 @@ function notesFor(file: PdfFile) {
 function Thumbnail({
   bitmap,
   rotation,
+  name,
+  onRead,
 }: {
   bitmap: ImageBitmap | undefined
   rotation: number
+  name: string
+  /** Open the file to read; left out while it cannot be. */
+  onRead?: (from: HTMLElement) => void
 }) {
   const canvas = useRef<HTMLCanvasElement>(null)
   useEffect(() => {
@@ -48,18 +54,31 @@ function Thumbnail({
     target.height = bitmap.height
     target.getContext("2d")?.drawImage(bitmap, 0, 0)
   }, [bitmap])
-  return (
-    <span className="flex size-16 shrink-0 items-center justify-center overflow-hidden rounded-md border bg-muted">
-      {bitmap && (
-        <canvas
-          ref={canvas}
-          aria-hidden="true"
-          data-testid="file-thumbnail"
-          className="max-h-full max-w-full bg-background shadow-sm transition-transform duration-200 motion-reduce:transition-none"
-          style={{ transform: `rotate(${rotation}deg)` }}
-        />
+  const picture = bitmap && (
+    <canvas
+      ref={canvas}
+      aria-hidden="true"
+      data-testid="file-thumbnail"
+      className="max-h-full max-w-full bg-background shadow-sm transition-transform duration-200 motion-reduce:transition-none"
+      style={{ transform: `rotate(${rotation}deg)` }}
+    />
+  )
+  const frame =
+    "flex size-16 shrink-0 items-center justify-center overflow-hidden rounded-md border bg-muted"
+  return onRead ? (
+    <button
+      type="button"
+      aria-label={`Read ${name}`}
+      onClick={(event) => onRead(event.currentTarget)}
+      className={cn(
+        frame,
+        "cursor-zoom-in outline-none hover:border-primary focus-visible:ring-2 focus-visible:ring-ring"
       )}
-    </span>
+    >
+      {picture}
+    </button>
+  ) : (
+    <span className={frame}>{picture}</span>
   )
 }
 
@@ -124,6 +143,7 @@ export function FileList({
   onRotate,
   onAgain,
   onRemove,
+  onRead,
   onUnlock,
 }: {
   files: PdfFile[]
@@ -136,6 +156,8 @@ export function FileList({
   onRotate: (id: string) => void
   onAgain: (id: string) => void
   onRemove: (id: string) => void
+  /** Open a file in the reader; `from` is the control that asked, which takes focus again afterwards. */
+  onRead: (id: string, from: HTMLElement) => void
   onUnlock: (id: string, password: string) => void
 }) {
   const ids = useId()
@@ -183,6 +205,12 @@ export function FileList({
             <Thumbnail
               bitmap={thumbnails[`${file.id}/0`]}
               rotation={file.rotation}
+              name={file.name}
+              onRead={
+                file.status === "ready"
+                  ? (from) => onRead(file.id, from)
+                  : undefined
+              }
             />
             <div className="min-w-0 flex-1 basis-48">
               <p className="truncate text-sm font-medium">{file.name}</p>
@@ -274,6 +302,15 @@ export function FileList({
               role="group"
               aria-label={`Actions for ${file.name}`}
             >
+              <Button
+                variant="ghost"
+                size="icon"
+                aria-label={`Open ${file.name} in the reader`}
+                disabled={file.status !== "ready"}
+                onClick={(event) => onRead(file.id, event.currentTarget)}
+              >
+                <IconBook2 aria-hidden="true" />
+              </Button>
               <Button
                 variant="ghost"
                 size="icon"

@@ -14,6 +14,7 @@ import {
   IconAlertCircle,
   IconArrowsShuffle,
   IconArrowsSort,
+  IconBook2,
   IconBookmarks,
   IconDownload,
   IconExternalLink,
@@ -34,7 +35,9 @@ import { ChoiceChips } from "@/components/ui/choice-chips"
 import { Input } from "@/components/ui/input"
 import { cn } from "cn"
 import { sizeLabel, sniffFormat } from "@/lib/image-compressor/formats"
-import { PdfClient } from "@/lib/pdf-merger/client"
+import { PdfReader, type Reading } from "@/components/pdf-reader/pdf-reader"
+import type { ReaderEntry, ReaderSource } from "@/components/pdf-reader/types"
+import { PdfClient, type FileLayout } from "@/lib/pdf-merger/client"
 import {
   filesReducer,
   lockedProblem,
@@ -79,7 +82,6 @@ import {
 import { FileList } from "./file-list"
 import { OutputPanel } from "./output-panel"
 import { PageGrid, type GridFile } from "./page-grid"
-import { PagePreview } from "./page-preview"
 import { PrintPanel } from "./print-panel"
 import { StructurePanel } from "./structure-panel"
 
@@ -88,6 +90,8 @@ const ACCEPT = "application/pdf,.pdf,image/*,.heic,.heif,.jxl"
 const THUMBNAIL_EDGE = 192
 /** Pictures of pages kept at once; older ones are let go and drawn again when needed. */
 const MAX_THUMBNAILS = 300
+/** Ids of merged files opened to be read begin with this, so they are never taken for a file to merge. */
+const RESULT_ID = "result-"
 const SAMPLES = ["keepsimp-report.pdf", "keepsimp-appendix.pdf"]
 
 const copy = (limits: Limits) => ({
@@ -129,7 +133,7 @@ export function PdfMerger() {
   /** The pages as arranged by hand; null while they follow the file list. */
   const [arranged, setArranged] = useState<History<PageEntry[]> | null>(null)
   const [selection, setSelection] = useState<ReadonlySet<string>>(new Set())
-  const [preview, setPreview] = useState<string | null>(null)
+  const [reading, setReading] = useState<Reading | null>(null)
   const [picturePage, setPicturePage] = useState<PicturePage>("previous")
   const [pictureMargin, setPictureMargin] = useState<PictureMargin>("small")
   const [alternating, setAlternating] = useState(false)
@@ -159,6 +163,18 @@ export function PdfMerger() {
   const live = useRef(state)
   const counter = useRef(0)
   const cancel = useRef<(() => void) | null>(null)
+  /** Page sizes and bookmarks of files that have been read, by file. */
+  const layouts = useRef(new Map<string, FileLayout>())
+  /** The merged file while it is open in the reader, and who waits for it to open. */
+  const resultOpened = useRef<{
+    id: string
+    done: (opened: boolean) => void
+  } | null>(null)
+  const resultRead = useRef<string | null>(null)
+  /** The control that opened the reader, which takes focus again when it closes. */
+  const opener = useRef<HTMLElement | null>(null)
+  /** Counts openings of the reader, so a slow one cannot overtake a later one. */
+  const readings = useRef(0)
   /** Pictures of pages asked for, oldest first. */
   const asked = useRef<string[]>([])
   const held = useRef({ thumbnails, result })
@@ -173,6 +189,14 @@ export function PdfMerger() {
 
   useEffect(() => {
     const instance = new PdfClient((event) => {
+      // The merged file, opened only to be read, is not one of the files to merge.
+      const waiting = resultOpened.current
+      if (waiting && event.id === waiting.id) {
+        resultOpened.current = null
+        waiting.done(event.type === "opened")
+        return
+      }
+      if (event.id.startsWith(RESULT_ID)) return
       if (event.type === "opened") {
         dispatch({ type: "opened", id: event.id, facts: event.facts })
         // While pages are arranged by hand, a new file's pages join at the end.
@@ -241,6 +265,8 @@ export function PdfMerger() {
     const mine = (key: string) =>
       file === undefined || key.startsWith(`${file}/`)
     asked.current = asked.current.filter((key) => !mine(key))
+    if (file === undefined) layouts.current.clear()
+    else layouts.current.delete(file)
     setThumbnails((current) => {
       const rest: Record<string, ImageBitmap> = {}
       for (const [key, bitmap] of Object.entries(current))
@@ -578,11 +604,186 @@ export function PdfMerger() {
       : gridFiles[entry.file]?.picture
         ? gridFiles[entry.file].name
         : `${gridFiles[entry.file]?.name ?? "A file"}, page ${entry.page + 1}`
-  const renderPage = useCallback(
-    (file: string, page: number, edge: number) =>
-      client.current?.thumbnail(file, page, edge) ?? Promise.resolve(null),
+  /** The reader asks the worker that holds the files for everything it shows. */
+  const source = useMemo<ReaderSource>(
+    () => ({
+      draw: (file, page, edge, urgent) =>
+        client.current?.draw(file, page, edge, urgent) ?? {
+          request: 0,
+          promise: Promise.resolve(null),
+        },
+      text: (file, page) =>
+        client.current?.text(file, page) ?? {
+          request: 0,
+          promise: Promise.resolve(null),
+        },
+      search: (needle, pages, onNews) =>
+        client.current?.search(needle, pages, onNews) ?? { stop() {} },
+      forget: (requests) => client.current?.forget(requests),
+    }),
     []
   )
+
+  const layoutOf = async (id: string) => {
+    const known = layouts.current.get(id)
+    if (known) return known
+    const found = (await client.current?.layout(id)) ?? null
+    if (found) layouts.current.set(id, found)
+    return found
+  }
+
+  const CANNOT_SHOW = "This file could not be shown. Try adding it again."
+
+  /** Read one file from its first page to its last, as it stands in the list. */
+  async function readFile(id: string, from: HTMLElement) {
+    const file = state.files.find((entry) => entry.id === id)
+    if (!file || file.status !== "ready") return
+    opener.current = from
+    const run = ++readings.current
+    setReading({ state: "opening", title: file.name })
+    const layout = await layoutOf(id)
+    if (run !== readings.current) return
+    if (!layout) {
+      setReading({ state: "failed", title: file.name, message: CANNOT_SHOW })
+      return
+    }
+    setReading({
+      state: "ready",
+      title: file.name,
+      subtitle: file.picture
+        ? `Picture · ${sizeLabel(file.size)}`
+        : `${plural(layout.sizes.length, "page")} · ${sizeLabel(file.size)}`,
+      start: 0,
+      entries: layout.sizes.map((size, page) => ({
+        kind: "page",
+        key: `${id}/${page}`,
+        file: id,
+        page,
+        rotation: file.rotation,
+        size,
+        label: file.picture ? file.name : `${file.name}, page ${page + 1}`,
+      })),
+      bookmarks: file.picture ? null : { file: id, items: layout.bookmarks },
+    })
+  }
+
+  /** Read the pages as they will be merged, starting at one of them. */
+  async function readPages(startKey: string) {
+    // The page's tile has focus, whether it was clicked or reached with the keys.
+    opener.current = document.activeElement as HTMLElement | null
+    const run = ++readings.current
+    const title = "The merged pages, as arranged"
+    const shown = entries
+    setReading({ state: "opening", title })
+    const ids = [
+      ...new Set(
+        shown.flatMap((entry) => (entry.kind === "page" ? [entry.file] : []))
+      ),
+    ]
+    const found = await Promise.all(ids.map(layoutOf))
+    if (run !== readings.current) return
+    const byFile = new Map(ids.map((id, at) => [id, found[at]]))
+    const list: ReaderEntry[] = []
+    for (const entry of shown) {
+      if (entry.kind === "blank") {
+        list.push({
+          kind: "blank",
+          key: entry.key,
+          size: { width: entry.width, height: entry.height },
+          label: "Blank page",
+        })
+        continue
+      }
+      const size = byFile.get(entry.file)?.sizes[entry.page]
+      if (!size) {
+        setReading({ state: "failed", title, message: CANNOT_SHOW })
+        return
+      }
+      list.push({
+        kind: "page",
+        key: entry.key,
+        file: entry.file,
+        page: entry.page,
+        rotation: entry.rotation,
+        size,
+        label: describe(entry),
+      })
+    }
+    setReading({
+      state: "ready",
+      title,
+      start: Math.max(
+        0,
+        shown.findIndex((entry) => entry.key === startKey)
+      ),
+      entries: list,
+      bookmarks: null,
+    })
+  }
+
+  /** Read the merged file itself, before it is downloaded. */
+  async function readResult(from: HTMLElement) {
+    const instance = client.current
+    if (!instance || !current) return
+    opener.current = from
+    const run = ++readings.current
+    const title = outputName(settings.name)
+    setReading({ state: "opening", title })
+    const id = `${RESULT_ID}${++counter.current}`
+    const failed = () => {
+      instance.close(id)
+      if (run === readings.current)
+        setReading({
+          state: "failed",
+          title,
+          message:
+            "The merged file could not be shown. You can still download it.",
+        })
+    }
+    let layout: FileLayout | null = null
+    try {
+      const blob = await (await fetch(current.url)).blob()
+      const opened = await new Promise<boolean>((done) => {
+        resultOpened.current = { id, done }
+        // The result is current, so the password is the one in the settings.
+        instance.open(id, blob, {
+          password: current.locked ? settings.password : undefined,
+        })
+      })
+      if (opened) layout = await instance.layout(id)
+    } catch {
+      // Told below.
+    }
+    if (!layout || run !== readings.current) {
+      failed()
+      return
+    }
+    resultRead.current = id
+    setReading({
+      state: "ready",
+      title,
+      subtitle: `${plural(current.pages, "page")} · ${sizeLabel(current.bytes)} · not yet downloaded`,
+      start: 0,
+      entries: layout.sizes.map((size, page) => ({
+        kind: "page",
+        key: `${id}/${page}`,
+        file: id,
+        page,
+        rotation: 0,
+        size,
+        label: `Page ${page + 1} of the merged file`,
+      })),
+      bookmarks: { file: id, items: layout.bookmarks },
+    })
+  }
+
+  function closeReader() {
+    readings.current++
+    setReading(null)
+    // The merged file was only open to be read.
+    if (resultRead.current) client.current?.close(resultRead.current)
+    resultRead.current = null
+  }
   /** The details of the first file that has any, to take over with one press. */
   const firstFacts = state.files.find(
     (file) =>
@@ -600,9 +801,6 @@ export function PdfMerger() {
         keywords: firstFacts.keywords,
       }
     : null
-  const previewAt = preview
-    ? entries.findIndex((entry) => entry.key === preview)
-    : -1
 
   const dropHandlers = {
     // Only files from outside count; dragging a row to reorder it does not.
@@ -895,6 +1093,7 @@ export function PdfMerger() {
               client.current?.open(newId, file.file, { picture: file.picture })
             }}
             onRemove={remove}
+            onRead={(id, from) => void readFile(id, from)}
             onUnlock={(id, password) => {
               const file = state.files.find((entry) => entry.id === id)
               if (!file) return
@@ -911,7 +1110,7 @@ export function PdfMerger() {
             selection={selection}
             onSelection={setSelection}
             onChange={changePages}
-            onPreview={setPreview}
+            onPreview={(key) => void readPages(key)}
             onUndo={() => {
               // Undoing the first change leaves the pages as the files give
               // them, so the file list sets the result again.
@@ -930,13 +1129,11 @@ export function PdfMerger() {
             newKey={() => `made-${++counter.current}`}
           />
         )}
-        <PagePreview
-          entries={entries}
-          at={previewAt >= 0 ? previewAt : null}
-          describe={describe}
-          render={renderPage}
-          onStep={(to) => setPreview(entries[to]?.key ?? null)}
-          onClose={() => setPreview(null)}
+        <PdfReader
+          reading={reading}
+          source={source}
+          onClose={closeReader}
+          returnTo={opener}
         />
         <p className="sr-only" role="status" aria-live="polite">
           {announcement}
@@ -1042,6 +1239,13 @@ export function PdfMerger() {
                 >
                   <IconExternalLink aria-hidden="true" /> Open in a new tab
                 </a>
+                <Button
+                  variant="outline"
+                  size="lg"
+                  onClick={(event) => void readResult(event.currentTarget)}
+                >
+                  <IconBook2 aria-hidden="true" /> Read it here
+                </Button>
               </div>
             </div>
           ) : (

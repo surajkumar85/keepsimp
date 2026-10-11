@@ -308,6 +308,118 @@ export async function makePdf(tag: string, options: FixtureOptions = {}) {
   return doc.save({ useObjectStreams: false })
 }
 
+/** How the pages of a shared-list file use what the list holds. */
+export type SharedHow =
+  /** Each page draws its own picture directly. */
+  | "direct"
+  /** Each page draws a form that names no resources of its own, and the form draws the picture. */
+  | "form"
+  /** Each page's picture is drawn by a stamp whose appearance names no resources of its own. */
+  | "stamp"
+  /** The pictures have names with a space in them, written as "#20" in the content. */
+  | "escaped"
+
+/** Bytes that do not compress, so a picture's size shows in the size of a file. */
+export function noise(length: number, seed: number) {
+  const bytes = new Uint8Array(length)
+  let state = seed
+  for (let index = 0; index < length; index++) {
+    state = (Math.imul(state, 1103515245) + 12345) >>> 0
+    bytes[index] = state >>> 24
+  }
+  return bytes
+}
+
+/** The size of one picture in a shared-list file, in bytes. */
+export const SHARED_PICTURE = 100 * 100 * 3
+
+/**
+ * A file in which every page points at one shared list of all the fonts and
+ * pictures in the file, as many programs write them, though each page draws
+ * only its own picture. Page N says "<tag>-P<N>" and shows picture N.
+ */
+export async function makeSharedPdf(
+  tag: string,
+  count: number,
+  how: SharedHow = "direct"
+) {
+  const doc = await PDFDocument.create()
+  const context = doc.context
+  const font = await doc.embedFont(StandardFonts.Helvetica)
+  const unused = await doc.embedFont(StandardFonts.Courier)
+  const key = (page: number) => (how === "escaped" ? `Im ${page}` : `Im${page}`)
+  const written = (page: number) =>
+    how === "escaped" ? `Im#20${page}` : `Im${page}`
+  const pictures: Record<string, PDFRef> = {}
+  for (let page = 1; page <= count; page++)
+    pictures[key(page)] = context.register(
+      context.stream(noise(SHARED_PICTURE, page), {
+        Type: "XObject",
+        Subtype: "Image",
+        Width: 100,
+        Height: 100,
+        ColorSpace: "DeviceRGB",
+        BitsPerComponent: 8,
+      })
+    )
+  const show = (page: number) => `q 100 0 0 100 40 40 cm /${written(page)} Do Q`
+  const forms: Record<string, PDFRef> = {}
+  if (how === "form")
+    for (let page = 1; page <= count; page++)
+      forms[`Fm${page}`] = context.register(
+        context.stream(show(page), {
+          Type: "XObject",
+          Subtype: "Form",
+          BBox: [0, 0, 300, 400],
+        })
+      )
+  const xobjects = context.obj({})
+  for (const [name, ref] of Object.entries({ ...pictures, ...forms }))
+    xobjects.set(PDFName.of(name), ref)
+  const shared = context.register(
+    context.obj({
+      Font: { F1: font.ref, F2: unused.ref },
+      XObject: xobjects,
+    } as never)
+  )
+  for (let number = 1; number <= count; number++) {
+    const page = doc.addPage([300, 400])
+    page.node.set(PDFName.of("Resources"), shared)
+    const text = `BT /F1 20 Tf 40 300 Td (${pageText(tag, number)}) Tj ET`
+    const drawn =
+      how === "form" ? `/Fm${number} Do` : how === "stamp" ? "" : show(number)
+    page.node.set(
+      PDFName.of("Contents"),
+      context.register(context.stream(`${text} ${drawn}`))
+    )
+    if (how === "stamp")
+      page.node.set(
+        PDFName.of("Annots"),
+        context.obj([
+          context.register(
+            context.obj({
+              Type: "Annot",
+              Subtype: "Stamp",
+              Rect: [0, 0, 300, 400],
+              F: 4,
+              P: page.ref,
+              AP: {
+                N: context.register(
+                  context.stream(show(number), {
+                    Type: "XObject",
+                    Subtype: "Form",
+                    BBox: [0, 0, 300, 400],
+                  })
+                ),
+              },
+            } as never)
+          ),
+        ])
+      )
+  }
+  return doc.save()
+}
+
 /**
  * Damage a PDF the way real files get damaged.
  * - "table": the table that says where each object is points nowhere

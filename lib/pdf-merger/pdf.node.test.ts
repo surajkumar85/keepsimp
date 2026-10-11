@@ -11,10 +11,18 @@ import { afterEach, describe, expect, it } from "vitest"
 import {
   damage,
   makePdf,
+  makeSharedPdf,
   pageText,
+  SHARED_PICTURE,
   type FixtureOptions,
+  type SharedHow,
 } from "@/tests/pdf-fixtures"
-import { readPdf, texts } from "@/tests/pdf-reader"
+import {
+  readPdf,
+  resourceNames,
+  storedPictures,
+  texts,
+} from "@/tests/pdf-reader"
 import {
   closePdf,
   mergePages,
@@ -565,6 +573,128 @@ describe("pictures of pages", () => {
       expect(Buffer.from(after.data).equals(Buffer.from(before.data))).toBe(
         true
       )
+    }
+  })
+})
+
+describe("pages taken out of a larger file", () => {
+  /** A file whose pages all point at one list of every font and picture in it. */
+  const shared = async (count: number, how: SharedHow = "direct") =>
+    open(await makeSharedPdf("S", count, how))
+  const takes = async (pdf: OpenedPdf, pages: number[]) =>
+    (await merge([part(pdf, "S", pages)], "none")) as Uint8Array
+  const sameDrawing = (from: OpenedPdf, page: number, bytes: Uint8Array) => {
+    const before = renderPage(mupdf, from, page, 300)
+    const after = renderPage(mupdf, open(bytes), 0, 300)
+    return Buffer.from(after.data).equals(Buffer.from(before.data))
+  }
+
+  it("carry only the pictures and fonts they use", async () => {
+    const pdf = await shared(6)
+    const one = await takes(pdf, [2])
+    // One picture of six, and it is the page's own.
+    expect(await storedPictures(one)).toBe(1)
+    expect(await resourceNames(one, "XObject")).toEqual([["Im3"]])
+    // The font the page writes with stays; the one no page uses goes.
+    expect(await resourceNames(one, "Font")).toEqual([["F1"]])
+    expect(one.length).toBeLessThan(SHARED_PICTURE * 1.5)
+    const read = await readPdf(one)
+    expect(read.pages.map((page) => [page.text, page.pictures])).toEqual([
+      ["S-P3", 1],
+    ])
+    expect(sameDrawing(pdf, 2, one)).toBe(true)
+  })
+
+  it("add up to about the size of the file they came from", async () => {
+    const bytes = await makeSharedPdf("S", 6)
+    const pdf = open(bytes)
+    let together = 0
+    for (let page = 0; page < 6; page++) {
+      const one = await takes(pdf, [page])
+      expect(one.length).toBeLessThan(SHARED_PICTURE * 1.5)
+      together += one.length
+    }
+    expect(together).toBeLessThan(bytes.length * 1.3)
+  })
+
+  it("keep one shared list between pages that use the same things", async () => {
+    const pdf = await shared(4)
+    const twice = await takes(pdf, [1, 1, 3])
+    expect(await storedPictures(twice)).toBe(2)
+    expect(await resourceNames(twice, "XObject")).toEqual([
+      ["Im2"],
+      ["Im2"],
+      ["Im4"],
+    ])
+    const read = await readPdf(twice)
+    expect(read.pages.map((page) => page.pictures)).toEqual([1, 1, 1])
+  })
+
+  it("leave a file that goes in whole exactly as it was", async () => {
+    const pdf = await shared(3)
+    const whole = await takes(pdf, [0, 1, 2])
+    expect(await storedPictures(whole)).toBe(3)
+    expect(await resourceNames(whole, "XObject")).toEqual([
+      ["Im1", "Im2", "Im3"],
+      ["Im1", "Im2", "Im3"],
+      ["Im1", "Im2", "Im3"],
+    ])
+  })
+
+  it("find pictures whose names are written with escapes", async () => {
+    const pdf = await shared(3, "escaped")
+    const one = await takes(pdf, [1])
+    expect(await storedPictures(one)).toBe(1)
+    expect((await readPdf(one)).pages[0].pictures).toBe(1)
+    expect(sameDrawing(pdf, 1, one)).toBe(true)
+  })
+
+  it("leave a page alone when a form on it leans on the page's own list", async () => {
+    const pdf = await shared(3, "form")
+    const one = await takes(pdf, [1])
+    // The form draws its picture by a name only the page's list explains.
+    expect(sameDrawing(pdf, 1, one)).toBe(true)
+    expect((await resourceNames(one, "XObject"))[0]).toContain("Im2")
+  })
+
+  it("keep what a stamp without a list of its own draws with", async () => {
+    const pdf = await shared(3, "stamp")
+    const one = await takes(pdf, [2])
+    expect(await resourceNames(one, "XObject")).toEqual([["Im3"]])
+    expect(await storedPictures(one)).toBe(1)
+    expect(sameDrawing(pdf, 2, one)).toBe(true)
+  })
+
+  it("still give a page whose content is damaged", async () => {
+    const { PDFDocument, PDFName } = await import("@cantoo/pdf-lib")
+    const doc = await PDFDocument.load(await makeSharedPdf("S", 2))
+    // Content that claims a compression it does not have.
+    doc
+      .getPage(0)
+      .node.set(
+        PDFName.of("Contents"),
+        doc.context.register(
+          doc.context.stream("not deflated at all", { Filter: "FlateDecode" })
+        )
+      )
+    const pdf = open(await doc.save())
+    const one = await takes(pdf, [0])
+    expect((await readPdf(one)).pages).toHaveLength(1)
+    // The page beside it is not harmed.
+    const other = await takes(pdf, [1])
+    expect((await readPdf(other)).pages[0].pictures).toBe(1)
+  })
+
+  it("trim pages of real files without changing how they look", async () => {
+    for (const name of ["chromium-tagged", "quartz-scan"]) {
+      const pdf = open(
+        new Uint8Array(readFileSync(`e2e/fixtures/pdf/${name}.pdf`))
+      )
+      if (pdf.facts.pages < 2) continue
+      for (let page = 0; page < pdf.facts.pages; page++)
+        expect(sameDrawing(pdf, page, await takes(pdf, [page])), name).toBe(
+          true
+        )
     }
   })
 })

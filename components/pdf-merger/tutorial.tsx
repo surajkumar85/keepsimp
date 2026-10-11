@@ -61,7 +61,12 @@ const content: TutorialContent = {
     {
       term: "Pages view",
       detail:
-        "Shows every page of the result as a small picture. Click pages to select them, and Shift-click to select everything between two. Drag them to a new place, or use the toolbar to turn, copy, remove or move them, to reverse their order, or to add a blank page. Undo and redo cover every change. Look closely opens one page large, with the pages beside it a press away.",
+        "Shows every page of the result as a small picture. Click pages to select them, and Shift-click to select everything between two. Drag them to a new place, or use the toolbar to turn, copy, remove or move them, to reverse their order, or to add a blank page. Undo and redo cover every change. Look closely opens the reader at that page, with the pages in the order they will be merged.",
+    },
+    {
+      term: "The reader",
+      detail:
+        "Click a file's picture to read it in a large window: every page in one column, with zoom, fit to width, a strip of small pages, the file's bookmarks, and a field to jump to a page. Search finds words on every page and marks them. Text can be selected and copied, and links inside the file work. After merging, Read it here opens the merged file itself before you download it. Escape closes the reader.",
     },
     {
       term: "Keyboard in the Pages view",

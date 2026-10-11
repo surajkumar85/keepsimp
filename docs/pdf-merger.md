@@ -18,7 +18,8 @@ Updated 11 October 2026. Applies to `/dashboard/pdf-merger/`. All four planned p
   - Toolbar: turn either way, copy, remove, move earlier or later or to either end, reverse the order, add a blank page, look closely, undo and redo.
   - Keyboard: arrows, Home and End move; Space selects; Shift with an arrow selects on; Alt with ← or → moves; R and Shift+R turn; Delete removes; Ctrl/Cmd+A, Ctrl/Cmd+Z and Ctrl/Cmd+Shift+Z; Escape lets go of the selection. Every change is announced to screen readers.
   - Pictures are drawn only for tiles near the screen, and at most 300 are kept, so a 5,000-page list stays light.
-  - **Look closely** opens one page large in a side sheet, with Previous and Next.
+  - **Look closely**, or a double click, opens the reader at that page, showing the pages in the order they will be merged, blank pages included.
+- **The reader** (`docs/pdf-reader.md`): a large window for reading a whole PDF. It opens from a file's picture or its "Open in the reader" button, from the Pages view, and from "Read it here" on the result, which shows the merged file itself before it is downloaded.
 - **Your own page order:** the first change in the Pages view makes the arrangement the person's own. From then on the file list shows where pages come from but no longer sets the result: its move buttons, pages fields and turn buttons are off, and a note says why. Files added later join at the end; a removed file takes its pages with it. "Start again from the files" goes back, after asking.
 - **Alternate pages:** with two or more files, deals their pages out in turn (first of each, second of each, and so on), with a switch for a last file that is in reverse order. It is one step in the undo history.
 - **Pictures as pages:** JPG, PNG, WebP, AVIF, HEIC, GIF, TIFF, BMP and JPEG XL. SVG is refused with a reason.
@@ -62,6 +63,14 @@ Updated 11 October 2026. Applies to `/dashboard/pdf-merger/`. All four planned p
 
 Shared parts are stored once: identical fonts and pictures in different files, or in one file used twice, become one object. Streams that were not compressed are compressed. This is why the result is often smaller than the files together.
 
+**Pages taken out of a larger file bring only what they use.** Many programs give every page of a file one shared list of all its fonts and pictures. A page copied from such a file would bring every picture of the file with it, which is why split or extracted pages are often nearly as large as the whole. When only some pages of a file are taken, each copied page's list is cut down to the names its own content uses (`resources.ts`, `trimResources` in the engine):
+
+- Every "/" in the page's drawing commands is read as the start of a name, wherever it stands. That can find a name too many, never miss one.
+- A stamp, note or field drawn without a list of its own is read as well, since it may fall back on the page's.
+- A page is left exactly as it is when something it draws (a form, a tiling pattern or a Type 3 font) names no resources of its own and so leans on the page's.
+- Names outside ASCII are always kept, and pages that used the same things still share one list.
+- A file that goes in whole is not touched.
+
 ## Limits
 
 Set from measurements with the real engine (Node, Apple silicon):
@@ -82,15 +91,15 @@ Set from measurements with the real engine (Node, Apple silicon):
 
 `mupdf` 1.28.1, MuPDF's own WebAssembly build. One engine reads, repairs, unlocks, draws and writes. Its file is 10.4 MB (3.6 MB with Brotli) and is loaded only when this tool is opened.
 
-- **Pure logic** (`lib/pdf-merger/`, 100% covered): `ranges.ts` (the pages field), `files.ts` (the list, its order and what a merge would do), `outline.ts` (bookmarks of the result), `settings.ts` (limits, names, the PDF sniffer).
-- **`mupdf-engine.ts`** is the only code that touches MuPDF. The engine module is handed in, so the same code runs in the worker and in Node, where the real-engine tests live.
+- **Pure logic** (`lib/pdf-merger/`, 100% covered): `ranges.ts` (the pages field), `files.ts` (the list, its order and what a merge would do), `outline.ts` (bookmarks of the result), `settings.ts` (limits, names, the PDF sniffer), `resources.ts` (the names a page's content uses).
+- **`mupdf-engine.ts`** is the code that merges with MuPDF; `lib/pdf-reader/mupdf-read.ts` reads sizes, text and search matches for the reader. No other file touches the engine. The engine module is handed in, so the same code runs in the worker and in Node, where the real-engine tests live.
 - More pure logic since phase 2: `pages.ts` (the page list and everything done to it, with undo and redo) and `picture.ts` (a JPEG's orientation, and where a picture sits on its page).
 - The engine merges page by page (`mergePages`): each page names its file, its page there and a turn, or is a blank page of a size. Pages of one file share one copy map wherever they end up, so a file's links find its pages even when another file's pages sit between them. `mergePdfs` remains for callers that think in whole files.
 - A picture is opened as a one-page file (`openPicture`) for its thumbnail; when merging, its page is laid out afresh for the chosen page size, and the picture itself is stored once however many pages show it.
 - `contents.ts` (pure) lays out contents pages and writes their drawing commands; the engine supplies the widths of letters and turns text into glyph numbers.
 - `print.ts` (pure) works out the sheet every page should become, the matrix that fits a page onto it, where a footer's texts go, and the matrix that lets a footer be drawn the way the reader sees the page, whatever its turn.
 - One writer puts text on pages for both contents and footers. To fit or stamp a page, its own content is wrapped, never changed: a new first part sets the matrix and saves the state, a new last part restores it. Pages that share content are therefore not affected by each other.
-- **`pdf.worker.ts`**, `protocol.ts` and `client.ts`: one worker holds every opened file and does everything, one request at a time. The plan had a second worker for thumbnails; with one, a file is held in memory once, not twice. A merge pauses every 16 ms to let a cancel through.
+- **`pdf.worker.ts`**, `protocol.ts` and `client.ts`: one worker holds every opened file and does everything, one request at a time. The plan had a second worker for thumbnails; with one, a file is held in memory once, not twice. A merge pauses every 16 ms to let a cancel through. Work waits in one list: what a reader is looking at (a page's picture and text) is done before thumbnails, a search works in slices of 24 ms and goes to the back of the list between them, and `forget` drops requests for pages that have scrolled away.
 
 ### How pages are copied
 
@@ -127,6 +136,7 @@ A page that appears twice is not copied twice: the second is a new page that sha
   - form fields kept, renamed and dropped; signatures; layers
   - shared parts stored once; the result's own details; progress, pauses and stopping
   - a hundred seeded random page plans, each checked page by page
+  - pages taken out of a file with one shared list: only their own pictures and fonts come along, the parts add up to about the whole, escaped names are found, and pages that lean on the shared list are left alone
   - every merged page drawn and compared, pixel for pixel, with the page it came from
   - single pages woven together from two files, with links and bookmarks; each page turned by itself; blank pages
   - pictures: a JPEG kept byte for byte, one stored on its side, pixels with see-through parts, every page-size choice, and a picture used twice stored once
@@ -146,7 +156,7 @@ A page that appears twice is not copied twice: the second is a new page that sha
   - dropped files and the samples
   - the Pages view: selecting, turning, moving, copying, removing, blank pages, undo and redo, then the file list beside an arrangement and going back to it
   - the Pages view from the keyboard, and dragging one page and several
-  - the large preview
+  - opening the reader from a file, from the Pages view and from the result (in `e2e/pdf-reader.spec.ts`)
   - alternating two files, one in reverse
   - pictures as pages: a turned JPEG, a PNG, an HEIC and a refused SVG, with each page size
   - every bookmark choice, and contents pages by name and by title, with a cover and a name in Chinese drawn by the browser

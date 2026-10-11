@@ -1,6 +1,7 @@
 import type { Rotation, Size } from "@/lib/image-compressor/geometry"
+import type { PageText, Quad } from "@/lib/pdf-reader/text"
 import type { FileFacts } from "./files"
-import type { BookmarkPolicy } from "./outline"
+import type { Bookmark, BookmarkPolicy } from "./outline"
 import type { PictureMargin, PicturePage } from "./picture"
 import type { FooterPlace, NumberStyle, SheetChoice } from "./print"
 import type { ContentsChoice, FormsChoice, LabelsChoice } from "./settings"
@@ -28,7 +29,22 @@ export type PdfRequest =
       edge: number
       /** Echoed back, so answers can be matched to their requests. */
       request: number
+      /** A page someone is waiting to read: drawn before anything that is not. */
+      urgent?: boolean
     }
+  /** What a reader needs to lay a file out: the size of every page, and its bookmarks. */
+  | { type: "layout"; id: string; request: number }
+  /** The text of one page and its links, for selecting, copying and following. */
+  | { type: "text"; id: string; page: number; request: number }
+  | {
+      type: "search"
+      request: number
+      needle: string
+      /** The pages to look through, in order; answers name a page by its place in this list. */
+      pages: { id: string; page: number }[]
+    }
+  /** Answers no longer wanted: pages that scrolled away, or a search that was replaced. */
+  | { type: "forget"; requests: number[] }
   | {
       type: "merge"
       /** Echoed back; a newer job or a cancel stops this one. */
@@ -67,6 +83,14 @@ export type PdfRequest =
         permissions: number
       } | null
     }
+  | {
+      type: "split"
+      /** Echoed back; a cancel stops it, as it stops a merge. */
+      job: number
+      id: string
+      /** The pages of each part, counted from 0, in the order they go in. */
+      parts: number[][]
+    }
   | { type: "cancel"; job: number }
 
 export type PdfResponse =
@@ -75,6 +99,23 @@ export type PdfResponse =
   | { type: "locked"; id: string; wrong: boolean }
   | { type: "open-error"; id: string; message: string }
   | { type: "thumbnail"; request: number; bitmap: ImageBitmap | null }
+  | {
+      type: "layout"
+      request: number
+      /** Null when the file is not open. */
+      layout: { sizes: Size[]; bookmarks: Bookmark[] } | null
+    }
+  | { type: "text"; request: number; text: PageText | null }
+  | {
+      type: "found"
+      request: number
+      /** What the pages searched since the last answer hold. */
+      found: { at: number; hits: Quad[][] }[]
+      /** How many pages have been searched, and how many of them hold any text. */
+      done: number
+      withText: number
+      total: number
+    }
   | { type: "progress"; job: number; done: number; total: number }
   /** Every page is in place and the file is being written, which cannot be stopped. */
   | { type: "writing"; job: number }
@@ -86,4 +127,15 @@ export type PdfResponse =
       bookmarks: number
     }
   | { type: "merge-error"; job: number; message: string }
+  /** One part of a split is written. Parts arrive in order. */
+  | {
+      type: "split-part"
+      job: number
+      index: number
+      bytes: ArrayBuffer
+      pages: number
+      bookmarks: number
+    }
+  | { type: "split-done"; job: number }
+  | { type: "split-error"; job: number; message: string }
   | { type: "cancelled"; job: number }

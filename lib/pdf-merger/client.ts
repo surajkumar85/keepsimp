@@ -1,5 +1,8 @@
 "use client"
 
+import type { Size } from "@/lib/image-compressor/geometry"
+import type { PageText, Quad } from "@/lib/pdf-reader/text"
+import type { Bookmark } from "./outline"
 import type { PdfRequest, PdfResponse } from "./protocol"
 
 /** Everything a merge is asked for. */
@@ -20,6 +23,36 @@ export interface MergeResult {
   bytes: ArrayBuffer
   pages: number
   bookmarks: number
+}
+
+/** What a reader needs to lay a file out. */
+export interface FileLayout {
+  sizes: Size[]
+  bookmarks: Bookmark[]
+}
+
+/** News from a search: what more was found, and how far it has got. */
+export interface SearchNews {
+  found: { at: number; hits: Quad[][] }[]
+  done: number
+  withText: number
+  total: number
+}
+
+/** One part of a split, as it arrives. */
+export interface SplitPart {
+  index: number
+  bytes: ArrayBuffer
+  pages: number
+  bookmarks: number
+}
+
+interface SplitJob {
+  /** True when every part was written; false when the split was cancelled. */
+  resolve: (finished: boolean) => void
+  reject: (error: Error) => void
+  onPart: (part: SplitPart) => void
+  onProgress: (done: number, total: number) => void
 }
 
 interface MergeJob {
@@ -44,7 +77,14 @@ export class PdfClient {
     number,
     (bitmap: ImageBitmap | null) => void
   >()
+  private readonly layouts = new Map<
+    number,
+    (layout: FileLayout | null) => void
+  >()
+  private readonly texts = new Map<number, (text: PageText | null) => void>()
+  private readonly searches = new Map<number, (news: SearchNews) => void>()
   private readonly merges = new Map<number, MergeJob>()
+  private readonly splits = new Map<number, SplitJob>()
   private requests = 0
   private jobs = 0
   private answered = false
@@ -71,15 +111,43 @@ export class PdfClient {
       this.thumbnails.delete(message.request)
       if (done) done(message.bitmap)
       else message.bitmap?.close()
-    } else if (message.type === "progress")
+    } else if (message.type === "layout") {
+      this.layouts.get(message.request)?.(message.layout)
+      this.layouts.delete(message.request)
+    } else if (message.type === "text") {
+      this.texts.get(message.request)?.(message.text)
+      this.texts.delete(message.request)
+    } else if (message.type === "found") {
+      const { request, found, done, withText, total } = message
+      this.searches.get(request)?.({ found, done, withText, total })
+      if (done >= total) this.searches.delete(request)
+    } else if (message.type === "split-part") {
+      const { index, bytes, pages, bookmarks } = message
+      this.splits.get(message.job)?.onPart({ index, bytes, pages, bookmarks })
+    } else if (
+      message.type === "split-done" ||
+      message.type === "split-error"
+    ) {
+      const job = this.splits.get(message.job)
+      this.splits.delete(message.job)
+      if (message.type === "split-done") job?.resolve(true)
+      else job?.reject(new Error(message.message))
+    } else if (message.type === "progress") {
+      this.splits.get(message.job)?.onProgress(message.done, message.total)
       this.merges.get(message.job)?.onProgress(message.done, message.total)
-    else if (message.type === "writing")
+    } else if (message.type === "writing")
       this.merges.get(message.job)?.onProgress(0, null)
     else if (
       message.type === "merged" ||
       message.type === "merge-error" ||
       message.type === "cancelled"
     ) {
+      const split = this.splits.get(message.job)
+      if (split && message.type === "cancelled") {
+        this.splits.delete(message.job)
+        split.resolve(false)
+        return
+      }
       const job = this.merges.get(message.job)
       this.merges.delete(message.job)
       if (!job) return
@@ -98,10 +166,11 @@ export class PdfClient {
   private failed() {
     this.worker?.terminate()
     this.worker = null
-    for (const done of this.thumbnails.values()) done(null)
-    this.thumbnails.clear()
+    this.dropReading()
     for (const job of this.merges.values()) job.reject(new Error(ENGINE_FAILED))
     this.merges.clear()
+    for (const job of this.splits.values()) job.reject(new Error(ENGINE_FAILED))
+    this.splits.clear()
     // Offline, some browsers fail to load a worker's scripts the first time (see WorkerPool).
     if (!this.answered && this.restarts < 2) {
       this.restarts++
@@ -112,6 +181,20 @@ export class PdfClient {
     for (const id of this.sent.keys())
       this.onFile({ type: "open-error", id, message: ENGINE_FAILED })
     this.sent.clear()
+  }
+
+  /** Answer everything a reader is waiting for with nothing. */
+  private dropReading() {
+    for (const done of this.thumbnails.values()) done(null)
+    for (const done of this.layouts.values()) done(null)
+    for (const done of this.texts.values()) done(null)
+    // A search that ends with nothing searched has, as far as it knows, no more to say.
+    for (const tell of this.searches.values())
+      tell({ found: [], done: 0, withText: 0, total: 0 })
+    this.thumbnails.clear()
+    this.layouts.clear()
+    this.texts.clear()
+    this.searches.clear()
   }
 
   open(
@@ -139,6 +222,68 @@ export class PdfClient {
   }
 
   /**
+   * A picture of one page for someone who is reading it: drawn ahead of
+   * thumbnails, and given up with `forget` when the page scrolls away.
+   */
+  draw(id: string, page: number, edge: number, urgent = true) {
+    const request = ++this.requests
+    const promise = new Promise<ImageBitmap | null>((resolve) => {
+      this.thumbnails.set(request, resolve)
+      this.send({ type: "thumbnail", id, page, edge, request, urgent })
+    })
+    return { request, promise }
+  }
+
+  /** The size of every page of an open file and its bookmarks; null when it cannot be read. */
+  layout(id: string) {
+    return new Promise<FileLayout | null>((resolve) => {
+      const request = ++this.requests
+      this.layouts.set(request, resolve)
+      this.send({ type: "layout", id, request })
+    })
+  }
+
+  /** The text and links of one page; null when they cannot be read. */
+  text(id: string, page: number) {
+    const request = ++this.requests
+    const promise = new Promise<PageText | null>((resolve) => {
+      this.texts.set(request, resolve)
+      this.send({ type: "text", id, page, request })
+    })
+    return { request, promise }
+  }
+
+  /**
+   * Look for words on pages of the open files. News arrives as pages are
+   * searched; `stop` ends it early.
+   */
+  search(
+    needle: string,
+    pages: { id: string; page: number }[],
+    onNews: (news: SearchNews) => void
+  ) {
+    const request = ++this.requests
+    this.searches.set(request, onNews)
+    this.send({ type: "search", request, needle, pages })
+    return {
+      stop: () => {
+        if (this.searches.delete(request)) this.forget([request])
+      },
+    }
+  }
+
+  /** Stop waiting for answers that are no longer wanted. */
+  forget(requests: number[]) {
+    for (const request of requests) {
+      this.thumbnails.get(request)?.(null)
+      this.thumbnails.delete(request)
+      this.texts.get(request)?.(null)
+      this.texts.delete(request)
+    }
+    if (this.worker && requests.length) this.send({ type: "forget", requests })
+  }
+
+  /**
    * Merge pages of the open files. The promise gives null when the merge was
    * cancelled. `onProgress` is given a null total once the file is being written.
    */
@@ -157,13 +302,35 @@ export class PdfClient {
     }
   }
 
+  /**
+   * Split an open file into parts. Parts are handed over as they are
+   * written. The promise gives false when the split was cancelled.
+   */
+  split(
+    id: string,
+    parts: number[][],
+    onPart: (part: SplitPart) => void,
+    onProgress: (done: number, total: number) => void
+  ) {
+    const job = ++this.jobs
+    const promise = new Promise<boolean>((resolve, reject) => {
+      this.splits.set(job, { resolve, reject, onPart, onProgress })
+      this.send({ type: "split", job, id, parts })
+    })
+    return {
+      promise,
+      cancel: () => this.worker?.postMessage({ type: "cancel", job }),
+    }
+  }
+
   dispose() {
     this.worker?.terminate()
     this.worker = null
-    for (const done of this.thumbnails.values()) done(null)
+    this.dropReading()
     for (const job of this.merges.values()) job.resolve(null)
-    this.thumbnails.clear()
     this.merges.clear()
+    for (const job of this.splits.values()) job.resolve(false)
+    this.splits.clear()
     this.sent.clear()
   }
 }

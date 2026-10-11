@@ -2,7 +2,7 @@
  * Read a PDF back with pdf.js, which shares no code with the engine that
  * writes our results.
  */
-import { PDFDocument } from "@cantoo/pdf-lib"
+import { PDFDocument, PDFName } from "@cantoo/pdf-lib"
 import { getDocument, OPS } from "pdfjs-dist/legacy/build/pdf.mjs"
 
 export interface ReadBookmark {
@@ -148,3 +148,33 @@ export async function readPdf(bytes: Uint8Array, password?: string) {
 /** The text of every page, in order. */
 export const texts = async (bytes: Uint8Array, password?: string) =>
   (await readPdf(bytes, password)).pages.map((page) => page.text)
+
+/** How many pictures a file holds, wherever they are used, counted with pdf-lib. */
+export async function storedPictures(bytes: Uint8Array) {
+  const doc = await PDFDocument.load(bytes)
+  return doc.context
+    .enumerateIndirectObjects()
+    .filter(
+      ([, object]) =>
+        "dict" in object &&
+        String(
+          (object.dict as { get(key: unknown): unknown }).get(
+            PDFName.of("Subtype")
+          )
+        ) === "/Image"
+    ).length
+}
+
+/** The names each page's resources list under a kind such as "Font" or "XObject", read with pdf-lib. */
+export async function resourceNames(bytes: Uint8Array, kind: string) {
+  const doc = await PDFDocument.load(bytes)
+  return doc.getPages().map((page) => {
+    const list = page.node.Resources()?.lookup(PDFName.of(kind))
+    return list && "keys" in list
+      ? (list as { keys(): { decodeText(): string }[] })
+          .keys()
+          .map((key) => key.decodeText())
+          .sort()
+      : []
+  })
+}
