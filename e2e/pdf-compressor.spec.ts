@@ -104,7 +104,8 @@ test("shows what makes a file big, compresses it and gives a smaller file that r
   ).toBeVisible()
 
   const got = await download(page)
-  expect(got.name).toBe("Holiday photos-compressed.pdf")
+  // WebKit on Linux puts an underscore where a file's name has a space.
+  expect(got.name.replace(/_/g, " ")).toBe("Holiday photos-compressed.pdf")
   expect(got.bytes.length).toBeLessThan(upload.buffer.length / 4)
   expect(await texts(got.bytes)).toEqual([pictureText(1)])
   // 300 points at 150 dpi.
