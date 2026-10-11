@@ -1,6 +1,6 @@
 # KeepSimp design reference
 
-Version 3.9 · marketing, functional dashboard, chips, image comparison, batch tools, result tables, JSON workspace, animation player, adjustment sliders, document lists, page grids, dialogs and the document reader · updated 11 October 2026 · applies to every future implementation. Tokens are unchanged from version 3.
+Version 3.10 · marketing, functional dashboard, chips, image comparison, batch tools, result tables, JSON workspace, animation player, adjustment sliders, document lists, page grids, dialogs, the document reader and page boards · updated 11 October 2026 · applies to every future implementation. Tokens are unchanged from version 3.
 
 KeepSimp combines the requested shadcn preset with Airbnb-informed clarity, spacing, hierarchy, and human language. The exact numbers below are **KeepSimp decisions**, not an official Airbnb token export. Airbnb's public references reviewed here do not provide a complete numerical radius specification. We retain our own teal identity and fonts.
 
@@ -141,7 +141,11 @@ The document reader (`components/pdf-reader/`) is a dialog that fills the screen
 - **A side panel**, 208px wide beside the pages from 768px and a 224px layer over them below that, with two tabs: a strip of small pages (the one being read takes the `primary` ring and `aria-current`) and the file's bookmarks as a nested list with page numbers in monospace.
 - **The pages**, one column on the `muted` surface, each a white sheet with a hairline ring and `shadow-md`, 16px apart. The column is one focusable group, so arrow keys, Page Up and Down, Home and End scroll it; `+` and `-` zoom only while focus is inside the reader, and Ctrl/Cmd+F opens the search. The search row sits under the toolbar: a field, a polite status ("3 of 17", "No matches", "No text to search"), previous, next and close. Matches are marked with `primary/25` and the one being looked at with `primary/60`, multiplied over the page, which is always light.
 
-Only the sheets near the screen exist, and each is drawn for the size it is shown at. Text is laid over the picture, unseen, so it can be selected, copied and read out.
+Only the sheets near the screen exist, and each is drawn for the size it is shown at. Text is laid over the picture, unseen, so it can be selected, copied and read out. A tool may add one action for the page being read (the splitter's "Cut after page 5"): an outline button with an icon that turns `primary` and reports `aria-pressed` while it is in force, with its words shown from 1280px.
+
+Page boards (`components/pdf-splitter/page-board.tsx`) show the pages of one file in order, where the order cannot change. Tiles follow the page-grid rules: a `rounded-lg` card with a picture, the page number in monospace and a short line saying where the page goes. Between two tiles sits a cut control, 44px wide on a phone and 28px on a computer: a dashed line and a scissors badge that become a solid `primary` line and a filled badge once cut, with `aria-pressed` and the page in its name. Cut controls are out of the tab order; the tile before one cuts with S, and a line of helper text says so. Neighbouring groups take turns between `card` and `muted`, and every tile also says its group in words, so groups never rest on colour alone. A page that goes nowhere keeps its text at full contrast: its border turns dashed and only its picture is dimmed. Never fade text with opacity to show that something is left out.
+
+Lists of results to be made (`components/pdf-splitter/parts-list.tsx`) are ordered lists of `rounded-lg` rows: what the row holds, a switch that leaves it out (the row then takes a dashed border and the `muted` tint and says "left out"), a name field whose placeholder is the name it would get, and, once made, its size with outline "Read" and "Download" actions. Long lists show the first hundred rows and say how many more there are.
 
 Crop overlays dim the excluded area with a `background` veil, show rule-of-thirds guides and eight handles with 44px/28px hit areas, and pair the box with exact pixel fields. The image compressor reference is `docs/image-compressor.md`.
 

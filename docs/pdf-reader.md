@@ -1,6 +1,6 @@
 # PDF reader
 
-A large window for reading a PDF, shared by the PDF tools. It reads files that are already open in the PDF worker, so nothing is opened twice and nothing leaves the device. Live in the PDF merger; the PDF splitter will use the same component.
+A large window for reading a PDF, shared by the PDF merger and the PDF splitter. It reads files that are already open in the PDF worker, so nothing is opened twice and nothing leaves the device.
 
 ## What it does
 
@@ -26,7 +26,9 @@ A large window for reading a PDF, shared by the PDF tools. It reads files that a
 
 ## Using it from a tool
 
-Give `PdfReader` a `reading` (null while closed), a `source` and `onClose`, and pass the control that opened it as `returnTo`.
+`usePdfReader` in `components/pdf/use-pdf-reader.ts` does the work for a tool: it gives the `reading`, the `source`, the control to return to, and three ways to open the reader (`readFile` for an open file, `readPages` for pages of open files in a given order, `readResult` for a finished file that is not one of the tool's own). Hand every file event from the worker to its `claims` first, so a result opened only to be read is never taken for one of the tool's files.
+
+Give `PdfReader` a `reading` (null while closed), a `source` and `onClose`, and pass the control that opened it as `returnTo`. An optional `action` gives one thing that can be done to the page being read, such as the splitter's cut.
 
 - `reading` is "opening", "failed" with a message, or "ready" with a title, the entries to show, the page to start at and, for one file, its bookmarks.
 - An entry is a page of an open file (file id, page, an added turn, its size in points and a label) or a blank page.

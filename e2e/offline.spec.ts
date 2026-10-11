@@ -180,6 +180,12 @@ test("every tool works offline after one visit", async ({ page }) => {
   // The animation converter, its samples and gifski all come from the saved copy.
   await page.goto(`${site.origin}/dashboard/animation-converter/`)
   await page.getByRole("button", { name: "Try a sample" }).click()
+  // A format chosen while the sample is still loading is put back by the sample's own.
+  await expect(page.getByTestId("animation-converter")).toHaveAttribute(
+    "data-settled",
+    "true",
+    { timeout: 150_000 }
+  )
   await page
     .getByRole("radiogroup", { name: "Format", exact: true })
     .getByRole("radio", { name: "GIF", exact: true })
@@ -235,6 +241,28 @@ test("every tool works offline after one visit", async ({ page }) => {
     "keepsimp-report",
     "keepsimp-appendix",
   ])
+
+  // The PDF splitter uses the same engine and a sample of its own.
+  await page.goto(`${site.origin}/dashboard/pdf-splitter/`)
+  await page.getByRole("button", { name: "Try a sample" }).click()
+  await expect(page.getByTestId("pdf-splitter")).toHaveAttribute(
+    "data-ready",
+    "true",
+    { timeout: 150_000 }
+  )
+  await page.getByRole("button", { name: "Every page on its own" }).click()
+  await page.getByRole("button", { name: "Split PDF" }).click()
+  await expect(page.getByTestId("pdf-splitter")).toHaveAttribute(
+    "data-split",
+    "true",
+    { timeout: 150_000 }
+  )
+  pending = page.waitForEvent("download")
+  await page
+    .getByRole("link", { name: "Download keepsimp-report-2.pdf" })
+    .click()
+  const part = await readPdf(new Uint8Array(await bytesOf(await pending)))
+  expect(part.pages).toHaveLength(1)
 
   await page.goto(`${site.origin}/dashboard/json-formatter/`)
   await replaceEditor(

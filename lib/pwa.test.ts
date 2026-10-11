@@ -35,7 +35,7 @@ it("lists only working tools as shortcuts", () => {
   expect(shortcuts.map((shortcut) => shortcut.url)).toEqual(
     available.map((tool) => `/dashboard/${tool.id}/`)
   )
-  expect(shortcuts).toHaveLength(6)
+  expect(shortcuts).toHaveLength(7)
   expect(shortcuts.map((shortcut) => shortcut.name)).not.toContain(
     "Video converter"
   )

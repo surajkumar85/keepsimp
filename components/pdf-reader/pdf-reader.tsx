@@ -8,6 +8,7 @@ import {
   useRef,
   useState,
   type KeyboardEvent,
+  type ReactNode,
   type RefObject,
 } from "react"
 import {
@@ -82,6 +83,15 @@ export type Reading =
 
 type Ready = Extract<Reading, { state: "ready" }>
 
+/** Something a tool lets a person do to the page being read, such as cutting after it. */
+export interface ReaderAction {
+  label: string
+  /** The action is in force for this page, as a cut that is already there. */
+  pressed: boolean
+  icon: ReactNode
+  onPress: () => void
+}
+
 const NO_MATCHES: Match[] = []
 
 const turnOf = (entry: ReaderEntry) =>
@@ -101,9 +111,11 @@ interface Results {
 function ReaderBody({
   reading,
   source,
+  action,
 }: {
   reading: Ready
   source: ReaderSource
+  action?: (page: number) => ReaderAction | null
 }) {
   const ids = useId()
   const area = useRef<HTMLDivElement>(null)
@@ -409,6 +421,7 @@ function ReaderBody({
     noText: finished && live?.withText === 0,
   })
   const bookmarkFile = reading.bookmarks?.file
+  const tool = action?.(current) ?? null
 
   return (
     <div
@@ -527,6 +540,19 @@ function ReaderBody({
           >
             <IconRotateClockwise2 aria-hidden="true" />
           </Button>
+          {tool && (
+            <Button
+              variant={tool.pressed ? "default" : "outline"}
+              aria-pressed={tool.pressed}
+              aria-label={tool.label}
+              title={tool.label}
+              onClick={tool.onPress}
+              data-testid="reader-action"
+            >
+              {tool.icon}
+              <span className="max-xl:sr-only">{tool.label}</span>
+            </Button>
+          )}
           <Button
             variant="ghost"
             size="icon"
@@ -685,11 +711,14 @@ export function PdfReader({
   source,
   onClose,
   returnTo,
+  action,
 }: {
   /** Null while the reader is closed. */
   reading: Reading | null
   source: ReaderSource
   onClose: () => void
+  /** What can be done to the page being read, counted from 0; null where nothing can. */
+  action?: (page: number) => ReaderAction | null
   /**
    * What takes focus when the reader closes: the control that opened it.
    * Safari does not focus a button that is clicked, so it cannot be left to
@@ -723,7 +752,7 @@ export function PdfReader({
         className="top-0 left-0 h-dvh max-h-none w-screen max-w-none translate-x-0 translate-y-0 gap-0 overflow-hidden rounded-none border-0 p-0 sm:top-4 sm:left-4 sm:h-[calc(100dvh-2rem)] sm:w-[calc(100vw-2rem)] sm:rounded-2xl sm:border"
       >
         {shown?.state === "ready" ? (
-          <ReaderBody reading={shown} source={source} />
+          <ReaderBody reading={shown} source={source} action={action} />
         ) : (
           shown && (
             <div

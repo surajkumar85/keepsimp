@@ -148,10 +148,19 @@ export const tools: readonly Tool[] = [
   {
     id: "pdf-splitter",
     name: "PDF splitter",
-    description: "Take just the pages you need.",
+    description: "Cut a PDF into parts, or take out just the pages you need.",
     category: "document",
-    keywords: ["pdf", "split", "pages"],
-    status: "planned",
+    keywords: [
+      "pdf",
+      "split",
+      "pages",
+      "extract",
+      "remove",
+      "separate",
+      "cut",
+      "ranges",
+    ],
+    status: "available",
   },
   {
     id: "json-formatter",

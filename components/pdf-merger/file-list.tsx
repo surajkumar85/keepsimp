@@ -12,6 +12,7 @@ import {
   IconRotateClockwise2,
   IconX,
 } from "@tabler/icons-react"
+import { PasswordRow } from "@/components/pdf/password-row"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { cn } from "cn"
@@ -79,57 +80,6 @@ function Thumbnail({
     </button>
   ) : (
     <span className={frame}>{picture}</span>
-  )
-}
-
-function PasswordRow({
-  file,
-  onUnlock,
-}: {
-  file: PdfFile
-  onUnlock: (password: string) => void
-}) {
-  const id = useId()
-  const [password, setPassword] = useState("")
-  return (
-    <form
-      className="mt-2 space-y-2"
-      onSubmit={(event) => {
-        event.preventDefault()
-        onUnlock(password)
-      }}
-    >
-      <label htmlFor={id} className="block text-sm font-medium">
-        Password<span className="sr-only"> for {file.name}</span>
-      </label>
-      <div className="flex flex-wrap gap-2">
-        <Input
-          id={id}
-          type="password"
-          autoComplete="off"
-          value={password}
-          onChange={(event) => setPassword(event.target.value)}
-          aria-invalid={file.wrongPassword || undefined}
-          aria-describedby={`${id}-hint`}
-          className="w-56 max-w-full"
-        />
-        <Button type="submit" variant="outline">
-          Unlock
-        </Button>
-      </div>
-      <p
-        id={`${id}-hint`}
-        role={file.wrongPassword ? "alert" : undefined}
-        className={cn(
-          "text-xs",
-          file.wrongPassword ? "text-destructive" : "text-muted-foreground"
-        )}
-      >
-        {file.wrongPassword
-          ? "That password did not open this file. Check it and try again."
-          : "This file is locked. The password is used on your device and is not kept."}
-      </p>
-    </form>
   )
 }
 
@@ -239,7 +189,8 @@ export function FileList({
               )}
               {file.status === "locked" && (
                 <PasswordRow
-                  file={file}
+                  name={file.name}
+                  wrong={Boolean(file.wrongPassword)}
                   onUnlock={(password) => onUnlock(file.id, password)}
                 />
               )}

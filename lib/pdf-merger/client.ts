@@ -14,7 +14,7 @@ export type MergeOrder = Omit<
 export const ENGINE_FAILED =
   "The PDF engine could not start. Reload the page and try again."
 
-type FileEvent = Extract<
+export type FileEvent = Extract<
   PdfResponse,
   { type: "opened" | "locked" | "open-error" }
 >

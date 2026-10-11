@@ -15,6 +15,8 @@ import { ImageResizerTutorial } from "@/components/image-resizer/tutorial"
 import { JsonTool } from "@/components/json-tool"
 import { PdfMerger } from "@/components/pdf-merger/pdf-merger"
 import { PdfMergerTutorial } from "@/components/pdf-merger/tutorial"
+import { PdfSplitter } from "@/components/pdf-splitter/pdf-splitter"
+import { PdfSplitterTutorial } from "@/components/pdf-splitter/tutorial"
 import { JsonTutorial } from "@/components/json-workspace/tutorial"
 
 const ready = tools.filter((tool) => tool.status === "available")
@@ -106,6 +108,8 @@ export default async function ToolPage({
         <AnimationConverter />
       ) : id === "pdf-merger" ? (
         <PdfMerger />
+      ) : id === "pdf-splitter" ? (
+        <PdfSplitter />
       ) : (
         <JsonTool />
       )}
@@ -119,6 +123,8 @@ export default async function ToolPage({
         <AnimationConverterTutorial />
       ) : id === "pdf-merger" ? (
         <PdfMergerTutorial />
+      ) : id === "pdf-splitter" ? (
+        <PdfSplitterTutorial />
       ) : (
         <JsonTutorial />
       )}

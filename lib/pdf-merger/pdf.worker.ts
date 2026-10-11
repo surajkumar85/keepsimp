@@ -266,8 +266,13 @@ async function split(request: Extract<PdfRequest, { type: "split" }>) {
         },
       })
       before += pages.length
-      // A cancel that arrived while the part was being written counts from here.
-      await new Promise((resolve) => setTimeout(resolve, 0))
+      // A cancel that arrived while small parts were being written counts from
+      // here. The pause is taken only now and then: browsers stretch each one
+      // to several milliseconds, which thousands of parts would add up.
+      if (performance.now() - paused >= 16) {
+        await new Promise((resolve) => setTimeout(resolve, 0))
+        paused = performance.now()
+      }
       if (job <= cancelled) throw new Cancelled()
       const bytes = result.bytes.buffer as ArrayBuffer
       post(
@@ -281,7 +286,12 @@ async function split(request: Extract<PdfRequest, { type: "split" }>) {
         },
         [bytes]
       )
-      post({ type: "progress", job, done: before, total })
+      // With thousands of small parts, news of every one would flood the page.
+      const now = performance.now()
+      if (now - last > 80) {
+        last = now
+        post({ type: "progress", job, done: before, total })
+      }
     }
     post({ type: "split-done", job })
   } catch (error) {
