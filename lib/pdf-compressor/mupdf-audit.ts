@@ -105,7 +105,7 @@ function firstPages(doc: Doc) {
 }
 
 /** True when the document's own details call it PDF/A. */
-function isArchive(doc: Doc) {
+export function isArchive(doc: Doc) {
   try {
     const details = doc.getTrailer().get("Root", "Metadata")
     if (!details.isStream()) return false

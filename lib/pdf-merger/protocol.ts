@@ -156,6 +156,10 @@ export type PdfRequest =
       maxPixels: number
     }
   | { type: "cancel"; job: number }
+  /** One end of a line to a helper that runs the picture codecs on a core of its own. */
+  | { type: "helper"; port: MessagePort }
+  /** The helpers have stopped; what they were doing is done in the worker itself. */
+  | { type: "helpers-lost" }
 
 export type PdfResponse =
   | { type: "opened"; id: string; facts: FileFacts }

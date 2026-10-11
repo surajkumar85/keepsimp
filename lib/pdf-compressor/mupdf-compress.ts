@@ -21,7 +21,11 @@ import {
   type ContentKind,
   type Pixels,
 } from "@/lib/image-compressor/ssim"
-import { drawPage, PasswordNeeded } from "@/lib/pdf-merger/mupdf-engine"
+import {
+  drawPage,
+  PasswordNeeded,
+  shareDuplicates,
+} from "@/lib/pdf-merger/mupdf-engine"
 import {
   checkResult,
   pagesToCheck,
@@ -30,8 +34,9 @@ import {
 } from "./check"
 import { bitsFromSamples, encodeJbig2 } from "./jbig2"
 import { inkMask, inkShare, rebuild, splitLayers } from "./layers"
+import { inLanes } from "./lanes"
 import { readJpeg, tagJpeg } from "./jpeg"
-import { auditPdf, eachObject, type Audit } from "./mupdf-audit"
+import { auditPdf, eachObject, isArchive, type Audit } from "./mupdf-audit"
 import {
   fromRgba,
   greyMatches,
@@ -44,6 +49,8 @@ import {
 } from "./pixels"
 import {
   planPicture,
+  SMALL_STREAM,
+  streamWorthIt,
   SMALL_PIXELS,
   TOP_QUALITY,
   worthIt,
@@ -72,11 +79,12 @@ import {
   type LevelPlan,
   type ScanChoice,
 } from "./settings"
-import { fitTarget, stepCount, stepPlan } from "./target"
+import { fitTarget, levelToTry, stepCount, stepPlan } from "./target"
 import {
   drawnSize,
   largest,
   resolution,
+  paletteSuits,
   sizeFor,
   type DrawMatrix,
 } from "./usage"
@@ -114,6 +122,12 @@ export interface CompressOptions {
   lock?: Lock
   /** The most pages to draw before and after. */
   checkBudget?: number
+  /**
+   * How many pictures may be worked on at once; one when left out. It is
+   * worth more than one only with codecs that run somewhere else, and is
+   * asked again as pictures finish, so helpers that start late are used.
+   */
+  lanes?: () => number
   /** Called between pages and pictures; it may pause, or throw to stop. */
   checkpoint?: () => Promise<void>
   /** `attempt` counts from 1 when the file is written several times to reach a size. */
@@ -619,6 +633,16 @@ async function repacked(
   const { base } = spaceOf(entry.ref.get("ColorSpace"))
   let space: Obj | null = null
   if (png.colour === "palette") {
+    // Where nothing may change, a picture that had no palette only gets
+    // one if it is drawn close to its own size (see `paletteSuits`). The
+    // other levels take the smaller file: the page is held to their mark.
+    const stored = entry.ref.get("ColorSpace")
+    const had =
+      stored.isArray() &&
+      stored.length > 0 &&
+      ["Indexed", "I"].includes(nameOf(stored.get(0)))
+    if (!work.plan && !had && !paletteSuits(from.size, entry.drawn))
+      return plain()
     // The palette is in the picture's own colour space: grey pictures get one byte a colour.
     const table = from.channels === 1 ? greyPalette(png.palette!) : png.palette!
     if (!table) return plain()
@@ -1320,6 +1344,94 @@ function dropHidden(doc: Doc) {
   return dropped
 }
 
+const bytesOf = (buffer: MuPDF.Buffer) => {
+  try {
+    return buffer.asUint8Array().slice()
+  } finally {
+    buffer.destroy()
+  }
+}
+
+/**
+ * Pack again what is not a picture: page content, fonts, colour profiles and
+ * document details. Much of a file was packed in a hurry by the app that
+ * made it, and details in XML are often not packed at all: a design app
+ * attaches a copy to every placed graphic, and the engine leaves all XML as
+ * it is. Each stream is read back and compared before it stays.
+ *
+ * The document's own details stay unpacked, so that software that only looks
+ * for them can find them, and so do all details in an archive file (PDF/A),
+ * whose rules ask for that.
+ * @param copies Objects that stand in for nothing any more (see `shareDuplicates`).
+ */
+async function repackStreams(
+  work: Work,
+  options: Omit<CompressOptions, "level">,
+  copies: ReadonlyMap<number, number>,
+  room: number
+) {
+  const { doc, codecs } = work
+  const own = doc.getTrailer().get("Root", "Metadata")
+  const ownNumber = own.isIndirect() ? own.asIndirect() : 0
+  const archive = isArchive(doc)
+  const todo: { ref: Obj; packed: boolean; bytes: number }[] = []
+  eachObject(doc, (ref, number) => {
+    if (!ref.isStream() || copies.has(number)) return
+    const type = nameOf(ref.get("Type"))
+    // The file's own index and its packed objects are written anew.
+    if (type === "XRef" || type === "ObjStm") return
+    if (nameOf(ref.get("Subtype")) === "Image") return
+    const bytes = numberOf(ref.get("Length"))
+    // Data kept in another file is not ours to pack.
+    if (bytes < SMALL_STREAM || !ref.get("F").isNull()) return
+    const filter = ref.get("Filter")
+    if (filter.isNull()) {
+      // The engine packs every other bare stream as it writes.
+      if (type === "Metadata" && number !== ownNumber && !archive)
+        todo.push({ ref, packed: false, bytes })
+      return
+    }
+    const name = filter.isArray()
+      ? filter.length === 1
+        ? nameOf(filter.get(0))
+        : ""
+      : nameOf(filter)
+    // A filter with settings (a predictor) is left to those who set it.
+    if (name === "FlateDecode" && ref.get("DecodeParms").isNull())
+      todo.push({ ref, packed: true, bytes })
+  })
+  await inLanes(
+    todo,
+    options.lanes ?? (() => 1),
+    // Text packs to a fraction of its size; this allows for eight times.
+    (item) => item.bytes * 2,
+    room,
+    async ({ ref, packed }) => {
+      await options.checkpoint?.()
+      try {
+        const was = bytesOf(ref.readRawStream())
+        const plain = packed ? bytesOf(ref.readStream()) : was
+        const now = await codecs.deflate(plain)
+        if (!streamWorthIt(was.length, now.length)) return
+        ref.writeRawStream(now)
+        if (!packed) ref.put("Filter", doc.newName("FlateDecode"))
+        let same = false
+        try {
+          same = sameBytes(bytesOf(ref.readStream()), plain)
+        } catch {
+          // What cannot be read back is not kept.
+        }
+        if (same) return
+        ref.writeRawStream(was)
+        if (!packed) ref.delete("Filter")
+      } catch (error) {
+        // Out of memory ends the job; a stream that cannot be read is left.
+        if (error instanceof RangeError) throw error
+      }
+    }
+  )
+}
+
 /** Take out of a document what its owner asked to have taken out. */
 function takeOut(doc: Doc, remove: Removal) {
   const trailer = doc.getTrailer()
@@ -1386,7 +1498,8 @@ async function compare(
   after: Doc,
   pages: readonly number[],
   options: Omit<CompressOptions, "level">,
-  attempt?: number
+  attempt?: number,
+  edge = CHECK_EDGE
 ) {
   // Notes that were taken out on purpose are not drawn for either side.
   const extras = !options.remove?.comments
@@ -1396,8 +1509,8 @@ async function compare(
     options.progress?.("checking", done, pages.length, attempt)
     let score = 0
     try {
-      const was = drawPage(mupdf, before, page, CHECK_EDGE, extras)
-      const is = drawPage(mupdf, after, page, CHECK_EDGE, extras)
+      const was = drawPage(mupdf, before, page, edge, extras)
+      const is = drawPage(mupdf, after, page, edge, extras)
       if (was.width === is.width && was.height === is.height)
         score = similarity(was, is).mean
     } catch {
@@ -1406,6 +1519,53 @@ async function compare(
     scores.push({ page, score })
   }
   return scores
+}
+
+/** How many pages are drawn to tell which of two results looks more like the original. */
+const LIKENESS_PAGES = 4
+/**
+ * The longer sides, in pixels, they are drawn at: the check's own, which is
+ * a page fitted to a screen, and twice that, about 220 to the inch on a
+ * sheet of paper. Which result looks better can depend on how closely it is
+ * looked at: at the smaller size alone, a picture with half the pixels of
+ * another looks the same; at the larger alone, what a viewer does when it
+ * draws a picture smaller is not seen.
+ */
+const LIKENESS_EDGES = [CHECK_EDGE, CHECK_EDGE * 2]
+
+/** How alike some pages of a written file and of the original look, from 0 to 1. */
+async function likeness(
+  mupdf: Engine,
+  pristine: Doc,
+  written: Written,
+  pages: readonly number[],
+  options: Omit<CompressOptions, "level">
+) {
+  const result = open(
+    mupdf,
+    written.out,
+    options.lock ? options.lock.password : options.password
+  )
+  try {
+    if (result.countPages() !== written.pages) return 0
+    let sum = 0
+    for (const edge of LIKENESS_EDGES) {
+      const scores = await compare(
+        mupdf,
+        pristine,
+        result,
+        pages,
+        // This is not the check the page reports on.
+        { ...options, progress: undefined },
+        undefined,
+        edge
+      )
+      for (const entry of scores) sum += entry.score
+    }
+    return sum / (pages.length * LIKENESS_EDGES.length)
+  } finally {
+    result.destroy()
+  }
 }
 
 /** A file as one attempt left it, before anyone has looked at the result. */
@@ -1430,7 +1590,9 @@ async function write(
   options: Omit<CompressOptions, "level">,
   attempt?: number,
   /** Settings of one's own: every picture in grey, and whether fonts may be cut. */
-  own: { grey: boolean; fonts: boolean } = { grey: false, fonts: true }
+  own: { grey: boolean; fonts: boolean } = { grey: false, fonts: true },
+  /** Pages whose pictures are left as they are, or "all" for every picture. */
+  leave: ReadonlySet<number> | "all" | null = null
 ): Promise<Written> {
   const maxPixels = options.maxPixels ?? DEFAULT_MAX_PIXELS
   const entries = new Map<number, Entry>()
@@ -1440,16 +1602,37 @@ async function write(
     const pages = doc.countPages()
     for (const [number, entry] of findPictures(doc)) entries.set(number, entry)
     await measureUse(mupdf, doc, entries, options, attempt)
-    const work: Work = { mupdf, doc, codecs: options.codecs, plan }
+    // Once the job is over, pictures still in work stop at their next step.
+    let over = false
+    const unlessOver =
+      <A extends unknown[], R>(codec: (...args: A) => Promise<R>) =>
+      (...args: A) =>
+        over ? Promise.reject<R>(new Error("stopped")) : codec(...args)
+    const work: Work = {
+      mupdf,
+      doc,
+      codecs: {
+        jpeg: unlessOver(options.codecs.jpeg),
+        resize: unlessOver(options.codecs.resize),
+        png: unlessOver(options.codecs.png),
+        deflate: unlessOver(options.codecs.deflate),
+      },
+      plan,
+    }
     const pictures = { found: entries.size, changed: 0, resized: 0 }
     const changedPages = new Set<number>()
     const scanPages = new Set<number>()
     const how = plan && options.scans !== "keep" ? options.scans : undefined
     let scans = 0
     let done = 0
-    for (const entry of entries.values()) {
+    const picture = async (entry: Entry) => {
       await options.checkpoint?.()
       options.progress?.("pictures", done++, entries.size, attempt)
+      if (
+        leave === "all" ||
+        (leave && [...entry.pages].some((page) => leave.has(page)))
+      )
+        return
       const facts = factsOf(entry)
       let change: Change | null = null
       try {
@@ -1473,22 +1656,38 @@ async function write(
         // picture leaves that picture as it is.
         if (error instanceof RangeError) throw error
       }
-      if (!change) continue
+      if (!change) return
       pictures.changed++
       if (change === "resized") pictures.resized++
       for (const page of entry.pages) changedPages.add(page)
     }
+    // Several pictures are in work at once when the codecs run on helpers.
+    // Between them they hold no more pixels than the largest picture allowed.
+    await inLanes(
+      entries.values(),
+      options.lanes ?? (() => 1),
+      (entry) =>
+        numberOf(entry.ref.get("Width")) * numberOf(entry.ref.get("Height")),
+      maxPixels,
+      (entry) =>
+        picture(entry).catch((error: unknown) => {
+          over = true
+          throw error
+        })
+    )
     for (const entry of entries.values()) entry.image.destroy()
     entries.clear()
     const dropped = dropHidden(doc)
     if (options.remove) takeOut(doc, options.remove)
     options.progress?.("writing", 0, 1, attempt)
     await options.checkpoint?.()
-    // Objects nothing points at are dropped, identical ones are stored once,
+    // Identical objects are stored once, those nothing points at are dropped,
     // and the rest is packed into compressed streams. A locked file stays locked.
+    const copies = shareDuplicates(doc)
+    await repackStreams(work, options, copies, maxPixels)
     const { lock } = options
     const buffer = doc.saveToBuffer({
-      garbage: 4,
+      garbage: 2,
       compress: "yes",
       objstms: "yes",
       ...(lock
@@ -1615,6 +1814,26 @@ async function verify(
 }
 
 /**
+ * After a result was held back because pages looked different where nothing
+ * may be lost: the pictures to leave alone on a second go. Null when there
+ * is no reason for one.
+ */
+function picturesToLeave(
+  written: Written,
+  checked: Compressed,
+  options: Omit<CompressOptions, "level">
+): ReadonlySet<number> | "all" | null {
+  const { low } = checked.report.check
+  if (checked.bytes || !low.length || !written.pictures.changed) return null
+  // With every changed page looked at, the pages that differ are known.
+  // With only a sample looked at, others may differ too.
+  return written.changedPages.length <=
+    (options.checkBudget ?? DEFAULT_CHECK_BUDGET)
+    ? new Set(low.map((entry) => entry.page))
+    : "all"
+}
+
+/**
  * Compress a PDF.
  * @throws PasswordNeeded when the file is locked and the password is missing or wrong.
  */
@@ -1627,14 +1846,31 @@ export async function compressPdf(
   const own = options.pristine ? null : open(mupdf, bytes, options.password)
   const pristine = options.pristine ?? own!
   try {
+    const mark = pageMarks[options.level]
+    const first = await write(mupdf, bytes, pristine, plan, options)
+    const checked = await verify(
+      mupdf,
+      bytes.length,
+      pristine,
+      first,
+      mark,
+      !plan,
+      options
+    )
+    const leave = plan ? null : picturesToLeave(first, checked, options)
+    if (!leave) return checked
+    // Where nothing may be lost and a page came out looking different, the
+    // file is written once more with those pictures as they were. The rest
+    // of the saving is kept, where there was nothing to hand over before.
     return await verify(
       mupdf,
       bytes.length,
       pristine,
-      await write(mupdf, bytes, pristine, plan, options),
-      pageMarks[options.level],
-      !plan,
-      options
+      await write(mupdf, bytes, pristine, plan, options, 2, undefined, leave),
+      mark,
+      true,
+      options,
+      2
     )
   } finally {
     own?.destroy()
@@ -1673,11 +1909,42 @@ export async function compressToSize(
         return { ...written, bytes: Math.min(written.out.length, bytes.length) }
       }
     )
+    let chosen: Written = fit.result
+    // A level measures each picture where a step writes all at one quality.
+    // Where one may fit as well, it is written too, and of the two that
+    // fit, the one whose pages look more like the original is kept.
+    const level = fit.met ? levelToTry(fit.step) : null
+    if (level) {
+      const measured = await write(
+        mupdf,
+        bytes,
+        pristine,
+        { ...levelPlans[level]!, again: true },
+        options,
+        ++writes
+      )
+      if (measured.out.length <= options.target) {
+        const pages = pagesToCheck(
+          fit.result.changedPages,
+          fit.result.pages,
+          LIKENESS_PAGES
+        )
+        const stepped = await likeness(mupdf, pristine, chosen, pages, options)
+        const levelled = await likeness(
+          mupdf,
+          pristine,
+          measured,
+          pages,
+          options
+        )
+        if (levelled >= stepped) chosen = measured
+      }
+    }
     const checked = await verify(
       mupdf,
       bytes.length,
       pristine,
-      fit.result,
+      chosen,
       fit.step ? TARGET_MARK : pageMarks.lossless,
       !fit.step,
       options,

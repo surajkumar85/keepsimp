@@ -5,10 +5,12 @@
  * pdf-lib, so the engine is never only checked against itself.
  */
 import { readFileSync } from "node:fs"
+import { deflateSync, inflateSync } from "node:zlib"
 import {
   PDFDocument,
   PDFHexString,
   PDFName,
+  StandardFonts,
   type PDFDict,
 } from "@cantoo/pdf-lib"
 import * as mupdf from "mupdf"
@@ -28,6 +30,7 @@ import {
   pictureText,
   pngOf,
   readPictures,
+  samePixels,
   scannedPage,
   scanText,
   scene,
@@ -41,6 +44,7 @@ import {
   compressCustom,
   compressPdf,
   compressToSize,
+  type Codecs,
   type CompressOptions,
 } from "./mupdf-compress"
 import { defaultExtras, lockOf, removalOf, type Removal } from "./options"
@@ -212,6 +216,36 @@ describe("drawings", () => {
       expect(after.width).toBe(800)
       expect(similarity(before, after).mean).toBe(1)
     }
+  }, 60_000)
+
+  it("gives a drawing a palette where nothing may change only if it is drawn near its own size", async () => {
+    // A viewer built on MuPDF draws a palette picture differently once it
+    // is shown at half its size or less, so a picture with far more pixels
+    // than it is shown with keeps its colours as they are.
+    const flat = await pngOf(chart(1200, 900))
+    const fine = await makePicturePdf([
+      { bytes: flat, type: "png", width: 150 },
+    ])
+    expect((await stored(fine))[0].space).toBe("/DeviceRGB")
+    const kept = await compress(fine, "lossless")
+    expect((await stored(kept.bytes ?? fine))[0].space).toBe("/DeviceRGB")
+    expect(kept.report.check.low).toEqual([])
+    // The other levels take the palette: the page is held to their mark.
+    const smaller = await compress(fine, "balanced")
+    expect(smaller.report.check.low).toEqual([])
+    expect(smaller.bytes!.length).toBeLessThan((kept.bytes ?? fine).length)
+
+    // 1,200 pixels over 8 inches is 150 to the inch.
+    const coarse = await makePicturePdf([
+      { bytes: flat, type: "png", width: 576 },
+    ])
+    const [before] = await readPictures(coarse)
+    const packed = await compress(coarse, "lossless")
+    expect(packed.bytes).not.toBeNull()
+    expect((await stored(packed.bytes!))[0].space).toContain("/Indexed")
+    expect(packed.report.check.low).toEqual([])
+    const [after] = await readPictures(packed.bytes!)
+    expect(samePixels(after, before)).toBe(true)
   }, 60_000)
 
   it("keeps a flat drawing whole when every pixel packs tightest", async () => {
@@ -749,6 +783,121 @@ describe("what is kept", () => {
   }, 60_000)
 })
 
+describe("what is not a picture", () => {
+  const xml = (words: string, archive = false) =>
+    `<?xpacket begin="" id="W5M0MpCehiHzreSzNTczkc9d"?><x:xmpmeta xmlns:x="adobe:ns:meta/">${
+      archive ? "<pdfaid:part>2</pdfaid:part>" : ""
+    }${`<rdf:li>${words}</rdf:li>`.repeat(1500)}</x:xmpmeta><?xpacket end="w"?>`
+
+  /** A page whose text was packed in a hurry, with details on the page and on the document. */
+  async function hurried(archive = false, count = 1200) {
+    const doc = await PDFDocument.create()
+    const page = doc.addPage([400, 400])
+    const font = doc.embedStandardFont(StandardFonts.Helvetica)
+    const lines = Array.from(
+      { length: count },
+      (_, index) =>
+        `BT /F1 6 Tf ${20 + (index % 5) * 70} ${390 - Math.floor(index / 5)} Td (w${index}) Tj ET`
+    ).join("\n")
+    const weak = new Uint8Array(deflateSync(Buffer.from(lines), { level: 1 }))
+    page.node.set(
+      PDFName.of("Contents"),
+      doc.context.register(doc.context.stream(weak, { Filter: "FlateDecode" }))
+    )
+    page.node.set(
+      PDFName.of("Resources"),
+      doc.context.obj({ Font: { F1: font.ref } })
+    )
+    const details = (text: string) =>
+      doc.context.register(
+        doc.context.stream(text, { Type: "Metadata", Subtype: "XML" })
+      )
+    doc.catalog.set(PDFName.of("Metadata"), details(xml("document", archive)))
+    page.node.set(PDFName.of("Metadata"), details(xml("page")))
+    return {
+      input: await doc.save({ useObjectStreams: false }),
+      weak: weak.length,
+    }
+  }
+
+  /** The details stream under `key` of the catalog or of the first page, as stored. */
+  async function detailsOf(bytes: Uint8Array, where: "document" | "page") {
+    const doc = await PDFDocument.load(bytes, { updateMetadata: false })
+    const holder = where === "document" ? doc.catalog : doc.getPage(0).node
+    const stream = holder.lookup(PDFName.of("Metadata")) as unknown as {
+      dict: PDFDict
+      contents: Uint8Array
+    }
+    return {
+      filter: String(stream.dict.get(PDFName.of("Filter"))),
+      bytes: stream.contents,
+    }
+  }
+
+  it("packs page content again, and the details of single objects, never the document's own", async () => {
+    const { input, weak } = await hurried()
+    const { bytes, report } = await compress(input, "lossless")
+    expect(bytes).not.toBeNull()
+    expect(report.check.low).toEqual([])
+    // What is left is mostly the document's own details, as they were.
+    expect(bytes!.length).toBeLessThan(input.length * 0.65)
+    expect((await texts(bytes!))[0]).toContain("w1199")
+    expect(await texts(bytes!)).toEqual(await texts(input))
+    // The document's own details can still be found by software that only looks for them.
+    const own = await detailsOf(bytes!, "document")
+    expect(own.filter).toBe("undefined")
+    expect(Buffer.from(own.bytes).toString()).toBe(xml("document"))
+    // Those of the page are packed, and unpack to what they were.
+    const part = await detailsOf(bytes!, "page")
+    expect(part.filter).toBe("/FlateDecode")
+    expect(inflateSync(part.bytes).toString()).toBe(xml("page"))
+    // The page's text takes less room than it did.
+    const page = (await PDFDocument.load(bytes!)).getPage(0).node
+    const content = page.lookup(PDFName.of("Contents")) as unknown as {
+      contents: Uint8Array
+    }
+    expect(content.contents.length).toBeLessThan(weak * 0.95)
+  }, 60_000)
+
+  it("leaves every set of details unpacked in an archive file", async () => {
+    // Enough text for the file to come out smaller without its details.
+    const { input } = await hurried(true, 9000)
+    const { bytes } = await compress(input, "lossless")
+    expect(bytes).not.toBeNull()
+    const part = await detailsOf(bytes!, "page")
+    expect(part.filter).toBe("undefined")
+    expect(Buffer.from(part.bytes).toString()).toBe(xml("page"))
+  }, 60_000)
+
+  it("puts back a stream that does not read back as it was", async () => {
+    const { input } = await hurried()
+    const faulty: Codecs["deflate"][] = [
+      // Packed well, but not what it was given.
+      async (bytes) =>
+        new Uint8Array(deflateSync(Buffer.from(bytes).reverse(), { level: 9 })),
+      // Not packed data at all.
+      async () => new Uint8Array(16),
+    ]
+    for (const deflate of faulty) {
+      const { bytes } = await compress(input, "lossless", {
+        codecs: { ...codecs, deflate },
+      })
+      const output = bytes ?? input
+      expect(await texts(output)).toEqual(await texts(input))
+      const part = await detailsOf(output, "page")
+      expect(part.filter).toBe("undefined")
+      expect(Buffer.from(part.bytes).toString()).toBe(xml("page"))
+    }
+  }, 60_000)
+
+  it("finds nothing more to pack in its own result", async () => {
+    const { input } = await hurried()
+    const first = await compress(input, "lossless")
+    const second = await compress(first.bytes!, "lossless")
+    expect(second.bytes).toBeNull()
+  }, 60_000)
+})
+
 describe("what is taken out", () => {
   it("drops page thumbnails and private app data, and says so", async () => {
     const input = await makeDrawnPdf(
@@ -901,6 +1050,127 @@ describe("the job itself", () => {
     expect(none.report.pictures.changed).toBe(0)
   }, 60_000)
 
+  it("gives the same pictures when several are worked on at once", async () => {
+    const pictures: Placed[] = [
+      { bytes: await jpegOf(scene(1400, 1000)), type: "jpeg", width: 300 },
+      { bytes: await pngOf(chart(900, 600)), type: "png", width: 250 },
+      {
+        bytes: await pngOf(scene(800, 600, 3)),
+        type: "png",
+        width: 200,
+        page: 2,
+      },
+      {
+        bytes: await jpegOf(greyScene(1200, 900, 1)),
+        type: "jpeg",
+        width: 220,
+        page: 2,
+      },
+      {
+        bytes: await jpegOf(scene(1000, 800, 5)),
+        type: "jpeg",
+        width: 240,
+        page: 3,
+      },
+    ]
+    const input = await makePicturePdf(pictures, 3)
+    const one = await compress(input, "balanced")
+    let inWork = 0
+    let most = 0
+    const counted =
+      <A extends unknown[], R>(codec: (...args: A) => Promise<R>) =>
+      async (...args: A) => {
+        most = Math.max(most, ++inWork)
+        try {
+          return await codec(...args)
+        } finally {
+          inWork--
+        }
+      }
+    const several = await compress(input, "balanced", {
+      lanes: () => 3,
+      codecs: {
+        jpeg: counted(codecs.jpeg),
+        resize: counted(codecs.resize),
+        png: counted(codecs.png),
+        deflate: counted(codecs.deflate),
+      },
+    })
+    expect(most).toBeGreaterThan(1)
+    expect(several.report.pictures).toEqual(one.report.pictures)
+    expect(several.report.check).toEqual(one.report.check)
+    // The objects may be written in another order; the pictures are the same.
+    expect(Math.abs(several.bytes!.length - one.bytes!.length)).toBeLessThan(
+      200
+    )
+    const alone = await readPictures(one.bytes!)
+    const together = await readPictures(several.bytes!)
+    expect(together).toHaveLength(alone.length)
+    for (const [index, picture] of together.entries()) {
+      expect(picture.width).toBe(alone[index].width)
+      expect(samePixels(picture, alone[index])).toBe(true)
+    }
+    expect(await texts(several.bytes!)).toEqual(await texts(one.bytes!))
+    // Stopping while several are in work stops them all, with the reason given.
+    let calls = 0
+    await expect(
+      compress(input, "balanced", {
+        lanes: () => 3,
+        checkpoint: async () => {
+          if (++calls === 6) throw new Error("Stopped.")
+        },
+      })
+    ).rejects.toThrow("Stopped.")
+  }, 120_000)
+
+  it("writes once more, leaving the pictures of a page that came out looking different where nothing may change", async () => {
+    const pictures: Placed[] = [1, 2].map((page) => ({
+      bytes: new Uint8Array(),
+      type: "png",
+      width: 400,
+      page,
+    }))
+    pictures[0].bytes = await pngOf(scene(600, 450, 1))
+    pictures[1].bytes = await pngOf(scene(600, 450, 2))
+    const input = await makePicturePdf(pictures, 2)
+    // Stored again, both pictures are smaller, and the pages look the same.
+    const plain = await compress(input, "lossless")
+    expect(plain.report.pictures.changed).toBe(2)
+    expect(plain.bytes).not.toBeNull()
+
+    // Now the first page is made to look different from what it is compared
+    // with: the "before" handed in has another picture there.
+    const other = await makePicturePdf(
+      [{ ...pictures[0], bytes: await pngOf(scene(600, 450, 9)) }, pictures[1]],
+      2
+    )
+    const pristine = new mupdf.PDFDocument(other)
+    const tries: (number | undefined)[] = []
+    const { bytes, report } = await compress(input, "lossless", {
+      pristine,
+      progress: (stage, _done, _total, attempt) => {
+        if (stage === "writing") tries.push(attempt)
+      },
+    })
+    pristine.destroy()
+    // The second go left the first page's picture as it was and stored
+    // only the other again. The page still differs, so nothing is handed over.
+    expect(tries).toEqual([undefined, 2])
+    expect(report.pictures).toEqual({ found: 2, changed: 1, resized: 0 })
+    expect(report.check.low.map((entry) => entry.page)).toEqual([0])
+    expect(bytes).toBeNull()
+
+    // With only a sample of the changed pages looked at, any of them may
+    // differ, so every picture is left on the second go.
+    const sample = new mupdf.PDFDocument(other)
+    const sampled = await compress(input, "lossless", {
+      pristine: sample,
+      checkBudget: 1,
+    })
+    sample.destroy()
+    expect(sampled.report.pictures.changed).toBe(0)
+  }, 120_000)
+
   it("reads the before pictures from a file that is already open", async () => {
     const input = await makePicturePdf([
       { bytes: await jpegOf(scene(1600, 1200)), type: "jpeg", width: 400 },
@@ -948,7 +1218,50 @@ describe("reaching a size", () => {
     const [small] = await readPictures(tight.bytes!)
     expect(large.width).toBeGreaterThan(small.width)
     // And uses most of the room it was given.
-    expect(roomy.bytes!.length).toBeGreaterThan(30_000)
+    expect(roomy.bytes!.length).toBeGreaterThan(45_000)
+  }, 120_000)
+
+  it("of a step and a level that both fit, keeps the one that looks more like the original", async () => {
+    // A screenshot: flat shapes with hard edges on a background that
+    // shades off, so it has too many colours for a palette. A step writes
+    // it as a JPEG of one quality; a level holds a drawing to its strictest
+    // mark and keeps it exact.
+    const shot = chart(1600, 1200)
+    for (let at = 0; at < shot.data.length; at += 4) {
+      const x = (at / 4) % 1600
+      const y = Math.floor(at / 4 / 1600)
+      if (shot.data[at] + shot.data[at + 1] + shot.data[at + 2] > 720) {
+        shot.data[at] = (255 - (x * 40) / 1600) | 0
+        shot.data[at + 1] = (255 - (y * 40) / 1200) | 0
+        shot.data[at + 2] = (255 - ((x + y) * 20) / 1400) | 0
+      }
+    }
+    const input = await makePicturePdf([
+      { bytes: await pngOf(shot), type: "png", width: 500 },
+    ])
+    const level = await compress(input, "balanced")
+    // Room for the level's result, and too little for the file with nothing lost.
+    const target = Math.round(level.report.after * 1.3)
+    const sized = await toSize(input, target)
+    expect(sized.report.target).toMatchObject({ wanted: target, met: true })
+    expect(sized.report.target!.writes).toBeLessThanOrEqual(
+      mostWrites(stepCount(false))
+    )
+    expect(sized.report.check.low).toEqual([])
+    // Whichever of the two was kept, its page is no less like the original
+    // than the level's, looked at closely.
+    const drawn = (bytes: Uint8Array) => {
+      const doc = new mupdf.PDFDocument(bytes)
+      try {
+        return drawPage(mupdf, doc, 0, 1800)
+      } finally {
+        doc.destroy()
+      }
+    }
+    const original = drawn(input)
+    expect(
+      similarity(original, drawn(sized.bytes!)).mean
+    ).toBeGreaterThanOrEqual(similarity(original, drawn(level.bytes!)).mean)
   }, 120_000)
 
   it("stops at what is easy to read, and says the size was missed", async () => {

@@ -1,14 +1,19 @@
 /**
  * Which pages to draw before and after, and what the comparison says. Every
  * page with a changed picture is looked at when there are few; a spread of
- * them when there are many.
+ * them when there are many. A few pages where nothing was meant to change
+ * are looked at too, while there is room.
  */
 
-/** Pages checked when nothing on any page was changed: enough to catch a fault in the tidying itself. */
+/**
+ * Pages checked though nothing on them was meant to change: enough to catch
+ * a fault in the tidying itself.
+ */
 const SPOT_CHECKS = 3
 
 /** `count` numbers spread evenly from `list`, ends included. */
 function spread(list: readonly number[], count: number) {
+  if (count <= 0) return []
   if (list.length <= count) return [...list]
   if (count === 1) return [list[0]]
   const picked = new Set<number>()
@@ -31,9 +36,15 @@ export function pagesToCheck(
   const pages = [...new Set(changed)]
     .filter((page) => page >= 0 && page < total)
     .sort((a, b) => a - b)
-  if (pages.length) return spread(pages, Math.max(1, budget))
-  const all = Array.from({ length: total }, (_, page) => page)
-  return spread(all, Math.min(SPOT_CHECKS, Math.max(1, budget)))
+  const room = Math.max(1, budget)
+  const picked = spread(pages, room)
+  // Where there is room, a few of the other pages are looked at as well.
+  const changes = new Set(pages)
+  const others: number[] = []
+  for (let page = 0; page < total; page++)
+    if (!changes.has(page)) others.push(page)
+  const spots = spread(others, Math.min(SPOT_CHECKS, room - picked.length))
+  return [...picked, ...spots].sort((a, b) => a - b)
 }
 
 export interface PageScore {

@@ -1,5 +1,6 @@
 "use client"
 
+import { poolSize } from "@/lib/image-batch/pool"
 import type { Size } from "@/lib/image-compressor/geometry"
 import type { Audit } from "@/lib/pdf-compressor/mupdf-audit"
 import type { CompressReport, Stage } from "@/lib/pdf-compressor/mupdf-compress"
@@ -127,6 +128,9 @@ export class PdfClient {
   private jobs = 0
   private answered = false
   private restarts = 0
+  /** Workers that run the compressor's picture codecs, each on a core of its own. */
+  private helpers: Worker[] = []
+  private helpersAsked = false
 
   constructor(private readonly onFile: (event: FileEvent) => void) {}
 
@@ -167,6 +171,8 @@ export class PdfClient {
     } else if (message.type === "audit") {
       this.audits.get(message.request)?.(message.audit)
       this.audits.delete(message.request)
+      // Only the compressor asks for this, and by now the worker has loaded.
+      this.startHelpers()
     } else if (message.type === "stage") {
       this.compressions
         .get(message.job)
@@ -229,10 +235,54 @@ export class PdfClient {
     } else this.onFile(message)
   }
 
+  /**
+   * Start the helpers that encode pictures while the worker goes on to the
+   * next one. They start one after another (see `WorkerPool`), and each is
+   * given a line of its own to the worker. Without them, and on a device
+   * with too few cores for them, the worker encodes pictures itself.
+   */
+  private startHelpers() {
+    if (this.helpersAsked) return
+    this.helpersAsked = true
+    const wanted = poolSize(navigator.hardwareConcurrency)
+    // One helper would only move the work, not share it.
+    if (wanted < 2) return
+    const next = () => {
+      if (this.helpers.length >= wanted) return
+      const helper = new Worker(
+        new URL("../pdf-compressor/codec.worker.ts", import.meta.url),
+        { type: "module" }
+      )
+      this.helpers.push(helper)
+      helper.onmessage = () => {
+        if (!this.worker || !this.helpers.includes(helper)) return
+        const line = new MessageChannel()
+        helper.postMessage({ port: line.port1 }, [line.port1])
+        this.worker.postMessage({ type: "helper", port: line.port2 }, [
+          line.port2,
+        ])
+        next()
+      }
+      // The worker does itself what a helper that stopped was doing.
+      helper.onerror = () => this.stopHelpers(true)
+    }
+    next()
+  }
+
+  /** @param tell Let the worker know, so it stops waiting for them. */
+  private stopHelpers(tell: boolean) {
+    for (const helper of this.helpers) helper.terminate()
+    this.helpers = []
+    if (tell) this.worker?.postMessage({ type: "helpers-lost" })
+  }
+
   /** The worker stopped: start it again if it never ran, otherwise say so. */
   private failed() {
     this.worker?.terminate()
     this.worker = null
+    // Their lines led to the worker that is gone; a new one gets new helpers.
+    this.stopHelpers(false)
+    this.helpersAsked = false
     this.dropReading()
     for (const job of this.merges.values()) job.reject(new Error(ENGINE_FAILED))
     this.merges.clear()
@@ -499,6 +549,8 @@ export class PdfClient {
   dispose() {
     this.worker?.terminate()
     this.worker = null
+    this.stopHelpers(false)
+    this.helpersAsked = false
     this.dropReading()
     for (const job of this.compressions.values()) job.resolve(null)
     this.compressions.clear()

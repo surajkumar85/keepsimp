@@ -260,6 +260,17 @@ export async function makeScanPdf(pictures: readonly Uint8Array[]) {
   return doc.save({ useObjectStreams: false })
 }
 
+/**
+ * True when two pictures have the very same pixels. A test should use this
+ * and not `toEqual`, which takes gigabytes to compare two large pictures.
+ */
+export const samePixels = (a: Pixels, b: Pixels) =>
+  a.width === b.width &&
+  a.height === b.height &&
+  Buffer.from(a.data.buffer, a.data.byteOffset, a.data.byteLength).equals(
+    Buffer.from(b.data.buffer, b.data.byteOffset, b.data.byteLength)
+  )
+
 export interface ReadPicture extends Pixels {
   /** Page number from 1. */
   page: number

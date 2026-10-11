@@ -47,6 +47,25 @@ export function resolution(pixels: Size, drawn: Size) {
   )
 }
 
+/** Where nothing may change, a picture with more pixels per inch than this, where it is drawn, is not given a palette. */
+export const PALETTE_DPI = 150
+
+/**
+ * Whether a picture may be stored with a palette in place of its colours.
+ * The pixels are the same either way, but a viewer built on MuPDF draws a
+ * palette picture differently once it is shown at half its size or less:
+ * it picks single pixels where it would blend several, and edges turn
+ * rough. Up to 150 dpi a picture is shown above half its size on any
+ * ordinary screen, so only those are changed. Measured on a 500 dpi figure:
+ * no difference down to 53% of its size, and visible ones from 47%.
+ */
+export function paletteSuits(pixels: Size, drawn: Size | null) {
+  if (!drawn) return false
+  const dpi = resolution(pixels, drawn)
+  // Two pixels an inch of room, for a size that was rounded to whole pixels.
+  return dpi !== null && dpi < PALETTE_DPI + 2
+}
+
 /**
  * The size a picture should be brought down to so that it has `dpi` pixels
  * per inch where it is drawn largest. Null when it is not worth doing: the

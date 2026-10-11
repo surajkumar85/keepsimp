@@ -448,6 +448,75 @@ test("uses settings of one's own, takes out what is asked, and locks the result"
   expect(plain.info.Title).toBe("Quarterly report")
 })
 
+/** The WebAssembly files each of the page's workers has loaded, by name. */
+const loadedBy = (page: Page) =>
+  Promise.all(
+    page.workers().map((worker) =>
+      worker.evaluate(() =>
+        performance
+          .getEntriesByType("resource")
+          .map((entry) => entry.name.split("/").pop()!)
+          .filter((name) => name.endsWith(".wasm"))
+      )
+    )
+  )
+
+test("shares the pictures between helpers where the device has cores to spare", async ({
+  page,
+}) => {
+  test.setTimeout(120_000)
+  await page.addInitScript(() =>
+    Object.defineProperty(Navigator.prototype, "hardwareConcurrency", {
+      get: () => 8,
+    })
+  )
+  const upload = await file("Album.pdf", (doc) =>
+    [1, 2, 3, 4, 5, 6].map((seed) => ({
+      ...photo(doc, seed),
+      width: 150,
+      height: 112,
+    }))
+  )
+  await add(page, upload)
+  // The worker with the engine, and four helpers started one after another.
+  await expect.poll(() => page.workers().length, { timeout: 30_000 }).toBe(5)
+  await compress(page)
+  await expect(page.getByTestId("changes")).toContainText(
+    "6 of 6 pictures made smaller"
+  )
+  const loaded = await loadedBy(page)
+  const engine = loaded.filter((names) =>
+    names.some((name) => name.startsWith("mupdf"))
+  )
+  expect(engine).toHaveLength(1)
+  // The engine's worker handed the pictures out: it never loaded a codec
+  // itself, and more than one helper did.
+  expect(engine[0].some((name) => name.startsWith("mozjpeg_enc"))).toBe(false)
+  const encoders = loaded.filter((names) =>
+    names.some((name) => name.startsWith("mozjpeg_enc"))
+  )
+  expect(encoders.length).toBeGreaterThan(1)
+  // The result is what one worker alone would have made.
+  const { bytes } = await download(page)
+  const pictures = await readPictures(bytes)
+  expect(pictures).toHaveLength(6)
+  for (const picture of pictures) expect(picture.width).toBeLessThan(700)
+  expect(await texts(bytes)).toEqual(await texts(new Uint8Array(upload.buffer)))
+})
+
+test("does without helpers on a device with two cores", async ({ page }) => {
+  await page.addInitScript(() =>
+    Object.defineProperty(Navigator.prototype, "hardwareConcurrency", {
+      get: () => 2,
+    })
+  )
+  await add(page, await file("Photo.pdf", (doc) => [photo(doc)]))
+  await compress(page)
+  expect(page.workers()).toHaveLength(1)
+  const [engine] = await loadedBy(page)
+  expect(engine.some((name) => name.startsWith("mozjpeg_enc"))).toBe(true)
+})
+
 test("compresses several files at once and hands them over as one ZIP", async ({
   page,
 }) => {
@@ -550,6 +619,14 @@ test("a compression can be stopped, the result read, and the file removed", asyn
 }) => {
   // Several compressions in a row, on a machine that may be busy.
   test.setTimeout(120_000)
+  // With helpers these pictures are done in under two seconds, and WebKit
+  // takes one of them to show that work has begun: the button would be
+  // pressed as the work ends. Without helpers it lasts long enough to stop.
+  await page.addInitScript(() =>
+    Object.defineProperty(Navigator.prototype, "hardwareConcurrency", {
+      get: () => 2,
+    })
+  )
   // Enough pictures that the work takes a while.
   const upload = await file("album.pdf", (doc) =>
     Array.from({ length: 14 }, (_, index) => ({

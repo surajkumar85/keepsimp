@@ -4,7 +4,7 @@
  * to harsh, and the gentlest step that fits is found by writing a few of
  * them.
  */
-import type { LevelPlan } from "./settings"
+import type { Level, LevelPlan } from "./settings"
 
 /** One step: pictures at most this many pixels per inch, JPEGs at this quality. */
 export interface Rung {
@@ -41,10 +41,25 @@ export const READABLE_RUNGS = 10
 export const stepCount = (further: boolean) =>
   1 + (further ? RUNGS.length : READABLE_RUNGS)
 
-/** What a step does to pictures; null for the step that loses nothing. */
+/** What part of a step towards the one before it would be like, to judge by: gentler than the first rung. */
+const ABOVE: Rung = { dpi: 300, quality: 92 }
+
+/**
+ * What a step does to pictures; null for the step that loses nothing. A
+ * step with a fraction lies between two rungs: 2.5 is half-way from the
+ * second rung to the third.
+ */
 export function stepPlan(step: number): LevelPlan | null {
-  const rung = RUNGS[step - 1]
-  if (!rung) return null
+  const harsh = RUNGS[Math.ceil(step) - 1]
+  if (!harsh) return null
+  const gentle = RUNGS[Math.ceil(step) - 2] ?? ABOVE
+  const back = Math.ceil(step) - step
+  const rung = {
+    dpi: Math.round(harsh.dpi + (gentle.dpi - harsh.dpi) * back),
+    quality: Math.round(
+      harsh.quality + (gentle.quality - harsh.quality) * back
+    ),
+  }
   return {
     dpi: rung.dpi,
     // Every step down in size must count, so a picture is resized as soon as it is over.
@@ -65,8 +80,16 @@ export interface Fit<T> {
   met: boolean
 }
 
+/** A result that fills less than this share of the size is tried again, part of a step gentler. */
+export const ROOM_TO_FILL = 0.85
+/** How many times: half a step back, then a quarter either way. */
+export const PART_STEPS = 2
+
 /**
- * Find the gentlest step whose result fits.
+ * Find the gentlest step whose result fits. The steps are far apart, so the
+ * first one that fits may leave a good part of the size unused; parts of a
+ * step towards the one before are then tried, and the gentlest that fits is
+ * kept.
  * @param steps How many steps there are, from 0.
  * @param target The size to stay within, in bytes.
  * @param write Writes the file at a step and says what it weighs.
@@ -93,12 +116,41 @@ export async function fitTarget<T extends { bytes: number }>(
       best = result
     } else low = middle
   }
-  return { step: high, result: best, met: true }
+  let fits = high
+  let over = high - 1
+  for (
+    let tries = 0;
+    tries < PART_STEPS && best.bytes < target * ROOM_TO_FILL;
+    tries++
+  ) {
+    const middle = (over + fits) / 2
+    const result = await write(middle)
+    if (result.bytes <= target) {
+      fits = middle
+      best = result
+    } else over = middle
+  }
+  return { step: fits, result: best, met: true }
 }
 
-/** The most times a file is written to find its step: both ends, then halving. */
+/**
+ * The level worth writing as well, once a step has been found. A step
+ * writes every JPEG at one quality; a level measures each picture and keeps
+ * drawings exact, and on slides and charts it comes out both smaller and
+ * more like the original than the steps near it. Balanced weighs about what
+ * the third to fifth step does, Strong about what the seventh to ninth does;
+ * beyond those no level would fit.
+ */
+export function levelToTry(step: number): Exclude<Level, "lossless"> | null {
+  if (step <= 0) return null
+  if (step <= 5) return "balanced"
+  if (step <= 9) return "strong"
+  return null
+}
+
+/** The most times a file is written to find its step: both ends, halving, parts of a step, and a level. */
 export const mostWrites = (steps: number) =>
-  steps <= 1 ? 1 : 2 + Math.ceil(Math.log2(steps - 1))
+  steps <= 1 ? 1 : 2 + Math.ceil(Math.log2(steps - 1)) + PART_STEPS + 1
 
 const KB = 1024
 const MB = 1024 * KB

@@ -5,6 +5,6 @@ export default defineConfig({
   test: {
     environment: "node",
     include: ["benchmarks/**/*.benchmark.ts"],
-    testTimeout: 600000,
+    testTimeout: 3_600_000,
   },
 })

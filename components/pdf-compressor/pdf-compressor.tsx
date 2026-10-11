@@ -651,7 +651,13 @@ export function PdfCompressor() {
         progress.done,
         progress.total,
         progress.attempt,
-        progress.attempt ? mostWrites(stepCount(further)) : 1
+        // A size is found by writing the file several times. At a level,
+        // a second writing only follows a first that was held back.
+        progress.attempt
+          ? settings.mode === "size"
+            ? mostWrites(stepCount(further))
+            : 2
+          : 1
       )
     : 0
   const gain = current

@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest"
-import { drawnSize, largest, resolution, sizeFor } from "./usage"
+import {
+  drawnSize,
+  largest,
+  PALETTE_DPI,
+  paletteSuits,
+  resolution,
+  sizeFor,
+} from "./usage"
 
 describe("drawnSize", () => {
   it("reads the size straight off an upright picture", () => {
@@ -52,6 +59,26 @@ describe("resolution", () => {
     expect(
       resolution({ width: 100, height: 100 }, { width: 50, height: 0 })
     ).toBeNull()
+  })
+})
+
+describe("paletteSuits", () => {
+  const inch = { width: 72, height: 72 }
+
+  it("allows a palette up to 150 dpi, with room for rounding", () => {
+    expect(PALETTE_DPI).toBe(150)
+    expect(paletteSuits({ width: 96, height: 96 }, inch)).toBe(true)
+    expect(paletteSuits({ width: 150, height: 150 }, inch)).toBe(true)
+    expect(paletteSuits({ width: 151, height: 151 }, inch)).toBe(true)
+    expect(paletteSuits({ width: 152, height: 152 }, inch)).toBe(false)
+    expect(paletteSuits({ width: 500, height: 500 }, inch)).toBe(false)
+  })
+
+  it("refuses when nothing is known of how the picture is drawn", () => {
+    expect(paletteSuits({ width: 96, height: 96 }, null)).toBe(false)
+    expect(
+      paletteSuits({ width: 96, height: 96 }, { width: 0.2, height: 0.2 })
+    ).toBe(false)
   })
 })
 

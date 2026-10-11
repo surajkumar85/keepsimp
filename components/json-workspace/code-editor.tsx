@@ -5,7 +5,7 @@ import { EditorState, Annotation, Compartment } from "@codemirror/state"
 import { EditorView, placeholder, keymap } from "@codemirror/view"
 import { basicSetup } from "codemirror"
 import { json } from "@codemirror/lang-json"
-import { undo, redo, indentWithTab } from "@codemirror/commands"
+import { undo, redo, indentWithTab, isolateHistory } from "@codemirror/commands"
 import { openSearchPanel } from "@codemirror/search"
 import {
   foldAll,
@@ -198,7 +198,9 @@ export function CodeEditor({
     if (editor && editor.state.doc.toString() !== value)
       editor.dispatch({
         changes: { from: 0, to: editor.state.doc.length, insert: value },
-        annotations: external.of(true),
+        // A replacement from outside is an undo step of its own; without this
+        // it joins typing done just before it, and one undo takes both back.
+        annotations: [external.of(true), isolateHistory.of("full")],
       })
   }, [value])
   return (

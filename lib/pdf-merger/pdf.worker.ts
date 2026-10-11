@@ -21,6 +21,7 @@ import {
   splitPart,
 } from "@/lib/pdf-splitter/mupdf-split"
 import { codecs } from "@/lib/pdf-compressor/codecs"
+import { HelperCodecs, type HelperPort } from "@/lib/pdf-compressor/helpers"
 import { auditPdf, type Audit } from "@/lib/pdf-compressor/mupdf-audit"
 import type { Stage } from "@/lib/pdf-compressor/report"
 import {
@@ -63,6 +64,9 @@ const TOO_LARGE =
 const UNREADABLE_PICTURE = "This picture could not be read. It may be damaged."
 
 class Cancelled extends Error {}
+
+/** The picture codecs: on helper workers when the page has started some, here otherwise. */
+const helpers = new HelperCodecs(codecs)
 
 /** Files held open, by the id the page gave them. */
 const files = new Map<string, OpenedPdf>()
@@ -417,8 +421,25 @@ async function compress(request: Extract<PdfRequest, { type: "compress" }>) {
     let paused = performance.now()
     const { how } = request
     const bytes = new Uint8Array(await request.file.arrayBuffer())
+    const stopIfCancelled = () => {
+      if (job <= cancelled) throw new Cancelled()
+    }
+    // With pictures out at the helpers, the worker is free to hear a cancel
+    // at any moment, so every step asks, and not only the pauses.
+    const asking =
+      <A extends unknown[], R>(codec: (...args: A) => Promise<R>) =>
+      async (...args: A) => {
+        stopIfCancelled()
+        return codec(...args)
+      }
     const options = {
-      codecs,
+      codecs: {
+        jpeg: asking(helpers.codecs.jpeg),
+        resize: asking(helpers.codecs.resize),
+        png: asking(helpers.codecs.png),
+        deflate: asking(helpers.codecs.deflate),
+      },
+      lanes: () => helpers.lanes,
       scans: request.scans,
       remove: request.remove ?? undefined,
       lock: request.lock ?? undefined,
@@ -426,10 +447,11 @@ async function compress(request: Extract<PdfRequest, { type: "compress" }>) {
       pristine: pdf.doc,
       maxPixels: request.maxPixels,
       checkpoint: async () => {
+        stopIfCancelled()
         if (performance.now() - paused < 16) return
         await new Promise((resolve) => setTimeout(resolve, 0))
         paused = performance.now()
-        if (job <= cancelled) throw new Cancelled()
+        stopIfCancelled()
       },
       progress: (now: Stage, done: number, total: number, attempt?: number) => {
         const time = performance.now()
@@ -631,6 +653,15 @@ self.onmessage = (event: MessageEvent<PdfRequest>) => {
   // A cancel must not wait behind the merge it is meant to stop.
   if (request.type === "cancel") {
     cancelled = Math.max(cancelled, request.job)
+    return
+  }
+  // Helpers come and go while a file is being compressed.
+  if (request.type === "helper") {
+    helpers.add(request.port as HelperPort)
+    return
+  }
+  if (request.type === "helpers-lost") {
+    helpers.clear()
     return
   }
   if (request.type === "forget") {

@@ -2,12 +2,19 @@ import { describe, expect, it } from "vitest"
 import { checkResult, pagesToCheck } from "./check"
 
 describe("pagesToCheck", () => {
-  it("checks every changed page when there are few", () => {
-    expect(pagesToCheck([7, 2, 2, 5], 10, 24)).toEqual([2, 5, 7])
+  it("checks every changed page when there are few, and a few of the others", () => {
+    expect(pagesToCheck([7, 2, 2, 5], 10, 24)).toEqual([0, 2, 4, 5, 7, 9])
+    // Only as many of the others as there is room for.
+    expect(pagesToCheck([7, 2, 5], 10, 4)).toEqual([0, 2, 5, 7])
+    expect(pagesToCheck([7, 2, 5], 10, 3)).toEqual([2, 5, 7])
+    expect(pagesToCheck([7, 2, 5], 10, 5)).toEqual([0, 2, 5, 7, 9])
+    // A file whose every page changed has no others.
+    expect(pagesToCheck([0, 1], 2, 24)).toEqual([0, 1])
   })
 
   it("leaves out pages the file does not have", () => {
-    expect(pagesToCheck([-1, 3, 10], 10, 24)).toEqual([3])
+    expect(pagesToCheck([-1, 3, 10], 4, 24)).toEqual([0, 1, 2, 3])
+    expect(pagesToCheck([-1, 3, 10], 4, 1)).toEqual([3])
   })
 
   it("spreads its checks when there are many, ends included", () => {

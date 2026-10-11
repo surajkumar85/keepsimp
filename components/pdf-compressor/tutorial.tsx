@@ -61,7 +61,7 @@ const content: TutorialContent = {
     {
       term: "To a size",
       detail:
-        "For forms and inboxes with a limit. Choose 100 KB, 200 KB, 500 KB, 1, 2, 5, 10 or 25 MB, or type a size in KB or MB. The only way to know what a file weighs at some setting is to write it, so the file is written up to six times, from gentle to harsh, and the gentlest result that fits is kept. It stops where pictures are still easy to read (72 dpi). If the size cannot be reached, you get the smallest readable result and are told how far over it is. “Go further” lets pictures get blurry when the size matters more.",
+        "For forms and inboxes with a limit. Choose 100 KB, 200 KB, 500 KB, 1, 2, 5, 10 or 25 MB, or type a size in KB or MB. The only way to know what a file weighs at some setting is to write it, so the file is written up to nine times, from gentle to harsh, and the gentlest result that fits is kept. It stops where pictures are still easy to read (72 dpi). If the size cannot be reached, you get the smallest readable result and are told how far over it is. “Go further” lets pictures get blurry when the size matters more.",
     },
     {
       term: "Custom",

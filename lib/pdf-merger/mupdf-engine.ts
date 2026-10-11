@@ -6,6 +6,7 @@
 import type * as MuPDF from "mupdf"
 import type { Rotation, Size } from "@/lib/image-compressor/geometry"
 import type { Pixels } from "@/lib/image-compressor/ssim"
+import { Duplicates, hashBytes, isDescription, sameBytes } from "./duplicates"
 import type { FileFacts } from "./files"
 import {
   contentsPageCount,
@@ -51,6 +52,117 @@ export const UNREADABLE =
   "This file could not be read as a PDF. It may be damaged."
 export const NO_PAGES = "This PDF has no pages."
 export const PRODUCER = "KeepSimp"
+
+/** Things that only become the same once what they point at has been shared take another round. */
+const SHARE_ROUNDS = 4
+
+/**
+ * What an object says, written out part by part. The engine could write it
+ * out whole, but only for an object it has been asked to hand over
+ * (`resolve`), and it then goes on holding that object: a stream that is
+ * held, and that points at another object, is written without its data when
+ * the file is saved (MuPDF 1.28.1). So nothing here ever asks for the object
+ * itself, only for its parts.
+ */
+function written(ref: Obj) {
+  const parts: string[] = []
+  ref.forEach((value, key) => parts.push(`${key} ${value.toString(true)}`))
+  return parts.join("\n")
+}
+
+/** Point everything that pointed at a copy at the one that is kept. */
+function repoint(doc: Doc, moved: Map<number, number>) {
+  const fix = (object: Obj) => {
+    const changes: [number | string, number][] = []
+    object.forEach((value, key) => {
+      if (value.isIndirect()) {
+        const to = moved.get(value.asIndirect())
+        if (to !== undefined) changes.push([key, to])
+      } else if (value.isDictionary() || value.isArray()) fix(value)
+    })
+    for (const [key, to] of changes) object.put(key, doc.newIndirect(to))
+  }
+  const count = doc.countObjects()
+  for (let number = 1; number < count; number++) {
+    if (moved.has(number)) continue
+    const ref = doc.newIndirect(number)
+    try {
+      if (ref.isDictionary() || ref.isArray()) fix(ref)
+    } catch {
+      // An object that cannot be read points at nothing.
+    }
+  }
+  fix(doc.getTrailer())
+}
+
+/**
+ * Store identical things once: streams (pictures, font files, colour
+ * profiles, page content) and the plain descriptions that point at them.
+ * Copies are left with nothing pointing at them, so they are dropped when
+ * the file is written.
+ *
+ * The engine can do this itself as it writes (`garbage: 4`), but it compares
+ * every object with every other: a tagged guide of 71,000 objects took over
+ * three minutes. This reads the file once a round. It also merges less:
+ * pages, notes, form fields, layers and tags stay apart even when two read
+ * the same, because each is a thing of its own.
+ * @returns Each copy's object number, with the number of the one kept in its place.
+ */
+export function shareDuplicates(doc: Doc) {
+  const count = doc.countObjects()
+  /** What each stream's bytes come to; they do not change between rounds. */
+  const hashes = new Map<number, string>()
+  const gone = new Map<number, number>()
+  const rawOf = (number: number) => {
+    const buffer = doc.newIndirect(number).readRawStream()
+    try {
+      return buffer.asUint8Array().slice()
+    } finally {
+      buffer.destroy()
+    }
+  }
+  for (let round = 0; round < SHARE_ROUNDS; round++) {
+    const seen = new Duplicates()
+    const moved = new Map<number, number>()
+    for (let number = 1; number < count; number++) {
+      if (gone.has(number)) continue
+      const ref = doc.newIndirect(number)
+      try {
+        const stream = ref.isStream()
+        let key: string
+        if (stream) {
+          const type = nameOf(ref.get("Type"))
+          // The file's own index and packed objects are written anew.
+          if (type === "XRef" || type === "ObjStm") continue
+          let hash = hashes.get(number)
+          if (hash === undefined) {
+            const bytes = rawOf(number)
+            hash = `${bytes.length}:${hashBytes(bytes)}`
+            hashes.set(number, hash)
+          }
+          key = `${hash}:${written(ref)}`
+        } else if (ref.isArray()) {
+          // A colour space, a list of filters: a list that starts with a name
+          // is a value, where one that starts with a page is a place.
+          if (!ref.length || !ref.get(0).isName()) continue
+          key = written(ref)
+        } else if (ref.isDictionary() && isDescription(nameOf(ref.get("Type"))))
+          key = written(ref)
+        else continue
+        const copyOf = seen.find(key, number, (other) =>
+          stream ? sameBytes(rawOf(other), rawOf(number)) : true
+        )
+        if (copyOf !== null) moved.set(number, copyOf)
+      } catch {
+        // An object that cannot be read is left as it is.
+      }
+    }
+    if (!moved.size) break
+    repoint(doc, moved)
+    for (const [number, kept] of moved) gone.set(number, kept)
+  }
+  return gone
+}
 
 /** A file needs a password that was not given, or the one given was wrong. */
 export class PasswordNeeded extends Error {
@@ -1428,11 +1540,12 @@ export async function mergePages(
           value.trim()
         )
     await options.checkpoint?.()
-    // Objects no longer referenced are dropped; identical ones, streams
-    // included (level 4), are stored once. Options go as an object, so a
+    // Identical parts are stored once, and objects no longer referenced
+    // are dropped as the file is written. Options go as an object, so a
     // password may hold any character.
+    shareDuplicates(out)
     const buffer = out.saveToBuffer({
-      garbage: 4,
+      garbage: 2,
       compress: "yes",
       objstms: "yes",
       ...(options.lock

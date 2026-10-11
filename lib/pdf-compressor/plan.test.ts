@@ -5,6 +5,9 @@ import {
   TOP_QUALITY,
   worthIt,
   type PictureFacts,
+  THIN_BITS,
+  SMALL_STREAM,
+  streamWorthIt,
 } from "./plan"
 import { levelPlans } from "./settings"
 
@@ -147,6 +150,27 @@ describe("planPicture", () => {
     })
   })
 
+  it("leaves JPEG 2000 that is stored at under half a bit a pixel", () => {
+    // 2,000 by 1,500 pixels at half a bit each is 187,500 bytes.
+    const thin = { stored: "jpx" as const, bytes: 187_499 }
+    expect(THIN_BITS).toBe(0.5)
+    expect(plan(thin)).toEqual({ do: "leave", why: "fine" })
+    expect(plan(thin, levelPlans.strong)).toEqual({ do: "leave", why: "fine" })
+    expect(plan({ ...thin, bytes: 187_500 })).toEqual({
+      do: "encode",
+      size: small,
+      top: TOP_QUALITY,
+    })
+    // A size to come under decides for itself.
+    expect(plan(thin, { ...balanced!, fixed: 60 })).toEqual({
+      do: "encode",
+      size: small,
+      top: TOP_QUALITY,
+    })
+    // Where nothing may be lost it was never going to be touched.
+    expect(plan(thin, null)).toEqual({ do: "leave", why: "kept" })
+  })
+
   it("leaves a JPEG that is already at or below the level's quality", () => {
     expect(plan({ ...fits, quality: 80 })).toEqual({ do: "leave", why: "fine" })
     expect(plan({ ...fits, quality: 40 })).toEqual({ do: "leave", why: "fine" })
@@ -212,5 +236,16 @@ describe("worthIt", () => {
   it("does not bother for a handful of bytes", () => {
     expect(worthIt(3000, 2800, "repacked")).toBe(false)
     expect(worthIt(3000, 2700, "repacked")).toBe(true)
+  })
+})
+
+describe("streamWorthIt", () => {
+  it("wants two parts in a hundred, and 64 bytes at the least", () => {
+    expect(SMALL_STREAM).toBe(512)
+    expect(streamWorthIt(1000, 936)).toBe(true)
+    expect(streamWorthIt(1000, 937)).toBe(false)
+    expect(streamWorthIt(100_000, 98_000)).toBe(true)
+    expect(streamWorthIt(100_000, 98_001)).toBe(false)
+    expect(streamWorthIt(1000, 1200)).toBe(false)
   })
 })

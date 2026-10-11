@@ -283,6 +283,29 @@ test("every tool works offline after one visit", async ({ page }) => {
   await page.getByRole("link", { name: "Download PDF" }).click()
   const smaller = await readPdf(new Uint8Array(await bytesOf(await pending)))
   expect(smaller.pages).toHaveLength(3)
+  // On a device with cores to spare its pictures are encoded by helper
+  // workers, which have to start from the saved copy as well.
+  if ((await page.evaluate(() => navigator.hardwareConcurrency)) >= 3) {
+    const loaded = await Promise.all(
+      page
+        .workers()
+        .map((worker) =>
+          worker.evaluate(() =>
+            performance
+              .getEntriesByType("resource")
+              .map((entry) => entry.name.split("/").pop()!)
+          )
+        )
+    )
+    const encoder = (names: string[]) =>
+      names.some((name) => name.startsWith("mozjpeg_enc"))
+    const engine = loaded.find((names) =>
+      names.some((name) => name.startsWith("mupdf"))
+    )
+    expect(engine).toBeDefined()
+    expect(encoder(engine!)).toBe(false)
+    expect(loaded.filter(encoder).length).toBeGreaterThan(0)
+  }
 
   await page.goto(`${site.origin}/dashboard/json-formatter/`)
   await replaceEditor(

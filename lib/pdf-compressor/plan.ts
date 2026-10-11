@@ -66,6 +66,14 @@ export const SMALL_PIXELS = 64 * 64
 export const SMALL_BYTES = 2048
 /** The best JPEG quality the compressor writes. */
 export const TOP_QUALITY = 92
+/**
+ * A JPEG 2000 picture stored with fewer bits a pixel than this is left
+ * alone by the levels that measure. It has been pressed harder than a JPEG
+ * of the same look can be, so saving it again costs sharpness and gains
+ * next to nothing. Scans from the Internet Archive are stored this way, at
+ * a tenth of a bit a pixel.
+ */
+export const THIN_BITS = 0.5
 /** A JPEG saved again at its own size must drop at least this much in quality, or there is nothing to gain. */
 const STEP_DOWN = 5
 
@@ -112,8 +120,12 @@ export function planPicture(
   const size = sizeFor(facts, facts.drawn, plan.dpi, plan.slack)
   // A soft mask keeps hard edges only when nothing is lost.
   if (facts.mask) return plain ? { do: "repack", size } : leave("kept")
-  if (facts.stored === "jpx")
+  if (facts.stored === "jpx") {
+    // A size to come under, or settings of one's own, are followed anyway.
+    if (plan.fixed === undefined && (facts.bytes * 8) / pixels < THIN_BITS)
+      return leave("fine")
     return size ? { do: "encode", size, top: TOP_QUALITY } : leave("kept")
+  }
   if (facts.stored === "jpeg" && !size) {
     // Its quality was chosen by measuring against the picture it came from.
     if (facts.ours && !plan.again) return leave("fine")
@@ -148,5 +160,21 @@ export function worthIt(before: number, after: number, change: Change) {
   return (
     before - after >= MUST_SAVE_BYTES &&
     after <= before * (1 - MUST_SAVE[change])
+  )
+}
+
+/** Streams with fewer bytes than this are not worth packing again. */
+export const SMALL_STREAM = 512
+const STREAM_MUST_SAVE = 0.02
+const STREAM_MUST_SAVE_BYTES = 64
+
+/**
+ * True when a stream that is not a picture (page content, a font, document
+ * details) packed again is enough smaller to replace what the file has.
+ */
+export function streamWorthIt(before: number, after: number) {
+  return (
+    before - after >=
+    Math.max(STREAM_MUST_SAVE_BYTES, before * STREAM_MUST_SAVE)
   )
 }
