@@ -12,6 +12,16 @@ import type { ContentsChoice, FormsChoice, LabelsChoice } from "./settings"
 export type WantedPage =
   { file: string; page: number; rotation: Rotation } | { blank: Size }
 
+/** What every part of a split keeps of its file, and whether it is locked. */
+export interface SplitKeep {
+  bookmarks: boolean
+  labels: boolean
+  details: boolean
+  /** Which parts carry the files attached to the PDF. */
+  attachments: "first" | "all" | "none"
+  lock: { password: string; ownerPassword: string; permissions: number } | null
+}
+
 export type PdfRequest =
   | {
       type: "open"
@@ -92,9 +102,16 @@ export type PdfRequest =
       id: string
       /** The pages of each part, counted from 0, in the order they go in. */
       parts: number[][]
+      keep: SplitKeep
     }
   /** Split a file into parts that each stay under a size in bytes. The parts are found as it goes. */
-  | { type: "split-size"; job: number; id: string; limit: number }
+  | {
+      type: "split-size"
+      job: number
+      id: string
+      limit: number
+      keep: SplitKeep
+    }
   /** How much of each page of a file holds marks, to find its blank pages. Answers come a run of pages at a time. */
   | { type: "ink"; id: string; request: number }
   /** The text found in one area of each page of a file, likewise. */

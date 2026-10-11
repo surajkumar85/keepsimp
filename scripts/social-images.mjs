@@ -67,6 +67,12 @@ const cards = [
     "/images/pdf-merge-guide.svg",
   ],
   [
+    "split-pdfs-without-uploading",
+    "Just the pages you need.",
+    "Split a PDF where you can see, without the upload.",
+    "/images/pdf-split-guide.svg",
+  ],
+  [
     "repair-compare-json-patch",
     "Preview every JSON change.",
     "Repair, compare and apply JSON Patch locally.",

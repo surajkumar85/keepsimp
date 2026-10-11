@@ -24,6 +24,7 @@ import { jpegOrientation, quarterTurns } from "./picture"
 import type { Size } from "@/lib/image-compressor/geometry"
 import type { PageText, Quad } from "@/lib/pdf-reader/text"
 import type { Bookmark } from "./outline"
+import { carriesAttachments } from "@/lib/pdf-splitter/options"
 import type { PdfRequest, PdfResponse } from "./protocol"
 
 declare const self: DedicatedWorkerGlobalScope
@@ -265,9 +266,14 @@ async function split(request: Extract<PdfRequest, { type: "split" }>) {
     let last = 0
     let paused = performance.now()
     for (const [index, pages] of request.parts.entries()) {
+      const { keep } = request
       const result = await splitPart(await engine, pdf, pages, {
-        // One part carries the attachments; every part would carry them many times over.
-        attachments: index === 0,
+        bookmarks: keep.bookmarks,
+        labels: keep.labels,
+        details: keep.details,
+        lock: keep.lock ?? undefined,
+        // Attached files are stored whole in every part that carries them.
+        attachments: carriesAttachments(keep.attachments, index === 0),
         checkpoint: async () => {
           if (performance.now() - paused < 16) return
           await new Promise((resolve) => setTimeout(resolve, 0))
@@ -329,7 +335,15 @@ async function splitSize(request: Extract<PdfRequest, { type: "split-size" }>) {
     if (!pdf) throw new Error(SPLIT_FAILED)
     let index = 0
     let paused = performance.now()
+    const { keep } = request
     await splitBySize(await engine, pdf, request.limit, {
+      keep: {
+        bookmarks: keep.bookmarks,
+        labels: keep.labels,
+        details: keep.details,
+        lock: keep.lock ?? undefined,
+      },
+      attaches: (start) => carriesAttachments(keep.attachments, start === 0),
       checkpoint: async () => {
         if (performance.now() - paused < 16) return
         await new Promise((resolve) => setTimeout(resolve, 0))

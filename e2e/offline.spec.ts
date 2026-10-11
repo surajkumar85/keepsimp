@@ -259,7 +259,7 @@ test("every tool works offline after one visit", async ({ page }) => {
   )
   pending = page.waitForEvent("download")
   await page
-    .getByRole("link", { name: "Download keepsimp-report-2.pdf" })
+    .getByRole("link", { name: "Download keepsimp-handbook-02.pdf" })
     .click()
   const part = await readPdf(new Uint8Array(await bytesOf(await pending)))
   expect(part.pages).toHaveLength(1)

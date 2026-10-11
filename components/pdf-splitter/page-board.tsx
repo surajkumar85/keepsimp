@@ -37,11 +37,14 @@ function fate(
   mode: SplitMode,
   parts: readonly number[],
   picked: boolean,
-  leftOut: ReadonlySet<number>
+  leftOut: ReadonlySet<number>,
+  planned: boolean
 ) {
   if (mode === "extract") return picked ? "Taken out" : "Not taken"
   if (mode === "remove") return picked ? "Removed" : "Kept"
   if (mode === "blank" && picked) return "Blank"
+  // Until there is a plan, nothing is said about where a page goes.
+  if (!planned) return ""
   const written = parts.filter((part) => !leftOut.has(part))
   if (!written.length) return "Left out"
   return `${written.length > 1 ? "Parts" : "Part"} ${written.map((part) => part + 1).join(", ")}`
@@ -107,7 +110,11 @@ const Tile = memo(function Tile({
         data-tile=""
         tabIndex={tabStop ? 0 : -1}
         aria-pressed={selects ? picked : undefined}
-        aria-label={`Page ${page + 1}, ${where.toLowerCase()}`}
+        aria-label={
+          where
+            ? `Page ${page + 1}, ${where.toLowerCase()}`
+            : `Page ${page + 1}`
+        }
         aria-keyshortcuts={cuts ? "S Enter" : "Enter"}
         onClick={(event) => onPress(page, event)}
         onDoubleClick={(event) => onRead(page, event.currentTarget)}
@@ -324,6 +331,8 @@ export const PageBoard = memo(function PageBoard({
 
   const tabStop = Math.min(Math.max(focused, 0), Math.max(count - 1, 0))
   const cutSet = new Set(cuts)
+  /** Some page has a part to go to; before that, pages are not shown as left out. */
+  const planned = membership.some((parts) => parts.length > 0)
   const tiles = []
   for (let page = 0; page < count; page++) {
     const parts = membership[page] ?? []
@@ -334,7 +343,7 @@ export const PageBoard = memo(function PageBoard({
         page={page}
         last={page === count - 1}
         bitmap={pictures[`${file}/${page}`]}
-        where={fate(mode, parts, picked, leftOut)}
+        where={fate(mode, parts, picked, leftOut, planned)}
         parts={parts.map((part) => part + 1).join(",")}
         cuts={mode === "cuts"}
         selects={selects}
@@ -345,7 +354,7 @@ export const PageBoard = memo(function PageBoard({
             ? picked
             : mode === "extract"
               ? !picked
-              : parts.every((part) => leftOut.has(part))
+              : planned && parts.every((part) => leftOut.has(part))
         }
         // Neighbouring parts take turns with a tint, so their edges show without colour alone.
         tinted={

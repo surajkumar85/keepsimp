@@ -1,10 +1,16 @@
 import { ToolTutorial, type TutorialContent } from "@/components/tool-tutorial"
 
 const content: TutorialContent = {
+  video: {
+    file: "pdf-splitter-tutorial",
+    duration: { iso: "PT1M14S", label: "1 min 14 s" },
+    uploadDate: "2026-10-11",
+  },
   name: "How to use the KeepSimp PDF splitter",
   description:
     "Split PDFs in your browser: cut them into parts where you can see the pages, at bookmarks or by size, take pages out or remove them, and download parts that are no larger than they need to be.",
-  intro: "Follow the steps below. Every option is explained underneath.",
+  intro:
+    "Watch the tour, or follow the same steps below. Every option is explained underneath.",
   steps: [
     {
       title: "Add your PDFs",
@@ -108,6 +114,11 @@ const content: TutorialContent = {
         "Many PDFs give every page one shared list of all the fonts and pictures in the file. Tools that copy that list make every part nearly as large as the whole. Here each part gets only what its own pages use, so the parts together are about the size of the original.",
     },
     {
+      term: "What each part keeps, and a password",
+      detail:
+        "Under the parts you can choose to leave out bookmarks, to count every part's pages from 1, or to leave out the title and author for privacy. Files attached to the PDF go into the first part, into every part, or nowhere. A password locks every part with AES-256 encryption; you can also stop printing, copying or changes, which viewers are asked to respect, and a second password lifts those limits. A lost password cannot be recovered.",
+    },
+    {
       term: "Locked, signed and tagged files",
       detail:
         "A locked file is opened with its password, which is used on your device and not kept; the parts have no password. A digital signature cannot stay valid in a part, so its picture is kept and the file's row tells you. Accessibility tags are not carried over yet.",
@@ -118,6 +129,7 @@ const content: TutorialContent = {
         "Up to 100 files, each of up to 5,000 pages. On a computer, files can be 300 MB each and 500 MB together; on a phone, 100 MB each and 200 MB together, because phones close pages that use more memory. Everything runs in your browser: the files, their contents and any passwords stay on your device.",
     },
   ],
+  guideHref: "/blog/split-pdfs-without-uploading/",
 }
 
 export function PdfSplitterTutorial() {

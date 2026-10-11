@@ -2,7 +2,7 @@
 
 Splits PDFs in the browser. Nothing is uploaded: files are opened, drawn and written by MuPDF as WebAssembly in the same worker the PDF merger uses. Live at `/dashboard/pdf-splitter/`.
 
-Phases 1 to 3 of four are built. A password on the parts, more choices, the tutorial video and the guide (phase 4) are not built yet, and the page does not offer them.
+All four planned phases are built.
 
 ## What it does
 
@@ -25,6 +25,8 @@ Phases 1 to 3 of four are built. A password on the parts, more choices, the tuto
 - **Several files:** every file has a row; with more than one, pressing a file's name shows its pages on the board, and its row takes the `primary` border. What is chosen once applies to every file: the way of splitting, rules that place cuts, typed ranges, typed pages, the bookmark level and filter, and the size. What is done by hand belongs to the file shown: pressed cuts and pages, undo, ticked bookmarks, typed names and parts left out. Each row says what will be made of its file ("3 parts") or why it is left out, and the other files are still split. Only files whose plan changed are split again. In the ZIP each file's parts are in a folder named after it.
 - **Names:** a pattern with `{name}`, `{part}`, `{from}`, `{to}`, `{pages}` and `{label}`. Numbers are padded with zeros to the length of the largest, so files sort in order. No two parts get the same name. The usual pattern is `{name}-{part}`; bookmarks use `{name}-{part}-{label}`, odd and even `{name}-{label}`, extract `{name}-pages-{pages}` and remove `{name}-edited`. Names are not part of what makes a result out of date: a part can be renamed after it is made, and the download and the ZIP use the name it has then.
 - **Split** is one button, with progress by part (and by file, with several) and a cancel. Cancelling keeps nothing of the file being split; files already finished keep their parts. Any change to the plan afterwards puts the button back with a sentence saying why.
+- **What each part keeps** is chosen in a card under the parts: bookmarks, the file's own page numbers, and the title and other details can each be left out; attached files go into the first part, every part or none. A change makes the result out of date.
+- **Password:** every part can be locked with AES-256, with limits on printing, copying and changes and an optional second password that lifts them, exactly as in the merger (`components/pdf/lock-fields.tsx`). Without a second password, limits get a random one that nobody keeps. A locked part can still be read in the reader before it is downloaded, since the password is in the options.
 - **Result:** each part's real size with "Read" and "Download", and "Download all (.zip)" for several parts. The ZIP is made on the device (`lib/image-resizer/zip.ts`) and stores the parts as they are.
 
 ### What a part keeps
@@ -89,6 +91,20 @@ What a run of pages weighs as a file of its own cannot be worked out from the or
 - The parts are only known once the file has been split, so before that the page says "Parts of at most 10 MB" and the board shows no parts. Parts found by size cannot be left out one by one.
 - A change of size makes the result out of date.
 
+## Speed
+
+Measured in Node on the development machine (an 8-core laptop), with the same engine the browser runs:
+
+| File                                 | Split                      | Time   |
+| ------------------------------------ | -------------------------- | ------ |
+| 2,000 pages of text, 0.8 MB          | every page on its own      | 0.35 s |
+| 2,000 pages of text, 0.8 MB          | every 50 pages             | 0.11 s |
+| 600 pages with a picture each, 18 MB | every 20 pages             | 1.2 s  |
+| 600 pages with a picture each, 18 MB | by size, 2 MB (nine parts) | 3.3 s  |
+| 200 pages                            | looked at for blank pages  | 0.11 s |
+
+A browser adds the cost of handing each part to the page. Splitting by size costs about three times a plain split, because parts are written more than once to find where they end.
+
 ## Limits
 
 Up to 100 files, each of up to 5,000 pages and 5,000 parts. Files can be 300 MB each and 500 MB together on a computer, and 100 MB each and 200 MB together on a phone (`limitsFor` in `lib/pdf-merger/settings.ts`).
@@ -110,11 +126,27 @@ A split into thousands of parts stays quick: board tiles are drawn again only wh
 - **`mupdf-split.ts`** writes one part by handing its pages to `mergePages`, with the file's details, its own page numbers and its bookmarks kept, and splits by size by writing runs of pages until they fit.
 - **Worker and client** (`lib/pdf-merger/`): a `split` request writes the parts one after another and hands each over as it is done; `split-size` finds the parts as it goes and says which pages each holds; `cancel` stops either between pages or parts. `ink` and `area-text` look through a file a slice at a time, as a search does, and `halve` swaps a file for its halved form or back.
 - **Components** (`components/pdf-splitter/`): `pdf-splitter.tsx` (the files, the choices, the results), `file-rows.tsx`, `rules-panel.tsx`, `scan-panel.tsx` (blank pages, text rules, the area picker and double pages), `page-board.tsx`, `parts-list.tsx` and `tutorial.tsx`.
-- **Shared by the PDF tools** (`components/pdf/`): `use-pdf-reader.ts` (opening a file, a list of pages or a finished result in the reader), `use-page-pictures.ts` (small pictures, at most 300 kept), `use-device-limits.ts` and `password-row.tsx`.
+- `options.ts` (pure): what parts keep, the lock, and what makes a result out of date. `options-panel.tsx` shows them.
+- **Shared by the PDF tools** (`components/pdf/`): `use-pdf-reader.ts` (opening a file, a list of pages or a finished result in the reader), `use-page-pictures.ts` (small pictures, at most 300 kept), `use-device-limits.ts`, `password-row.tsx` and `lock-fields.tsx`.
+
+## Sample, tutorial video and guide
+
+- `npm run samples:pdfs` also writes `public/samples/keepsimp-handbook.pdf`, the file behind "Try a sample": twelve pages in five chapters, with each section bookmarked under its chapter, so it can be cut by hand, at bookmarks of either level, or by the word "Chapter".
+- `public/videos/pdf-splitter-tutorial.mp4` (1 min 14 s, 5.8 MB, with poster and captions) is recorded from the real app by the shared recorder and `scripts/tutorial/pdf-splitter.mjs`:
+
+  ```bash
+  npm run build
+  npx serve out --listen tcp://127.0.0.1:4180
+  KEEPSIMP_PREVIEW_URL=http://127.0.0.1:4180 npm run tutorial:video -- pdf-splitter
+  ```
+
+  The page sets `data-settled` on its root when nothing is being read, looked through or split; the recorder waits on it. If the length changes, update `video.duration` in `components/pdf-splitter/tutorial.tsx`.
+
+- The journal article "Just the pages you need, without the upload." (`lib/blog.ts`) is the written guide the help section links to. Its artwork is `public/images/pdf-split-guide.svg` and its social image comes from `scripts/social-images.mjs`.
 
 ## Tests
 
-- **Unit:** `parts`, `naming`, `settings`, `bookmarks`, `size`, `files`, `blank`, `text-rule` and `halves`, with their edge cases. The size search is tested with files whose pages weigh what the test says: even pages, very uneven ones, a page over the size, a file that fits whole, and a thousand pages without a thousand writes.
+- **Unit:** `parts`, `naming`, `settings`, `bookmarks`, `size`, `files`, `blank`, `text-rule`, `halves` and `options`, with their edge cases. The size search is tested with files whose pages weigh what the test says: even pages, very uneven ones, a page over the size, a file that fits whole, and a thousand pages without a thousand writes.
 - **Real engine in Node** (`split.node.test.ts`), with files written by pdf-lib and parts read back by pdf.js and pdf-lib:
   - every rule, typed ranges that overlap, repeat and count down
   - sixty seeded sets of random cuts, each put back together and compared page by page
@@ -125,6 +157,7 @@ A split into thousands of parts stays quick: board tiles are drawn again only wh
   - blank pages: an empty page, cream paper, a speck, a punch hole and a line of text measured against the three settings, and a scan with writing never taken for blank
   - text in an area read from the same place on every page, and nothing found on a scan
   - double pages: the boxes of both halves read back with pdf-lib; each half drawn pixel for pixel like that half of the sheet, also for a sheet stored on its side; the right page first, a cut off the middle, one above the other; a cover and pages that are not double; a link kept with its half
+  - what parts keep: bookmarks, page numbers and details left out; a password with limits and a second password; attached files in the first part, every part or none
   - by size: parts filled as far as the size allows and no further, the measured size being the size of the file handed over, a page over the size, a file that fits whole, progress, stopping, and attachments in the first part only
 - **Browser** (`e2e/pdf-splitter.spec.ts`, five profiles), with the ZIP unpacked and every part read by pdf.js:
   - cutting between pages, bookmarks and links in the parts, one part downloaded on its own
@@ -145,7 +178,8 @@ A split into thousands of parts stays quick: board tiles are drawn again only wh
   - double pages: halves on the board and in the parts, a cover, a moved cut, and whole pages again
   - several files: a rule for all, a cut for one, a file that cannot be read, folders in the ZIP, only changed files split again, ranges too long for one file, and reading a file that is not shown
   - axe in both themes in every way of splitting, 320 px, control sizes and no external requests
-  - the written help
+  - what parts keep, attached files, a password with limits, and reading a locked part
+  - the tutorial video, its captions, the written steps and options, and the guide
 - **Offline:** the splitter and its sample are part of the offline journey in `e2e/offline.spec.ts`.
 
 ## Not planned

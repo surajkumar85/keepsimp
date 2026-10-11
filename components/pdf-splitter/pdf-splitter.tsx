@@ -44,6 +44,13 @@ import {
   type Sensitivity,
 } from "@/lib/pdf-splitter/blank"
 import type { HalveChoice } from "@/lib/pdf-splitter/halves"
+import {
+  defaultOptions,
+  lockFor,
+  optionsKey,
+  optionsProblem,
+  type SplitOptions,
+} from "@/lib/pdf-splitter/options"
 import type { Area } from "@/lib/pdf-splitter/text-rule"
 import { looksLikePdf, megabytes } from "@/lib/pdf-merger/settings"
 import {
@@ -87,6 +94,7 @@ import {
 } from "@/lib/pdf-splitter/settings"
 import { limitBytes, UNIT_BYTES, type SizeUnit } from "@/lib/pdf-splitter/size"
 import { FileRows, type FileSummary } from "./file-rows"
+import { OptionsPanel } from "./options-panel"
 import { PageBoard } from "./page-board"
 import { MOST_ROWS, PartsList, type WrittenPart } from "./parts-list"
 import { RulesPanel, type SizeChoice } from "./rules-panel"
@@ -94,7 +102,7 @@ import { BlankRules, HalvePanel, TextRules } from "./scan-panel"
 
 const INPUT_ID = "split-file"
 const ACCEPT = "application/pdf,.pdf"
-const SAMPLE = "keepsimp-report.pdf"
+const SAMPLE = "keepsimp-handbook.pdf"
 
 interface Result {
   /** What was split; a different plan makes the result out of date. */
@@ -195,6 +203,12 @@ export function PdfSplitter() {
   /** How double pages are cut in half; null while pages are left whole. */
   const [halving, setHalving] = useState<HalveChoice | null>(null)
   const [pattern, setPattern] = useState("")
+  const [options, setOptions] = useState<SplitOptions>(defaultOptions)
+  const updateOptions = useCallback(
+    (change: Partial<SplitOptions>) =>
+      setOptions((before) => ({ ...before, ...change })),
+    []
+  )
   const [notice, setNotice] = useState("")
   const [progress, setProgress] = useState<{
     /** Which file is being split, from 1, of how many. */
@@ -500,11 +514,14 @@ export function PdfSplitter() {
       : Number(size) * UNIT_BYTES.MB
   const usedPattern = pattern.trim() || patternFor(mode, { blankHow, textKind })
 
+  /** What is kept and locked, as part of what a result was made from. */
+  const kept = optionsKey(options)
+
   const views = useMemo<FileView[]>(
     () =>
       state.files.map((file) => {
         const count = file.status === "ready" ? (file.facts?.pages ?? 0) : 0
-        const key = mode === "size" ? sizeKey(file.id, limit ?? 0) : null
+        const key = mode === "size" ? sizeKey(file.id, limit ?? 0) + kept : null
         const sized =
           key && results[file.id]?.key === key
             ? results[file.id].sized
@@ -553,7 +570,7 @@ export function PdfSplitter() {
                   ? "Type a size of at least 10 KB."
                   : null
                 : nothingToWrite(parts)))
-        const ownKey = key ?? splitKey(file.id, parts)
+        const ownKey = key ?? splitKey(file.id, parts) + kept
         return {
           file,
           count,
@@ -581,6 +598,7 @@ export function PdfSplitter() {
       limits.pages,
       usedPattern,
       results,
+      kept,
       sensitivity,
       blankHow,
       textKind,
@@ -597,7 +615,8 @@ export function PdfSplitter() {
   const workable = views.filter(
     (view) => view.file.status === "ready" && !view.problem
   )
-  const wrongPattern = patternProblem(pattern)
+  // What is wrong with the names or the password stops every file alike.
+  const wrongPattern = patternProblem(pattern) ?? optionsProblem(options)
   const splitting = progress !== null
   const done = workable.length > 0 && workable.every((view) => view.current)
   const canSplit =
@@ -675,11 +694,24 @@ export function PdfSplitter() {
           total: all,
           parts: arrived.length,
         })
+      const keep = {
+        bookmarks: options.bookmarks,
+        labels: options.labels,
+        details: options.details,
+        attachments: options.attachments,
+        // Without a second password, limits get a random one that nobody keeps.
+        lock: lockFor(options, () =>
+          Array.from(crypto.getRandomValues(new Uint8Array(24)), (byte) =>
+            byte.toString(16).padStart(2, "0")
+          ).join("")
+        ),
+      }
       const job =
         mode === "size"
           ? instance.splitBySize(
               file.id,
               limit!,
+              keep,
               (part) => {
                 sized.push({
                   pages: Array.from(
@@ -701,6 +733,7 @@ export function PdfSplitter() {
           : instance.split(
               file.id,
               list.map((part) => part.pages),
+              keep,
               (part) =>
                 arrived.push({
                   number: list[part.index].number,
@@ -914,13 +947,15 @@ export function PdfSplitter() {
         {
           title: name,
           subtitle: `${plural(part.pages, "page")} · ${sizeLabel(part.bytes)} · not yet downloaded`,
+          // The part is up to date, so its password is the one in the options.
+          password: options.protect ? options.password : undefined,
           label: (page) => `Page ${page} of ${name}`,
           failure: "This part could not be shown. You can still download it.",
         },
         from
       )
     },
-    [written, shownNames, readResult]
+    [written, shownNames, readResult, options.protect, options.password]
   )
   const show = useCallback((id: string) => {
     dispatch({ type: "activate", id })
@@ -1089,6 +1124,11 @@ export function PdfSplitter() {
       data-testid="pdf-splitter"
       data-ready={reading ? undefined : "true"}
       data-split={done ? "true" : undefined}
+      data-settled={
+        !reading && !splitting && !views.some((view) => isWaiting(view.problem))
+          ? "true"
+          : undefined
+      }
       data-parts={shown?.parts.length ?? 0}
       {...dropHandlers}
     >
@@ -1588,6 +1628,10 @@ export function PdfSplitter() {
             Files are split on your device and are not uploaded.
           </p>
         </section>
+
+        {state.files.some((file) => file.status === "ready") && (
+          <OptionsPanel options={options} update={updateOptions} />
+        )}
       </div>
     </div>
   )

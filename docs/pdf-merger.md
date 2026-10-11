@@ -123,7 +123,7 @@ A page that appears twice is not copied twice: the second is a new page that sha
 
 ## Samples
 
-`npm run samples:pdfs` writes the two files behind "Try a sample" into `public/samples/`: a three-page report and a two-page appendix, each with bookmarks and a link.
+`npm run samples:pdfs` writes the two files behind "Try a sample" into `public/samples/`: a three-page report and a two-page appendix, each with bookmarks and a link. It also writes the splitter's sample (`docs/pdf-splitter.md`).
 
 ## Tests
 

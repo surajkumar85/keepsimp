@@ -29,6 +29,14 @@ import { textInArea, type Area } from "./text-rule"
 export interface SplitOptions {
   /** Carry the file's attachments in this part. One part is enough to keep them. */
   attachments?: boolean
+  /** Keep the bookmarks of the part's pages; kept unless turned off. */
+  bookmarks?: boolean
+  /** Keep the page numbers the file gives its own pages; kept unless turned off. */
+  labels?: boolean
+  /** Keep the title, author, subject and keywords; kept unless turned off. */
+  details?: boolean
+  /** Lock the part: the password to open it, a second one that lifts the limits, and the limits. */
+  lock?: { password: string; ownerPassword: string; permissions: number }
   /** Called between pages; it may pause, or throw to stop. */
   checkpoint?: () => Promise<void>
   /** How many of the part's pages are in place. */
@@ -46,22 +54,24 @@ export function splitPart(
 ): Promise<Merged> {
   if (!pages.length) throw new Error("A part needs at least one page.")
   const { facts } = pdf
+  const keeps = options.details !== false
   return mergePages(
     mupdf,
     new Map([["file", { pdf, name: "" }]]),
     pages.map((index) => ({ source: "file", index, rotation: 0 })),
     {
-      bookmarks: "keep",
+      bookmarks: options.bookmarks === false ? "none" : "keep",
       forms: "keep",
       // A file that numbers its own pages keeps those numbers; any other counts from 1.
-      labels: pdf.labels ? "keep" : "continuous",
+      labels: pdf.labels && options.labels !== false ? "keep" : "continuous",
       attachments: options.attachments ?? false,
       details: {
-        title: facts.title,
-        author: facts.author ?? "",
-        subject: facts.subject ?? "",
-        keywords: facts.keywords ?? "",
+        title: keeps ? facts.title : "",
+        author: keeps ? (facts.author ?? "") : "",
+        subject: keeps ? (facts.subject ?? "") : "",
+        keywords: keeps ? (facts.keywords ?? "") : "",
       },
+      lock: options.lock,
       checkpoint: options.checkpoint,
       progress: options.progress,
       now: options.now,
@@ -85,12 +95,17 @@ export async function splitBySize(
   limit: number,
   options: {
     onPart: (part: SizedWritten) => Promise<void> | void
+    /** What every part keeps, and its lock. Which parts carry the attached files is decided by `attaches`. */
+    keep?: Pick<SplitOptions, "bookmarks" | "labels" | "details" | "lock">
+    /** Whether the part that starts at a page carries the attached files; the first only, unless told otherwise. */
+    attaches?: (start: number) => boolean
     checkpoint?: () => Promise<void>
     /** How many of the file's pages are in a settled part. */
     progress?: (done: number, total: number) => void
   }
 ) {
   const count = pdf.pages.length
+  const attaches = options.attaches ?? ((start: number) => start === 0)
   /** The longest run from the current start that has fitted, as it was written. */
   let best: { length: number; written: Merged } | null = null
   return partsBySize(
@@ -101,7 +116,11 @@ export async function splitBySize(
         mupdf,
         pdf,
         Array.from({ length }, (_, at) => start + at),
-        { attachments: start === 0, checkpoint: options.checkpoint }
+        {
+          ...options.keep,
+          attachments: attaches(start),
+          checkpoint: options.checkpoint,
+        }
       )
       // One page is kept whatever it weighs: a page cannot be made smaller here.
       if (length === 1 || written.bytes.length <= limit)

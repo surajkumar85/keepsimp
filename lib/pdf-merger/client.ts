@@ -5,7 +5,7 @@ import type { PageText, Quad } from "@/lib/pdf-reader/text"
 import type { HalveChoice } from "@/lib/pdf-splitter/halves"
 import type { Area } from "@/lib/pdf-splitter/text-rule"
 import type { Bookmark } from "./outline"
-import type { PdfRequest, PdfResponse } from "./protocol"
+import type { PdfRequest, PdfResponse, SplitKeep } from "./protocol"
 
 /** Everything a merge is asked for. */
 export type MergeOrder = Omit<
@@ -366,13 +366,14 @@ export class PdfClient {
   split(
     id: string,
     parts: number[][],
+    keep: SplitKeep,
     onPart: (part: SplitPart) => void,
     onProgress: (done: number, total: number) => void
   ) {
     const job = ++this.jobs
     const promise = new Promise<boolean>((resolve, reject) => {
       this.splits.set(job, { resolve, reject, onPart, onProgress })
-      this.send({ type: "split", job, id, parts })
+      this.send({ type: "split", job, id, parts, keep })
     })
     return {
       promise,
@@ -387,13 +388,14 @@ export class PdfClient {
   splitBySize(
     id: string,
     limit: number,
+    keep: SplitKeep,
     onPart: (part: SplitPart) => void,
     onProgress: (done: number, total: number) => void
   ) {
     const job = ++this.jobs
     const promise = new Promise<boolean>((resolve, reject) => {
       this.splits.set(job, { resolve, reject, onPart, onProgress })
-      this.send({ type: "split-size", job, id, limit })
+      this.send({ type: "split-size", job, id, limit, keep })
     })
     return {
       promise,

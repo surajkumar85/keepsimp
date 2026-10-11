@@ -41,6 +41,7 @@ export default defineConfig({
         "lib/pdf-splitter/files.ts",
         "lib/pdf-splitter/halves.ts",
         "lib/pdf-splitter/naming.ts",
+        "lib/pdf-splitter/options.ts",
         "lib/pdf-splitter/parts.ts",
         "lib/pdf-splitter/settings.ts",
         "lib/pdf-splitter/size.ts",

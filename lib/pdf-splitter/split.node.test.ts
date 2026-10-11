@@ -29,6 +29,7 @@ import {
   splitPart,
   type SizedWritten,
 } from "./mupdf-split"
+import { permissionBits } from "@/lib/pdf-merger/settings"
 import { BLANK_BELOW } from "./blank"
 import { defaultHalves, type HalveChoice } from "./halves"
 import {
@@ -782,5 +783,96 @@ describe("cutting double pages in half", () => {
       [300, 400],
       [300, 400],
     ])
+  })
+})
+
+describe("what is chosen for the parts", () => {
+  const rich = async () =>
+    source("O", {
+      pages: 4,
+      bookmarks: [
+        { title: "One", page: 1 },
+        { title: "Three", page: 3 },
+      ],
+      romanPages: 2,
+      title: "Private report",
+      author: "Ada",
+      attachments: { "notes.txt": "hello" },
+    })
+
+  it("keeps bookmarks, page numbers and details unless told not to", async () => {
+    const pdf = await rich()
+    const kept = await readPdf((await splitPart(mupdf, pdf, [0, 1])).bytes)
+    expect(kept.bookmarks.map((entry) => entry.title)).toEqual(["One"])
+    expect(kept.labels).toEqual(["i", "ii"])
+    expect(kept.info.Title).toBe("Private report")
+    const bare = await readPdf(
+      (
+        await splitPart(mupdf, pdf, [0, 1], {
+          bookmarks: false,
+          labels: false,
+          details: false,
+        })
+      ).bytes
+    )
+    expect(bare.bookmarks).toEqual([])
+    expect(bare.labels).toBeNull()
+    expect(bare.info.Title).toBeUndefined()
+    expect(bare.info.Author).toBeUndefined()
+    // The pages themselves are the same.
+    expect(bare.pages.map((page) => page.text)).toEqual(["O-P1", "O-P2"])
+  })
+
+  it("locks a part with a password, and limits what a reader may do", async () => {
+    const pdf = await rich()
+    const lock = {
+      password: "open, sesame",
+      ownerPassword: "the boss",
+      permissions: permissionBits({
+        allowPrint: true,
+        allowCopy: false,
+        allowChanges: false,
+      }),
+    }
+    const { bytes } = await splitPart(mupdf, pdf, [2, 3], { lock })
+    await expect(readPdf(bytes)).rejects.toThrow()
+    const opened = await readPdf(bytes, "open, sesame")
+    expect(opened.pages.map((page) => page.text)).toEqual(["O-P3", "O-P4"])
+    expect(opened.permissions).not.toBeNull()
+    // The second password opens it too.
+    expect((await readPdf(bytes, "the boss")).pages).toHaveLength(2)
+  })
+
+  it("puts attached files where they are asked for when splitting by size", async () => {
+    const pdf = await source("Y", {
+      pages: 4,
+      picture: true,
+      attachments: { "notes.txt": "hello" },
+    })
+    const whole = (await splitPart(mupdf, pdf, [0, 1, 2, 3])).bytes.length
+    const attached = async (attaches?: (start: number) => boolean) => {
+      const parts: SizedWritten[] = []
+      await splitBySize(mupdf, pdf, Math.round(whole * 0.7), {
+        onPart: (part) => {
+          parts.push(part)
+        },
+        attaches,
+        keep: { bookmarks: false },
+      })
+      return Promise.all(
+        parts.map(
+          async (part) => (await readPdf(part.written.bytes)).attachments.length
+        )
+      )
+    }
+    const usual = await attached()
+    expect(usual.length).toBeGreaterThan(1)
+    expect(usual).toEqual([1, ...usual.slice(1).map(() => 0)])
+    expect((await attached(() => true)).every((count) => count === 1)).toBe(
+      true
+    )
+    expect((await attached(() => false)).every((count) => count === 0)).toBe(
+      true
+    )
   })
 })

@@ -637,8 +637,8 @@ test("takes the sample, dropped files and more files later", async ({
   await expect(tool(page)).toHaveAttribute("data-ready", "true", {
     timeout: 60_000,
   })
-  await expect(row(page, "keepsimp-report.pdf")).toContainText("3 pages")
-  await expect(page.getByTestId("board-page")).toHaveCount(3)
+  await expect(row(page, "keepsimp-handbook.pdf")).toContainText("12 pages")
+  await expect(page.getByTestId("board-page")).toHaveCount(12)
   // The pictures of the pages are drawn.
   await expect(
     page.locator("[data-testid=board-page] canvas").first()
@@ -660,7 +660,7 @@ test("takes the sample, dropped files and more files later", async ({
   await expect(page.getByTestId("file-row")).toHaveCount(2)
   await expect(row(page, "dropped.pdf")).toContainText("2 pages")
   // The first file is still the one shown.
-  await expect(page.getByTestId("board-page")).toHaveCount(3)
+  await expect(page.getByTestId("board-page")).toHaveCount(12)
 })
 
 test("splits at bookmarks, and names the parts after them", async ({
@@ -1194,6 +1194,77 @@ test("cuts scans of two pages in half before splitting", async ({ page }) => {
   await expect(row(page, "book.pdf")).toContainText("3 pages")
 })
 
+test("chooses what parts keep, and locks them with a password", async ({
+  page,
+}) => {
+  await add(
+    page,
+    await pdf("Private.pdf", "V", {
+      pages: 4,
+      title: "Salaries 2026",
+      author: "Ada",
+      bookmarks: [
+        { title: "One", page: 1 },
+        { title: "Three", page: 3 },
+      ],
+      attachments: { "notes.txt": "hello" },
+    })
+  )
+  await cutAfter(page, 2).click()
+  const kept = page.getByTestId("split-options")
+
+  // As it comes: bookmarks and details stay, attached files go into the first part.
+  const usual = await splitToZip(page)
+  expect(usual.parts.map((part) => part.bookmarks.length)).toEqual([1, 1])
+  expect(usual.parts.map((part) => part.info.Title)).toEqual([
+    "Salaries 2026",
+    "Salaries 2026",
+  ])
+  expect(usual.parts.map((part) => part.attachments.length)).toEqual([1, 0])
+
+  // Changing what is kept makes the result out of date.
+  await kept.getByRole("switch", { name: "Bookmarks" }).click()
+  await expect(tool(page)).not.toHaveAttribute("data-split", "true")
+  await kept
+    .getByRole("switch", { name: "Title, author and other details" })
+    .click()
+  await kept.getByRole("radio", { name: "In every part", exact: true }).click()
+  const bare = await splitToZip(page)
+  expect(bare.parts.map((part) => part.bookmarks.length)).toEqual([0, 0])
+  expect(bare.parts.map((part) => part.info.Title)).toEqual([
+    undefined,
+    undefined,
+  ])
+  expect(bare.parts.map((part) => part.attachments.length)).toEqual([1, 1])
+
+  // A password is asked for before anything is written.
+  await kept
+    .getByRole("switch", { name: "Lock every part with a password" })
+    .click()
+  await expect(page.getByTestId("result").getByRole("alert")).toContainText(
+    "Enter a password for the parts, or turn the password off."
+  )
+  await expect(page.getByRole("button", { name: "Split PDF" })).toBeDisabled()
+  await kept.getByLabel("Password to open the file").fill("s3cret, yes")
+  await kept
+    .getByRole("switch", { name: "Allow copying text and pictures" })
+    .click()
+  await page.getByRole("button", { name: "Split PDF" }).click()
+  await waitForSplit(page)
+  const pending = page.waitForEvent("download")
+  await page.getByRole("link", { name: "Download Private-2.pdf" }).click()
+  const bytes = await bytesOf(await pending)
+  await expect(readPdf(bytes)).rejects.toThrow()
+  const opened = await readPdf(bytes, "s3cret, yes")
+  expect(opened.pages.map((entry) => entry.text)).toEqual(["V-P3", "V-P4"])
+  expect(opened.permissions).not.toBeNull()
+
+  // A locked part can still be read here before it is downloaded.
+  await page.getByRole("button", { name: "Read Private-1.pdf" }).click()
+  await readerReady(page)
+  await expect(drawnPage(page, 1)).toBeVisible({ timeout: 30_000 })
+})
+
 test("stays accessible, local and responsive", async ({ page }) => {
   const external: string[] = []
   const errors: string[] = []
@@ -1281,10 +1352,45 @@ test("stays accessible, local and responsive", async ({ page }) => {
   expect(errors).toEqual([])
 })
 
-test("the written help is there", async ({ page }) => {
+test("the tutorial video, captions, written help and guide are available", async ({
+  page,
+  request,
+}) => {
   await page.goto(ROUTE)
   const help = page.getByRole("region", { name: "A little help along the way" })
+  const video = help.locator("video")
+  await expect(video).toHaveAttribute(
+    "poster",
+    "/videos/pdf-splitter-tutorial-poster.webp"
+  )
+  await expect(video).toHaveAttribute("preload", "none")
+  for (const [path, type] of [
+    ["/videos/pdf-splitter-tutorial.mp4", "video/mp4"],
+    ["/videos/pdf-splitter-tutorial-poster.webp", "image/webp"],
+    ["/videos/pdf-splitter-tutorial.vtt", "text/vtt"],
+  ]) {
+    const response = await request.get(path)
+    expect(response.ok()).toBe(true)
+    expect(response.headers()["content-type"]).toContain(type)
+  }
+  const captions = await (
+    await request.get("/videos/pdf-splitter-tutorial.vtt")
+  ).text()
+  expect(captions.startsWith("WEBVTT")).toBe(true)
+  expect(captions).toContain("Step 2 of 6: Cut where you can see")
+  expect(captions).toContain("Step 6 of 6: Split and download")
   await expect(help.locator("#tutorial-steps > li")).toHaveCount(6)
   await help.getByText("Every option explained").click()
   await expect(help).toContainText("Each range you type becomes a part")
+  await expect(
+    help.getByRole("link", { name: "Read the step-by-step guide" })
+  ).toHaveAttribute("href", "/blog/split-pdfs-without-uploading/")
+  // The guide itself is there, and leads back to the tool.
+  await page.goto("/blog/split-pdfs-without-uploading/")
+  await expect(
+    page.getByRole("heading", {
+      level: 1,
+      name: "Just the pages you need, without the upload.",
+    })
+  ).toBeVisible()
 })
