@@ -10,7 +10,7 @@ The current user request chooses Next.js over the earlier Astro proposal. The ar
 - Airbnb-informed persistent design reference, machine-readable tokens, generated CSS, drift checks, and agent instructions.
 - Unit tests for live catalogue/URL/navigation logic, with full coverage required for that module.
 - Production-output Playwright tests across five browser/device profiles, including axe accessibility scans.
-- GitHub Actions configuration for design, lint, build, typing, unit coverage, and browser checks.
+- GitHub Actions configuration for design, lint, build, typing, unit coverage, and browser checks. The browser checks run as one job for each of the five profiles: in a single job they outgrew its time limit.
 
 ## Architecture and later phases
 
