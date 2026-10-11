@@ -241,8 +241,9 @@ describe("partsOfPages", () => {
 describe("partKeys", () => {
   const parts = [{ pages: [0, 1] }, { pages: [2] }]
 
-  it("knows a part made by cuts by its first page", () => {
-    expect(partKeys("cuts", parts)).toEqual(["p0", "p2"])
+  it("knows a part that is a run of pages by its first page", () => {
+    for (const mode of ["cuts", "bookmarks", "size"] as const)
+      expect(partKeys(mode, parts)).toEqual(["p0", "p2"])
   })
 
   it("knows any other part by its place", () => {

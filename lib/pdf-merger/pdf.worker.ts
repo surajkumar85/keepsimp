@@ -13,7 +13,7 @@ import {
   type OpenedPdf,
 } from "./mupdf-engine"
 import { pageSizes, readPage, searchPage } from "@/lib/pdf-reader/mupdf-read"
-import { splitPart } from "@/lib/pdf-splitter/mupdf-split"
+import { splitBySize, splitPart } from "@/lib/pdf-splitter/mupdf-split"
 import { jpegOrientation, quarterTurns } from "./picture"
 import type { Size } from "@/lib/image-compressor/geometry"
 import type { PageText, Quad } from "@/lib/pdf-reader/text"
@@ -305,6 +305,54 @@ async function split(request: Extract<PdfRequest, { type: "split" }>) {
   }
 }
 
+async function splitSize(request: Extract<PdfRequest, { type: "split-size" }>) {
+  const { job } = request
+  try {
+    const pdf = files.get(request.id)
+    if (!pdf) throw new Error(SPLIT_FAILED)
+    let index = 0
+    let paused = performance.now()
+    await splitBySize(await engine, pdf, request.limit, {
+      checkpoint: async () => {
+        if (performance.now() - paused < 16) return
+        await new Promise((resolve) => setTimeout(resolve, 0))
+        paused = performance.now()
+        if (job <= cancelled) throw new Cancelled()
+      },
+      onPart: async (part) => {
+        // Writing a part cannot be stopped half-way; a cancel counts from here.
+        await new Promise((resolve) => setTimeout(resolve, 0))
+        paused = performance.now()
+        if (job <= cancelled) throw new Cancelled()
+        const bytes = part.written.bytes.buffer as ArrayBuffer
+        post(
+          {
+            type: "split-part",
+            job,
+            index: index++,
+            bytes,
+            pages: part.written.pages,
+            bookmarks: part.written.bookmarks,
+            start: part.start,
+            over: part.over,
+          },
+          [bytes]
+        )
+      },
+      progress: (done, total) => post({ type: "progress", job, done, total }),
+    })
+    post({ type: "split-done", job })
+  } catch (error) {
+    if (error instanceof Cancelled) post({ type: "cancelled", job })
+    else
+      post({
+        type: "split-error",
+        job,
+        message: readable(error, SPLIT_FAILED),
+      })
+  }
+}
+
 function layout(request: Extract<PdfRequest, { type: "layout" }>) {
   const pdf = files.get(request.id)
   let found: { sizes: Size[]; bookmarks: Bookmark[] } | null = null
@@ -452,6 +500,8 @@ self.onmessage = (event: MessageEvent<PdfRequest>) => {
     enqueue({ run: () => search(request), request: request.request })
   else if (request.type === "merge") enqueue({ run: () => merge(request) })
   else if (request.type === "split") enqueue({ run: () => split(request) })
+  else if (request.type === "split-size")
+    enqueue({ run: () => splitSize(request) })
   else
     enqueue({
       run: () => {

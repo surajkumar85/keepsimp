@@ -91,6 +91,8 @@ export type PdfRequest =
       /** The pages of each part, counted from 0, in the order they go in. */
       parts: number[][]
     }
+  /** Split a file into parts that each stay under a size in bytes. The parts are found as it goes. */
+  | { type: "split-size"; job: number; id: string; limit: number }
   | { type: "cancel"; job: number }
 
 export type PdfResponse =
@@ -135,6 +137,9 @@ export type PdfResponse =
       bytes: ArrayBuffer
       pages: number
       bookmarks: number
+      /** In a split by size: the part's first page, counted from 0, and whether it is one page over the size. */
+      start?: number
+      over?: boolean
     }
   | { type: "split-done"; job: number }
   | { type: "split-error"; job: number; message: string }

@@ -113,6 +113,23 @@ export function partNames(
   )
 }
 
-/** The name of the ZIP that holds every part. */
-export const zipName = (source: string) =>
-  `${safeSegment(baseName(source)).slice(0, MAX_STEM) || "pages"}-split.zip`
+/** A file's name made safe to be a file or folder name, without its ".pdf". */
+const safeStem = (source: string) =>
+  safeSegment(baseName(source)).slice(0, MAX_STEM)
+
+/** The name of the ZIP that holds every part: after the file that was split, when it was one. */
+export const zipName = (sources: readonly string[]) =>
+  sources.length === 1
+    ? `${safeStem(sources[0]) || "pages"}-split.zip`
+    : "split-pdfs.zip"
+
+/**
+ * The folder each file's parts go into when several files are split
+ * together. No two are the same, whatever the files are called.
+ */
+export const folderNames = (sources: readonly string[]) =>
+  uniqueNames(
+    sources.map(
+      (source, index) => `${safeStem(source) || `file-${index + 1}`}.x`
+    )
+  ).map((name) => name.slice(0, -2))

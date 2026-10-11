@@ -15,13 +15,17 @@ import {
 const ROUTE = "/dashboard/pdf-splitter/"
 const tool = (page: Page) => page.getByTestId("pdf-splitter")
 
-async function add(page: Page, file: Upload) {
+async function add(page: Page, ...files: Upload[]) {
   await page.goto(ROUTE)
-  await page.locator("#split-file").setInputFiles(file)
+  await page.locator("#split-file").setInputFiles(files)
   await expect(tool(page)).toHaveAttribute("data-ready", "true", {
     timeout: 60_000,
   })
 }
+
+/** The row of a file, by its name. */
+const row = (page: Page, name: string) =>
+  page.getByTestId("file-row").filter({ hasText: name })
 
 /** The cut control after a page, by the page's number from 1. */
 const cutAfter = (page: Page, number: number) =>
@@ -50,8 +54,8 @@ async function waitForSplit(page: Page) {
 }
 
 /** Split, download every part as one ZIP, and read each part back with pdf.js. */
-async function splitToZip(page: Page) {
-  await page.getByRole("button", { name: "Split PDF" }).click()
+async function splitToZip(page: Page, button = "Split PDF") {
+  await page.getByRole("button", { name: button }).click()
   await waitForSplit(page)
   const pending = page.waitForEvent("download")
   await page.getByRole("button", { name: "Download all (.zip)" }).click()
@@ -106,7 +110,7 @@ test("cuts a file between pages and downloads every part", async ({ page }) => {
       ],
     })
   )
-  await expect(page.getByTestId("file-bar")).toContainText("6 pages")
+  await expect(row(page, "Report 2026.pdf")).toContainText("6 pages")
   await expect(page.getByTestId("board-page")).toHaveCount(6)
   // Nothing is cut yet, so there is nothing to split.
   await expect(page.getByRole("button", { name: "Split PDF" })).toBeDisabled()
@@ -496,21 +500,25 @@ test("opens locked and damaged files, and refuses what is not a PDF", async ({
     page,
     await pdf("locked.pdf", "L", { pages: 3, password: { user: "pw" } })
   )
-  const bar = page.getByTestId("file-bar")
-  await expect(bar).toHaveAttribute("data-status", "locked")
+  const locked = row(page, "locked.pdf")
+  await expect(locked).toHaveAttribute("data-status", "locked")
   await expect(page.getByTestId("board-page")).toHaveCount(0)
   await page.getByLabel("Password for locked.pdf").fill("nope")
   await page.getByRole("button", { name: "Unlock" }).click()
-  await expect(bar.getByRole("alert")).toContainText(
+  await expect(locked.getByRole("alert")).toContainText(
     "That password did not open this file"
   )
   await page.getByLabel("Password for locked.pdf").fill("pw")
   await page.getByRole("button", { name: "Unlock" }).click()
   await expect(page.getByTestId("board-page")).toHaveCount(3)
-  await expect(bar).toContainText("Unlocked. The parts have no password.")
+  await expect(locked).toContainText("Unlocked. The parts have no password.")
   await cutAfter(page, 1).click()
   const result = await splitToZip(page)
   expect(result.texts).toEqual([["L-P1"], ["L-P2", "L-P3"]])
+  await page.getByRole("button", { name: "Remove locked.pdf" }).click()
+  await expect(
+    page.getByRole("heading", { name: "Drop PDFs to split" })
+  ).toBeVisible()
 
   // A damaged file is repaired, and says so.
   const good = await pdf("damaged.pdf", "G", { pages: 2 })
@@ -518,13 +526,10 @@ test("opens locked and damaged files, and refuses what is not a PDF", async ({
     ...good,
     buffer: Buffer.from(damage(new Uint8Array(good.buffer), "table")),
   })
-  await expect(bar).toContainText("damaged and has been repaired")
+  await expect(row(page, "damaged.pdf")).toContainText(
+    "damaged and has been repaired"
+  )
   await expect(page.getByTestId("board-page")).toHaveCount(2)
-  // The cuts of the file before it are gone.
-  await expect(
-    page.locator("[data-testid=board-cut][aria-pressed=true]")
-  ).toHaveCount(0)
-  await expect(page.getByTestId("part-row")).toHaveCount(0)
 
   // What is not a PDF is refused, and the file that is open stays.
   await page.locator("#split-file").setInputFiles({
@@ -535,19 +540,26 @@ test("opens locked and damaged files, and refuses what is not a PDF", async ({
   await expect(page.getByRole("alert").first()).toContainText(
     "letter.docx is not a PDF. Save or export it as a PDF first"
   )
-  await expect(bar).toContainText("damaged.pdf")
+  await expect(page.getByTestId("file-row")).toHaveCount(1)
 
-  // A file that cannot be read says so.
+  // A file that cannot be read says so, and does not stop the other.
   await page.locator("#split-file").setInputFiles({
     name: "broken.pdf",
     mimeType: "application/pdf",
     buffer: Buffer.from("%PDF-1.7\nnothing here\n%%EOF"),
   })
-  await expect(bar).toHaveAttribute("data-status", "error")
-  await expect(bar.getByRole("alert")).toContainText("could not be read")
-  await page.getByRole("button", { name: "Remove the file" }).click()
+  const broken = row(page, "broken.pdf")
+  await expect(broken).toHaveAttribute("data-status", "error")
+  await expect(broken.getByRole("alert")).toContainText("could not be read")
+  await cutAfter(page, 1).click()
+  await expect(page.getByTestId("plan")).toHaveText(
+    "1 file to split · 1 file left out"
+  )
+  const rest = await splitToZip(page, "Split 1 file")
+  expect(rest.texts).toEqual([["G-P1"], ["G-P2"]])
+  await page.getByRole("button", { name: "Clear all" }).click()
   await expect(
-    page.getByRole("heading", { name: "Drop a PDF to split" })
+    page.getByRole("heading", { name: "Drop PDFs to split" })
   ).toBeVisible()
 })
 
@@ -600,25 +612,25 @@ test("can be stopped, and keeps nothing when it is", async ({ page }) => {
   )
 })
 
-test("takes the sample, a dropped file and a replacement", async ({ page }) => {
+test("takes the sample, dropped files and more files later", async ({
+  page,
+}) => {
   await page.goto(ROUTE)
   await expect(
-    page.getByRole("heading", { name: "Drop a PDF to split" })
+    page.getByRole("heading", { name: "Drop PDFs to split" })
   ).toBeVisible()
   await page.getByRole("button", { name: "Try a sample" }).click()
   await expect(tool(page)).toHaveAttribute("data-ready", "true", {
     timeout: 60_000,
   })
-  await expect(page.getByTestId("file-bar")).toContainText(
-    "keepsimp-report.pdf"
-  )
+  await expect(row(page, "keepsimp-report.pdf")).toContainText("3 pages")
   await expect(page.getByTestId("board-page")).toHaveCount(3)
   // The pictures of the pages are drawn.
   await expect(
     page.locator("[data-testid=board-page] canvas").first()
   ).toBeVisible({ timeout: 30_000 })
 
-  // Dropping a file onto the tool replaces the one that is open.
+  // Dropping a file onto the tool adds it beside the one that is open.
   const dropped = await pdf("dropped.pdf", "D", { pages: 2 })
   const transfer = await page.evaluateHandle(
     ({ name, data }) => {
@@ -631,8 +643,299 @@ test("takes the sample, a dropped file and a replacement", async ({ page }) => {
     { name: dropped.name, data: [...dropped.buffer] }
   )
   await tool(page).dispatchEvent("drop", { dataTransfer: transfer })
-  await expect(page.getByTestId("file-bar")).toContainText("dropped.pdf")
-  await expect(page.getByTestId("board-page")).toHaveCount(2)
+  await expect(page.getByTestId("file-row")).toHaveCount(2)
+  await expect(row(page, "dropped.pdf")).toContainText("2 pages")
+  // The first file is still the one shown.
+  await expect(page.getByTestId("board-page")).toHaveCount(3)
+})
+
+test("splits at bookmarks, and names the parts after them", async ({
+  page,
+}) => {
+  await add(
+    page,
+    await pdf("Manual.pdf", "M", {
+      pages: 10,
+      bookmarks: [
+        {
+          title: "Getting started",
+          page: 2,
+          children: [
+            { title: "Install", page: 3 },
+            { title: "Set up", page: 4 },
+          ],
+        },
+        {
+          title: "Using it",
+          page: 6,
+          children: [{ title: "Every day", page: 7 }],
+        },
+        { title: "Appendix: tables", page: 9 },
+      ],
+    })
+  )
+  await mode(page, "By bookmarks").click()
+  const rules = page.getByTestId("split-rules")
+  // The top bookmarks start parts; the page before the first is a part of its own.
+  await expect(
+    rules.getByTestId("bookmark-list").getByRole("checkbox")
+  ).toHaveCount(3)
+  expect(await partsOnBoard(page)).toEqual([
+    "1",
+    "2",
+    "2",
+    "2",
+    "2",
+    "3",
+    "3",
+    "3",
+    "4",
+    "4",
+  ])
+  await expect(page.getByTestId("part-row").nth(1)).toContainText(
+    "Part 2 · pages 2-5 · 4 pages"
+  )
+
+  // A deeper level, with the front pages joined to the first part.
+  await rules.getByRole("radio", { name: "Level 2", exact: true }).click()
+  await rules
+    .getByRole("radio", { name: "Join the first part", exact: true })
+    .click()
+  expect(await partsOnBoard(page)).toEqual([
+    "1",
+    "1",
+    "1",
+    "2",
+    "2",
+    "2",
+    "3",
+    "3",
+    "3",
+    "3",
+  ])
+  // A bookmark that is unticked no longer starts a part.
+  await rules.getByRole("checkbox", { name: /Set up/ }).uncheck()
+  expect(await partsOnBoard(page)).toEqual([
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "2",
+    "2",
+    "2",
+    "2",
+  ])
+  await rules.getByRole("button", { name: "Untick all" }).click()
+  await expect(page.getByTestId("result").getByRole("alert")).toContainText(
+    "Tick at least one bookmark."
+  )
+  await rules.getByRole("button", { name: "Tick all", exact: true }).click()
+  // Only bookmarks that hold the words typed.
+  await rules.getByLabel("Only bookmarks that contain").fill("zebra")
+  await expect(page.getByTestId("result").getByRole("alert")).toContainText(
+    "No bookmark at this level matches."
+  )
+  await rules.getByLabel("Only bookmarks that contain").fill("")
+
+  await rules.getByRole("radio", { name: "Top bookmarks", exact: true }).click()
+  await rules
+    .getByRole("radio", { name: "A part of their own", exact: true })
+    .click()
+  const result = await splitToZip(page)
+  expect(result.names).toEqual([
+    "Manual-1-Front.pdf",
+    "Manual-2-Getting-started.pdf",
+    "Manual-3-Using-it.pdf",
+    "Manual-4-Appendix-tables.pdf",
+  ])
+  expect(result.texts.map((part) => part.length)).toEqual([1, 4, 3, 2])
+  expect(result.texts[2]).toEqual(["M-P6", "M-P7", "M-P8"])
+  // Each part keeps the bookmarks of its own pages.
+  expect(result.parts[1].bookmarks).toEqual([
+    {
+      title: "Getting started",
+      to: 1,
+      items: [
+        { title: "Install", to: 2, items: [] },
+        { title: "Set up", to: 3, items: [] },
+      ],
+    },
+  ])
+
+  // A file without bookmarks says so.
+  await page.getByRole("button", { name: "Clear all" }).click()
+  await page
+    .locator("#split-file")
+    .setInputFiles(await pdf("plain.pdf", "P", { pages: 3 }))
+  await expect(tool(page)).toHaveAttribute("data-ready", "true")
+  await mode(page, "By bookmarks").click()
+  await expect(page.getByTestId("result").getByRole("alert")).toContainText(
+    "This file has no bookmarks that lead to pages."
+  )
+})
+
+test("splits by size, so every part stays under it", async ({ page }) => {
+  // Eight pages, each with a picture of about 30 kB that cannot be compressed.
+  await add(page, {
+    name: "heavy.pdf",
+    mimeType: "application/pdf",
+    buffer: Buffer.from(await makeSharedPdf("W", 8)),
+  })
+  await mode(page, "By size").click()
+  const rules = page.getByTestId("split-rules")
+  await expect(page.getByTestId("plan")).toHaveText(
+    "Parts of at most 10 MB from 8 pages"
+  )
+  await rules.getByRole("radio", { name: "Another size", exact: true }).click()
+  await rules.getByLabel("Size", { exact: true }).fill("abc")
+  await expect(page.getByTestId("result").getByRole("alert")).toContainText(
+    "Type a size of at least 10 KB."
+  )
+  await expect(page.getByRole("button", { name: "Split PDF" })).toBeDisabled()
+  await rules.getByLabel("Size", { exact: true }).fill("100")
+  await rules.getByRole("radio", { name: "KB", exact: true }).click()
+  await expect(page.getByTestId("plan")).toHaveText(
+    "Parts of at most 100 KB from 8 pages"
+  )
+  const result = await splitToZip(page)
+  expect(result.names).toEqual(["heavy-1.pdf", "heavy-2.pdf", "heavy-3.pdf"])
+  expect(result.texts.map((part) => part.length)).toEqual([3, 3, 2])
+  expect(result.texts.flat()).toEqual(
+    Array.from({ length: 8 }, (_, at) => `W-P${at + 1}`)
+  )
+  for (const part of result.parts)
+    expect(part.bytes.length).toBeLessThanOrEqual(100 * 1024)
+  // The parts that were found are shown, on the board and in the list.
+  expect(await partsOnBoard(page)).toEqual([
+    "1",
+    "1",
+    "1",
+    "2",
+    "2",
+    "2",
+    "3",
+    "3",
+  ])
+  await expect(page.getByTestId("part-row").nth(2)).toContainText(
+    "Part 3 · pages 7-8 · 2 pages"
+  )
+  await expect(page.getByTestId("plan")).toHaveText("3 parts from 8 pages")
+
+  // A size no page fits under: every page gets a part, and each row says why.
+  await rules.getByLabel("Size", { exact: true }).fill("20")
+  await expect(tool(page)).not.toHaveAttribute("data-split", "true")
+  const small = await splitToZip(page)
+  expect(small.parts).toHaveLength(8)
+  await expect(
+    page.getByTestId("part-row").filter({ hasText: "larger than the size" })
+  ).toHaveCount(8)
+})
+
+test("splits several files at once, each into a folder of its own", async ({
+  page,
+}) => {
+  await add(
+    page,
+    await pdf("alpha.pdf", "A", { pages: 4 }),
+    await pdf("beta.pdf", "B", { pages: 6 }),
+    {
+      name: "broken.pdf",
+      mimeType: "application/pdf",
+      buffer: Buffer.from("%PDF-1.7\nnothing here\n%%EOF"),
+    }
+  )
+  await expect(page.getByTestId("file-row")).toHaveCount(3)
+  await expect(page.getByRole("heading", { name: "3 files" })).toBeVisible()
+  // The first file is shown; a rule places cuts in every file.
+  await expect(row(page, "alpha.pdf")).toHaveAttribute("data-shown", "true")
+  const rules = page.getByTestId("split-rules")
+  await rules.getByRole("button", { name: "Place the cuts" }).first().click()
+  await expect(row(page, "alpha.pdf").getByTestId("file-summary")).toHaveText(
+    "2 parts"
+  )
+  await expect(row(page, "beta.pdf").getByTestId("file-summary")).toHaveText(
+    "3 parts"
+  )
+  await expect(row(page, "broken.pdf")).toContainText("It is left out.")
+  await expect(page.getByTestId("plan")).toHaveText(
+    "2 files to split · 1 file left out"
+  )
+
+  // Another file is shown, and a cut by hand is for that file alone.
+  await page.getByRole("button", { name: "Show the pages of beta.pdf" }).click()
+  await expect(page.getByTestId("board-page")).toHaveCount(6)
+  await cutAfter(page, 1).click()
+  await expect(row(page, "beta.pdf").getByTestId("file-summary")).toHaveText(
+    "4 parts"
+  )
+  await expect(row(page, "alpha.pdf").getByTestId("file-summary")).toHaveText(
+    "2 parts"
+  )
+  await expect(page.getByTestId("result")).toContainText("Parts of beta.pdf")
+  await expect(page.getByTestId("part-row")).toHaveCount(4)
+
+  const result = await splitToZip(page, "Split 2 files")
+  expect(result.zip).toBe("split-pdfs.zip")
+  expect(result.names).toEqual([
+    "alpha/alpha-1.pdf",
+    "alpha/alpha-2.pdf",
+    "beta/beta-1.pdf",
+    "beta/beta-2.pdf",
+    "beta/beta-3.pdf",
+    "beta/beta-4.pdf",
+  ])
+  expect(result.texts).toEqual([
+    ["A-P1", "A-P2"],
+    ["A-P3", "A-P4"],
+    ["B-P1"],
+    ["B-P2"],
+    ["B-P3", "B-P4"],
+    ["B-P5", "B-P6"],
+  ])
+  await expect(page.getByTestId("result-facts")).toContainText("6 files")
+
+  // Changing one file leaves the other's parts as they are; only that file is split again.
+  await page
+    .getByRole("button", { name: "Show the pages of alpha.pdf" })
+    .click()
+  await cutAfter(page, 1).click()
+  await expect(tool(page)).not.toHaveAttribute("data-split", "true")
+  const again = await splitToZip(page, "Split 2 files")
+  expect(again.names.filter((name) => name.startsWith("alpha/"))).toHaveLength(
+    3
+  )
+  expect(again.names.filter((name) => name.startsWith("beta/"))).toHaveLength(4)
+
+  // The same ranges are taken from every file; a file too short for them is left out.
+  await mode(page, "Page ranges").click()
+  await page.getByLabel("Pages of each part").fill("1-2, 5-6")
+  await expect(
+    row(page, "alpha.pdf").getByTestId("file-summary")
+  ).toContainText("has 4 pages")
+  await expect(page.getByTestId("plan")).toHaveText(
+    "1 file to split · 2 files left out"
+  )
+  const ranged = await splitToZip(page, "Split 1 file")
+  expect(ranged.zip).toBe("beta-split.zip")
+  expect(ranged.texts).toEqual([
+    ["B-P1", "B-P2"],
+    ["B-P5", "B-P6"],
+  ])
+
+  // Reading a file that is not shown shows it as well.
+  await page
+    .getByRole("button", { name: "Open beta.pdf in the reader" })
+    .click()
+  await readerReady(page)
+  await page.keyboard.press("Escape")
+  await expect(row(page, "beta.pdf")).toHaveAttribute("data-shown", "true")
+
+  await page.getByRole("button", { name: "Remove broken.pdf" }).click()
+  await page.getByRole("button", { name: "Remove alpha.pdf" }).click()
+  await expect(page.getByTestId("file-row")).toHaveCount(1)
+  await expect(page.getByRole("heading", { name: "1 file" })).toBeVisible()
 })
 
 test("stays accessible, local and responsive", async ({ page }) => {
@@ -655,9 +958,16 @@ test("stays accessible, local and responsive", async ({ page }) => {
     .analyze()
   expect(empty.violations).toEqual([])
 
-  await page
-    .locator("#split-file")
-    .setInputFiles(await pdf("check.pdf", "C", { pages: 5 }))
+  await page.locator("#split-file").setInputFiles([
+    await pdf("check.pdf", "C", {
+      pages: 5,
+      bookmarks: [
+        { title: "One", page: 1 },
+        { title: "Two", page: 3 },
+      ],
+    }),
+    await pdf("other.pdf", "O", { pages: 2 }),
+  ])
   await expect(tool(page)).toHaveAttribute("data-ready", "true", {
     timeout: 60_000,
   })
@@ -669,6 +979,8 @@ test("stays accessible, local and responsive", async ({ page }) => {
     for (const name of [
       "Cut into parts",
       "Page ranges",
+      "By bookmarks",
+      "By size",
       "Odd and even",
       "Extract pages",
     ]) {
@@ -681,7 +993,9 @@ test("stays accessible, local and responsive", async ({ page }) => {
       expect(results.violations, `${theme} ${name}`).toEqual([])
     }
   }
-  await makeOne(page)
+  // Page 2 is taken out of both files.
+  await page.getByRole("button", { name: "Split 2 files" }).click()
+  await waitForSplit(page)
   const done = await new AxeBuilder({ page })
     .withTags(["wcag2a", "wcag2aa", "wcag21aa"])
     .analyze()

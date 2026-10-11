@@ -483,6 +483,17 @@ test("works from the keyboard alone", async ({ page, isMobile }) => {
   await expect(page.getByTestId("reader-pages")).toBeFocused()
   await page.keyboard.press("End")
   await expect(reader(page)).toHaveAttribute("data-page", "15")
+  // Browsers glide to the end; a key pressed while they do can be lost.
+  await expect
+    .poll(() =>
+      page
+        .getByTestId("reader-pages")
+        .evaluate(
+          (element) =>
+            element.scrollHeight - element.clientHeight - element.scrollTop
+        )
+    )
+    .toBeLessThan(2)
   await page.keyboard.press("Home")
   await expect(reader(page)).toHaveAttribute("data-page", "1")
   // With nothing to scroll sideways, the arrows turn pages.

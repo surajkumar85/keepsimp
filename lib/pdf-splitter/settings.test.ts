@@ -1,12 +1,14 @@
 import { describe, expect, it } from "vitest"
 import { desktopLimits } from "@/lib/pdf-merger/settings"
 import {
+  admitFiles,
   fileProblem,
   givesOneFile,
   nothingToWrite,
   pagesProblem,
   patternFor,
   planFor,
+  sizeKey,
   splitKey,
   typedCount,
   withOverrides,
@@ -55,6 +57,44 @@ describe("fileProblem", () => {
         desktopLimits
       )
     ).toBe("big.pdf is larger than 300 MB.")
+  })
+})
+
+describe("admitFiles", () => {
+  const limits = { files: 3, fileBytes: 100, totalBytes: 150, pages: 10 }
+  const pdf = (name: string, size: number, isPdf = true) => ({
+    name,
+    size,
+    pdf: isPdf,
+  })
+
+  it("takes files while there is room, and says why the rest are left out", () => {
+    expect(
+      admitFiles(
+        [{ size: 40 }],
+        [pdf("a.pdf", 50), pdf("b.pdf", 70), pdf("c.pdf", 60), pdf("d.pdf", 1)],
+        limits
+      )
+    ).toEqual([
+      null,
+      "b.pdf was left out: together the files would be larger than 0 MB.",
+      null,
+      "d.pdf was left out: up to 3 files can be split at once.",
+    ])
+  })
+
+  it("refuses what could not be split by itself", () => {
+    expect(
+      admitFiles(
+        [],
+        [pdf("x.png", 5, false), pdf("empty.pdf", 0), pdf("big.pdf", 101)],
+        limits
+      )
+    ).toEqual([
+      "x.png is not a PDF.",
+      "empty.pdf is empty.",
+      "big.pdf is larger than 0 MB.",
+    ])
   })
 })
 
@@ -107,6 +147,86 @@ describe("planFor", () => {
       "Select the pages to take out."
     )
   })
+
+  const headings = [
+    { title: "Intro", page: 1, level: 1 },
+    { title: "Deep", page: 2, level: 2 },
+    { title: "Body", page: 3, level: 1 },
+  ]
+
+  it("splits at the bookmarks of a level, with the front pages on their own", () => {
+    const plan = planFor(choices({ mode: "bookmarks", headings }), 6)
+    expect(shown(plan)).toEqual([[1], [2, 3], [4, 5, 6]])
+    expect("parts" in plan && plan.parts.map((part) => part.label)).toEqual([
+      "Front",
+      "Intro",
+      "Body",
+    ])
+  })
+
+  it("follows the level, the words typed, the ticks and where the front pages go", () => {
+    expect(
+      shown(planFor(choices({ mode: "bookmarks", headings, level: 2 }), 6))
+    ).toEqual([
+      [1, 2],
+      [3, 4, 5, 6],
+    ])
+    expect(
+      shown(
+        planFor(
+          choices({
+            mode: "bookmarks",
+            headings,
+            filter: "body",
+            front: "join",
+          }),
+          6
+        )
+      )
+    ).toEqual([[1, 2, 3, 4, 5, 6]])
+    expect(
+      shown(
+        planFor(
+          choices({
+            mode: "bookmarks",
+            headings,
+            unticked: new Set([3]),
+            front: "join",
+          }),
+          6
+        )
+      )
+    ).toEqual([[1, 2, 3, 4, 5, 6]])
+  })
+
+  it("says why a file cannot be split at its bookmarks", () => {
+    expect(shown(planFor(choices({ mode: "bookmarks" }), 6))).toBe(
+      "This file has no bookmarks that lead to pages."
+    )
+    expect(
+      shown(planFor(choices({ mode: "bookmarks", headings, level: 3 }), 6))
+    ).toBe("No bookmark at this level matches.")
+    expect(
+      shown(
+        planFor(
+          choices({ mode: "bookmarks", headings, unticked: new Set([1, 3]) }),
+          6
+        )
+      )
+    ).toBe("Tick at least one bookmark.")
+  })
+
+  it("for sizes gives the parts the last split came to, or none before it has run", () => {
+    expect(shown(planFor(choices({ mode: "size" }), 6))).toEqual([])
+    expect(
+      shown(
+        planFor(
+          choices({ mode: "size", sized: [{ pages: [0, 1] }, { pages: [2] }] }),
+          6
+        )
+      )
+    ).toEqual([[1, 2], [3]])
+  })
 })
 
 describe("modes", () => {
@@ -116,6 +236,8 @@ describe("modes", () => {
     expect(givesOneFile("cuts")).toBe(false)
     expect(givesOneFile("ranges")).toBe(false)
     expect(givesOneFile("oddeven")).toBe(false)
+    expect(givesOneFile("bookmarks")).toBe(false)
+    expect(givesOneFile("size")).toBe(false)
   })
 
   it("has a fitting pattern for each", () => {
@@ -124,6 +246,8 @@ describe("modes", () => {
     expect(patternFor("oddeven")).toBe("{name}-{label}")
     expect(patternFor("extract")).toBe("{name}-pages-{pages}")
     expect(patternFor("remove")).toBe("{name}-edited")
+    expect(patternFor("bookmarks")).toBe("{name}-{part}-{label}")
+    expect(patternFor("size")).toBe("{name}-{part}")
   })
 })
 
@@ -182,24 +306,29 @@ describe("splitKey", () => {
     new Set(["p1"])
   )
 
-  it("changes with the file, the parts written and their names", () => {
-    const key = splitKey("a", parts, ["x.pdf", "y.pdf"])
-    expect(splitKey("a", parts, ["x.pdf", "y.pdf"])).toBe(key)
-    expect(splitKey("b", parts, ["x.pdf", "y.pdf"])).not.toBe(key)
-    expect(splitKey("a", parts, ["x.pdf", "z.pdf"])).not.toBe(key)
+  it("changes with the file and the parts written", () => {
+    const key = splitKey("a", parts)
+    expect(splitKey("a", parts)).toBe(key)
+    expect(splitKey("b", parts)).not.toBe(key)
     expect(
-      splitKey(
-        "a",
-        [parts[0], { ...parts[1], skipped: false }, parts[2]],
-        ["x.pdf", "y.pdf"]
-      )
+      splitKey("a", [parts[0], { ...parts[1], skipped: false }, parts[2]])
     ).not.toBe(key)
   })
 
-  it("does not change with a part that is left out", () => {
-    const key = splitKey("a", parts, ["x.pdf", "y.pdf"])
-    const other = [parts[0], { ...parts[1], pages: [1, 2, 3] }, parts[2]]
-    expect(splitKey("a", other, ["x.pdf", "y.pdf"])).toBe(key)
+  it("does not change with a part that is left out, or with a name", () => {
+    const key = splitKey("a", parts)
+    expect(
+      splitKey("a", [parts[0], { ...parts[1], pages: [1, 2, 3] }, parts[2]])
+    ).toBe(key)
+    expect(
+      splitKey("a", [{ ...parts[0], typed: "Cover" }, ...parts.slice(1)])
+    ).toBe(key)
+  })
+
+  it("for a split by size changes with the file and the size", () => {
+    expect(sizeKey("a", 1000)).toBe(sizeKey("a", 1000))
+    expect(sizeKey("a", 1000)).not.toBe(sizeKey("a", 2000))
+    expect(sizeKey("a", 1000)).not.toBe(sizeKey("b", 1000))
   })
 })
 

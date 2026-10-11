@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest"
 import {
   DEFAULT_PATTERN,
+  folderNames,
   partNames,
   partStem,
   patternProblem,
@@ -145,8 +146,30 @@ describe("partNames", () => {
 })
 
 describe("zipName", () => {
-  it("is named after the file that was split", () => {
-    expect(zipName("Annual Report.pdf")).toBe("Annual-Report-split.zip")
-    expect(zipName("???.pdf")).toBe("pages-split.zip")
+  it("is named after the one file that was split", () => {
+    expect(zipName(["Annual Report.pdf"])).toBe("Annual-Report-split.zip")
+    expect(zipName(["???.pdf"])).toBe("pages-split.zip")
+  })
+
+  it("has a plain name when several files were split", () => {
+    expect(zipName(["a.pdf", "b.pdf"])).toBe("split-pdfs.zip")
+  })
+})
+
+describe("folderNames", () => {
+  it("gives each file a folder of its own, named after it", () => {
+    expect(folderNames(["Annual Report.pdf", "notes.PDF"])).toEqual([
+      "Annual-Report",
+      "notes",
+    ])
+  })
+
+  it("tells files of the same name apart, and names what has no name", () => {
+    expect(folderNames(["a.pdf", "a.pdf", "A.pdf", "???.pdf"])).toEqual([
+      "a",
+      "a-2",
+      "A-3",
+      "file-4",
+    ])
   })
 })

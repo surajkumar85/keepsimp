@@ -15,10 +15,12 @@ export const MOST_ROWS = 100
 
 /** A part that has been written. */
 export interface WrittenPart {
-  name: string
+  /** An address to download it from; empty for parts beyond those that are listed. */
   url: string
   bytes: number
   pages: number
+  /** One page that is larger than the size asked for. */
+  over?: boolean
 }
 
 /**
@@ -33,6 +35,7 @@ export const PartsList = memo(function PartsList({
   onSkip,
   onRead,
   disabled,
+  canSkip = true,
 }: {
   parts: readonly PlannedPart[]
   /** The file name each part gets, by its place in `parts`. */
@@ -44,6 +47,8 @@ export const PartsList = memo(function PartsList({
   onRead: (number: number, from: HTMLElement) => void
   /** While a split is running, nothing can be changed. */
   disabled: boolean
+  /** Parts can be left out. Not so where the parts are only known once they are written. */
+  canSkip?: boolean
 }) {
   const ids = useId()
   const rows = parts.slice(0, MOST_ROWS)
@@ -52,7 +57,8 @@ export const PartsList = memo(function PartsList({
       <ol aria-label="Parts" className="space-y-2" data-testid="parts-list">
         {rows.map((part, index) => {
           const result = written.get(part.number)
-          const stem = names[index].replace(/\.pdf$/, "")
+          const name = names[index]
+          const stem = name.replace(/\.pdf$/, "")
           return (
             <li
               key={part.key}
@@ -76,7 +82,7 @@ export const PartsList = memo(function PartsList({
                     {part.skipped && " · left out"}
                   </span>
                 </p>
-                {parts.length > 1 && (
+                {parts.length > 1 && canSkip && (
                   <Switch
                     checked={!part.skipped}
                     disabled={disabled}
@@ -106,6 +112,12 @@ export const PartsList = memo(function PartsList({
                   </span>
                 </div>
               )}
+              {result?.over && (
+                <p className="text-xs text-muted-foreground">
+                  This one page is larger than the size you set. Pictures are
+                  not made smaller here.
+                </p>
+              )}
               {result && (
                 <div className="flex flex-wrap items-center gap-2">
                   <span
@@ -119,14 +131,14 @@ export const PartsList = memo(function PartsList({
                     onClick={(event) =>
                       onRead(part.number, event.currentTarget)
                     }
-                    aria-label={`Read ${result.name}`}
+                    aria-label={`Read ${name}`}
                   >
                     <IconBook2 aria-hidden="true" /> Read
                   </Button>
                   <a
                     href={result.url}
-                    download={result.name}
-                    aria-label={`Download ${result.name}`}
+                    download={name}
+                    aria-label={`Download ${name}`}
                     className={buttonVariants({ variant: "outline" })}
                   >
                     <IconDownload aria-hidden="true" /> Download

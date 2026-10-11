@@ -45,6 +45,9 @@ export interface SplitPart {
   bytes: ArrayBuffer
   pages: number
   bookmarks: number
+  /** In a split by size: the part's first page, counted from 0, and whether it is one page over the size. */
+  start?: number
+  over?: boolean
 }
 
 interface SplitJob {
@@ -122,8 +125,10 @@ export class PdfClient {
       this.searches.get(request)?.({ found, done, withText, total })
       if (done >= total) this.searches.delete(request)
     } else if (message.type === "split-part") {
-      const { index, bytes, pages, bookmarks } = message
-      this.splits.get(message.job)?.onPart({ index, bytes, pages, bookmarks })
+      const { index, bytes, pages, bookmarks, start, over } = message
+      this.splits
+        .get(message.job)
+        ?.onPart({ index, bytes, pages, bookmarks, start, over })
     } else if (
       message.type === "split-done" ||
       message.type === "split-error"
@@ -316,6 +321,27 @@ export class PdfClient {
     const promise = new Promise<boolean>((resolve, reject) => {
       this.splits.set(job, { resolve, reject, onPart, onProgress })
       this.send({ type: "split", job, id, parts })
+    })
+    return {
+      promise,
+      cancel: () => this.worker?.postMessage({ type: "cancel", job }),
+    }
+  }
+
+  /**
+   * Split an open file into parts that each stay under a size in bytes.
+   * Which pages a part holds is only known when it arrives.
+   */
+  splitBySize(
+    id: string,
+    limit: number,
+    onPart: (part: SplitPart) => void,
+    onProgress: (done: number, total: number) => void
+  ) {
+    const job = ++this.jobs
+    const promise = new Promise<boolean>((resolve, reject) => {
+      this.splits.set(job, { resolve, reject, onPart, onProgress })
+      this.send({ type: "split-size", job, id, limit })
     })
     return {
       promise,

@@ -147,6 +147,10 @@ Page boards (`components/pdf-splitter/page-board.tsx`) show the pages of one fil
 
 Lists of results to be made (`components/pdf-splitter/parts-list.tsx`) are ordered lists of `rounded-lg` rows: what the row holds, a switch that leaves it out (the row then takes a dashed border and the `muted` tint and says "left out"), a name field whose placeholder is the name it would get, and, once made, its size with outline "Read" and "Download" actions. Long lists show the first hundred rows and say how many more there are.
 
+When a document list holds several files and one of them is shown in detail below (`components/pdf-splitter/file-rows.tsx`), the shown row takes the `primary` border and ring and says "shown below"; its name is a button with `aria-pressed`, padded to a 44px hit area without moving the line. Each row carries one muted line saying what will be made of the file, which turns `destructive` and says "It is left out" when the file cannot take part.
+
+Lists to tick (the bookmarks in `components/pdf-splitter/rules-panel.tsx`) are a `fieldset` with its count in the legend and "Tick all" and "Untick all" beside it, holding rows of native checkboxes with the `primary` accent. The whole row is the label, at least 44px/36px tall, with the title on the left and a monospace number on the right, inside a `rounded-lg` border that scrolls after 288px.
+
 Crop overlays dim the excluded area with a `background` veil, show rule-of-thirds guides and eight handles with 44px/28px hit areas, and pair the box with exact pixel fields. The image compressor reference is `docs/image-compressor.md`.
 
 ## JSON workspace

@@ -3,16 +3,16 @@ import { ToolTutorial, type TutorialContent } from "@/components/tool-tutorial"
 const content: TutorialContent = {
   name: "How to use the KeepSimp PDF splitter",
   description:
-    "Split a PDF in your browser: cut it into parts where you can see the pages, take pages out or remove them, and download parts that are no larger than they need to be.",
+    "Split PDFs in your browser: cut them into parts where you can see the pages, at bookmarks or by size, take pages out or remove them, and download parts that are no larger than they need to be.",
   intro: "Follow the steps below. Every option is explained underneath.",
   steps: [
     {
-      title: "Add your PDF",
-      text: "Drop a PDF, choose it from your device or paste it. A locked file asks for its password; a damaged one is repaired where possible.",
+      title: "Add your PDFs",
+      text: "Drop one PDF or several, choose them from your device or paste them. A locked file asks for its password; a damaged one is repaired where possible.",
     },
     {
       title: "Choose how to split",
-      text: "Cut the file into parts, type page ranges, part odd pages from even ones, take pages out as one file, or remove pages.",
+      text: "Cut the file into parts, type page ranges, split at bookmarks or by size, part odd pages from even ones, take pages out as one file, or remove pages.",
     },
     {
       title: "Place the cuts",
@@ -43,6 +43,21 @@ const content: TutorialContent = {
         "Each range you type becomes a part: 1-3, 4-10, 11- gives three. An open range such as 11- runs to the last page and -3 starts at the first. Ranges may overlap or repeat, 5-1 takes pages in reverse, and odd and even take every other page. A plus sign joins ranges into one part: 1-3 + 7.",
     },
     {
+      term: "By bookmarks",
+      detail:
+        "Each bookmark starts a part, which runs to the page before the next bookmark and is named after its bookmark. Choose the level to split at when bookmarks sit under one another, narrow them down by words in their titles, and untick any you do not want to split at. Pages before the first bookmark become a part of their own or join the first part. Each part keeps the bookmarks of its own pages.",
+    },
+    {
+      term: "By size",
+      detail:
+        "Makes parts that each stay under a size, such as 10 MB for email. The only way to know what a set of pages weighs is to write it, so the parts are found by writing them and are shown once the file is split. Each part takes as many pages as fit. Pictures are not made smaller, so a single page that is over the size gets a part to itself and its row says so.",
+    },
+    {
+      term: "Several files at once",
+      detail:
+        "Add as many PDFs as you like. The way of splitting, the rules that place cuts, typed ranges, typed pages, the bookmark level and the size apply to every file. Cuts and pages pressed by hand, ticked bookmarks, typed names and parts left out belong to the file that is shown; press a file's name to show it. A file that cannot be split as things stand says why in its row and is left out, and the others are still split. In the ZIP, each file's parts are in a folder of their own.",
+    },
+    {
       term: "Odd and even",
       detail:
         "Makes two files, one with pages 1, 3, 5 and so on and one with pages 2, 4, 6 and so on. It parts the fronts from the backs of a double-sided scan.",
@@ -60,7 +75,7 @@ const content: TutorialContent = {
     {
       term: "Names",
       detail:
-        "The pattern names every part. {name} is the file's name, {part} the part's number, {from} and {to} its first and last page, {pages} its pages as you would type them, and {label} a word for the part where there is one, such as odd or even. Numbers get zeros in front so that files sort in order. A name typed for one part is used as it is, and no two parts get the same name.",
+        "The pattern names every part. {name} is the file's name, {part} the part's number, {from} and {to} its first and last page, {pages} its pages as you would type them, and {label} a word for the part where there is one, such as its bookmark, or odd or even. Names can be changed after splitting without splitting again. Numbers get zeros in front so that files sort in order. A name typed for one part is used as it is, and no two parts get the same name.",
     },
     {
       term: "Leaving a part out",
@@ -85,7 +100,7 @@ const content: TutorialContent = {
     {
       term: "Limits and privacy",
       detail:
-        "One file at a time, up to 5,000 pages. On a computer the file can be 300 MB; on a phone, 100 MB, because phones close pages that use more memory. Everything runs in your browser: the file, its contents and any password stay on your device.",
+        "Up to 100 files, each of up to 5,000 pages. On a computer, files can be 300 MB each and 500 MB together; on a phone, 100 MB each and 200 MB together, because phones close pages that use more memory. Everything runs in your browser: the files, their contents and any passwords stay on your device.",
     },
   ],
 }

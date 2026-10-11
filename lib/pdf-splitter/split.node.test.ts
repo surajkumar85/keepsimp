@@ -21,7 +21,7 @@ import {
   renderPage,
   type OpenedPdf,
 } from "@/lib/pdf-merger/mupdf-engine"
-import { splitPart } from "./mupdf-split"
+import { splitBySize, splitPart, type SizedWritten } from "./mupdf-split"
 import {
   cutsEqual,
   cutsEvery,
@@ -370,5 +370,100 @@ describe("the size of parts", () => {
         expect((await readPdf(bytes)).pages).toHaveLength(1)
       }
     }
+  })
+})
+
+describe("splitting by size", () => {
+  /** Eight pages, each with a picture of about 30 kB that cannot be compressed. */
+  const heavy = async () => open(await makeSharedPdf("W", 8))
+  const bySize = async (pdf: OpenedPdf, limit: number) => {
+    const parts: SizedWritten[] = []
+    const listed = await splitBySize(mupdf, pdf, limit, {
+      onPart: (part) => {
+        parts.push(part)
+      },
+    })
+    expect(listed.map((part) => [part.start, part.length])).toEqual(
+      parts.map((part) => [part.start, part.length])
+    )
+    return parts
+  }
+
+  it("fills each part as far as the size allows, and no further", async () => {
+    const pdf = await heavy()
+    const limit = SHARED_PICTURE * 3.5
+    const parts = await bySize(pdf, limit)
+    expect(parts.map((part) => part.length)).toEqual([3, 3, 2])
+    for (const part of parts) {
+      expect(part.over).toBe(false)
+      // The size that was measured is the size of the file handed over.
+      expect(part.written.bytes.length).toBe(part.bytes)
+      expect(part.bytes).toBeLessThanOrEqual(limit)
+    }
+    // Every page once, in order.
+    expect(
+      (
+        await Promise.all(
+          parts.map(async (part) =>
+            (await readPdf(part.written.bytes)).pages.map((page) => page.text)
+          )
+        )
+      ).flat()
+    ).toEqual(Array.from({ length: 8 }, (_, at) => pageText("W", at + 1)))
+    // One page more would not have fitted.
+    const more = await splitPart(mupdf, pdf, [0, 1, 2, 3])
+    expect(more.bytes.length).toBeGreaterThan(limit)
+  })
+
+  it("gives a page that is over the size a part to itself, and says so", async () => {
+    const pdf = await heavy()
+    const parts = await bySize(pdf, SHARED_PICTURE / 2)
+    expect(parts).toHaveLength(8)
+    expect(parts.every((part) => part.over && part.length === 1)).toBe(true)
+    expect((await readPdf(parts[4].written.bytes)).pages[0].text).toBe("W-P5")
+  })
+
+  it("keeps a file that fits as one part", async () => {
+    const pdf = await heavy()
+    const parts = await bySize(pdf, SHARED_PICTURE * 20)
+    expect(parts.map((part) => [part.start, part.length])).toEqual([[0, 8]])
+    expect((await readPdf(parts[0].written.bytes)).pages).toHaveLength(8)
+  })
+
+  it("says how far it has got, and can be stopped", async () => {
+    const pdf = await heavy()
+    const seen: number[] = []
+    await splitBySize(mupdf, pdf, SHARED_PICTURE * 2.5, {
+      onPart: () => {},
+      progress: (done, total) => {
+        expect(total).toBe(8)
+        seen.push(done)
+      },
+    })
+    expect(seen).toEqual([2, 4, 6, 8])
+    let calls = 0
+    await expect(
+      splitBySize(mupdf, pdf, SHARED_PICTURE * 2.5, {
+        onPart: () => {},
+        checkpoint: async () => {
+          if (++calls > 5) throw new Error("stopped")
+        },
+      })
+    ).rejects.toThrow("stopped")
+  })
+
+  it("puts attached files in the first part only", async () => {
+    const pdf = await source("Q", {
+      pages: 4,
+      picture: true,
+      attachments: { "notes.txt": "hello" },
+    })
+    const whole = (await splitPart(mupdf, pdf, [0, 1, 2, 3])).bytes.length
+    const parts = await bySize(pdf, Math.round(whole * 0.7))
+    expect(parts.length).toBeGreaterThan(1)
+    expect((await readPdf(parts[0].written.bytes)).attachments).toEqual([
+      "notes.txt",
+    ])
+    expect((await readPdf(parts[1].written.bytes)).attachments).toEqual([])
   })
 })
