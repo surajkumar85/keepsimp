@@ -360,8 +360,24 @@ test("stays accessible, local and responsive", async ({ page }) => {
     return (await (part ? axe.include(part) : axe).analyze()).violations
   }
   const scan = scanOf()
-  /** The signature window by itself: everything behind it is out of reach while it is open. */
-  const scanSheet = scanOf("[data-testid=signature-dialog]")
+  /**
+   * The signature window by itself: everything behind it is out of reach
+   * while it is open. Its button is looked at once it has settled: on its
+   * way from switched off to switched on it is, for a moment, neither.
+   */
+  const scanWindow = scanOf("[data-testid=signature-dialog]")
+  const scanSheet = async () => {
+    await expect
+      .poll(() =>
+        placeIt(page).evaluate(
+          (button) =>
+            (button as HTMLButtonElement).disabled ||
+            getComputedStyle(button).opacity === "1"
+        )
+      )
+      .toBe(true)
+    return scanWindow()
+  }
   await page.emulateMedia({ reducedMotion: "reduce" })
   await page.goto(ROUTE)
   await expect(
