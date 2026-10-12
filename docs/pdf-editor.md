@@ -90,6 +90,10 @@ A form's fields are **the file's own** and stay fields. Filling one in is a step
 - **What a file's form is** (`formFacts`): how many places, whether it has an XFA part (said when the file is opened: with ordinary fields too, they are what is filled in; without, the pages can only be typed on), and whether a script works fields out (`/CO`; said too, since nothing is run).
 - **Fill PDF form** (`/dashboard/fill-pdf-form/`) is a door with the tools for filling in (select, text, tick or cross, sign, date). Its sample is a form (`public/samples/keepsimp-form.pdf`, made by `npm run samples:pdfs`).
 
+## Rows of boxes (phase 3, fifth part)
+
+A paper form often has a row of boxes for a postcode or a number, one letter to a box. A text box with `comb` set (2 to 60) is one line whose letters are spread over that many boxes of equal width, each in the middle of its own (`combLine`, `combStarts` in `text-layout.ts`). The number is a part of a text box's look ("Boxes" in the bar, 0 for ordinary text), remembered for the next box like the font; the box's two side handles fit it to the row on the page. A call-out takes none. While it is typed, the browser sets the letters a box apart by a figure's width, which is close; the page shows them exactly once the file has them, since it is drawn from the file. `comb.test.ts` (100% with the other unit tests), `comb.node.test.ts` (each letter's place read back with pdf.js) and a journey in `e2e/pdf-form-filler.spec.ts`.
+
 ## Signed files (phase 3, third part)
 
 A digital signature covers the bytes of the file as it was signed. A file that is written anew has other bytes, and the signature no longer holds. Written **after** the file, the signed part is still there byte for byte.
@@ -221,7 +225,7 @@ The report (`ExportReport`) becomes the lines in the download card (`lib/pdf-edi
 
 1. **The workspace, and adding things.** Built.
 2. **Mark up and comment.** Built: marks on words, the highlighter pen, notes and replies, the list of comments, comments a file comes with, the PDF annotator page, stamps, call-outs and measuring lines.
-3. **Fill and sign.** Built so far: drawn, typed and pictured signatures, initials, the date, ticks and crosses, and the Sign PDF page. Also built: filling in a form's own fields, with the Fill PDF form page. Also built: saving after a signed file so that its signature stays valid, and drafts kept on the device when asked. Still to come: text in comb boxes on forms without fields.
+3. **Fill and sign.** Built so far: drawn, typed and pictured signatures, initials, the date, ticks and crosses, and the Sign PDF page. Also built: filling in a form's own fields, with the Fill PDF form page. Also built: saving after a signed file so that its signature stays valid, drafts kept on the device when asked, and text in the rows of boxes of forms without fields. The phase is complete.
 4. **Change the text that is there,** in the file's own font where it has the letters, with the old words gone from the file.
 5. **Paragraphs, pictures in the page, links, find and replace.**
 6. **Pages and the document:** reorder, crop, numbers, watermarks, bookmarks, details. Focused pages: Add page numbers, Watermark PDF, Crop PDF.

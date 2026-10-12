@@ -76,6 +76,12 @@ export interface TextObject extends Base {
   colour: Colour
   align: TextAlign
   /**
+   * For the row of boxes a paper form has for a postcode or a number: the
+   * box is one line, and its letters are spread over this many boxes of
+   * equal width, one letter in the middle of each.
+   */
+  comb?: number
+  /**
    * What a call-out points at. With it, the box has a frame round it and a
    * line from the frame to this point; the point stays where it is when the
    * box is moved.
@@ -386,6 +392,16 @@ export function copyOf<T extends EditorObject>(
 const isNumber = (value: unknown): value is number =>
   typeof value === "number" && Number.isFinite(value)
 
+/** The fewest and the most boxes letters are spread over. */
+export const FEWEST_BOXES = 2
+export const MOST_BOXES = 60
+
+/** Whether a number is a number of boxes that letters can be spread over. */
+export const isComb = (value: unknown): value is number =>
+  Number.isInteger(value) &&
+  (value as number) >= FEWEST_BOXES &&
+  (value as number) <= MOST_BOXES
+
 const isPoint = (value: unknown): value is Point =>
   typeof value === "object" &&
   value !== null &&
@@ -465,7 +481,9 @@ export function readObject(value: unknown): EditorObject | null {
         // A call-out stands upright: its frame and its line are worked out that way.
         ...(isPoint(data.tip)
           ? { tip: { x: data.tip.x, y: data.tip.y }, rotation: 0 }
-          : null),
+          : isComb(data.comb)
+            ? { comb: data.comb }
+            : null),
       }
     }
     case "stamp": {

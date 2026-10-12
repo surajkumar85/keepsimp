@@ -49,6 +49,11 @@ const content: TutorialContent = {
         "A filled box that hides what is under it. It only covers: the words underneath are still in the file and can be copied out by anyone. Do not use it to hide private information. Redaction, which removes what is under it, comes in a later version.",
     },
     {
+      term: "Boxes",
+      detail:
+        "For the row of boxes a paper form has for a postcode or a number. With the text tool in hand or a text box selected, set Boxes to how many there are, and pull the box's sides to fit the row: the letters are spread out, one in the middle of each box, and no more are taken than there are boxes. Set it back to 0 for ordinary text.",
+    },
+    {
       term: "Form fields",
       detail:
         "A form's own fields are tinted and can be typed in, ticked and chosen from; Tab goes from one to the next, and a line above the page says what must still be filled in. When you download, the form keeps its fields or they become part of the page. A form's scripts are never run, so totals it would work out are yours to fill in.",
@@ -332,7 +337,7 @@ const filling: TutorialContent = {
     {
       term: "Forms without fields",
       detail:
-        "Many forms are only a picture of a form. Fill those in like paper: the text tool types anywhere, the tick tool places ticks, crosses and dots, and Sign places your signature.",
+        "Many forms are only a picture of a form. Fill those in like paper: the text tool types anywhere, the tick tool places ticks, crosses and dots, and Sign places your signature. For a row of boxes, such as a postcode or an account number, set Boxes in the text bar to how many there are and stretch the text box over the row: each letter goes into the middle of its own box.",
     },
     {
       term: "What is not done",

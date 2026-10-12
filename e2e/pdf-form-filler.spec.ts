@@ -2,7 +2,7 @@ import { test, expect, type Locator, type Page } from "@playwright/test"
 import AxeBuilder from "@axe-core/playwright"
 import { PDFDocument } from "@cantoo/pdf-lib"
 import { makeFormPdf, type FormOptions } from "../tests/pdf-fixtures"
-import { readPdf } from "../tests/pdf-reader"
+import { readPdf, textPlaces } from "../tests/pdf-reader"
 import { bytesOf, pdf, reader, readerReady, type Upload } from "./pdf"
 
 const ROUTE = "/dashboard/fill-pdf-form/"
@@ -282,6 +282,55 @@ test("says what a file's form is: none, of the XFA kind, worked out by scripts",
   await expect(tool(page)).toContainText(
     "Scripts are never run here, so check totals and dates yourself."
   )
+})
+
+test("writes into the row of boxes of a form that has no fields", async ({
+  page,
+}) => {
+  await open(page, await pdf("paper.pdf", "pf", { pages: 1 }))
+  await pick(page, "Text").click()
+  const boxes = reader(page).getByLabel("Boxes to spread the letters over")
+  await expect(boxes).toHaveValue("0")
+  await boxes.fill("6")
+  const layer = page.locator('[data-testid=editor-layer][data-page="1"]')
+  const place = (await layer.boundingBox())!
+  await page.mouse.click(
+    place.x + place.width * 0.15,
+    place.y + place.height * 0.3
+  )
+  const typing = page.getByTestId("editor-typing")
+  await expect(typing).toBeFocused()
+  // No more letters than there are boxes.
+  await page.keyboard.type("AB12345678")
+  await expect(typing).toHaveValue("AB1234")
+  await page.keyboard.press("Control+Enter")
+  await changes(page, 1)
+
+  const spread = await saved(page, page.getByTestId("editor-download"))
+  const letters = (await textPlaces(spread.bytes))[0].filter((run) =>
+    /^[AB1-4]$/.test(run.text.trim())
+  )
+  expect(letters.map((run) => run.text.trim()).join("")).toBe("AB1234")
+  // The four figures are as wide as each other, so they start a box apart.
+  const [one, two, three, four] = letters.slice(2).map((run) => run.x)
+  const box = two - one
+  expect(box).toBeGreaterThan(12)
+  expect(Math.abs(three - two - box)).toBeLessThan(0.5)
+  expect(Math.abs(four - three - box)).toBeLessThan(0.5)
+
+  // Taken out of its boxes, it is ordinary text again.
+  await page.getByRole("button", { name: "Keep editing" }).click()
+  await readerReady(page)
+  await layer.getByTestId("editor-object").first().focus()
+  await expect(boxes).toHaveValue("6")
+  await boxes.fill("0")
+  await changes(page, 2)
+  const plain = await saved(page, page.getByTestId("editor-download"))
+  expect(
+    (await textPlaces(plain.bytes))[0].some((run) =>
+      run.text.includes("AB1234")
+    )
+  ).toBe(true)
 })
 
 test("leaves the fields alone while something is drawn over them", async ({

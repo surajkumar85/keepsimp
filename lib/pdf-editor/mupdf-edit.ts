@@ -47,7 +47,7 @@ import {
   type EditorObject,
   type TextObject,
 } from "./objects"
-import { BASELINE, lineStart } from "./text-layout"
+import { BASELINE, combStarts, lineStart } from "./text-layout"
 import type { Change, Op } from "./tools"
 
 type Engine = typeof MuPDF
@@ -492,19 +492,34 @@ function appearance(mupdf: Engine, session: EditSession, object: EditorObject) {
           })
           const width =
             glyphs.reduce((sum, glyph) => sum + glyph.advance, 0) * object.size
-          let x =
-            object.box.x + lineStart(object.align, width, object.box.width)
           const y =
             object.box.y + (index * LINE_HEIGHT + BASELINE) * object.size
-          for (const glyph of glyphs) {
+          // In a row of boxes each letter stands in the middle of its own.
+          const starts = object.comb
+            ? combStarts(
+                glyphs.map((glyph) => glyph.advance * object.size),
+                object.box.width,
+                object.comb
+              )
+            : null
+          let x =
+            object.box.x + lineStart(object.align, width, object.box.width)
+          glyphs.forEach((glyph, at) => {
             text.showGlyph(
               font,
-              [object.size, 0, 0, -object.size, x, y],
+              [
+                object.size,
+                0,
+                0,
+                -object.size,
+                starts ? object.box.x + starts[at] : x,
+                y,
+              ],
               glyph.glyph,
               glyph.code
             )
             x += glyph.advance * object.size
-          }
+          })
         })
         device.fillText(text, place, rgb, colour(object.colour), alpha)
         break

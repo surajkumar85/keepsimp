@@ -6,6 +6,7 @@
 import { LARGEST_SCALE, SMALLEST_SCALE, type MeasureUnit } from "./measure"
 import type { CheckShape } from "./signature"
 import {
+  isComb,
   LONGEST_STAMP,
   retyped,
   THICKEST,
@@ -63,6 +64,8 @@ export type Look =
   | { unit: MeasureUnit }
   | { scale: number }
   | { shape: CheckShape }
+  /** How many boxes a text box's letters are spread over; 0 for text that is not. */
+  | { comb: number }
 
 /** Which parts of a look a kind of thing has. */
 export type LookPart =
@@ -79,9 +82,19 @@ export type LookPart =
   | "unit"
   | "scale"
   | "shape"
+  | "comb"
 
 const PARTS: Record<EditorObject["kind"], LookPart[]> = {
-  text: ["font", "size", "bold", "italic", "align", "stroke", "opacity"],
+  text: [
+    "font",
+    "size",
+    "bold",
+    "italic",
+    "align",
+    "comb",
+    "stroke",
+    "opacity",
+  ],
   picture: ["opacity"],
   box: ["stroke", "fill", "weight", "opacity"],
   ellipse: ["stroke", "fill", "weight", "opacity"],
@@ -96,7 +109,7 @@ const PARTS: Record<EditorObject["kind"], LookPart[]> = {
 /** The parts of a look that can be set for a tool about to make something. */
 const TOOL_PARTS: Record<Tool, LookPart[]> = {
   select: [],
-  text: ["font", "size", "bold", "italic", "align", "stroke"],
+  text: ["font", "size", "bold", "italic", "align", "comb", "stroke"],
   box: ["stroke", "fill", "weight"],
   ellipse: ["stroke", "fill", "weight"],
   line: ["stroke", "weight"],
@@ -116,7 +129,12 @@ const stampWords = (value: string) => value.trim().slice(0, LONGEST_STAMP)
 export function partsFor(objects: readonly EditorObject[], tool: Tool) {
   if (!objects.length) return TOOL_PARTS[tool]
   return PARTS[objects[0].kind].filter((part) =>
-    objects.every((object) => PARTS[object.kind].includes(part))
+    objects.every(
+      (object) =>
+        PARTS[object.kind].includes(part) &&
+        // A call-out is text, but is not written in a row of boxes.
+        !(part === "comb" && object.kind === "text" && object.tip)
+    )
   )
 }
 
@@ -164,6 +182,14 @@ export function withLook(object: EditorObject, look: Look): EditorObject {
       const next = retyped(object, { size: value as number })
       return next.size === object.size ? object : next
     }
+    if (part === "comb") {
+      // A call-out is not written in boxes, and any other number is none.
+      const comb = !object.tip && isComb(value) ? (value as number) : undefined
+      if (comb === object.comb) return object
+      const plain = { ...object }
+      delete plain.comb
+      return comb ? { ...plain, comb } : plain
+    }
     const key = part as "font" | "bold" | "italic" | "align"
     return object[key] === value ? object : { ...object, [key]: value }
   }
@@ -209,6 +235,8 @@ export function stylesWith(styles: Styles, tool: Tool, look: Look): Styles {
       return value === null
         ? styles
         : { ...styles, [tool === "text" ? "textColour" : "stroke"]: value }
+    if (part === "comb")
+      return { ...styles, comb: isComb(value) ? (value as number) : 0 }
     return { ...styles, [part]: value }
   }
   if (tool === "check") {
@@ -268,6 +296,7 @@ export function lookOf(
   unit: MeasureUnit
   scale: number
   shape: CheckShape
+  comb: number
 } {
   const [first] = objects
   const base = {
@@ -288,6 +317,7 @@ export function lookOf(
     bold: styles.bold,
     italic: styles.italic,
     align: styles.align,
+    comb: tool === "text" ? styles.comb : 0,
     opacity: 1,
     label: styles.stampLabel,
     unit: styles.unit,
@@ -305,6 +335,7 @@ export function lookOf(
       bold: first.bold,
       italic: first.italic,
       align: first.align,
+      comb: first.comb ?? 0,
     }
   if (first.kind === "cover") return { ...seen, fill: first.fill }
   if (first.kind === "picture") return seen

@@ -65,8 +65,10 @@ import {
 } from "@/lib/pdf-editor/measure"
 import {
   FONT_FAMILIES,
+  isComb,
   LARGEST_TEXT,
   LONGEST_STAMP,
+  MOST_BOXES,
   SMALLEST_TEXT,
   type Colour,
 } from "@/lib/pdf-editor/objects"
@@ -818,6 +820,28 @@ export function EditorToolbar({
                     className="h-11 w-16 rounded-md border bg-background px-2 text-base text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring md:h-9 md:text-sm"
                   />
                 </label>
+                {has("comb") && (
+                  <label
+                    className="flex shrink-0 items-center gap-2 text-xs text-muted-foreground"
+                    title="For the row of boxes a form has for a postcode or a number: one letter goes in each. Leave it at 0 for ordinary text."
+                  >
+                    Boxes
+                    <input
+                      type="number"
+                      inputMode="numeric"
+                      min={0}
+                      max={MOST_BOXES}
+                      value={look.comb}
+                      aria-label="Boxes to spread the letters over"
+                      onChange={(event) => {
+                        const comb = Number(event.target.value)
+                        // One box is no row of boxes: it is ordinary text.
+                        if (comb === 0 || isComb(comb)) editor.setLook({ comb })
+                      }}
+                      className="h-11 w-16 rounded-md border bg-background px-2 text-base text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring md:h-9 md:text-sm"
+                    />
+                  </label>
+                )}
                 <div
                   role="group"
                   aria-label="Style"

@@ -93,6 +93,8 @@ export interface Styles {
   bold: boolean
   italic: boolean
   align: TextAlign
+  /** How many boxes the next text box spreads its letters over; 0 for none. */
+  comb: number
   /** What the next stamp says, and its colour. */
   stampLabel: string
   stampColour: Colour
@@ -117,6 +119,7 @@ export const defaultStyles: Styles = {
   bold: false,
   italic: false,
   align: "left",
+  comb: 0,
   stampLabel: "Approved",
   stampColour: [0.09, 0.56, 0.24],
   unit: "mm",
@@ -560,6 +563,7 @@ export function makeText(
     size: styles.size,
     colour: styles.textColour,
     align: styles.align,
+    ...(styles.comb ? { comb: styles.comb } : null),
   }
 }
 

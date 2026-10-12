@@ -41,7 +41,7 @@ import {
   type Signature,
   type SignatureSlot,
 } from "@/lib/pdf-editor/signature"
-import { breakLines } from "@/lib/pdf-editor/text-layout"
+import { breakLines, combLine } from "@/lib/pdf-editor/text-layout"
 import {
   applied,
   defaultStyles,
@@ -105,11 +105,14 @@ function measureWith(key: string, size: number) {
 export const laidOut = (object: TextObject, text = object.text): TextObject =>
   retyped(object, {
     text,
-    lines: breakLines(
-      text,
-      object.box.width,
-      measureWith(fontKey(object), object.size)
-    ),
+    // A row of boxes is one line, with a letter to a box.
+    lines: object.comb
+      ? [combLine(text, object.comb)]
+      : breakLines(
+          text,
+          object.box.width,
+          measureWith(fontKey(object), object.size)
+        ),
   })
 
 let made = 0

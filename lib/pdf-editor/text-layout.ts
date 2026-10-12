@@ -55,6 +55,29 @@ export function breakLines(text: string, width: number, measure: Measure) {
   return lines
 }
 
+/**
+ * What is written in a row of boxes: one line, with no more letters than
+ * there are boxes. Line breaks are dropped; they have no place in a row.
+ */
+export const combLine = (text: string, boxes: number) =>
+  Array.from(text.replace(/[\r\n]+/g, ""))
+    .slice(0, boxes)
+    .join("")
+
+/**
+ * Where the letters of a row of boxes stand: how far from the left of the
+ * row each one starts, so that it is in the middle of its box.
+ * @param advances How wide each letter is, at the size it is written in.
+ */
+export function combStarts(
+  advances: readonly number[],
+  width: number,
+  boxes: number
+) {
+  const box = width / boxes
+  return advances.map((advance, at) => at * box + (box - advance) / 2)
+}
+
 /** How far from the left of its box a line starts. */
 export function lineStart(
   align: TextAlign,

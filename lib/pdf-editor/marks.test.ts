@@ -343,7 +343,10 @@ describe("how they look", () => {
       "stroke",
       "weight",
     ])
-    expect(partsFor([], "callout")).toEqual(partsFor([], "text"))
+    // A call-out is text in everything but the row of boxes.
+    expect(partsFor([], "callout")).toEqual(
+      partsFor([], "text").filter((part) => part !== "comb")
+    )
   })
 
   it("gives a stamp other words and another colour", () => {

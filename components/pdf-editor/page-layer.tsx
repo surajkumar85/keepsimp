@@ -508,6 +508,12 @@ export function PageLayer({
           // pixels. The field is made larger and scaled back down, so its
           // letters are the size they will be on the page.
           const grow = Math.max(1, 16 / object.size)
+          // In a row of boxes the letters are set as far apart as the boxes
+          // are, about a figure's width each. The page shows them exactly,
+          // each in the middle of its box, once the file has them.
+          const apart = object.comb
+            ? (object.box.width / object.comb - object.size * 0.556) * grow
+            : 0
           return (
             <div
               className="absolute"
@@ -529,6 +535,7 @@ export function PageLayer({
                 spellCheck={false}
                 autoCapitalize="off"
                 rows={Math.max(1, object.lines.length)}
+                maxLength={object.comb}
                 onChange={(event) =>
                   editor.setTyping({
                     ...mine,
@@ -569,8 +576,18 @@ export function PageLayer({
                   fontSize: object.size * grow,
                   lineHeight: LINE_HEIGHT,
                   color: cssColour(object.colour),
-                  textAlign:
-                    object.align === "centre" ? "center" : object.align,
+                  textAlign: object.comb
+                    ? "left"
+                    : object.align === "centre"
+                      ? "center"
+                      : object.align,
+                  ...(object.comb
+                    ? {
+                        letterSpacing: apart,
+                        paddingLeft: Math.max(0, apart / 2),
+                        whiteSpace: "pre" as const,
+                      }
+                    : null),
                   outlineWidth: grow / scale,
                 }}
               />
