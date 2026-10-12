@@ -42,7 +42,8 @@ export function checkLines(report: ExportReport): CheckLine[] {
   if (
     report.added === 0 &&
     report.comments.had === 0 &&
-    report.fields.had === 0
+    report.fields.had === 0 &&
+    report.retext.steps === 0
   )
     lines.push({
       text: "Nothing was added. The file was written again as it is.",
@@ -121,6 +122,24 @@ export function checkLines(report: ExportReport): CheckLine[] {
               : `${comments(had)} ${had === 1 ? "was" : "were"} left out.`,
         good: true,
       })
+  }
+  const { steps, lines: written, found: reread } = report.retext
+  if (steps > 0) {
+    const places = `${steps.toLocaleString("en")} place${steps === 1 ? "" : "s"}`
+    lines.push(
+      reread < written
+        ? {
+            text: `${(written - reread).toLocaleString("en")} of the ${written.toLocaleString("en")} line${written === 1 ? "" : "s"} you changed could not be read back from the result. Read the result before you rely on it.`,
+            good: false,
+          }
+        : {
+            text:
+              written === 0
+                ? `The page's own text was changed in ${places}. What you took out is no longer in the file.`
+                : `The page's own text was changed in ${places}. The old words are no longer in the file, and ${written === 1 ? "the line you wrote was" : `all ${written.toLocaleString("en")} lines you wrote were`} read back from the result.`,
+            good: true,
+          }
+    )
   }
   const form = report.fields
   const fields = (count: number) =>

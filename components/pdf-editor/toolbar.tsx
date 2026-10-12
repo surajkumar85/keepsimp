@@ -1,6 +1,7 @@
 "use client"
 
 import {
+  Fragment,
   useId,
   useRef,
   useState,
@@ -34,6 +35,7 @@ import {
   IconRectangleFilled,
   IconRubberStamp,
   IconRulerMeasure,
+  IconCursorText,
   IconSignature,
   IconSquare,
   IconStackBack,
@@ -81,6 +83,7 @@ import {
 } from "@/lib/pdf-editor/styles"
 import type { Tool } from "@/lib/pdf-editor/tools"
 import type { Comments } from "./use-comments"
+import { RETEXT_HINT, type Retext } from "./use-retext"
 import type { Editor } from "./use-editor"
 
 const TOOLS: { tool: Tool; label: string; key: string; icon: ReactNode }[] = [
@@ -395,9 +398,12 @@ export function EditorToolbar({
   focus = null,
   onAllTools,
   onSign,
+  retext,
 }: {
   editor: Editor
   comments: Comments
+  /** Changing the words that are already on the page. */
+  retext: Retext
   /** Which tools come first in the row: those that add things, or those that comment. */
   first?: "things" | "comments"
   /**
@@ -476,18 +482,35 @@ export function EditorToolbar({
       {placed}
       <Rule />
       {TOOLS.map(({ tool, label, key, icon }) => (
-        <Toggle
-          key={tool}
-          label={label}
-          shortcut={key}
-          pressed={!comments.tool && state.tool === tool}
-          onPress={() => {
-            comments.setTool(null)
-            editor.setTool(tool)
-          }}
-        >
-          {icon}
-        </Toggle>
+        <Fragment key={tool}>
+          <Toggle
+            label={label}
+            shortcut={key}
+            pressed={
+              !comments.tool &&
+              state.tool === tool &&
+              !(tool === "select" && retext.on)
+            }
+            onPress={() => {
+              comments.setTool(null)
+              retext.setOn(false)
+              editor.setTool(tool)
+            }}
+          >
+            {icon}
+          </Toggle>
+          {/* Beside the tool that adds text: the one that changes the text that is there. */}
+          {tool === "text" && (
+            <Toggle
+              label="Change text"
+              shortcut="E"
+              pressed={retext.on}
+              onPress={() => retext.setOn(!retext.on)}
+            >
+              <IconCursorText aria-hidden="true" />
+            </Toggle>
+          )}
+        </Fragment>
       ))}
       <input
         ref={picker}
@@ -521,6 +544,7 @@ export function EditorToolbar({
       ? comments.tool !== null || state.tool === "select"
       : focus === "signing"
         ? comments.tool === null &&
+          !retext.on &&
           (state.tool === "select" || SIGNING.includes(state.tool))
         : false
   const marks = COMMENT_TOOLS.map(({ tool, label, key, icon }) => (
@@ -732,7 +756,7 @@ export function EditorToolbar({
                 className="line-clamp-2 min-w-0 flex-1 px-1 text-xs leading-4 whitespace-normal text-muted-foreground"
                 data-testid="editor-hint"
               >
-                {HINTS[state.tool]}
+                {retext.on ? retext.note || RETEXT_HINT : HINTS[state.tool]}
               </p>
             )}
             {acting && (

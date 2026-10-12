@@ -4,6 +4,7 @@ import { poolSize } from "@/lib/image-batch/pool"
 import type { Size } from "@/lib/image-compressor/geometry"
 import type { CommentChange, LetterLine } from "@/lib/pdf-editor/comments"
 import type { FieldChange } from "@/lib/pdf-editor/forms"
+import type { PageLine, TextChange } from "@/lib/pdf-editor/retext"
 import type { ExportReport, Step } from "@/lib/pdf-editor/mupdf-edit"
 import type { Change } from "@/lib/pdf-editor/tools"
 import type { Audit } from "@/lib/pdf-compressor/mupdf-audit"
@@ -150,6 +151,10 @@ export class PdfClient {
     (state: EditState | null) => void
   >()
   private readonly editPictures = new Map<number, (size: Size | null) => void>()
+  private readonly editLines = new Map<
+    number,
+    (lines: PageLine[] | null) => void
+  >()
   private readonly editDrafts = new Map<
     number,
     (draft: { steps: Step[]; position: number } | null) => void
@@ -215,6 +220,9 @@ export class PdfClient {
     } else if (message.type === "edit-state") {
       this.editStates.get(message.request)?.(message.state)
       this.editStates.delete(message.request)
+    } else if (message.type === "edit-lines") {
+      this.editLines.get(message.request)?.(message.lines)
+      this.editLines.delete(message.request)
     } else if (message.type === "edit-draft") {
       this.editDrafts.get(message.request)?.(message.draft)
       this.editDrafts.delete(message.request)
@@ -381,6 +389,8 @@ export class PdfClient {
     this.editStates.clear()
     for (const done of this.editPictures.values()) done(null)
     this.editPictures.clear()
+    for (const done of this.editLines.values()) done(null)
+    this.editLines.clear()
     for (const done of this.editDrafts.values()) done(null)
     this.editDrafts.clear()
     for (const done of this.editLetters.values()) done(null)
@@ -491,6 +501,24 @@ export class PdfClient {
       const request = ++this.requests
       this.editLetters.set(request, resolve)
       this.send({ type: "edit-letters", id, request, page })
+    })
+  }
+
+  /** The lines of a page's own text, as they can be changed; null when the page cannot be read. */
+  linesOf(id: string, page: number) {
+    return new Promise<PageLine[] | null>((resolve) => {
+      const request = ++this.requests
+      this.editLines.set(request, resolve)
+      this.send({ type: "edit-lines", id, request, page })
+    })
+  }
+
+  /** Change the words of lines, as one step; what the pages hold afterwards. */
+  editText(id: string, change: TextChange) {
+    return new Promise<EditNews>((resolve, reject) => {
+      const request = ++this.requests
+      this.editNews.set(request, { resolve, reject })
+      this.send({ type: "edit-text", id, request, change })
     })
   }
 

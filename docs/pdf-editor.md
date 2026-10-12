@@ -118,6 +118,24 @@ Nothing is kept unless a switch is turned on: "Keep a draft on this device", off
 - **A locked file** is kept locked and asks for its password again when it is taken up. No password is kept.
 - **The privacy page** (`app/(marketing)/privacy/page.tsx`) lists everything the editor can keep on the device: the name comments are signed with, a remembered signature, and a draft.
 
+## Changing the text that is there (phase 4, first part)
+
+"Change text" (E) offers every line of a page's own text. Click one, type, press Enter: the old letters are **taken out of the page's content**, and the new ones are written in their place **with the very font object the line was written with**. Nothing is covered, no font is copied, and none is added for a letter the file's font has.
+
+- **Reading** (`linesOn` in `lib/pdf-editor/mupdf-text.ts`): the page's content alone is run (`runPageContents`, so that nothing the editor or anyone laid over the page is taken for its text) and read as lines. Each letter comes with its font, size, colour and place, and a line is its text, its box, where it starts, the looks its letters have (`LineStyle`: font, size, colour, how far it is raised) and which look each letter has. Lines come from the top of the page down.
+- **What a font can write** (`codesOf`): the engine tells which shape a letter was drawn with, but not which number of the font stands for it, and that number is what has to be written. So a second copy of the file is opened (`EditSession.reading`), which is read and never changed. In it, a page is added that shows every number a letter can have in that font (256, or 65,536 for a font with two bytes to a letter) once, each at a place that says which number it is, and the engine is asked what it sees. That takes 5 to 80 ms a font and is kept. A shape that stands for several letters at once (the "fi" of a paper) is not taken for its first letter: written for an "f", it would add an "i" nobody typed, which is what the first try on a real paper did. Places of private use are not letters. A font that writes its letters with one or two bytes as it pleases is not written with.
+- **Which look a new letter takes** (`spreadLooks`): the start and the end the old and new words share keep their looks; what was typed between takes the look of the letter before it, as in any editor. A mark that the look it was given cannot write, and another look of the line can (a raised star set in a symbol font), takes that look whole.
+- **Stand-ins:** a letter the file's font lacks is written in the closest of the editor's fonts (`standInFor`: serif, sans or mono, bold and italic, by the font's own flags and its name), which is put into the file once (`addFont`) and cut to its letters on download. The field names such letters while they are typed (`standIns`), and the bar says so after. When no font has a letter, nothing is changed and the page says which letter.
+- **Taking out** is the engine's redaction with nothing drawn in its place, no picture and no line art touched, and marks for redaction that the file came with set aside and put back. It is done through a thin band through the middle of each letter (`bandOf`): the engine takes out every letter a band touches, and the boxes of letters reach into the lines above and below where lines are set close; their middles do not. Links that lay over the line are put back if the engine drops them.
+- **Writing** (`runsOf`, `contentFor` in `retext.ts`): letters that follow each other in one font, size, colour and height are one run; a space the font has no letter for is only room. What is written asks for everything it needs (colour, plain filled letters, no extra spacing) and is placed through the inverse of the page's own matrix, so it stands upright on a page the file shows turned. The page's content is closed off first (`q … Q`) so that what is written starts from nothing. The font is named in the page's resources as `KS<number>` (the file's own, by its object number) or `KS<key>` (ours).
+- **The proof, at every change:** the page is read again. Every other line must be where it was, saying what it said, or the change is not made ("cannot be changed without touching the text beside it"); and the new words must be read back at the line's height, or it is not made either. A change that fails is taken back whole, like any step.
+- **What cannot be retyped:** text that is turned or runs downwards, and text in scripts whose letters join and change shape (Hebrew, Arabic, the scripts of India and South-East Asia). Both can be taken out. The field says why.
+- **A step like any other:** a change is found again by where the line is and what it says (`isLine`), so it can be made again on a fresh copy for undo, for a signed file and for a draft (`readTextOp` is one of the draft's readers).
+- **On download** the file's own fonts are left whole unless one of ours was used on a page (then fonts are cut as for text boxes, and kept only if every page draws the same). The check says in how many places the page's own text was changed and how many lines were read back from the result.
+- **On real files** (a LaTeX paper, a publisher's report, two IRS documents, a booklet; `scripts/pdf-benchmark-files.mjs` fetches them): 56 lines of 56 were changed, each read back, every page that was not touched identical to the original, and qpdf and Poppler had nothing to say about any result.
+- **Tests:** `retext.test.ts` (100%), `retext.node.test.ts` with the real engine and a fixture of every kind of text (`tests/pdf-text.ts`: a font embedded with only its letters, fonts that are not embedded, two looks on a line, colour, a raised mark, a link, lines set close, turned text, a turned page), results read by pdf.js and pdf-lib, the page compared pixel for pixel outside the line; and `e2e/pdf-retext.spec.ts` on five profiles.
+- **Not yet** (second part): changing a line's size, colour or font, moving it, changing several lines as a paragraph that flows (phase 5), a font of one's own.
+
 ## One editor, several doors
 
 There is one PDF editor. The annotator, Sign PDF and Fill PDF form are **doors**: each is a catalogue entry with `partOf: "pdf-editor"`. A door has an address, a title, a description, written help and an article of its own, is in the sitemap and the offline copy, and is found by the search in the header. It is not a card on the tools page, not counted in the sidebar and not an app shortcut (`listed` in `lib/catalogue.ts` is the tools without their doors), and the article that goes through every tool names it under the editor. Each page says what it is and links to the other.
@@ -162,26 +180,27 @@ The report (`ExportReport`) becomes the lines in the download card (`lib/pdf-edi
 
 ### Files
 
-| File                                                           | What it holds                                                                                                                         |
-| -------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
-| `lib/pdf-editor/objects.ts`                                    | What an added thing is, how it moves, resizes and turns, and `readObject`, which checks one.                                          |
-| `lib/pdf-editor/geometry.ts`                                   | Turned boxes, handles, hit tests, snapping, staying on the page.                                                                      |
-| `lib/pdf-editor/tools.ts`                                      | The tools: press, drag, release; nudge, paste, order, restyle; `applied`.                                                             |
-| `lib/pdf-editor/text-layout.ts`, `ink.ts`                      | Breaking lines by measured widths; thinning and smoothing a stroke.                                                                   |
-| `lib/pdf-editor/measure.ts`                                    | Units and scale, what a measuring line says, where its end marks and its label go.                                                    |
-| `lib/pdf-editor/signature.ts`                                  | Signatures drawn, typed and from a picture; ticks, crosses and dots; what is remembered.                                              |
-| `lib/pdf-editor/styles.ts`, `fonts.ts`                         | The palette and what a look changes; which font file is which.                                                                        |
-| `lib/pdf-editor/history.ts`, `report.ts`                       | What the undo list says and what is unsaved; the words of the check.                                                                  |
-| `lib/pdf-editor/forms.ts`, `mupdf-forms.ts`                    | What a field is, what it takes, dates, what is missing, how a list is drawn; reading and filling fields in the engine.                |
-| `lib/pdf-editor/draft.ts`, `draft-store.ts`, `mupdf-signed.ts` | What a draft is and how it is checked; where it is kept; writing changes after a signed file.                                         |
-| `lib/pdf-editor/mupdf-edit.ts`                                 | Sessions, changes, undo, flattening, the export. With `mupdf-comments.ts` and `mupdf-forms.ts`, the only files that touch the engine. |
-| `lib/pdf-merger/{protocol,pdf.worker,client}`                  | The `edit-*` requests, beside the other tools' in the one worker.                                                                     |
-| `components/pdf-editor/`                                       | The tool's page, the state hook, the toolbar, the layer over a page, the written help.                                                |
-| `public/fonts/editor/`                                         | Twelve Liberation font files and four that look written by hand (5.4 MB), with their licences. Part of the offline copy.              |
+| File                                                           | What it holds                                                                                                                           |
+| -------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| `lib/pdf-editor/objects.ts`                                    | What an added thing is, how it moves, resizes and turns, and `readObject`, which checks one.                                            |
+| `lib/pdf-editor/geometry.ts`                                   | Turned boxes, handles, hit tests, snapping, staying on the page.                                                                        |
+| `lib/pdf-editor/tools.ts`                                      | The tools: press, drag, release; nudge, paste, order, restyle; `applied`.                                                               |
+| `lib/pdf-editor/text-layout.ts`, `ink.ts`                      | Breaking lines by measured widths; thinning and smoothing a stroke.                                                                     |
+| `lib/pdf-editor/measure.ts`                                    | Units and scale, what a measuring line says, where its end marks and its label go.                                                      |
+| `lib/pdf-editor/signature.ts`                                  | Signatures drawn, typed and from a picture; ticks, crosses and dots; what is remembered.                                                |
+| `lib/pdf-editor/styles.ts`, `fonts.ts`                         | The palette and what a look changes; which font file is which.                                                                          |
+| `lib/pdf-editor/history.ts`, `report.ts`                       | What the undo list says and what is unsaved; the words of the check.                                                                    |
+| `lib/pdf-editor/forms.ts`, `mupdf-forms.ts`                    | What a field is, what it takes, dates, what is missing, how a list is drawn; reading and filling fields in the engine.                  |
+| `lib/pdf-editor/draft.ts`, `draft-store.ts`, `mupdf-signed.ts` | What a draft is and how it is checked; where it is kept; writing changes after a signed file.                                           |
+| `lib/pdf-editor/retext.ts`, `mupdf-text.ts`                    | Changing a page's own words: which look a letter takes, what is written; reading lines and fonts, taking out and writing in the engine. |
+| `lib/pdf-editor/mupdf-edit.ts`                                 | Sessions, changes, undo, flattening, the export. With `mupdf-comments.ts` and `mupdf-forms.ts`, the only files that touch the engine.   |
+| `lib/pdf-merger/{protocol,pdf.worker,client}`                  | The `edit-*` requests, beside the other tools' in the one worker.                                                                       |
+| `components/pdf-editor/`                                       | The tool's page, the state hook, the toolbar, the layer over a page, the written help.                                                  |
+| `public/fonts/editor/`                                         | Twelve Liberation font files and four that look written by hand (5.4 MB), with their licences. Part of the offline copy.                |
 
 ## Rules
 
-- Only `lib/pdf-editor/mupdf-edit.ts`, `mupdf-comments.ts` and `mupdf-forms.ts` touch the engine, and each is handed the engine, so the same code runs in the worker and in Node.
+- Only `lib/pdf-editor/mupdf-edit.ts`, `mupdf-comments.ts`, `mupdf-forms.ts`, `mupdf-signed.ts` and `mupdf-text.ts` touch the engine, and each is handed the engine, so the same code runs in the worker and in Node.
 - Nothing a file brings with it is run. A form's script is read as text at most (to learn how a date is written).
 - Never save the working copy with `garbage`, and never keep a page object across a change.
 - Never call the engine's `undo()` or `redo()`, and never save the working copy with `incremental`. A change is undone by making the working copy anew, and written after a signed file from a fresh copy.
@@ -193,7 +212,8 @@ The report (`ExportReport`) becomes the lines in the download card (`lib/pdf-edi
 
 ## Limits
 
-- Words that are already in the file cannot be changed yet (phase 4), nor can form fields be added (phase 8).
+- Form fields cannot be added yet (phase 8).
+- A change to the page's own text stays within its line: a longer line runs on to the right and nothing below it moves (paragraphs are phase 5). Letter spacing a line was set with (kerning, justification) is not kept: the new letters stand where their own widths put them. Turned text and text in scripts whose letters join can be taken out but not retyped.
 - A form's scripts are never run: a field a script would format or work out holds what was typed. XFA forms are not read. Read-only fields, push buttons and places for a certificate signature are left as they are.
 - A list's look is ours, in Helvetica: a letter that font lacks is left out of the picture of the list (the choice itself is kept). A drop-down shows the value the file keeps, which a few forms make different from what they show.
 - A date field takes three presses of Tab in some browsers, one for each part of the date.
@@ -226,7 +246,7 @@ The report (`ExportReport`) becomes the lines in the download card (`lib/pdf-edi
 1. **The workspace, and adding things.** Built.
 2. **Mark up and comment.** Built: marks on words, the highlighter pen, notes and replies, the list of comments, comments a file comes with, the PDF annotator page, stamps, call-outs and measuring lines.
 3. **Fill and sign.** Built so far: drawn, typed and pictured signatures, initials, the date, ticks and crosses, and the Sign PDF page. Also built: filling in a form's own fields, with the Fill PDF form page. Also built: saving after a signed file so that its signature stays valid, drafts kept on the device when asked, and text in the rows of boxes of forms without fields. The phase is complete.
-4. **Change the text that is there,** in the file's own font where it has the letters, with the old words gone from the file.
+4. **Change the text that is there,** in the file's own font where it has the letters, with the old words gone from the file. Built so far: a line's words are changed or taken out. Still to come: its size, colour and font, moving it, and a font of one's own.
 5. **Paragraphs, pictures in the page, links, find and replace.**
 6. **Pages and the document:** reorder, crop, numbers, watermarks, bookmarks, details. Focused pages: Add page numbers, Watermark PDF, Crop PDF.
 7. **Redact and protect:** by area, text and pattern, removed and proved. Focused page: Redact PDF.

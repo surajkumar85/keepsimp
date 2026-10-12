@@ -129,6 +129,7 @@ test("draws a signature and places it, and remembers it only when asked", async 
   await expect(remember).not.toBeChecked()
   await remember.click()
   await placeIt(page).click()
+  await expect(sheet(page)).toBeHidden()
   await changes(page, 2)
   expect(await kept(page)).toContain('"kind":"draw"')
 
@@ -178,6 +179,7 @@ test("types a signature and initials in a chosen hand, and fills in a date and t
   await expect(hand).toHaveAttribute("aria-checked", "true")
   await sheet(page).getByRole("button", { name: "Ink: Blue" }).click()
   await placeIt(page).click()
+  await expect(sheet(page)).toBeHidden()
   await changes(page, 1)
   await expect(things(page).first()).toHaveAccessibleName(
     "Text box: Ada Lovelace"
@@ -190,6 +192,7 @@ test("types a signature and initials in a chosen hand, and fills in a date and t
   await sheet(page).getByRole("radio", { name: "Type" }).click()
   await sheet(page).getByLabel("Your initials").fill("AL")
   await placeIt(page).click()
+  await expect(sheet(page)).toBeHidden()
   await changes(page, 2)
   await expect(page.getByTestId("editor-undo")).toHaveAttribute(
     "aria-label",
@@ -285,6 +288,7 @@ test("takes a signature from a photo and leaves its paper behind", async ({
   await expect(page.getByTestId("signature-picture")).toBeVisible()
   await expect(sheet(page).getByRole("alert")).toHaveCount(0)
   await placeIt(page).click()
+  await expect(sheet(page)).toBeHidden()
   await changes(page, 1)
   await expect(things(page).first()).toHaveAttribute("data-kind", "picture")
   await expect.poll(() => inkOn(page)).toBeGreaterThan(before + 20)
@@ -327,6 +331,7 @@ test("places what it adds in the part of the page that is being read", async ({
   )
   await draw(page)
   await placeIt(page).click()
+  await expect(sheet(page)).toBeHidden()
   await changes(page, 1)
   await expect(things(page).first()).toBeInViewport({ ratio: 0.99 })
 

@@ -47,6 +47,7 @@ import {
   type EditorObject,
   type TextObject,
 } from "./objects"
+import type { TextChange } from "./retext"
 import { BASELINE, combStarts, lineStart } from "./text-layout"
 import type { Change, Op } from "./tools"
 
@@ -72,7 +73,7 @@ const CHECK_EDGE = 700
  * changes are written after a signed file, and how a draft is taken up.
  */
 export interface Done {
-  kind: "things" | "comments" | "fields"
+  kind: "things" | "comments" | "fields" | "text"
   change: unknown
 }
 
@@ -103,6 +104,12 @@ export interface EditSession {
   again?: boolean
   /** Told when the working copy has become another document: after an undo it is made anew. */
   moved?: (doc: Doc) => void
+  /**
+   * A second copy of the file as it came, which is read from and never
+   * changed, with what was learnt from it: what each of the file's fonts
+   * can write (see `mupdf-text.ts`). It is opened when it is first wanted.
+   */
+  reading?: { doc: Doc; fonts: Map<number, unknown> }
 }
 
 /** A font file was asked for that the session has not been given. */
@@ -161,6 +168,8 @@ export function letGo(session: EditSession) {
   for (const font of session.fonts.values()) font.destroy()
   session.pictures.clear()
   session.fonts.clear()
+  session.reading?.doc.destroy()
+  session.reading = undefined
 }
 
 /**
@@ -1142,6 +1151,11 @@ export interface ExportReport {
   /** How many comments the file held, each reply counted, what became of them, and how many the result holds. */
   comments: { had: number; how: "keep" | "flatten" | "remove"; has: number }
   /**
+   * The page's own words: in how many steps they were changed, how many
+   * lines were written, and how many of those were read back.
+   */
+  retext: { steps: number; lines: number; found: number }
+  /**
    * Only for a signed file whose changes were written after it: whether
    * the file as it came is still there, byte for byte, at the start of the
    * result, which is what its signature covers.
@@ -1254,12 +1268,50 @@ export async function exportEdited(
     // still reads and draws the same.
     let fontsCut = false
     const fields = doc.getTrailer().get("Root", "AcroForm", "Fields")
+    // Lines of the page's own text that were changed, as they should now read.
+    const rewritten: { page: number; box: Box; text: string }[] = []
+    let retexts = 0
+    for (const step of session.steps.slice(0, position)) {
+      if (step.done.kind !== "text") continue
+      retexts++
+      for (const op of (step.done.change as TextChange).ops) {
+        // The line as it was written the time before: it begins where it
+        // began, and says what this change found there.
+        const at = rewritten.findIndex(
+          (one) =>
+            one.page === op.page &&
+            Math.abs(one.box.x - op.box.x) <= 3 &&
+            Math.abs(one.box.y - op.box.y) <= 3 &&
+            squeezed(one.text) === squeezed(op.was)
+        )
+        if (at >= 0) rewritten.splice(at, 1)
+        if (op.text.trim())
+          rewritten.push({ page: op.page, box: op.box, text: op.text })
+      }
+    }
     const textPages = [
-      ...new Set(
-        things
+      ...new Set([
+        ...things
           .filter((thing) => fontsFor(thing.object).length > 0)
-          .map((thing) => thing.page)
-      ),
+          .map((thing) => thing.page),
+        // Where a letter the file's font lacks was written in one of ours.
+        // A page whose lines were written in the file's own fonts alone
+        // brings no font of ours, and the file's fonts are left whole.
+        ...[...new Set(rewritten.map((line) => line.page))].filter((page) =>
+          withPage(doc, page, (opened) => {
+            const fonts = opened
+              .getObject()
+              .getInheritable("Resources")
+              .get("Font")
+            let ours = false
+            if (fonts.isDictionary())
+              fonts.forEach((_font, name) => {
+                if (/^KS[a-z]+$/.test(String(name))) ours = true
+              })
+            return ours
+          })
+        ),
+      ]),
     ]
     if (textPages.length && !(fields.isArray() && fields.length > 0)) {
       // Both sides of the comparison are read from the same written file, so
@@ -1322,6 +1374,12 @@ export async function exportEdited(
       const letters = pageLetters.get(page)!
       if (wordsOf(lettersIn(object)).every((word) => letters.includes(word)))
         found++
+    }
+    let reread = 0
+    for (const { page, text } of rewritten) {
+      if (!pageLetters.has(page))
+        pageLetters.set(page, textOf(doc, page).replace(/\s+/g, ""))
+      if (pageLetters.get(page)!.includes(text.replace(/\s+/g, ""))) reread++
     }
     const untouched = { checked: 0, differ: [] as number[] }
     const others = Array.from({ length: pages }, (_, page) => page).filter(
@@ -1396,6 +1454,7 @@ export async function exportEdited(
         fontsCut,
         locked: Boolean(lock),
         comments: { had: commented.count, how, has: commentPages(doc).count },
+        retext: { steps: retexts, lines: rewritten.length, found: reread },
         fields: { had: form.values.size, how: fieldsHow, ...fieldsRead },
       },
     }

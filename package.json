@@ -71,6 +71,7 @@
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.13.0",
+    "@cantoo/fontkit": "^2.0.12",
     "@cantoo/pdf-lib": "^2.11.1",
     "@playwright/test": "^1.64.0",
     "@signpdf/signer-p12": "^3.3.0",

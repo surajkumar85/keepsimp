@@ -29,7 +29,9 @@ import { shown, turnHandle, turns } from "@/lib/pdf-editor/tools"
 import { cn } from "cn"
 import { CommentMarks, CommentSpots } from "./comment-layer"
 import { FieldSpots } from "./field-layer"
+import { LineSpots } from "./retext-layer"
 import type { Comments } from "./use-comments"
+import type { Retext } from "./use-retext"
 import { laidOut, pagePoint, type Editor } from "./use-editor"
 
 const points = (list: readonly Point[]) =>
@@ -124,9 +126,11 @@ export function PageLayer({
   size,
   scale,
   comments,
+  retext,
 }: {
   editor: Editor
   comments: Comments
+  retext: Retext
   /** Counted from 0. */
   page: number
   size: Size
@@ -278,10 +282,18 @@ export function PageLayer({
         scale={scale}
         idle={!drawing && !gesture && !mine}
       />
+      {retext.on && (
+        <LineSpots
+          editor={editor}
+          retext={retext}
+          page={page}
+          version={editor.versions[page] ?? 0}
+        />
+      )}
       <FieldSpots
         editor={editor}
         page={page}
-        idle={!drawing && !gesture && !mine}
+        idle={!drawing && !gesture && !mine && !retext.on}
       />
       {objects.map((object) => {
         const corners = cornersOf(object.box, object.rotation)

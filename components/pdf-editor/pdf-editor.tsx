@@ -16,6 +16,7 @@ import {
   IconCircleCheck,
   IconDownload,
   IconEdit,
+  IconPencil,
   IconFileTypePdf,
   IconLock,
   IconPlayerStop,
@@ -68,6 +69,7 @@ import { EditorToolbar } from "./toolbar"
 import { useComments } from "./use-comments"
 import { useDraft, type DraftStatus } from "./use-draft"
 import { useEditor } from "./use-editor"
+import { useRetext } from "./use-retext"
 
 const INPUT_ID = "editor-file"
 const ACCEPT = "application/pdf,.pdf"
@@ -270,7 +272,7 @@ const SIGN_ABILITIES = [
 const DOORS: Record<EditorMode, { heading: string; body: string }> = {
   edit: {
     heading: "Drop a PDF to edit",
-    body: "Add text, pictures, shapes and drawings to any page, mark words, place notes and sign, then download the result. You can also paste a file with ⌘V or Ctrl+V.",
+    body: "Change the words that are there, add text, pictures, shapes and drawings, mark words, place notes and sign, then download the result. You can also paste a file with ⌘V or Ctrl+V.",
   },
   annotate: {
     heading: "Drop a PDF to annotate",
@@ -297,6 +299,11 @@ const FOCUSED: Partial<Record<EditorMode, string>> = {
 const ABILITIES = [
   {
     icon: IconTypography,
+    title: "Change the words that are there",
+    text: "Click a line and type. The old words are taken out of the file and the new ones are written in the line's own font, size and colour.",
+  },
+  {
+    icon: IconPencil,
     title: "Add text, pictures and shapes",
     text: "Type anywhere on a page, place pictures, and draw boxes, ellipses, lines, arrows and freehand. Everything can be moved, resized, turned and undone.",
   },
@@ -350,6 +357,7 @@ function Workspace({
   )
   const editor = useEditor(client, doc.id, opened, onPicture)
   const comments = useComments(editor, mode === "annotate" ? "highlight" : null)
+  const retext = useRetext(editor, comments)
   /** A page opened for one job shows the tools of that job alone until the others are asked for. */
   const [allTools, setAllTools] = useState(false)
   /** The window a signature is made in is open. A page opened for signing begins with it. */
@@ -655,6 +663,15 @@ function Workspace({
       setSigning(true)
       return used()
     }
+    // E changes the words that are there; Escape puts that down again.
+    if (plain && letter === "e") {
+      retext.setOn(!retext.on)
+      return used()
+    }
+    if (event.key === "Escape" && retext.on) {
+      retext.setOn(false)
+      return used()
+    }
     // Any other tool's key puts a comment tool down.
     if (plain && comments.tool && "vtboladckrqx".includes(letter))
       comments.setTool(null)
@@ -709,6 +726,7 @@ function Workspace({
         <EditorToolbar
           editor={editor}
           comments={comments}
+          retext={retext}
           first={mode === "annotate" ? "comments" : "things"}
           focus={
             allTools
@@ -777,6 +795,7 @@ function Workspace({
         <PageLayer
           editor={editor}
           comments={comments}
+          retext={retext}
           page={entry.page}
           size={entry.size}
           scale={scale}
@@ -1521,8 +1540,7 @@ export function PdfEditor({ mode = "edit" }: { mode?: EditorMode }) {
                 >
                   Fill PDF form
                 </Link>{" "}
-                for forms. Changing the words that are already in a file comes
-                in a later version.
+                for forms.
               </>
             )}
           </p>

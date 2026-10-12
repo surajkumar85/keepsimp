@@ -111,6 +111,13 @@ export async function exportAfter(
         fontsCut: false,
         locked: false,
         comments: { had: comments, how: "keep", has },
+        retext: {
+          steps: session.steps
+            .slice(0, position)
+            .filter((step) => step.done.kind === "text").length,
+          lines: 0,
+          found: 0,
+        },
         fields: { had: form.values.size, how: "keep", same, left },
         signature: { intact: beginsWith(bytes, session.original) },
       },

@@ -191,11 +191,16 @@ export const tools: readonly Tool[] = [
   {
     id: "pdf-editor",
     name: "PDF editor",
-    description: "Add text, pictures, shapes and drawings to any PDF.",
+    description:
+      "Change the words of a PDF, and add text, pictures, shapes and drawings.",
     category: "document",
     keywords: [
       "pdf",
       "edit",
+      "edit text",
+      "change text",
+      "correct",
+      "typo",
       "write",
       "type",
       "text",

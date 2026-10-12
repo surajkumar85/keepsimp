@@ -97,7 +97,7 @@ export const overviewPost: BlogPost = {
       title: "PDF editor: write and draw on any page.",
       paragraphs: [
         "Type on a form that has no fields to fill, add a date or a name, place a picture, or mark a page with boxes, arrows and a pen. Every change is made in the real file and can be undone, and the page you see is the page you will download.",
-        "The text you add is real text in a font that travels inside the file, so it looks the same everywhere and can be searched. Before the download, the result is read back and checked. Changing the words that are already in a file comes in a later version.",
+        "The text you add is real text in a font that travels inside the file, so it looks the same everywhere and can be searched. Before the download, the result is read back and checked. It also changes the words that are already there, a line at a time, in the line's own font, and the old words are really taken out of the file.",
         "It signs and fills in forms, too: draw your signature, type it or use a photo of it; type into a form's fields, tick its boxes and choose from its lists; and fill in a form that has no fields like paper.",
         "The same editor marks up and comments: highlight, underline or strike out words by dragging across them, place notes, and reply to the comments a file already has. These are real PDF comments, so the next person sees them as comments in their own program; for a final copy they can be drawn into the page or left out.",
       ],
@@ -496,7 +496,8 @@ export const editPost: BlogPost = {
       title: "What it does today, and what it does not.",
       paragraphs: [
         "The editor adds things to pages: text, pictures, boxes, ellipses, lines, arrows and freehand drawing. Everything you add can be moved, resized, turned, restyled, copied and deleted, and every step can be undone, all the way back to the file as you opened it.",
-        "It also marks and comments, signs, and fills in a form's fields, each of which has a guide of its own. It does not yet change the words that are already in a file. That is being built and will arrive as a later version of the same editor. We would rather say so here than let you find out halfway through a job.",
+        "It also marks and comments, signs, and fills in a form's fields, each of which has a guide of its own.",
+        "And it changes the words that are already in a file. Choose Change text, click a line and type. The old letters are taken out of the page, not covered, and the new ones are written in the very font the line was written in, at the same size, colour and place. A file often carries only the letters it uses; a letter its font does not have is set in the closest font the editor has, and you are told which before you press Enter. What it does not do yet: a change stays within its line, so a longer sentence runs on to the right instead of pushing the next line down; and text that is turned, or in scripts whose letters join, can be taken out but not retyped. We would rather say so here than let you find out halfway through a job.",
       ],
       links: [
         { label: "Open the PDF editor", href: "/dashboard/pdf-editor/" },

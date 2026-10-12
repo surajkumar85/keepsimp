@@ -41,6 +41,7 @@ import {
   type Signature,
   type SignatureSlot,
 } from "@/lib/pdf-editor/signature"
+import { standIns, type PageLine } from "@/lib/pdf-editor/retext"
 import { breakLines, combLine } from "@/lib/pdf-editor/text-layout"
 import {
   applied,
@@ -158,6 +159,7 @@ export function useEditor(
   const queue = useRef<Promise<unknown>>(Promise.resolve())
   const fonts = useRef(new Map<string, Promise<void>>())
   const lettersRead = useRef(new Map<string, Promise<LetterLine[]>>())
+  const linesRead = useRef(new Map<string, Promise<PageLine[]>>())
   /** How many changes are in force this moment, ahead of what has been drawn. */
   const position = useRef((opened.history ?? emptyHistory).position)
   /** What the file last said its pages hold. */
@@ -456,6 +458,47 @@ export function useEditor(
       return reading
     },
     [client, file]
+  )
+
+  /** The lines of a page's own text as they can be changed, read once for each state of the page. */
+  const lines = useCallback(
+    (page: number, version: number) => {
+      const key = `${page}/${version}`
+      let reading = linesRead.current.get(key)
+      if (!reading) {
+        reading = (async () =>
+          (await client.current?.linesOf(file, page)) ?? [])()
+        linesRead.current.set(key, reading)
+      }
+      return reading
+    },
+    [client, file]
+  )
+
+  /**
+   * Change what a line of a page says; with nothing, the line is taken out.
+   * The fonts that stand in for letters the line's own font lacks are made
+   * ready first. It is seen when the file has answered.
+   */
+  const retext = useCallback(
+    async (page: number, line: PageLine, text: string) => {
+      try {
+        if (standIns(line, text).length)
+          for (const key of new Set(line.styles.map((style) => style.standIn)))
+            await ensureFont(key)
+      } catch {
+        setProblem("The font could not be loaded. Check your connection.")
+        return
+      }
+      flush()
+      return enqueue((worker) =>
+        worker.editText(file, {
+          label: text ? "Change text" : "Take out text",
+          ops: [{ do: "retext", page, box: line.box, was: line.text, text }],
+        })
+      )
+    },
+    [ensureFont, flush, enqueue, file]
   )
 
   const undo = useCallback(() => {
@@ -999,6 +1042,8 @@ export function useEditor(
     fillField,
     comment,
     letters,
+    lines,
+    retext,
     versions,
     history,
     state,

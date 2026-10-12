@@ -12,6 +12,7 @@ import { readCommentOp } from "./comments"
 import { readFieldOp } from "./forms"
 import type { Step } from "./mupdf-edit"
 import { fontsFor, readObject } from "./objects"
+import { readTextOp } from "./retext"
 import type { Op } from "./tools"
 
 /** The largest file a draft is kept of. Larger ones are edited as before, without a draft. */
@@ -61,6 +62,7 @@ const readers = {
   things: readOp,
   comments: readCommentOp,
   fields: readFieldOp,
+  text: readTextOp,
 } as const
 
 /** A step as it comes out of storage, with every change in it checked, or null when it is not one. */

@@ -49,6 +49,8 @@ import type { LetterLine } from "@/lib/pdf-editor/comments"
 import { applyFields, fieldsOn, formFacts } from "@/lib/pdf-editor/mupdf-forms"
 import { readDraft } from "@/lib/pdf-editor/draft"
 import { canWriteAfter, exportAfter } from "@/lib/pdf-editor/mupdf-signed"
+import { applyText, linesOn } from "@/lib/pdf-editor/mupdf-text"
+import type { PageLine } from "@/lib/pdf-editor/retext"
 import {
   compressCustom,
   compressPdf,
@@ -672,6 +674,38 @@ async function editField(request: Extract<PdfRequest, { type: "edit-field" }>) {
   }
 }
 
+async function editText(request: Extract<PdfRequest, { type: "edit-text" }>) {
+  const session = editing.get(request.id)
+  try {
+    if (!session) throw new Error(EDIT_FAILED)
+    const pages = applyText(await engine, session, request.change)
+    post({
+      type: "edit-news",
+      request: request.request,
+      news: newsOf(session, pages),
+    })
+  } catch (error) {
+    post({
+      type: "edit-news",
+      request: request.request,
+      news: null,
+      message: readable(error, EDIT_FAILED),
+    })
+  }
+}
+
+async function editLines(request: Extract<PdfRequest, { type: "edit-lines" }>) {
+  const session = editing.get(request.id)
+  let lines: PageLine[] | null = null
+  try {
+    if (session && request.page < session.doc.countPages())
+      lines = linesOn(await engine, session, request.page)
+  } catch {
+    // The page says that the words of this page could not be read.
+  }
+  post({ type: "edit-lines", request: request.request, lines })
+}
+
 function editLetters(request: Extract<PdfRequest, { type: "edit-letters" }>) {
   const session = editing.get(request.id)
   let lines: LetterLine[] | null = null
@@ -1041,6 +1075,10 @@ self.onmessage = (event: MessageEvent<PdfRequest>) => {
     enqueue({ run: () => editComment(request) })
   else if (request.type === "edit-field")
     enqueue({ run: () => editField(request) })
+  else if (request.type === "edit-text")
+    enqueue({ run: () => editText(request) })
+  else if (request.type === "edit-lines")
+    enqueue({ run: () => editLines(request) })
   else if (request.type === "edit-letters")
     enqueue({ run: async () => editLetters(request) })
   else if (request.type === "edit-step")

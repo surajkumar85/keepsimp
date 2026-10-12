@@ -3,7 +3,7 @@ import { ToolTutorial, type TutorialContent } from "@/components/tool-tutorial"
 const content: TutorialContent = {
   name: "How to use the KeepSimp PDF editor",
   description:
-    "Add text, pictures, shapes and drawings to a PDF in your browser. Every change is made in the real file and can be undone, the result is checked before you download it, and nothing is uploaded.",
+    "Change the words of a PDF and add text, pictures, shapes and drawings, in your browser. Every change is made in the real file and can be undone, the result is checked before you download it, and nothing is uploaded.",
   intro:
     "Follow the steps below. Every tool and option is explained underneath.",
   steps: [
@@ -14,6 +14,10 @@ const content: TutorialContent = {
     {
       title: "Pick a tool",
       text: "The tools are in the row under the title. The first group adds things to a page: text, box, ellipse, line, arrow, draw, cover, stamp, call-out, measure and a picture. The second marks and comments: highlight, underline, strike out, squiggle, a highlighter pen and notes. Each has a letter on the keyboard, shown when you rest the pointer on it.",
+    },
+    {
+      title: "Change the words that are there",
+      text: "Choose Change text (E). Every line of the page gets a thin frame. Click one, type, and press Enter: the old words are taken out of the file and the new ones are written in the same font, size and colour. Delete takes a selected line out.",
     },
     {
       title: "Add what you need",
@@ -47,6 +51,11 @@ const content: TutorialContent = {
       term: "Cover",
       detail:
         "A filled box that hides what is under it. It only covers: the words underneath are still in the file and can be copied out by anyone. Do not use it to hide private information. Redaction, which removes what is under it, comes in a later version.",
+    },
+    {
+      term: "Change text",
+      detail:
+        "For the words a file already has. A line is changed at a time, and typed letters take the look of the letter before them, so a word typed after bold words is bold. The line's own font is used for every letter it has. Files often carry only the letters they use; a letter the font lacks is set in the closest font the editor has, and a note under the line names such letters while you type. A change stays within its line: a longer line runs on to the right. Text that is turned, or in a script whose letters join (Arabic, Hebrew, the scripts of India), can be taken out but not retyped. The old words are removed from the file, not covered.",
     },
     {
       term: "Boxes",

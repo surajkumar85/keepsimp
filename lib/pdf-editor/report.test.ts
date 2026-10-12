@@ -11,6 +11,7 @@ const report = (change: Partial<ExportReport> = {}): ExportReport => ({
   locked: false,
   comments: { had: 0, how: "keep", has: 0 },
   fields: { had: 0, how: "keep", same: 0, left: 0 },
+  retext: { steps: 0, lines: 0, found: 0 },
   ...change,
 })
 
@@ -246,5 +247,39 @@ describe("what became of a signature", () => {
       text: "The signed part of the file is not what it was. Its signature will not hold; read the result before you rely on it.",
       good: false,
     })
+  })
+})
+
+describe("what became of the page's own text", () => {
+  const told = (retext: ExportReport["retext"]) =>
+    everyLine(report({ added: 0, retext }))
+
+  it("says where it was changed and that the new lines were read back", () => {
+    expect(told({ steps: 1, lines: 1, found: 1 })).toEqual([
+      {
+        text: "The page's own text was changed in 1 place. The old words are no longer in the file, and the line you wrote was read back from the result.",
+        good: true,
+      },
+    ])
+    expect(told({ steps: 1200, lines: 3, found: 3 })[0].text).toBe(
+      "The page's own text was changed in 1,200 places. The old words are no longer in the file, and all 3 lines you wrote were read back from the result."
+    )
+  })
+
+  it("says so when lines were only taken out", () => {
+    expect(told({ steps: 2, lines: 0, found: 0 })[0]).toEqual({
+      text: "The page's own text was changed in 2 places. What you took out is no longer in the file.",
+      good: true,
+    })
+  })
+
+  it("warns when a line that was written is not read back", () => {
+    expect(told({ steps: 3, lines: 3, found: 1 })[0]).toEqual({
+      text: "2 of the 3 lines you changed could not be read back from the result. Read the result before you rely on it.",
+      good: false,
+    })
+    expect(told({ steps: 1, lines: 1, found: 0 })[0].text).toBe(
+      "1 of the 1 line you changed could not be read back from the result. Read the result before you rely on it."
+    )
   })
 })
