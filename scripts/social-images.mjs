@@ -80,7 +80,7 @@ const cards = [
   ],
   [
     "free-online-tools-no-upload",
-    "Ten free tools. No uploads.",
+    "Nine free tools. No uploads.",
     "PDFs, images, GIFs and JSON, all in your browser.",
     "/images/tools-overview.svg",
   ],

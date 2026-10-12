@@ -157,7 +157,15 @@ test("marks words in four ways, and downloads comments that other software reads
   page,
 }) => {
   await open(page, await plain())
-  // The annotator opens with the highlighter in hand, and its tools come first.
+  // The annotator opens with the highlighter in hand, and shows the tools
+  // for marking up alone; the editor's others are one press away.
+  await expect(pick(page, "Highlight")).toHaveAttribute("aria-pressed", "true")
+  await expect(pick(page, "Box")).toHaveCount(0)
+  await expect(pick(page, "Stamp")).toHaveCount(0)
+  await page.getByTestId("all-tools").click()
+  await expect(pick(page, "Box")).toBeVisible()
+  await expect(pick(page, "Stamp")).toBeVisible()
+  await expect(page.getByTestId("all-tools")).toHaveCount(0)
   await expect(pick(page, "Highlight")).toHaveAttribute("aria-pressed", "true")
   await expect(page.getByTestId("editor-hint")).toContainText(
     "Drag across words"
@@ -535,6 +543,16 @@ test("the written help and the guide are there, and the editor has the same tool
   await expect(
     page.getByRole("link", { name: "Read the step-by-step guide" })
   ).toHaveAttribute("href", "/blog/annotate-pdfs-without-uploading/")
+
+  // The annotator is a door into the editor, and says so; it is not a tool of its own in the list.
+  await expect(
+    page.getByRole("link", { name: "PDF editor", exact: true })
+  ).toHaveAttribute("href", "/dashboard/pdf-editor/")
+  await page.goto("/dashboard/?category=document")
+  await expect(page.getByTestId("tool-card")).toHaveCount(4)
+  await expect(
+    page.getByTestId("tool-card").filter({ hasText: "PDF annotator" })
+  ).toHaveCount(0)
 
   // In the editor the comment tools follow the others, and nothing is in hand to begin with.
   await page.goto("/dashboard/pdf-editor/")

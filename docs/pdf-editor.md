@@ -34,7 +34,7 @@ Two families live on a page. **Things** (text boxes, pictures, shapes) become pa
 - **Comments a file comes with** are listed with the new ones and can be read, answered, given other words and deleted. Marks on words, notes and pen strokes can be given another colour. Any other kind (a stamp, a call-out, a shape from another program) is shown and answered, and keeps the look it came with.
 - **Picking:** a press on a comment picks it (a dashed frame), and the second row of the bar offers delete, "show in the list" and colours. Delete removes it, Enter opens its words in the list, Escape lets go. One thing is in hand at a time: picking a comment lets go of a selected thing, and the other way round.
 - **Download** asks what becomes of comments when the file has any: **kept as comments** (the usual), **part of the page** (drawn in for good; a note keeps its icon and its words are no longer shown), or **left out** (also the ones the file came with).
-- **The annotator** (`/dashboard/pdf-annotator/`, `mode="annotate"`) opens with the highlighter in hand and the comment tools first in the row. It has its own title, description, help and article.
+- **The annotator** (`/dashboard/pdf-annotator/`, `mode="annotate"`) is a door into the editor, not a second tool. It opens with the highlighter in hand and shows the tools for marking up alone (the marks, the pen, notes, select and the list of comments); "All tools" brings the rest for as long as the file is open, and a tool taken in hand by its key shows them too. It has its own title, description, help and article.
 
 ### How comments are built
 
@@ -58,6 +58,12 @@ These three are **things**, like text boxes and shapes: they are moved, resized,
 - **Measuring line** (R): a line with a mark across each end and its length written over its middle, turned with the line and never upside down (an upright one is read from below). Units: mm, cm, m, in, ft, pt. A scale of N measures a drawing made at one to N. The label is worked out from the ends each time the line is drawn (`measured`), so it cannot disagree with the line. It is a line for every purpose of the tools (`isLine`): two ends, no turning handle.
 - **Fonts:** a stamp needs the bold sans and a measuring line the regular sans, whether or not any text box uses them. `fontsFor` says which fonts a thing is drawn with; the page loads them before a change is sent, and the download counts such pages among those whose fonts are cut and checked.
 - **Handles** are now "grips" (`Grip`): one of the eight handles, or `tip`. `handleSpot` says where each is, for the tools and the screen alike.
+
+## One editor, several doors
+
+There is one PDF editor. A page such as the annotator is a **door**: a catalogue entry with `partOf: "pdf-editor"`. A door has an address, a title, a description, written help and an article of its own, is in the sitemap and the offline copy, and is found by the search in the header. It is not a card on the tools page, not counted in the sidebar and not an app shortcut (`listed` in `lib/catalogue.ts` is the tools without their doors), and the article that goes through every tool names it under the editor. Each page says what it is and links to the other.
+
+A door must be **focused**: it shows the tools of its job and puts the others one press away. A door that offered everything the editor does was a second copy of the editor in the list, which is what this replaced. The doors planned for later phases (Sign PDF, Fill PDF form, Redact PDF and the rest) are made the same way.
 
 ## How it is built
 

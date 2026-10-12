@@ -4,7 +4,12 @@ import Link from "next/link"
 import { BrandLogo } from "@/components/brand-logo"
 import { usePathname, useSearchParams } from "next/navigation"
 import { IconLock, IconPalette, IconX } from "@tabler/icons-react"
-import { categories, isActivePath, parseCategory, tools } from "@/lib/catalogue"
+import {
+  categories,
+  isActivePath,
+  listed,
+  parseCategory,
+} from "@/lib/catalogue"
 import { CategoryIcon } from "@/components/category-icon"
 import { Button } from "@/components/ui/button"
 import {
@@ -94,8 +99,8 @@ export function AppSidebar() {
                       <span>{category.label}</span>
                       <span className="ml-auto text-xs text-muted-foreground">
                         {category.id === "all"
-                          ? tools.length
-                          : tools.filter(
+                          ? listed.length
+                          : listed.filter(
                               (tool) => tool.category === category.id
                             ).length}
                       </span>

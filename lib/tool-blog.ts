@@ -3,7 +3,7 @@ import type { BlogPost } from "./blog"
 /** The post that goes through every tool on the site, with a link to each. */
 export const overviewPost: BlogPost = {
   slug: "free-online-tools-no-upload",
-  title: "Ten free tools that never ask for your files.",
+  title: "Nine free tools that never ask for your files.",
   searchTitle:
     "Free online PDF, image and JSON tools that work without uploading",
   description:
@@ -28,7 +28,7 @@ export const overviewPost: BlogPost = {
   readingTime: "5 min read",
   image: "/images/tools-overview.svg",
   imageAlt:
-    "Ten tiles, one for each KeepSimp tool: five for PDFs, four for images and animations, and one for JSON",
+    "Nine tiles, one for each KeepSimp tool: four for PDFs, four for images and animations, and one for JSON",
   tool: "",
   intro:
     "Most online tools work the same way: you upload a file, wait, and download the result, often after a sign-up or a limit of two files a day. KeepSimp works differently. Each tool runs inside your browser, on your own computer or phone, so the file never leaves it. There is no account, no watermark and no daily limit. Here is every tool we have today, what it is good for, and where to read more.",
@@ -98,6 +98,7 @@ export const overviewPost: BlogPost = {
       paragraphs: [
         "Type on a form that has no fields to fill, add a date or a name, place a picture, or mark a page with boxes, arrows and a pen. Every change is made in the real file and can be undone, and the page you see is the page you will download.",
         "The text you add is real text in a font that travels inside the file, so it looks the same everywhere and can be searched. Before the download, the result is read back and checked. Changing the words that are already in a file comes in a later version.",
+        "The same editor marks up and comments: highlight, underline or strike out words by dragging across them, place notes, and reply to the comments a file already has. These are real PDF comments, so the next person sees them as comments in their own program; for a final copy they can be drawn into the page or left out.",
       ],
       links: [
         { label: "Edit a PDF", href: "/dashboard/pdf-editor/" },
@@ -105,17 +106,10 @@ export const overviewPost: BlogPost = {
           label: "Guide: write on a PDF without sending it anywhere",
           href: "/blog/edit-pdfs-without-uploading/",
         },
-      ],
-    },
-    {
-      id: "pdf-annotator",
-      title: "PDF annotator: mark it up and comment.",
-      paragraphs: [
-        "For reading with a pen in hand. Highlight, underline or strike out words by dragging across them, place notes, and reply to the comments a file already has. On a scanned page, a highlighter pen marks anything.",
-        "These are real PDF comments, so the next person sees them as comments in their own program. For a final copy they can be drawn into the page instead, or left out altogether.",
-      ],
-      links: [
-        { label: "Annotate a PDF", href: "/dashboard/pdf-annotator/" },
+        {
+          label: "Only marking up? Open it as the PDF annotator",
+          href: "/dashboard/pdf-annotator/",
+        },
         {
           label: "Guide: mark up a PDF without sending it anywhere",
           href: "/blog/annotate-pdfs-without-uploading/",

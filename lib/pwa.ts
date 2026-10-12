@@ -1,5 +1,5 @@
 import type { MetadataRoute } from "next"
-import { tools } from "@/lib/catalogue"
+import { listed } from "@/lib/catalogue"
 
 /**
  * sRGB exports of the light and dark `background` tokens. A web manifest and
@@ -38,8 +38,9 @@ export function webManifest(): MetadataRoute.Manifest {
       icon("icon-maskable-192.png", 192, "maskable"),
       icon("icon-maskable-512.png", 512, "maskable"),
     ],
-    // Long-pressing the icon offers the working tools; planned ones stay out.
-    shortcuts: tools
+    // Long-pressing the icon offers the working tools; planned ones stay
+    // out, and so do the doors into a tool that is already there.
+    shortcuts: listed
       .filter((tool) => tool.status === "available")
       .map((tool) => ({
         name: tool.name,

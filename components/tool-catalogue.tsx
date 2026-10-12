@@ -9,6 +9,7 @@ import { cn } from "cn"
 import {
   categories,
   filterTools,
+  listed,
   parseCategory,
   type Tool,
 } from "@/lib/catalogue"
@@ -113,7 +114,8 @@ function Group({
  */
 export function ToolCatalogue() {
   const category = parseCategory(useSearchParams().get("category"))
-  const results = filterTools("", category)
+  // A door into a tool is not a tool of its own: it is reached from the tool it opens, and by searching.
+  const results = filterTools("", category, listed)
   const ready = results.filter((tool) => tool.status === "available")
   const planned = results.filter((tool) => tool.status !== "available")
   const selected = categories.find((entry) => entry.id === category)!

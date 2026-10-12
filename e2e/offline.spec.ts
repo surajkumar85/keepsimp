@@ -121,7 +121,7 @@ test("every tool works offline after one visit", async ({ page }) => {
 
   // A full page load, then a move between tools from a link.
   await page.reload()
-  await expect(page.getByTestId("tool-card")).toHaveCount(16)
+  await expect(page.getByTestId("tool-card")).toHaveCount(15)
   await page
     .getByTestId("tool-card")
     .getByRole("link", { name: "Image compressor" })

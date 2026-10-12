@@ -5,7 +5,30 @@ import {
   parseCategory,
   tools,
   type Tool,
+  listed,
 } from "./catalogue"
+
+describe("doors", () => {
+  it("lists every tool once, without the pages that open another tool for one job", () => {
+    const doors = tools.filter((tool) => tool.partOf)
+    expect(doors.map((tool) => tool.id)).toEqual(["pdf-annotator"])
+    expect(listed).toHaveLength(tools.length - doors.length)
+    expect(listed.some((tool) => tool.partOf)).toBe(false)
+    // A door opens a tool that is there, is ready, and is of the same kind.
+    for (const door of doors) {
+      const opens = listed.find((tool) => tool.id === door.partOf)
+      expect(opens, door.id).toBeDefined()
+      expect(opens!.status).toBe("available")
+      expect(opens!.category).toBe(door.category)
+    }
+  })
+
+  it("still finds a door by searching", () => {
+    expect(filterTools("highlight", "all").map((tool) => tool.id)).toContain(
+      "pdf-annotator"
+    )
+  })
+})
 
 describe("catalogue search", () => {
   it("returns the full catalogue for whitespace without changing its order", () => {

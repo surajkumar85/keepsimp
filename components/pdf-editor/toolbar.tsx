@@ -20,6 +20,7 @@ import {
   IconBubbleText,
   IconCircle,
   IconCopy,
+  IconDots,
   IconHighlight,
   IconItalic,
   IconLine,
@@ -368,11 +369,19 @@ export function EditorToolbar({
   editor,
   comments,
   first = "things",
+  focused = false,
+  onAllTools,
 }: {
   editor: Editor
   comments: Comments
   /** Which tools come first in the row: those that add things, or those that comment. */
   first?: "things" | "comments"
+  /**
+   * Only the tools of the job the page was opened for are shown, with a
+   * button for the rest. A tool that is in hand is always shown.
+   */
+  focused?: boolean
+  onAllTools?: () => void
 }) {
   const ids = useId()
   const picker = useRef<HTMLInputElement>(null)
@@ -430,6 +439,8 @@ export function EditorToolbar({
       </Button>
     </>
   )
+  // Focused on marking up, the tools that add things are put away, unless one of them is in hand.
+  const narrow = focused && (comments.tool !== null || state.tool === "select")
   const marks = COMMENT_TOOLS.map(({ tool, label, key, icon }) => (
     <Toggle
       key={tool}
@@ -483,9 +494,41 @@ export function EditorToolbar({
           <IconArrowForwardUp aria-hidden="true" />
         </Button>
         <Rule />
-        {first === "comments" ? marks : things}
-        <Rule />
-        {first === "comments" ? things : marks}
+        {narrow ? (
+          <>
+            {marks}
+            <Rule />
+            <Toggle
+              label="Select"
+              shortcut="V"
+              pressed={!comments.tool}
+              onPress={() => {
+                comments.setTool(null)
+                editor.setTool("select")
+              }}
+            >
+              <IconPointer aria-hidden="true" />
+            </Toggle>
+            <Button
+              type="button"
+              variant="ghost"
+              aria-label="Show all the editor's tools"
+              title="Text, pictures, shapes, stamps and more"
+              onClick={onAllTools}
+              className="h-11 shrink-0 gap-1.5 px-2.5 md:h-9"
+              data-testid="all-tools"
+            >
+              <IconDots aria-hidden="true" />
+              <span className="text-xs">All tools</span>
+            </Button>
+          </>
+        ) : (
+          <>
+            {first === "comments" ? marks : things}
+            <Rule />
+            {first === "comments" ? things : marks}
+          </>
+        )}
         <Rule />
         <Button
           type="button"

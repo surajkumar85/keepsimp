@@ -1,5 +1,5 @@
 import { expect, it } from "vitest"
-import { tools } from "./catalogue"
+import { listed } from "./catalogue"
 import { themeColors, webManifest } from "./pwa"
 
 it("describes an installable app that opens on the tools", () => {
@@ -31,11 +31,15 @@ it("offers the sizes launchers need, as plain and maskable icons", () => {
 
 it("lists only working tools as shortcuts", () => {
   const shortcuts = webManifest().shortcuts!
-  const available = tools.filter((tool) => tool.status === "available")
+  // Every tool once: a door into a tool is not a shortcut beside it.
+  const available = listed.filter((tool) => tool.status === "available")
   expect(shortcuts.map((shortcut) => shortcut.url)).toEqual(
     available.map((tool) => `/dashboard/${tool.id}/`)
   )
-  expect(shortcuts).toHaveLength(10)
+  expect(shortcuts).toHaveLength(9)
+  expect(shortcuts.map((shortcut) => shortcut.name)).not.toContain(
+    "PDF annotator"
+  )
   expect(shortcuts.map((shortcut) => shortcut.name)).not.toContain(
     "Video converter"
   )

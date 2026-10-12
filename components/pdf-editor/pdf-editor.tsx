@@ -1,5 +1,6 @@
 "use client"
 
+import Link from "next/link"
 import {
   useCallback,
   useEffect,
@@ -187,6 +188,8 @@ function Workspace({
   const ids = useId()
   const editor = useEditor(client, doc.id, opened)
   const comments = useComments(editor, mode === "annotate" ? "highlight" : null)
+  /** The annotator shows the marking tools alone until the others are asked for. */
+  const [allTools, setAllTools] = useState(false)
   const commentCount = countComments(editor.comments)
   const [commentsHow, setCommentsHow] =
     useState<(typeof COMMENT_CHOICES)[number]["value"]>("keep")
@@ -483,6 +486,8 @@ function Workspace({
           editor={editor}
           comments={comments}
           first={mode === "annotate" ? "comments" : "things"}
+          focused={mode === "annotate" && !allTools}
+          onAllTools={() => setAllTools(true)}
         />
         {editor.problem && (
           <p
@@ -1063,8 +1068,32 @@ export function PdfEditor({ mode = "edit" }: { mode?: EditorMode }) {
             )}
           </ul>
           <p className="text-xs text-muted-foreground">
-            Changing the words that are already in a file, forms and signatures
-            come in later versions.
+            {mode === "annotate" ? (
+              <>
+                This is the{" "}
+                <Link
+                  href="/dashboard/pdf-editor/"
+                  className="underline underline-offset-4 hover:text-foreground"
+                >
+                  PDF editor
+                </Link>
+                , opened for marking up. Its other tools (text, pictures,
+                shapes, stamps) are behind “All tools”.
+              </>
+            ) : (
+              <>
+                Only here to highlight and comment? The{" "}
+                <Link
+                  href="/dashboard/pdf-annotator/"
+                  className="underline underline-offset-4 hover:text-foreground"
+                >
+                  PDF annotator
+                </Link>{" "}
+                opens this editor with just those tools. Changing the words that
+                are already in a file, forms and signatures come in later
+                versions.
+              </>
+            )}
           </p>
         </div>
       </div>

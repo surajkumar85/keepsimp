@@ -15,6 +15,13 @@ export type Tool = {
   category: Exclude<Category, "all">
   keywords: readonly string[]
   status: "planned" | "available"
+  /**
+   * The tool this is a door into, by its id. A door is a page of its own
+   * that opens another tool ready for one job: it has an address, a title
+   * and an article, and can be found by searching, but it is not listed as
+   * a tool beside the one it opens.
+   */
+  partOf?: string
 }
 
 export const tools: readonly Tool[] = [
@@ -206,6 +213,7 @@ export const tools: readonly Tool[] = [
     id: "pdf-annotator",
     name: "PDF annotator",
     description: "Highlight, underline and comment on any PDF.",
+    partOf: "pdf-editor",
     category: "document",
     keywords: [
       "pdf",
@@ -250,6 +258,9 @@ export const tools: readonly Tool[] = [
     status: "available",
   },
 ]
+
+/** The tools as they are listed: every tool once, without the doors into it. */
+export const listed: readonly Tool[] = tools.filter((tool) => !tool.partOf)
 
 export function parseCategory(value: string | null | undefined): Category {
   return categories.find((category) => category.id === value)?.id ?? "all"
