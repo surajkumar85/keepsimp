@@ -1,12 +1,14 @@
 "use client"
 
 import { useEffect, useRef, useState, type RefObject } from "react"
-import { canBeKept } from "@/lib/pdf-editor/draft"
+import { canBeKept, fontsOf } from "@/lib/pdf-editor/draft"
 import {
   beginDraft,
   clearDraft,
+  keepFont,
   keepPicture,
   keepSteps,
+  type OwnFile,
 } from "@/lib/pdf-editor/draft-store"
 import type { History } from "@/lib/pdf-editor/history"
 import type { PdfClient } from "@/lib/pdf-merger/client"
@@ -35,6 +37,7 @@ export function useDraft({
   wanted,
   begun,
   pictures,
+  fonts,
 }: {
   client: RefObject<PdfClient | null>
   id: string
@@ -45,6 +48,8 @@ export function useDraft({
   begun: boolean
   /** Every picture that was placed, by the name it was given. It is added to as pictures are placed. */
   pictures: Map<string, Blob>
+  /** Every font of one's own that was added, by its key. Those the steps are written in are kept. */
+  fonts: Map<string, OwnFile>
 }) {
   const [kept, setKept] = useState<{ status: DraftStatus; of: History | null }>(
     { status: "none", of: null }
@@ -57,7 +62,9 @@ export function useDraft({
     if (!wanted) setKept({ status: "none", of: null })
   }
   const started = useRef(begun)
-  const [taken] = useState(() => new Set(begun ? pictures.keys() : []))
+  const [taken] = useState(
+    () => new Set(begun ? [...pictures.keys(), ...fonts.keys()] : [])
+  )
   const stored = useRef(taken)
   const fits = canBeKept(file.size)
   const changed = history.steps.length > 0
@@ -92,6 +99,12 @@ export function useDraft({
             await keepPicture(name, picture)
             stored.current.add(name)
           }
+        for (const key of fontsOf(draft.steps)) {
+          const font = fonts.get(key)
+          if (!font || stored.current.has(key)) continue
+          await keepFont(key, font)
+          stored.current.add(key)
+        }
         await keepSteps({
           name: file.name,
           size: file.size,
@@ -118,7 +131,7 @@ export function useDraft({
       stale = true
       clearTimeout(timer)
     }
-  }, [client, id, file, history, wanted, fits, changed, pictures])
+  }, [client, id, file, history, wanted, fits, changed, pictures, fonts])
 
   const status: DraftStatus = !wanted
     ? "none"

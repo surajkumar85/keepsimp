@@ -1,14 +1,16 @@
 /**
  * Where a draft is kept: the browser's own storage on this device, and
  * nowhere else. The file and each picture are kept as their bytes (some
- * browsers keep no files in a private window, and bytes they all keep); the
+ * browsers keep no files in a private window, and bytes they all keep), and
+ * so is a font of one's own that the steps are written in; the
  * steps are kept beside them and written again after every change.
  *
  * One draft is kept at a time, of the file that was last changed with the
  * switch on. Everything here can fail (a private window keeps nothing, a
  * full disk has no room), and whoever calls says so on the page.
  */
-import { picturesOf, readDraft, type Draft } from "./draft"
+import { fontsOf, picturesOf, readDraft, type Draft } from "./draft"
+import { isOwn, ownKey, readFont } from "./own-font"
 
 const DATABASE = "keepsimp-drafts"
 const STORE = "pdf-editor"
@@ -95,14 +97,28 @@ export async function keepPicture(name: string, picture: Blob) {
   await run("readwrite", (store) => store.put(value, `picture/${name}`))
 }
 
+/** Keep a font of one's own that the steps are written in, under the key it goes by. */
+export async function keepFont(key: string, font: OwnFile) {
+  const value = await kept(font.blob)
+  await run("readwrite", (store) => store.put(value, `font/${key}`))
+}
+
 export const keepSteps = (draft: Draft) =>
   run("readwrite", (store) => store.put(draft, "steps"))
 
-/** A draft with its file and the pictures its steps place. */
+/** A font of one's own as it is kept: what it is called, the name it is written under in a PDF, and its file. */
+export interface OwnFile {
+  name: string
+  written: string
+  blob: Blob
+}
+
+/** A draft with its file, the pictures its steps place and the fonts of one's own they are written in. */
 export interface KeptDraft {
   draft: Draft
   file: Blob
   pictures: Map<string, Blob>
+  fonts: Map<string, OwnFile>
 }
 
 /**
@@ -122,5 +138,16 @@ export async function loadDraft(): Promise<KeptDraft | null> {
     if (!picture) return null
     pictures.set(name, picture)
   }
-  return { draft, file, pictures }
+  const fonts = new Map<string, OwnFile>()
+  for (const key of fontsOf(draft.steps).filter(isOwn)) {
+    const value = await run("readonly", (store) => store.get(`font/${key}`))
+    const blob = blobOf(value)
+    if (!blob) return null
+    // What is kept as a font is read as one again, and must be the font the steps name.
+    const bytes = new Uint8Array(await blob.arrayBuffer())
+    const read = readFont(bytes)
+    if (!read?.allowed || ownKey(bytes) !== key) return null
+    fonts.set(key, { name: read.name, written: read.written, blob })
+  }
+  return { draft, file, pictures, fonts }
 }

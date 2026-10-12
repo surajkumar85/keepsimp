@@ -448,9 +448,9 @@ export class PdfClient {
     })
   }
 
-  /** Hand the worker a font file for text boxes. */
-  editFont(id: string, key: string, bytes: ArrayBuffer) {
-    this.send({ type: "edit-font", id, key, bytes })
+  /** Hand the worker a font file for text boxes; with its name when it is a font of one's own. */
+  editFont(id: string, key: string, bytes: ArrayBuffer, name?: string) {
+    this.send({ type: "edit-font", id, key, bytes, name })
   }
 
   /** Hand the worker a picture to place; its size in pixels, or null when it cannot be read. */

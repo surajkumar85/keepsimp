@@ -11,6 +11,7 @@
  * where the letters go, and the text of what is written into the page.
  */
 import type { Box, Point } from "./geometry"
+import { isOwn } from "./own-font"
 import { FONT_KEYS, LARGEST_TEXT, SMALLEST_TEXT, type Colour } from "./objects"
 
 /** The look some letters of a line have. */
@@ -102,7 +103,10 @@ function readLook(value: unknown): LineLook | undefined {
     given.colour.every(isPart)
   )
     look.colour = [given.colour[0], given.colour[1], given.colour[2]]
-  if (typeof given.font === "string" && FONT_KEYS.includes(given.font))
+  if (
+    typeof given.font === "string" &&
+    (FONT_KEYS.includes(given.font) || isOwn(given.font))
+  )
     look.font = given.font
   return Object.keys(look).length ? look : undefined
 }
@@ -284,6 +288,14 @@ export function familyOf(
   if (SERIF.test(name)) return "serif"
   return mono ? "mono" : serif ? "serif" : "sans"
 }
+
+/**
+ * The name one of the editor's fonts goes by on a page. It begins with
+ * letters, which tells it from a font of the file (`KS` and a number).
+ */
+export const oursAs = (key: string) => `KS${key.replace(/[^a-z0-9]/g, "")}`
+/** Whether a font's name on a page is one of the editor's. */
+export const isOurs = (name: string) => /^KS[a-z][a-z0-9]*$/.test(name)
 
 /** How wide a space is where a font has none of its own, as a share of the size of its letters. */
 export const SPACE = 0.27

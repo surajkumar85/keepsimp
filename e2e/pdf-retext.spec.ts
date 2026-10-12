@@ -289,8 +289,11 @@ test("gives a line another size, colour and font, and says what that does", asyn
   const [placed] = await textPlaces(bytes)
   const total = placed.find((run) => run.text === TEXT.total)!
   expect(total.size).toBeCloseTo(16, 1)
-  const title = placed.find((run) => run.text.includes("Quarterly"))!
-  expect(title.text).toContain("2026")
+  // The whole line is in the editor's font, spaces and all: it reads as one
+  // line (pdf.js hands the words of a font with wide gaps over one by one).
+  expect((await readPdf(bytes)).pages[0].text).toContain(
+    "Quarterly report 2026"
+  )
   const fonts = (await embeddedFonts(bytes)).map((one) => one.name)
   expect(fonts.some((name) => name.includes("LiberationMono-Bold"))).toBe(true)
 })

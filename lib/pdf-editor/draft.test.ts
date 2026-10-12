@@ -222,8 +222,11 @@ describe("a draft, read back", () => {
         touched: [0],
       })!
     expect(
-      fontsOf([...steps, retext(["mono", "serif-bold", "comic", 7])])
-    ).toEqual(["serif-bold", "mono"])
+      fontsOf([
+        ...steps,
+        retext(["mono", "serif-bold", "comic", 7, "own-0123456789ab", "own-1"]),
+      ])
+    ).toEqual(["serif-bold", "mono", "own-0123456789ab"])
     expect(fontsOf([retext(undefined)])).toEqual([])
     expect(retext("mono").done.change).not.toHaveProperty("fonts")
     // Fonts are only said of changes to text.

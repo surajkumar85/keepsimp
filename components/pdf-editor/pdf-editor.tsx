@@ -52,6 +52,7 @@ import {
   loadDraft,
   wantDrafts,
   type KeptDraft,
+  type OwnFile,
 } from "@/lib/pdf-editor/draft-store"
 import { fontUrls } from "@/lib/pdf-editor/fonts"
 import { changeCount, unsaved } from "@/lib/pdf-editor/history"
@@ -114,6 +115,12 @@ const DRAFT_SAYS: Record<DraftStatus, string> = {
 async function takeUpDraft(client: PdfClient, id: string, kept: KeptDraft) {
   try {
     for (const key of fontsOf(kept.draft.steps)) {
+      // A font of one's own came with the draft; the editor's are on the site.
+      const own = kept.fonts.get(key)
+      if (own) {
+        client.editFont(id, key, await own.blob.arrayBuffer(), own.written)
+        continue
+      }
       const response = await fetch(fontUrls[key])
       if (!response.ok) return null
       client.editFont(id, key, await response.arrayBuffer())
@@ -355,7 +362,13 @@ function Workspace({
     (name: string, picture: Blob) => void pictures.set(name, picture),
     [pictures]
   )
-  const editor = useEditor(client, doc.id, opened, onPicture)
+  /** Every font of one's own that was added, likewise. */
+  const [ownFiles] = useState(() => new Map(doc.draft?.fonts))
+  const [own] = useState(() => ({
+    fonts: doc.draft?.fonts,
+    onFont: (key: string, font: OwnFile) => void ownFiles.set(key, font),
+  }))
+  const editor = useEditor(client, doc.id, opened, onPicture, own)
   const comments = useComments(editor, mode === "annotate" ? "highlight" : null)
   const retext = useRetext(editor, comments)
   /** A page opened for one job shows the tools of that job alone until the others are asked for. */
@@ -431,6 +444,7 @@ function Workspace({
     wanted: drafts,
     begun: Boolean(doc.draft),
     pictures,
+    fonts: ownFiles,
   })
   // The browser asks before a page with unsaved changes is left, unless a
   // draft holds them.

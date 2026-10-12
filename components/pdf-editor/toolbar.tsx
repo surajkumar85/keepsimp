@@ -36,6 +36,7 @@ import {
   IconRubberStamp,
   IconRulerMeasure,
   IconCursorText,
+  IconFileUpload,
   IconSignature,
   IconSquare,
   IconStackBack,
@@ -85,6 +86,8 @@ import {
 import type { Tool } from "@/lib/pdf-editor/tools"
 import type { Comments } from "./use-comments"
 import { mainStyle } from "@/lib/pdf-editor/retext"
+import { isOwn, type OwnKey } from "@/lib/pdf-editor/own-font"
+import { canListFonts, LocalFontsDialog } from "./local-fonts-dialog"
 import { RETEXT_HINT, type Retext } from "./use-retext"
 import type { Editor } from "./use-editor"
 
@@ -382,6 +385,93 @@ function Toggle({
   )
 }
 
+/**
+ * Fonts of one's own: those that were added, each as a font to choose, and
+ * the ways to add one: from a file, or from the fonts on the device where
+ * the browser can list them.
+ */
+function OwnFonts({
+  editor,
+  value,
+  onPick,
+  listed = true,
+}: {
+  editor: Editor
+  /** The font that is chosen now. */
+  value: string | null
+  onPick: (font: OwnKey) => void
+  /** Show the fonts that were added as buttons; a list elsewhere shows them when not. */
+  listed?: boolean
+}) {
+  const picker = useRef<HTMLInputElement>(null)
+  const [device, setDevice] = useState(false)
+  const [can] = useState(canListFonts)
+  const add = async (font: Blob, names?: string[]) => {
+    const key = await editor.addOwnFont(font, names)
+    if (key) onPick(key)
+  }
+  return (
+    <>
+      {listed &&
+        editor.ownFonts.map((font) => (
+          <Button
+            key={font.key}
+            type="button"
+            size="sm"
+            variant={value === font.key ? "secondary" : "ghost"}
+            aria-pressed={value === font.key}
+            title={font.name}
+            onClick={() => onPick(font.key as OwnKey)}
+            className="h-11 max-w-40 md:h-9"
+          >
+            <span className="truncate">{font.name}</span>
+          </Button>
+        ))}
+      <input
+        ref={picker}
+        type="file"
+        accept=".ttf,.otf,.ttc,font/ttf,font/otf,font/collection"
+        aria-label="Choose a font file of your own"
+        className="sr-only"
+        onChange={(event) => {
+          const [font] = Array.from(event.target.files ?? [])
+          event.target.value = ""
+          if (font) void add(font)
+        }}
+      />
+      <Button
+        type="button"
+        size="sm"
+        variant="ghost"
+        title="Use a font of your own: a TrueType or OpenType file. It stays on your device."
+        onClick={() => picker.current?.click()}
+        className="h-11 shrink-0 md:h-9"
+      >
+        <IconFileUpload aria-hidden="true" /> Your own font
+      </Button>
+      {can && (
+        <Button
+          type="button"
+          size="sm"
+          variant="ghost"
+          title="Choose from the fonts on this device. The browser asks first."
+          onClick={() => setDevice(true)}
+          className="h-11 shrink-0 md:h-9"
+        >
+          From this device
+        </Button>
+      )}
+      {can && (
+        <LocalFontsDialog
+          open={device}
+          onClose={() => setDevice(false)}
+          onPick={(font, names) => void add(font, names)}
+        />
+      )}
+    </>
+  )
+}
+
 /** Put the keyboard back in the line that is being typed, after something in the bar was chosen for it. */
 const backToLine = () =>
   requestAnimationFrame(() =>
@@ -398,11 +488,12 @@ const LINE_FAMILIES = ["sans", "serif", "mono"] as const
  * whether it stays in the file's own font or is set, whole, in one of the
  * editor's.
  */
-function LineLookRow({ retext }: { retext: Retext }) {
+function LineLookRow({ editor, retext }: { editor: Editor; retext: Retext }) {
   const typing = retext.typing!
   const style = mainStyle(typing.line)
   const { look } = typing
   const family = LINE_FAMILIES.find((one) => look.font?.startsWith(one))
+  const own = isOwn(look.font) ? look.font : null
   const bold = Boolean(look.font?.includes("bold"))
   const italic = Boolean(look.font?.includes("italic"))
   const set = (font: string, heavy = bold, slanted = italic) => {
@@ -423,8 +514,13 @@ function LineLookRow({ retext }: { retext: Retext }) {
         Font
         <select
           aria-label="Font of the line"
-          value={family ?? ""}
-          onChange={(event) => set(event.target.value)}
+          value={own ?? family ?? ""}
+          onChange={(event) => {
+            const font = event.target.value
+            if (!isOwn(font)) return set(font)
+            retext.setLook({ font })
+            backToLine()
+          }}
           className="h-11 rounded-md border bg-background px-2 text-base text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring md:h-9 md:text-sm"
         >
           <option value="">Its own</option>
@@ -433,8 +529,22 @@ function LineLookRow({ retext }: { retext: Retext }) {
               {FAMILY_LABELS[one]}
             </option>
           ))}
+          {editor.ownFonts.map((font) => (
+            <option key={font.key} value={font.key}>
+              {font.name}
+            </option>
+          ))}
         </select>
       </label>
+      <OwnFonts
+        editor={editor}
+        value={null}
+        listed={false}
+        onPick={(font) => {
+          retext.setLook({ font })
+          backToLine()
+        }}
+      />
       {family && (
         <div
           role="group"
@@ -790,7 +900,7 @@ export function EditorToolbar({
         className="flex h-13 items-center gap-x-4 overflow-x-auto border-t px-2 whitespace-nowrap md:h-11"
       >
         {retext.typing ? (
-          <LineLookRow retext={retext} />
+          <LineLookRow editor={editor} retext={retext} />
         ) : comments.tool ? (
           <>
             <Swatches
@@ -953,6 +1063,11 @@ export function EditorToolbar({
                       {FAMILY_LABELS[family]}
                     </Button>
                   ))}
+                  <OwnFonts
+                    editor={editor}
+                    value={look.font}
+                    onPick={(font) => editor.setLook({ font })}
+                  />
                 </div>
                 <label className="flex shrink-0 items-center gap-2 text-xs text-muted-foreground">
                   Size
@@ -992,26 +1107,29 @@ export function EditorToolbar({
                     />
                   </label>
                 )}
-                <div
-                  role="group"
-                  aria-label="Style"
-                  className="flex shrink-0 items-center"
-                >
-                  <Toggle
-                    label="Bold"
-                    pressed={look.bold}
-                    onPress={() => editor.setLook({ bold: !look.bold })}
+                {/* A font of one's own is one file: it has no bold or italic of the editor's making. */}
+                {!isOwn(look.font) && (
+                  <div
+                    role="group"
+                    aria-label="Style"
+                    className="flex shrink-0 items-center"
                   >
-                    <IconBold aria-hidden="true" />
-                  </Toggle>
-                  <Toggle
-                    label="Italic"
-                    pressed={look.italic}
-                    onPress={() => editor.setLook({ italic: !look.italic })}
-                  >
-                    <IconItalic aria-hidden="true" />
-                  </Toggle>
-                </div>
+                    <Toggle
+                      label="Bold"
+                      pressed={look.bold}
+                      onPress={() => editor.setLook({ bold: !look.bold })}
+                    >
+                      <IconBold aria-hidden="true" />
+                    </Toggle>
+                    <Toggle
+                      label="Italic"
+                      pressed={look.italic}
+                      onPress={() => editor.setLook({ italic: !look.italic })}
+                    >
+                      <IconItalic aria-hidden="true" />
+                    </Toggle>
+                  </div>
+                )}
                 <div
                   role="group"
                   aria-label="Alignment"

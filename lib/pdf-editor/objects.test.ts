@@ -312,6 +312,13 @@ describe("readObject", () => {
       bold: false,
       italic: false,
     })
+    // A font of one's own goes by its key; what only looks like one is no font.
+    expect(
+      (readObject({ ...text, font: "own-0123456789ab" }) as TextObject).font
+    ).toBe("own-0123456789ab")
+    expect((readObject({ ...text, font: "own-1" }) as TextObject).font).toBe(
+      "sans"
+    )
     const styled = readObject({
       ...text,
       font: "mono",
@@ -385,6 +392,10 @@ describe("fonts and arrows", () => {
     )
     // A font that looks written by hand has one file, whatever is asked of it.
     expect(fontKey({ font: "kalam", bold: true, italic: true })).toBe("kalam")
+    // A font of one's own is one file as well.
+    expect(
+      fontKey({ font: "own-0123456789ab", bold: true, italic: true })
+    ).toBe("own-0123456789ab")
     expect(isHand("kalam")).toBe(true)
     expect(isHand("serif")).toBe(false)
     expect(FONT_KEYS).toHaveLength(16)

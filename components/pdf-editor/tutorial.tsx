@@ -40,7 +40,7 @@ const content: TutorialContent = {
     {
       term: "Text",
       detail:
-        "Three font families come with the site: a sans, a serif and a mono, each with bold and italic. They are as wide, letter for letter, as Arial, Times New Roman and Courier New. The font is put inside your file, cut down to the letters you used, so the text looks the same everywhere and can be selected and searched. Press Enter with a text box selected, or double-click it, to change its words.",
+        "Three font families come with the site: a sans, a serif and a mono, each with bold and italic. They are as wide, letter for letter, as Arial, Times New Roman and Courier New. The font is put inside your file, cut down to the letters you used, so the text looks the same everywhere and can be selected and searched. “Your own font” takes a font file from your device (TrueType or OpenType), and “From this device” lists the fonts that are installed, in browsers that can (Chrome and Edge on a computer; the browser asks first). The font is read on your device and is not sent anywhere. A font whose maker does not allow it in documents is not used. Press Enter with a text box selected, or double-click it, to change its words.",
     },
     {
       term: "Pictures",
@@ -55,7 +55,7 @@ const content: TutorialContent = {
     {
       term: "Change text",
       detail:
-        "For the words a file already has. A line is changed at a time, and typed letters take the look of the letter before them, so a word typed after bold words is bold. The line's own font is used for every letter it has. Files often carry only the letters they use; a letter the font lacks is set in the closest font the editor has, and a note under the line names such letters while you type. While a line is typed, the bar offers its size, its colour and its font: size and colour keep the line's own font; choosing Sans, Serif or Mono sets the whole line in that font of the editor's. Drag a line's frame to move it, or use the arrow keys on it. A line that is turned on the page is typed straight and written turned. A change stays within its line: a longer line runs on to the right. Text written downwards, or in a script whose letters join (Arabic, Hebrew, the scripts of India), can be taken out but not retyped. The old words are removed from the file, not covered.",
+        "For the words a file already has. A line is changed at a time, and typed letters take the look of the letter before them, so a word typed after bold words is bold. The line's own font is used for every letter it has. Files often carry only the letters they use; a letter the font lacks is set in the closest font the editor has, and a note under the line names such letters while you type. While a line is typed, the bar offers its size, its colour and its font: size and colour keep the line's own font; choosing Sans, Serif or Mono sets the whole line in that font of the editor's, and a font of your own can be added and chosen there too. Drag a line's frame to move it, or use the arrow keys on it. A line that is turned on the page is typed straight and written turned. A change stays within its line: a longer line runs on to the right. Text written downwards, or in a script whose letters join (Arabic, Hebrew, the scripts of India), can be taken out but not retyped. The old words are removed from the file, not covered.",
     },
     {
       term: "Boxes",

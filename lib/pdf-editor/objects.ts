@@ -16,6 +16,7 @@ import {
   type Handle,
   type Point,
 } from "./geometry"
+import { isOwn, type OwnKey } from "./own-font"
 import {
   LARGEST_SCALE,
   lengthOf,
@@ -41,8 +42,11 @@ export const HAND_FAMILIES = [
   "aurore",
 ] as const
 export type HandFamily = (typeof HAND_FAMILIES)[number]
-export type FontFamily = "sans" | "serif" | "mono" | HandFamily
-export const FONT_FAMILIES: readonly FontFamily[] = [
+/** The families that come with the editor. */
+export type BuiltIn = "sans" | "serif" | "mono" | HandFamily
+/** The editor's own families, and a font of one's own, which goes by its key (`own-font.ts`). */
+export type FontFamily = BuiltIn | OwnKey
+export const FONT_FAMILIES: readonly BuiltIn[] = [
   "sans",
   "serif",
   "mono",
@@ -465,9 +469,10 @@ export function readObject(value: unknown): EditorObject | null {
         kind: "text",
         text: data.text,
         lines: data.lines as string[],
-        font: FONT_FAMILIES.includes(data.font as FontFamily)
-          ? (data.font as FontFamily)
-          : "sans",
+        font:
+          FONT_FAMILIES.includes(data.font as BuiltIn) || isOwn(data.font)
+            ? (data.font as FontFamily)
+            : "sans",
         bold: data.bold === true,
         italic: data.italic === true,
         size: isNumber(data.size)
@@ -572,7 +577,8 @@ export function readObject(value: unknown): EditorObject | null {
 
 /** Which of the font files a text box is written with. */
 export const fontKey = (text: Pick<TextObject, "font" | "bold" | "italic">) =>
-  isHand(text.font)
+  // A font that looks written by hand, and a font of one's own, are one file: they have no bold and no italic.
+  isHand(text.font) || isOwn(text.font)
     ? text.font
     : `${text.font}${text.bold ? "-bold" : ""}${text.italic ? "-italic" : ""}`
 

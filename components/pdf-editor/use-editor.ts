@@ -41,6 +41,13 @@ import {
   type Signature,
   type SignatureSlot,
 } from "@/lib/pdf-editor/signature"
+import {
+  isOwn,
+  LARGEST_FONT,
+  ownKey,
+  readFont,
+} from "@/lib/pdf-editor/own-font"
+import type { OwnFile } from "@/lib/pdf-editor/draft-store"
 import { standIns, type LineLook, type PageLine } from "@/lib/pdf-editor/retext"
 import { breakLines, combLine } from "@/lib/pdf-editor/text-layout"
 import {
@@ -133,7 +140,12 @@ export function useEditor(
   file: string,
   opened: EditState,
   /** Told of every picture that is placed, for a draft to keep. */
-  onPicture?: (name: string, picture: Blob) => void
+  onPicture?: (name: string, picture: Blob) => void,
+  /** Fonts of one's own: those a draft brought with it, and whom to tell of each that is added. */
+  own?: {
+    fonts?: ReadonlyMap<string, OwnFile>
+    onFont?: (key: string, font: OwnFile) => void
+  }
 ) {
   const [objects, setObjects] = useState<EditorObject[][]>(opened.objects)
   /** The comments on each page, as the file has them. */
@@ -158,6 +170,10 @@ export function useEditor(
   /** Changes are made one after another, in the order they were asked for. */
   const queue = useRef<Promise<unknown>>(Promise.resolve())
   const fonts = useRef(new Map<string, Promise<void>>())
+  /** The fonts of one's own that were added, in the order they were. */
+  const [ownFonts, setOwnFonts] = useState<{ key: string; name: string }[]>(
+    () => [...(own?.fonts ?? [])].map(([key, { name }]) => ({ key, name }))
+  )
   const lettersRead = useRef(new Map<string, Promise<LetterLine[]>>())
   const linesRead = useRef(new Map<string, Promise<PageLine[]>>())
   /** How many changes are in force this moment, ahead of what has been drawn. */
@@ -214,6 +230,9 @@ export function useEditor(
   const ensureFont = useCallback(
     (key: string) => {
       let loading = fonts.current.get(key)
+      // A font of one's own is not on the site: it is there when it was added, or not at all.
+      if (!loading && isOwn(key))
+        return Promise.reject(new Error("That font has not been added."))
       if (!loading) {
         loading = (async () => {
           const response = await fetch(fontUrls[key])
@@ -231,6 +250,89 @@ export function useEditor(
       return loading
     },
     [client, file]
+  )
+
+  /** Make a font of one's own ready for the screen, under the key it goes by. */
+  const showOwn = useCallback(async (key: string, bytes: ArrayBuffer) => {
+    const face = new FontFace(screenFamily(key), bytes)
+    await face.load()
+    document.fonts.add(face)
+  }, [])
+
+  // The fonts a draft brought with it are already with the worker; the screen needs them too.
+  const brought = own?.fonts
+  useEffect(() => {
+    for (const [key, { blob }] of brought ?? [])
+      if (!fonts.current.has(key))
+        fonts.current.set(
+          key,
+          blob.arrayBuffer().then((bytes) => showOwn(key, bytes))
+        )
+  }, [brought, showOwn])
+
+  /**
+   * Add a font of one's own from a file: it is read for its name and for
+   * whether its maker allows it in documents, shown on the screen, and
+   * handed to the worker. Of a file that holds several fonts, the one
+   * that goes by one of the names given is taken, or the first.
+   * @returns The key it goes by; null when it cannot be used, and the bar says why.
+   */
+  const tellOwn = own?.onFont
+  const addOwnFont = useCallback(
+    async (chosen: Blob, names?: readonly string[]) => {
+      let bytes: Uint8Array
+      try {
+        if (chosen.size > LARGEST_FONT) throw new Error("large")
+        bytes = new Uint8Array(await chosen.arrayBuffer())
+      } catch {
+        setProblem("That file could not be read as a font.")
+        return null
+      }
+      const read = readFont(bytes, names)
+      if (!read) {
+        setProblem(
+          "That file is not a font the editor can use. Choose a TrueType or OpenType font (.ttf or .otf)."
+        )
+        return null
+      }
+      if (!read.allowed) {
+        setProblem(
+          `The maker of “${read.name}” does not allow it to be put into documents. Choose another font.`
+        )
+        return null
+      }
+      const key = ownKey(read.file)
+      if (!fonts.current.has(key)) {
+        const loading = showOwn(key, read.file.slice().buffer)
+        fonts.current.set(key, loading)
+        try {
+          await loading
+        } catch {
+          fonts.current.delete(key)
+          setProblem("The browser could not read that font.")
+          return null
+        }
+        client.current?.editFont(
+          file,
+          key,
+          read.file.slice().buffer,
+          read.written
+        )
+        tellOwn?.(key, {
+          name: read.name,
+          written: read.written,
+          blob: new Blob([read.file.slice()], { type: "font/sfnt" }),
+        })
+      }
+      setOwnFonts((was) =>
+        was.some((font) => font.key === key)
+          ? was
+          : [...was, { key, name: read.name }]
+      )
+      setProblem("")
+      return key
+    },
+    [client, file, showOwn, tellOwn]
   )
 
   /**
@@ -1096,6 +1198,8 @@ export function useEditor(
     addSignature,
     addDate,
     loadFont: ensureFont,
+    ownFonts,
+    addOwnFont,
     key,
     select,
     deselect,

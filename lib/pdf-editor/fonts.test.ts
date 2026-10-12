@@ -43,6 +43,12 @@ describe("fonts", () => {
     expect(fontName("serif-bold")).toBe("LiberationSerif-Bold")
     expect(fontName("mono")).toBe("LiberationMono-Regular")
     expect(fontName("sacramento")).toBe("Sacramento-Regular")
+    // A font of one's own goes by the name given with it, as a PDF can write it.
+    expect(fontName("own-0123456789ab", "Brush Script MT, Italic")).toBe(
+      "BrushScriptMTItalic"
+    )
+    expect(fontName("own-0123456789ab", "明朝")).toBe("OwnFont")
+    expect(fontName("own-0123456789ab")).toBe("OwnFont")
     expect(Object.keys(FAMILY_LABELS)).toEqual([
       "sans",
       "serif",

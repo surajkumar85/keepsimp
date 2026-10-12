@@ -47,7 +47,7 @@ import {
   type EditorObject,
   type TextObject,
 } from "./objects"
-import type { TextChange } from "./retext"
+import { isOurs, type TextChange } from "./retext"
 import { BASELINE, combStarts, lineStart } from "./text-layout"
 import type { Change, Op } from "./tools"
 
@@ -208,10 +208,12 @@ export function addFont(
   mupdf: Engine,
   session: EditSession,
   key: string,
-  bytes: Uint8Array
+  bytes: Uint8Array,
+  /** What a font of one's own is called. */
+  name?: string
 ) {
   if (!session.fonts.has(key))
-    session.fonts.set(key, new mupdf.Font(fontName(key), bytes))
+    session.fonts.set(key, new mupdf.Font(fontName(key, name), bytes))
 }
 
 /**
@@ -1317,7 +1319,7 @@ export async function exportEdited(
             let ours = false
             if (fonts.isDictionary())
               fonts.forEach((_font, name) => {
-                if (/^KS[a-z]+$/.test(String(name))) ours = true
+                if (isOurs(String(name))) ours = true
               })
             return ours
           })

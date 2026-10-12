@@ -31,6 +31,7 @@ import {
   familyOf,
   inverse,
   isLine,
+  oursAs,
   readTextOp,
   restyled,
   runsOf,
@@ -491,7 +492,14 @@ function carryOut(
         })
         return
       }
-      if (!letter.trim()) {
+      // A gap between words. A font the whole line is set in writes its own
+      // space, so the words are apart by as much as that font means and are
+      // read as words; where a file's font has no space, the gap is only room.
+      const spaced =
+        !letter.trim() && set
+          ? session.fonts.get(set)?.encodeCharacter(letter.codePointAt(0)!)
+          : 0
+      if (!letter.trim() && !spaced) {
         glyphs.push({
           ...size,
           font: "",
@@ -510,7 +518,7 @@ function carryOut(
       ours.add(lent)
       glyphs.push({
         ...size,
-        font: `KS${lent.replace(/[^a-z]/g, "")}`,
+        font: oursAs(lent),
         code: glyph.toString(16).padStart(4, "0"),
         advance: font.advanceGlyph(glyph) * style.size,
       })
@@ -591,10 +599,7 @@ function carryOut(
     for (const number of plan.own)
       names.put(`KS${number}`, doc.newIndirect(number))
     for (const key of plan.ours)
-      names.put(
-        `KS${key.replace(/[^a-z]/g, "")}`,
-        doc.addFont(session.fonts.get(key)!)
-      )
+      names.put(oursAs(key), doc.addFont(session.fonts.get(key)!))
     const written = contentFor(
       runsOf(glyphs, plan.origin, line.along),
       inverse(page.getTransform() as Matrix)

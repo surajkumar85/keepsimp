@@ -5,14 +5,15 @@
  * expect in a document. The same file draws the letters on the screen and is
  * embedded in the PDF.
  */
-import { FONT_KEYS, isHand, type FontFamily } from "./objects"
+import { FONT_KEYS, isHand, type BuiltIn } from "./objects"
+import { isOwn } from "./own-font"
 
 /**
  * The fonts for signatures look written by hand: Great Vibes, Sacramento,
  * Kalam and La Belle Aurore, each under the SIL Open Font License. Each has
  * one style.
  */
-const FAMILY_FILES: Record<FontFamily, string> = {
+const FAMILY_FILES: Record<BuiltIn, string> = {
   sans: "LiberationSans",
   serif: "LiberationSerif",
   mono: "LiberationMono",
@@ -31,7 +32,7 @@ const STYLES: Record<string, string> = {
 
 /** Where a font file is, on the site, by its key (see `fontKey`). */
 export function fontUrl(key: string) {
-  const family = (Object.keys(FAMILY_FILES) as FontFamily[]).find(
+  const family = (Object.keys(FAMILY_FILES) as BuiltIn[]).find(
     (name) => key === name || key.startsWith(`${name}-`)
   )
   const rest = family === undefined ? "?" : key.slice(family.length)
@@ -43,9 +44,15 @@ export function fontUrl(key: string) {
   return `/fonts/editor/${FAMILY_FILES[family]}-${style}.ttf`
 }
 
-/** The name a font goes by inside a PDF: its file's name, which is the name the font gives itself. */
-export const fontName = (key: string) =>
-  fontUrl(key).slice(fontUrl(key).lastIndexOf("/") + 1, -".ttf".length)
+/**
+ * The name a font goes by inside a PDF: its file's name, which is the name
+ * the font gives itself. A font of one's own is not on the site and goes by
+ * the name that is given with it.
+ */
+export const fontName = (key: string, own?: string) =>
+  isOwn(key)
+    ? (own ?? "").replace(/[^A-Za-z0-9-]+/g, "") || "OwnFont"
+    : fontUrl(key).slice(fontUrl(key).lastIndexOf("/") + 1, -".ttf".length)
 
 /** Every font file's address, by key. */
 export const fontUrls: Readonly<Record<string, string>> = Object.fromEntries(
@@ -56,7 +63,7 @@ export const fontUrls: Readonly<Record<string, string>> = Object.fromEntries(
 export const screenFamily = (key: string) => `KeepSimp ${key}`
 
 /** What a family is called in the panel. */
-export const FAMILY_LABELS: Record<FontFamily, string> = {
+export const FAMILY_LABELS: Record<BuiltIn, string> = {
   sans: "Sans",
   serif: "Serif",
   mono: "Mono",

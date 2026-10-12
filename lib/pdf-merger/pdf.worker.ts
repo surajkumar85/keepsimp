@@ -1063,7 +1063,8 @@ self.onmessage = (event: MessageEvent<PdfRequest>) => {
             await engine,
             session,
             request.key,
-            new Uint8Array(request.bytes)
+            new Uint8Array(request.bytes),
+            request.name
           )
       },
     })

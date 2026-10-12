@@ -12,6 +12,7 @@ import { readCommentOp } from "./comments"
 import { readFieldOp } from "./forms"
 import type { Step } from "./mupdf-edit"
 import { FONT_KEYS, fontsFor, readObject } from "./objects"
+import { isOwn } from "./own-font"
 import { readTextOp } from "./retext"
 import type { Op } from "./tools"
 
@@ -85,7 +86,7 @@ export function readStep(value: unknown): Step | null {
     done.kind === "text" && Array.isArray(change.fonts)
       ? change.fonts.filter(
           (key): key is string =>
-            typeof key === "string" && FONT_KEYS.includes(key)
+            typeof key === "string" && (FONT_KEYS.includes(key) || isOwn(key))
         )
       : null
   return {

@@ -172,7 +172,14 @@ export type PdfRequest =
   /** Where a file being edited stands: its pages, what was added to them, and its list of changes. */
   | { type: "edit-state"; id: string; request: number }
   /** A font file for text boxes, by its key. */
-  | { type: "edit-font"; id: string; key: string; bytes: ArrayBuffer }
+  | {
+      type: "edit-font"
+      id: string
+      key: string
+      bytes: ArrayBuffer
+      /** What a font of one's own is called. */
+      name?: string
+    }
   /** A picture to be placed, under a name. */
   | {
       type: "edit-picture"

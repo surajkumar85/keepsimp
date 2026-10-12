@@ -7,6 +7,8 @@ import {
   FURTHEST_MOVE,
   inverse,
   isLine,
+  isOurs,
+  oursAs,
   lacking,
   LONGEST_LINE,
   mainStyle,
@@ -96,6 +98,11 @@ describe("another look and another place for a line, as they arrive", () => {
         move: { x: 3, y: -4 },
       })
     )
+    // A font of one's own is a font a line can be set in; what only looks like one is not.
+    expect(
+      readTextOp(op({ look: { font: "own-0123456789ab" } }))?.look
+    ).toEqual({ font: "own-0123456789ab" })
+    expect(readTextOp(op({ look: { font: "own-12" } }))?.look).toBeUndefined()
     // A size is kept within what letters can be, and a move within the page.
     expect(readTextOp(op({ look: { size: 5000 } }))?.look).toEqual({
       size: 288,
@@ -461,5 +468,18 @@ describe("what is written into the page", () => {
     expect(content).toContain("0 0 0 rg")
     // No "-0" for nothing.
     expect(content).toContain("1 0 0 1 0 0 Tm")
+  })
+})
+
+describe("the name one of the editor's fonts goes by on a page", () => {
+  it("is told from a font of the file, and one font from another", () => {
+    expect(oursAs("sans-bold-italic")).toBe("KSsansbolditalic")
+    expect(oursAs("own-0123456789ab")).toBe("KSown0123456789ab")
+    expect(oursAs("own-0123456789ab")).not.toBe(oursAs("own-0123456789ac"))
+    expect(isOurs(oursAs("mono"))).toBe(true)
+    expect(isOurs(oursAs("own-0123456789ab"))).toBe(true)
+    // A font of the file goes by its number, and other names are not ours.
+    for (const name of ["KS12", "KS", "F1", "KSSans", "xKSsans"])
+      expect(isOurs(name)).toBe(false)
   })
 })
