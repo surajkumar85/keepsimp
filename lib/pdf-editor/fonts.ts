@@ -1,0 +1,52 @@
+/**
+ * The fonts a text box can be written in. They are the Liberation fonts
+ * (SIL Open Font License), which are as wide, letter for letter, as Arial,
+ * Times New Roman and Courier New, so text set in them sits the way people
+ * expect in a document. The same file draws the letters on the screen and is
+ * embedded in the PDF.
+ */
+import { FONT_KEYS, type FontFamily } from "./objects"
+
+const FAMILY_FILES: Record<FontFamily, string> = {
+  sans: "LiberationSans",
+  serif: "LiberationSerif",
+  mono: "LiberationMono",
+}
+
+const STYLES: Record<string, string> = {
+  "": "Regular",
+  "-bold": "Bold",
+  "-italic": "Italic",
+  "-bold-italic": "BoldItalic",
+}
+
+/** Where a font file is, on the site, by its key (see `fontKey`). */
+export function fontUrl(key: string) {
+  const family = (Object.keys(FAMILY_FILES) as FontFamily[]).find(
+    (name) => key === name || key.startsWith(`${name}-`)
+  )
+  const style =
+    family === undefined ? undefined : STYLES[key.slice(family.length)]
+  if (family === undefined || style === undefined)
+    throw new Error(`There is no font "${key}".`)
+  return `/fonts/editor/${FAMILY_FILES[family]}-${style}.ttf`
+}
+
+/** The name a font goes by inside a PDF: its file's name, which is the name the font gives itself. */
+export const fontName = (key: string) =>
+  fontUrl(key).slice(fontUrl(key).lastIndexOf("/") + 1, -".ttf".length)
+
+/** Every font file's address, by key. */
+export const fontUrls: Readonly<Record<string, string>> = Object.fromEntries(
+  FONT_KEYS.map((key) => [key, fontUrl(key)])
+)
+
+/** The name the screen knows a font file by. Each file is a family of its own, so bold and italic are never faked. */
+export const screenFamily = (key: string) => `KeepSimp ${key}`
+
+/** What a family is called in the panel. */
+export const FAMILY_LABELS: Record<FontFamily, string> = {
+  sans: "Sans",
+  serif: "Serif",
+  mono: "Mono",
+}

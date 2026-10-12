@@ -5,6 +5,7 @@ import {
   IconBraces,
   IconCut,
   IconDimensions,
+  IconFilePencil,
   IconFileZip,
   IconGif,
   IconHeadphones,
@@ -33,6 +34,7 @@ const icons: Record<string, typeof IconBraces> = {
   "pdf-merger": IconLayersUnion,
   "pdf-splitter": IconArrowsSplit2,
   "pdf-compressor": IconArrowsDiagonalMinimize2,
+  "pdf-editor": IconFilePencil,
   "json-formatter": IconBraces,
 }
 

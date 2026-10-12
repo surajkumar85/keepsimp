@@ -121,7 +121,7 @@ test("every tool works offline after one visit", async ({ page }) => {
 
   // A full page load, then a move between tools from a link.
   await page.reload()
-  await expect(page.getByTestId("tool-card")).toHaveCount(14)
+  await expect(page.getByTestId("tool-card")).toHaveCount(15)
   await page
     .getByTestId("tool-card")
     .getByRole("link", { name: "Image compressor" })
@@ -306,6 +306,44 @@ test("every tool works offline after one visit", async ({ page }) => {
     expect(encoder(engine!)).toBe(false)
     expect(loaded.filter(encoder).length).toBeGreaterThan(0)
   }
+
+  // The PDF editor needs its fonts as well: one is read from the saved copy
+  // when text is typed, shown on the screen and put into the file.
+  await page.goto(`${site.origin}/dashboard/pdf-editor/`)
+  await page.getByRole("button", { name: "Try a sample" }).click()
+  await expect(page.getByTestId("reader")).toHaveAttribute(
+    "data-ready",
+    "true",
+    { timeout: 150_000 }
+  )
+  const sheet = page.locator('[data-testid=editor-layer][data-page="1"]')
+  const place = (await sheet.boundingBox())!
+  await page
+    .getByTestId("reader")
+    .getByRole("button", { name: "Text", exact: true })
+    .click()
+  await page.mouse.click(
+    place.x + place.width * 0.2,
+    place.y + place.width * 0.3
+  )
+  await expect(page.getByTestId("editor-typing")).toBeFocused({
+    timeout: 60_000,
+  })
+  await page.keyboard.type("Written offline")
+  await page.keyboard.press("Control+Enter")
+  await expect(page.getByTestId("pdf-editor")).toHaveAttribute(
+    "data-changes",
+    "1",
+    { timeout: 60_000 }
+  )
+  pending = page.waitForEvent("download")
+  await page.getByTestId("editor-download").click()
+  const edited = await readPdf(new Uint8Array(await bytesOf(await pending)))
+  expect(edited.pages).toHaveLength(12)
+  expect(edited.pages[0].text).toContain("Written offline")
+  await expect(page.getByTestId("editor-check")).toContainText(
+    "The text you added was read back from the result."
+  )
 
   await page.goto(`${site.origin}/dashboard/json-formatter/`)
   await replaceEditor(

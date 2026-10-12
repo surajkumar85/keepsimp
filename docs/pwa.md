@@ -37,7 +37,7 @@ After one visit to the tools, the whole site works without a connection: every t
 
 Both files in `service-worker/` are plain JavaScript with JSDoc types, because their text is copied into the worker as it is. There is no bundler and no step after the build, so any host that serves the export serves the worker. An earlier version wrote `out/sw.js` after `next build`; Vercel did not publish that file.
 
-- **Saved:** every page, the build files in `.next/static` (scripts, styles, fonts, WebAssembly codecs), and the files in `public/` (images, icons, tutorial posters and captions). This is about 29 MB in 179 files on disk and about 10 MB to download with Brotli compression; the PDF engine, which the merger, the splitter and the compressor share, is 10.4 MB of that on disk and 3.6 MB of the download. The animation converter's caption font is a second copy of the Outfit file (32 KB), because the worker loads it by its own address.
+- **Saved:** every page, the build files in `.next/static` (scripts, styles, fonts, WebAssembly codecs), and the files in `public/` (images, icons, tutorial posters and captions). This is about 34 MB in 195 files on disk and about 12 MB to download with Brotli compression; the PDF engine, which the merger, the splitter, the compressor and the editor share, is 10.4 MB of that on disk and 3.6 MB of the download. The PDF editor's twelve font files (`public/fonts/editor/`) are 4.2 MB on disk and 1.9 MB of the download: they are what text is typed in and what goes into the file, so the editor cannot type offline without them. The animation converter's caption font is a second copy of the Outfit file (32 KB), because the worker loads it by its own address.
 - **Not saved:**
   - tutorial videos (56 MB), which stream on demand
   - link-preview images, which only other sites read
@@ -89,7 +89,7 @@ A worker script served from the saved copy is rebuilt as a new `Response`. Other
   - the status bar colour follows a manual theme switch and survives a reload
 - **Offline** (`e2e/offline.spec.ts`), on all five profiles. Each test serves the export on its own port (`e2e/static-server.ts`) and stops that server to go offline, so the network is really gone for both the page and the worker:
   - marketing pages register no worker
-  - the saved copy matches what the export holds, and without a server the compressor, converter (AVIF), resizer and JSON formatter produce real output
+  - the saved copy matches what the export holds, and without a server the compressor, converter (AVIF), resizer and JSON formatter produce real output, and the PDF editor types text in a font from the saved copy and downloads a file that is read back
   - a link followed offline, or on a stalled connection, still opens its page
   - online, a newer page wins; a stalled or missing network falls back to the saved one
   - a new release installs beside the old one without re-downloading hashed files, tolerates a file the host no longer serves, and takes over after the windows close

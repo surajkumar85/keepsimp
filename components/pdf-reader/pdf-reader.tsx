@@ -92,6 +92,31 @@ export interface ReaderAction {
   onPress: () => void
 }
 
+/**
+ * What a tool adds to the window when it does more than read: the editor's
+ * tools, and what it lays over each page.
+ */
+export interface ReaderExtras {
+  /** What the window is, for its close button: "reader" unless said otherwise. */
+  name?: string
+  /** Buttons at the end of the bar. */
+  actions?: ReactNode
+  /** Rows under the bar. */
+  toolbar?: ReactNode
+  /** Laid over a page, in the page's own points. `scale` is screen pixels to a point. */
+  overlay?: (page: {
+    index: number
+    entry: ReaderEntry
+    scale: number
+  }) => ReactNode
+  /** The view cannot be turned: what is laid over the pages counts on that. */
+  fixed?: boolean
+  /** Told which page is being read, counted from 0. */
+  onPage?: (index: number) => void
+  /** Keys the tool wants before the reader has them. True when it took one. */
+  onKey?: (event: KeyboardEvent) => boolean
+}
+
 const NO_MATCHES: Match[] = []
 
 const turnOf = (entry: ReaderEntry) =>
@@ -112,10 +137,12 @@ function ReaderBody({
   reading,
   source,
   action,
+  extras,
 }: {
   reading: Ready
   source: ReaderSource
   action?: (page: number) => ReaderAction | null
+  extras?: ReaderExtras
 }) {
   const ids = useId()
   const area = useRef<HTMLDivElement>(null)
@@ -148,6 +175,11 @@ function ReaderBody({
     ? currentPage(column, scroll, room.height)
     : reading.start
   const near = room ? pagesNear(column, scroll, room.height, room.height) : null
+
+  const onPage = extras?.onPage
+  useEffect(() => {
+    onPage?.(current)
+  }, [onPage, current])
 
   /** The first place each page of each file is shown. */
   const places = useMemo(() => {
@@ -348,6 +380,7 @@ function ReaderBody({
   }
 
   const onKeyDown = (event: KeyboardEvent) => {
+    if (extras?.onKey?.(event)) return
     if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "f") {
       event.preventDefault()
       openSearch()
@@ -409,6 +442,7 @@ function ReaderBody({
               : -1
           }
           onLink={goTo}
+          overlay={extras?.overlay?.({ index, entry, scale })}
         />
       )
     }
@@ -531,15 +565,17 @@ function ReaderBody({
               <IconArrowAutofitContent aria-hidden="true" />
             </Button>
           </div>
-          <Button
-            variant="ghost"
-            size="icon"
-            aria-label="Turn the view"
-            title="Turn the view"
-            onClick={() => change(choice, ((turn + 90) % 360) as Rotation)}
-          >
-            <IconRotateClockwise2 aria-hidden="true" />
-          </Button>
+          {!extras?.fixed && (
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label="Turn the view"
+              title="Turn the view"
+              onClick={() => change(choice, ((turn + 90) % 360) as Rotation)}
+            >
+              <IconRotateClockwise2 aria-hidden="true" />
+            </Button>
+          )}
           {tool && (
             <Button
               variant={tool.pressed ? "default" : "outline"}
@@ -563,6 +599,7 @@ function ReaderBody({
           >
             <IconSearch aria-hidden="true" />
           </Button>
+          {extras?.actions}
         </div>
         <DialogClose
           render={
@@ -574,9 +611,10 @@ function ReaderBody({
           }
         >
           <IconX aria-hidden="true" />
-          <span className="sr-only">Close the reader</span>
+          <span className="sr-only">Close the {extras?.name ?? "reader"}</span>
         </DialogClose>
       </header>
+      {extras?.toolbar}
 
       {searching && (
         <div
@@ -712,6 +750,7 @@ export function PdfReader({
   onClose,
   returnTo,
   action,
+  extras,
 }: {
   /** Null while the reader is closed. */
   reading: Reading | null
@@ -725,6 +764,8 @@ export function PdfReader({
    * "whatever had focus before".
    */
   returnTo?: RefObject<HTMLElement | null>
+  /** What a tool adds when the window is more than a reader. */
+  extras?: ReaderExtras
 }) {
   // What was last read stays in the window while it closes.
   const [last, setLast] = useState(reading)
@@ -735,10 +776,12 @@ export function PdfReader({
       open={reading !== null}
       onOpenChange={(open, details) => {
         if (open) return
-        // In the search field, Escape closes the search and leaves the reader open.
+        // In the search field, Escape closes the search and leaves the reader
+        // open; so does an Escape that a tool has used for itself.
         if (
           details.reason === "escape-key" &&
-          document.activeElement?.closest("[role=search]")
+          (details.event.defaultPrevented ||
+            document.activeElement?.closest("[role=search]"))
         ) {
           details.cancel()
           return
@@ -752,7 +795,12 @@ export function PdfReader({
         className="top-0 left-0 h-dvh max-h-none w-screen max-w-none translate-x-0 translate-y-0 gap-0 overflow-hidden rounded-none border-0 p-0 sm:top-4 sm:left-4 sm:h-[calc(100dvh-2rem)] sm:w-[calc(100vw-2rem)] sm:rounded-2xl sm:border"
       >
         {shown?.state === "ready" ? (
-          <ReaderBody reading={shown} source={source} action={action} />
+          <ReaderBody
+            reading={shown}
+            source={source}
+            action={action}
+            extras={extras}
+          />
         ) : (
           shown && (
             <div

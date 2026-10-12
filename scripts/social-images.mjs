@@ -80,7 +80,7 @@ const cards = [
   ],
   [
     "free-online-tools-no-upload",
-    "Eight free tools. No uploads.",
+    "Nine free tools. No uploads.",
     "PDFs, images, GIFs and JSON, all in your browser.",
     "/images/tools-overview.svg",
   ],
@@ -95,6 +95,12 @@ const cards = [
     "Under 200 KB. Still readable.",
     "Compress a PDF to the size a form asks for.",
     "/images/pdf-size-guide.svg",
+  ],
+  [
+    "edit-pdfs-without-uploading",
+    "Write on a PDF. Keep it yours.",
+    "Add text, pictures and shapes in your browser.",
+    "/images/pdf-edit-guide.svg",
   ],
   [
     "repair-compare-json-patch",

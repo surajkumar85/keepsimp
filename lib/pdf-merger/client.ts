@@ -2,6 +2,8 @@
 
 import { poolSize } from "@/lib/image-batch/pool"
 import type { Size } from "@/lib/image-compressor/geometry"
+import type { ExportReport } from "@/lib/pdf-editor/mupdf-edit"
+import type { Change } from "@/lib/pdf-editor/tools"
 import type { Audit } from "@/lib/pdf-compressor/mupdf-audit"
 import type { CompressReport, Stage } from "@/lib/pdf-compressor/mupdf-compress"
 import type { Lock, Removal } from "@/lib/pdf-compressor/options"
@@ -12,10 +14,24 @@ import type { Area } from "@/lib/pdf-splitter/text-rule"
 import type { Bookmark } from "./outline"
 import type {
   CompressHow,
+  EditNews,
   PdfRequest,
   PdfResponse,
   SplitKeep,
 } from "./protocol"
+
+/** Where a file being edited stands when it is opened. */
+export type EditState = NonNullable<
+  Extract<PdfResponse, { type: "edit-state" }>["state"]
+>
+
+/** A change that could not be made, with the reason for the page. */
+export class EditFailed extends Error {}
+
+interface ExportJob {
+  resolve: (result: { bytes: ArrayBuffer; report: ExportReport } | null) => void
+  reject: (error: Error) => void
+}
 
 /** Everything a merge is asked for. */
 export type MergeOrder = Omit<
@@ -107,7 +123,10 @@ export class PdfClient {
    * again. Passwords are not remembered: one is only ever sent to a worker
    * that has already answered, and such a worker is never started again.
    */
-  private readonly sent = new Map<string, { file: Blob; picture: boolean }>()
+  private readonly sent = new Map<
+    string,
+    { file: Blob; picture: boolean; edit?: boolean }
+  >()
   private readonly thumbnails = new Map<
     number,
     (bitmap: ImageBitmap | null) => void
@@ -124,6 +143,16 @@ export class PdfClient {
   private readonly splits = new Map<number, SplitJob>()
   private readonly audits = new Map<number, (audit: Audit | null) => void>()
   private readonly compressions = new Map<number, CompressJob>()
+  private readonly editStates = new Map<
+    number,
+    (state: EditState | null) => void
+  >()
+  private readonly editPictures = new Map<number, (size: Size | null) => void>()
+  private readonly editNews = new Map<
+    number,
+    { resolve: (news: EditNews) => void; reject: (error: Error) => void }
+  >()
+  private readonly exports = new Map<number, ExportJob>()
   private requests = 0
   private jobs = 0
   private answered = false
@@ -173,6 +202,26 @@ export class PdfClient {
       this.audits.delete(message.request)
       // Only the compressor asks for this, and by now the worker has loaded.
       this.startHelpers()
+    } else if (message.type === "edit-state") {
+      this.editStates.get(message.request)?.(message.state)
+      this.editStates.delete(message.request)
+    } else if (message.type === "edit-picture") {
+      this.editPictures.get(message.request)?.(message.size)
+      this.editPictures.delete(message.request)
+    } else if (message.type === "edit-news") {
+      const waiting = this.editNews.get(message.request)
+      this.editNews.delete(message.request)
+      if (message.news) waiting?.resolve(message.news)
+      else waiting?.reject(new EditFailed(message.message ?? ""))
+    } else if (
+      message.type === "edit-exported" ||
+      message.type === "edit-export-error"
+    ) {
+      const job = this.exports.get(message.job)
+      this.exports.delete(message.job)
+      if (message.type === "edit-exported")
+        job?.resolve({ bytes: message.bytes, report: message.report })
+      else job?.reject(new Error(message.message))
     } else if (message.type === "stage") {
       this.compressions
         .get(message.job)
@@ -213,6 +262,12 @@ export class PdfClient {
       if (split && message.type === "cancelled") {
         this.splits.delete(message.job)
         split.resolve(false)
+        return
+      }
+      const exporting = this.exports.get(message.job)
+      if (exporting && message.type === "cancelled") {
+        this.exports.delete(message.job)
+        exporting.resolve(null)
         return
       }
       const compression = this.compressions.get(message.job)
@@ -291,16 +346,32 @@ export class PdfClient {
     for (const job of this.compressions.values())
       job.reject(new Error(ENGINE_FAILED))
     this.compressions.clear()
+    this.dropEditing(new EditFailed(ENGINE_FAILED))
     // Offline, some browsers fail to load a worker's scripts the first time (see WorkerPool).
     if (!this.answered && this.restarts < 2) {
       this.restarts++
-      for (const [id, { file, picture }] of this.sent)
-        this.send({ type: "open", id, file, picture })
+      for (const [id, { file, picture, edit }] of this.sent)
+        this.send({ type: "open", id, file, picture, edit })
       return
     }
     for (const id of this.sent.keys())
       this.onFile({ type: "open-error", id, message: ENGINE_FAILED })
     this.sent.clear()
+  }
+
+  /** Answer everything an editor is waiting for: nothing, or the reason given. */
+  private dropEditing(reason: Error | null) {
+    for (const done of this.editStates.values()) done(null)
+    this.editStates.clear()
+    for (const done of this.editPictures.values()) done(null)
+    this.editPictures.clear()
+    for (const waiting of this.editNews.values())
+      waiting.reject(reason ?? new EditFailed(""))
+    this.editNews.clear()
+    for (const job of this.exports.values())
+      if (reason) job.reject(reason)
+      else job.resolve(null)
+    this.exports.clear()
   }
 
   /** Answer everything a reader is waiting for with nothing. */
@@ -323,11 +394,82 @@ export class PdfClient {
   open(
     id: string,
     file: Blob,
-    options: { password?: string; picture?: boolean } = {}
+    options: { password?: string; picture?: boolean; edit?: boolean } = {}
   ) {
     const picture = Boolean(options.picture)
-    this.sent.set(id, { file, picture })
-    this.send({ type: "open", id, file, password: options.password, picture })
+    const edit = Boolean(options.edit)
+    this.sent.set(id, { file, picture, edit })
+    this.send({
+      type: "open",
+      id,
+      file,
+      password: options.password,
+      picture,
+      edit,
+    })
+  }
+
+  /** Where a file opened for editing stands; null when it is not open for that. */
+  editState(id: string) {
+    return new Promise<EditState | null>((resolve) => {
+      const request = ++this.requests
+      this.editStates.set(request, resolve)
+      this.send({ type: "edit-state", id, request })
+    })
+  }
+
+  /** Hand the worker a font file for text boxes. */
+  editFont(id: string, key: string, bytes: ArrayBuffer) {
+    this.send({ type: "edit-font", id, key, bytes })
+  }
+
+  /** Hand the worker a picture to place; its size in pixels, or null when it cannot be read. */
+  editPicture(id: string, name: string, file: Blob) {
+    return new Promise<Size | null>((resolve) => {
+      const request = ++this.requests
+      this.editPictures.set(request, resolve)
+      this.send({ type: "edit-picture", id, request, name, file })
+    })
+  }
+
+  /**
+   * Make a change to a file being edited.
+   * @throws EditFailed with words for the page when it could not be made.
+   */
+  editApply(id: string, change: Change) {
+    return new Promise<EditNews>((resolve, reject) => {
+      const request = ++this.requests
+      this.editNews.set(request, { resolve, reject })
+      this.send({ type: "edit-apply", id, request, change })
+    })
+  }
+
+  /** Undo the last change (`back`), or make it again. */
+  editStep(id: string, back: boolean) {
+    return new Promise<EditNews>((resolve, reject) => {
+      const request = ++this.requests
+      this.editNews.set(request, { resolve, reject })
+      this.send({ type: "edit-step", id, request, back })
+    })
+  }
+
+  /** Write an edited file out. The promise gives null when it was cancelled. */
+  editExport(
+    id: string,
+    options: { keepEditable: boolean; lock: Lock | null }
+  ) {
+    const job = ++this.jobs
+    const promise = new Promise<{
+      bytes: ArrayBuffer
+      report: ExportReport
+    } | null>((resolve, reject) => {
+      this.exports.set(job, { resolve, reject })
+      this.send({ type: "edit-export", id, job, ...options })
+    })
+    return {
+      promise,
+      cancel: () => this.worker?.postMessage({ type: "cancel", job }),
+    }
   }
 
   close(id: string) {
@@ -554,6 +696,7 @@ export class PdfClient {
     this.dropReading()
     for (const job of this.compressions.values()) job.resolve(null)
     this.compressions.clear()
+    this.dropEditing(null)
     for (const job of this.merges.values()) job.resolve(null)
     this.merges.clear()
     for (const job of this.splits.values()) job.resolve(false)

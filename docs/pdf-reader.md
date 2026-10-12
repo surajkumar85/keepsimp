@@ -30,6 +30,14 @@ A large window for reading a PDF, shared by the PDF merger and the PDF splitter.
 
 Give `PdfReader` a `reading` (null while closed), a `source` and `onClose`, and pass the control that opened it as `returnTo`. An optional `action` gives one thing that can be done to the page being read, such as the splitter's cut.
 
+A tool that does more than read hands the window `extras` (`ReaderExtras`), as the PDF editor does (`docs/pdf-editor.md`):
+
+- `toolbar` is rows under the bar, and `actions` are buttons at the end of the bar.
+- `overlay` is laid over each page, inside a box that is the page's own size in points and scaled with it. Text and links are out of reach under it.
+- `onKey` is offered every key before the reader has it and says whether it used it. A key it used and called `preventDefault` on does not close the window, so Escape can put a tool down first.
+- `onPage` is told which page is being read. `fixed` takes the button that turns the view away, for what is laid over the pages counts on their turn. `name` is what the close button calls the window.
+- A page entry may carry a `version`. When it goes up, the page's picture and its small picture in the strip are drawn again at once, which is how the editor shows a change made to the file.
+
 - `reading` is "opening", "failed" with a message, or "ready" with a title, the entries to show, the page to start at and, for one file, its bookmarks.
 - An entry is a page of an open file (file id, page, an added turn, its size in points and a label) or a blank page.
 - `source` wraps the tool's `PdfClient`: `draw`, `text`, `search` and `forget`.

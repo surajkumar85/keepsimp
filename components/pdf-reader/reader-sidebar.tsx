@@ -26,6 +26,7 @@ function Thumb({
   const [drawn, setDrawn] = useState(false)
   const file = entry.kind === "page" ? entry.file : null
   const page = entry.kind === "page" ? entry.page : null
+  const version = entry.kind === "page" ? (entry.version ?? 0) : 0
   useEffect(() => {
     if (file === null || page === null) return
     let alive = true
@@ -49,7 +50,7 @@ function Thumb({
       alive = false
       if (waiting) source.forget([asked.request])
     }
-  }, [file, page, source])
+  }, [file, page, source, version])
   const sideways = turn % 180 !== 0
   const shape = sideways
     ? { width: entry.size.height, height: entry.size.width }

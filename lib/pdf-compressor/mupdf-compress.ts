@@ -214,7 +214,7 @@ const FONT_CHECK_EDGE = 500
 const nameOf = (object: Obj) => (object.isName() ? object.asName() : "")
 const numberOf = (object: Obj) => (object.isNumber() ? object.asNumber() : 0)
 
-function open(mupdf: Engine, bytes: Uint8Array, password?: string) {
+export function open(mupdf: Engine, bytes: Uint8Array, password?: string) {
   const doc = new mupdf.PDFDocument(bytes)
   if (
     doc.needsPassword() &&
@@ -1264,7 +1264,7 @@ function wholeFonts(doc: Doc) {
 }
 
 /** True when two documents write the same text and draw the same picture on a page. */
-function samePage(mupdf: Engine, a: Doc, b: Doc, index: number) {
+export function samePage(mupdf: Engine, a: Doc, b: Doc, index: number) {
   const text = (doc: Doc) => {
     const page = doc.loadPage(index)
     try {

@@ -279,7 +279,13 @@ function prepare(doc: Doc, count: number) {
 export function openPdf(
   mupdf: Engine,
   bytes: Uint8Array,
-  password?: string
+  password?: string,
+  /**
+   * Leave the pages exactly as they are. The editor changes this very copy
+   * and hands it back, so nothing may be rewritten to make pages easier to
+   * copy; `pages` is then empty.
+   */
+  untouched = false
 ): OpenedPdf {
   let doc: Doc
   try {
@@ -337,7 +343,13 @@ export function openPdf(
         page.destroy()
       }
     }
-    return { doc, pages: prepare(doc, count), facts, bookmarks, labels }
+    return {
+      doc,
+      pages: untouched ? [] : prepare(doc, count),
+      facts,
+      bookmarks,
+      labels,
+    }
   } catch (error) {
     doc.destroy()
     if (error instanceof PasswordNeeded) throw error

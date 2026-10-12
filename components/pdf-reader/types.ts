@@ -15,6 +15,8 @@ export type ReaderEntry =
       size: Size
       /** What it is, in words: "report.pdf, page 3". */
       label: string
+      /** Counts the changes made to the page. Its picture is drawn again when this goes up. */
+      version?: number
     }
   | { kind: "blank"; key: string; size: Size; label: string }
 

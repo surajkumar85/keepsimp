@@ -7,6 +7,10 @@ import type {
   Level,
   ScanChoice,
 } from "@/lib/pdf-compressor/settings"
+import type { History } from "@/lib/pdf-editor/history"
+import type { ExportReport } from "@/lib/pdf-editor/mupdf-edit"
+import type { EditorObject } from "@/lib/pdf-editor/objects"
+import type { Change } from "@/lib/pdf-editor/tools"
 import type { PageText, Quad } from "@/lib/pdf-reader/text"
 import type { HalveChoice } from "@/lib/pdf-splitter/halves"
 import type { Area } from "@/lib/pdf-splitter/text-rule"
@@ -42,6 +46,8 @@ export type PdfRequest =
       password?: string
       /** The file is a picture, to become a one-page file. */
       picture?: boolean
+      /** The file is to be edited: it is opened untouched, and what is opened is the copy that changes. */
+      edit?: boolean
     }
   | { type: "close"; id: string }
   | {
@@ -156,10 +162,42 @@ export type PdfRequest =
       maxPixels: number
     }
   | { type: "cancel"; job: number }
+  /** Where a file being edited stands: its pages, what was added to them, and its list of changes. */
+  | { type: "edit-state"; id: string; request: number }
+  /** A font file for text boxes, by its key. */
+  | { type: "edit-font"; id: string; key: string; bytes: ArrayBuffer }
+  /** A picture to be placed, under a name. */
+  | {
+      type: "edit-picture"
+      id: string
+      request: number
+      name: string
+      file: Blob
+    }
+  /** Make a change to the file, as one step. */
+  | { type: "edit-apply"; id: string; request: number; change: Change }
+  /** Undo the last change, or make it again. */
+  | { type: "edit-step"; id: string; request: number; back: boolean }
+  /** Write the file out as it stands. */
+  | {
+      type: "edit-export"
+      id: string
+      job: number
+      keepEditable: boolean
+      lock: Lock | null
+    }
   /** One end of a line to a helper that runs the picture codecs on a core of its own. */
   | { type: "helper"; port: MessagePort }
   /** The helpers have stopped; what they were doing is done in the worker itself. */
   | { type: "helpers-lost" }
+
+/** What changed in a file being edited: the pages to draw again with what is now on them, and the list of changes. */
+export interface EditNews {
+  pages: { page: number; objects: EditorObject[] }[]
+  history: History
+  /** Letters a text box holds that its font has no shape for. */
+  lacking: string[]
+}
 
 export type PdfResponse =
   | { type: "opened"; id: string; facts: FileFacts }
@@ -244,4 +282,31 @@ export type PdfResponse =
       report: CompressReport
     }
   | { type: "compress-error"; job: number; message: string }
+  | {
+      type: "edit-state"
+      request: number
+      /** Null when the file is not open for editing. */
+      state: {
+        sizes: Size[]
+        objects: EditorObject[][]
+        history: History
+        bookmarks: Bookmark[]
+      } | null
+    }
+  /** A picture's size in pixels; null when it could not be read. */
+  | { type: "edit-picture"; request: number; size: Size | null }
+  /** `news` is null when the change could not be made; `message` then says why. */
+  | {
+      type: "edit-news"
+      request: number
+      news: EditNews | null
+      message?: string
+    }
+  | {
+      type: "edit-exported"
+      job: number
+      bytes: ArrayBuffer
+      report: ExportReport
+    }
+  | { type: "edit-export-error"; job: number; message: string }
   | { type: "cancelled"; job: number }

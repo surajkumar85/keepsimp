@@ -21,6 +21,21 @@ import {
   splitPart,
 } from "@/lib/pdf-splitter/mupdf-split"
 import { codecs } from "@/lib/pdf-compressor/codecs"
+import {
+  addFont,
+  addPicture,
+  applyChange,
+  editingOf,
+  exportEdited,
+  historyOf,
+  letGo,
+  lettersLacking,
+  objectsOn,
+  pageSizes as editSizes,
+  stepBack,
+  stepForward,
+  type EditSession,
+} from "@/lib/pdf-editor/mupdf-edit"
 import { HelperCodecs, type HelperPort } from "@/lib/pdf-compressor/helpers"
 import { auditPdf, type Audit } from "@/lib/pdf-compressor/mupdf-audit"
 import type { Stage } from "@/lib/pdf-compressor/report"
@@ -74,9 +89,15 @@ const files = new Map<string, OpenedPdf>()
 const originals = new Map<string, OpenedPdf>()
 
 /** Let go of a file, and of the file it was cut from. */
+/** Files that are being edited: each is the very document in `files`, with its fonts, pictures and list of changes. */
+const editing = new Map<string, EditSession>()
+
 function closeFile(id: string) {
   const pdf = files.get(id)
   const original = originals.get(id)
+  const session = editing.get(id)
+  if (session) letGo(session)
+  editing.delete(id)
   if (pdf) closePdf(pdf)
   if (original && original !== pdf) closePdf(original)
   files.delete(id)
@@ -142,14 +163,15 @@ async function open(request: Extract<PdfRequest, { type: "open" }>) {
   }
   try {
     closeFile(request.id)
-    const pdf = request.picture
-      ? await picture(mupdf, request.file)
-      : openPdf(
-          mupdf,
-          new Uint8Array(await request.file.arrayBuffer()),
-          request.password
-        )
+    const bytes = request.picture
+      ? null
+      : new Uint8Array(await request.file.arrayBuffer())
+    const pdf = bytes
+      ? openPdf(mupdf, bytes, request.password, request.edit)
+      : await picture(mupdf, request.file)
     files.set(request.id, pdf)
+    if (bytes && request.edit)
+      editing.set(request.id, editingOf(pdf.doc, bytes, request.password))
     post({ type: "opened", id: request.id, facts: pdf.facts })
   } catch (error) {
     if (error instanceof PasswordNeeded)
@@ -485,6 +507,160 @@ async function compress(request: Extract<PdfRequest, { type: "compress" }>) {
   }
 }
 
+const EDIT_FAILED =
+  "That change could not be made. Undo the last step, or add the file once more."
+const EXPORT_FAILED =
+  "The file could not be written. Try again, or add the file once more."
+
+function editState(request: Extract<PdfRequest, { type: "edit-state" }>) {
+  const session = editing.get(request.id)
+  const pdf = files.get(request.id)
+  let state: Extract<PdfResponse, { type: "edit-state" }>["state"] = null
+  try {
+    if (session && pdf) {
+      const sizes = editSizes(session)
+      state = {
+        sizes,
+        objects: sizes.map((_, page) => objectsOn(session, page)),
+        history: historyOf(session),
+        bookmarks: pdf.bookmarks,
+      }
+    }
+  } catch {
+    // The page says that the file could not be opened for editing.
+  }
+  post({ type: "edit-state", request: request.request, state })
+}
+
+/** What to tell the page after a change: the pages to draw again, and the list of changes. */
+function newsOf(
+  session: EditSession,
+  pages: readonly number[],
+  change?: { ops: readonly { do: string; object?: unknown }[] }
+) {
+  const lacking = new Set<string>()
+  for (const op of change?.ops ?? []) {
+    const object = (op as { object?: { kind?: string } }).object
+    if (object?.kind === "text")
+      try {
+        for (const letter of lettersLacking(session, object as never))
+          lacking.add(letter)
+      } catch {
+        // A font that is missing has already failed the change itself.
+      }
+  }
+  return {
+    pages: pages.map((page) => ({ page, objects: objectsOn(session, page) })),
+    history: historyOf(session),
+    lacking: [...lacking],
+  }
+}
+
+async function editApply(request: Extract<PdfRequest, { type: "edit-apply" }>) {
+  const session = editing.get(request.id)
+  try {
+    if (!session) throw new Error(EDIT_FAILED)
+    const pages = applyChange(await engine, session, request.change)
+    post({
+      type: "edit-news",
+      request: request.request,
+      news: newsOf(session, pages, request.change),
+    })
+  } catch (error) {
+    post({
+      type: "edit-news",
+      request: request.request,
+      news: null,
+      message: readable(error, EDIT_FAILED),
+    })
+  }
+}
+
+function editStep(request: Extract<PdfRequest, { type: "edit-step" }>) {
+  const session = editing.get(request.id)
+  try {
+    if (!session) throw new Error(EDIT_FAILED)
+    const pages = request.back ? stepBack(session) : stepForward(session)
+    post({
+      type: "edit-news",
+      request: request.request,
+      news: newsOf(session, pages ?? []),
+    })
+  } catch (error) {
+    post({
+      type: "edit-news",
+      request: request.request,
+      news: null,
+      message: readable(error, EDIT_FAILED),
+    })
+  }
+}
+
+async function editPicture(
+  request: Extract<PdfRequest, { type: "edit-picture" }>
+) {
+  let size: Size | null = null
+  try {
+    const session = editing.get(request.id)
+    if (session) {
+      const { file } = request
+      const head = new Uint8Array(
+        await file.slice(0, 1024 * 1024).arrayBuffer()
+      )
+      const format = sniffFormat(head)
+      // A PNG, and a JPEG that is stored the way up it is shown, go in as
+      // they are. Anything else is drawn first and kept as a PNG, which
+      // also keeps see-through parts.
+      const asItIs =
+        format === "png" ||
+        (format === "jpeg" && quarterTurns(jpegOrientation(head)) === 0)
+      if (format && format !== "svg") {
+        const bytes = asItIs
+          ? new Uint8Array(await file.arrayBuffer())
+          : await helpers.codecs.png(await decodeImageFile(file, format))
+        size = addPicture(await engine, session, request.name, bytes)
+      }
+    }
+  } catch {
+    // The page says that the picture could not be read.
+  }
+  post({ type: "edit-picture", request: request.request, size })
+}
+
+async function editExport(
+  request: Extract<PdfRequest, { type: "edit-export" }>
+) {
+  const { job } = request
+  try {
+    const session = editing.get(request.id)
+    if (!session) throw new Error(EXPORT_FAILED)
+    let paused = performance.now()
+    const result = await exportEdited(await engine, session, {
+      keepEditable: request.keepEditable,
+      lock: request.lock ?? undefined,
+      checkpoint: async () => {
+        if (job <= cancelled) throw new Cancelled()
+        if (performance.now() - paused < 16) return
+        await new Promise((resolve) => setTimeout(resolve, 0))
+        paused = performance.now()
+        if (job <= cancelled) throw new Cancelled()
+      },
+    })
+    const out = result.bytes.buffer as ArrayBuffer
+    post({ type: "edit-exported", job, bytes: out, report: result.report }, [
+      out,
+    ])
+  } catch (error) {
+    if (error instanceof Cancelled) post({ type: "cancelled", job })
+    else
+      post({
+        type: "edit-export-error",
+        job,
+        message: readable(error, EXPORT_FAILED),
+      })
+  }
+}
+
 async function halve(request: Extract<PdfRequest, { type: "halve" }>) {
   const { id } = request
   const current = files.get(id)
@@ -727,6 +903,29 @@ self.onmessage = (event: MessageEvent<PdfRequest>) => {
     })
   else if (request.type === "halve") enqueue({ run: () => halve(request) })
   else if (request.type === "audit") enqueue({ run: () => audit(request) })
+  else if (request.type === "edit-state")
+    enqueue({ run: async () => editState(request) })
+  else if (request.type === "edit-font")
+    enqueue({
+      run: async () => {
+        const session = editing.get(request.id)
+        if (session)
+          addFont(
+            await engine,
+            session,
+            request.key,
+            new Uint8Array(request.bytes)
+          )
+      },
+    })
+  else if (request.type === "edit-picture")
+    enqueue({ run: () => editPicture(request) })
+  else if (request.type === "edit-apply")
+    enqueue({ run: () => editApply(request) })
+  else if (request.type === "edit-step")
+    enqueue({ run: async () => editStep(request) })
+  else if (request.type === "edit-export")
+    enqueue({ run: () => editExport(request) })
   else if (request.type === "compress")
     enqueue({ run: () => compress(request) })
   else if (request.type === "merge") enqueue({ run: () => merge(request) })

@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 600" role="img" aria-labelledby="title desc">
+  <title id="title">Edit a PDF in your browser</title><desc id="desc">A page of a PDF with a line of typed text selected, a red box drawn around a paragraph, an arrow, a pen stroke and a small picture, under a row of tools.</desc>
+  <rect width="900" height="600" rx="24" fill="#f5f5f0"/>
+  <rect x="60" y="50" width="780" height="64" rx="16" fill="#fff" stroke="#d4d4d4"/>
+  <rect x="80" y="64" width="36" height="36" rx="8" fill="#e6f2f0"/>
+  <g fill="none" stroke="#00786f" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M91 73 l14 8 l-6 2 l-2 6 z"/></g>
+  <g fill="none" stroke="#525252" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M141 92 l6 -20 l6 20 m-9 -7 h6"/><rect x="183" y="72" width="20" height="20" rx="3"/><circle cx="238" cy="82" r="10"/><path d="M273 92 l20 -20"/><path d="M318 92 l20 -20 m-9 0 h9 v9"/><path d="M363 92 l3 -9 l12 -12 l6 6 l-12 12 z"/></g>
+  <rect x="405" y="72" width="22" height="20" rx="4" fill="#525252"/>
+  <rect x="716" y="64" width="104" height="36" rx="10" fill="#00786f"/>
+  <text x="768" y="88" font-family="sans-serif" font-size="15" font-weight="600" fill="#fff" text-anchor="middle">Download</text>
+  <rect x="200" y="140" width="500" height="460" fill="#fff" stroke="#d4d4d4"/>
+  <rect x="240" y="176" width="210" height="18" rx="4" fill="#0a0a0a"/>
+  <g fill="#d4d4d4"><rect x="240" y="222" width="420" height="10" rx="5"/><rect x="240" y="244" width="390" height="10" rx="5"/><rect x="240" y="266" width="410" height="10" rx="5"/><rect x="240" y="322" width="420" height="10" rx="5"/><rect x="240" y="344" width="330" height="10" rx="5"/><rect x="240" y="520" width="180" height="10" rx="5"/></g>
+  <rect x="228" y="306" width="446" height="64" rx="2" fill="none" stroke="#dc2626" stroke-width="3"/>
+  <g stroke="#dc2626" stroke-width="3" stroke-linecap="round" fill="#dc2626"><path d="M760 300 L690 334"/><path d="M682 338 l14 -14 l4 12 z" stroke="none"/></g>
+  <text x="252" y="430" font-family="sans-serif" font-size="22" fill="#0a0a0a">Approved, 12 October</text>
+  <rect x="238" y="406" width="256" height="34" fill="none" stroke="#00786f" stroke-width="2"/>
+  <g fill="#fff" stroke="#00786f" stroke-width="2"><rect x="233" y="418" width="10" height="10" rx="2"/><rect x="489" y="418" width="10" height="10" rx="2"/><circle cx="366" cy="388" r="5"/></g>
+  <path d="M520 470 c14 -34 24 -34 32 0 s20 30 30 -4 s22 -26 30 6 s18 18 34 -10" fill="none" stroke="#1a40bf" stroke-width="4" stroke-linecap="round"/>
+  <g><rect x="240" y="462" width="96" height="42" rx="4" fill="#f7e2d3"/><circle cx="262" cy="477" r="7" fill="#b4541a"/><path d="M246 500 l24 -18 l16 12 l14 -8 l30 14 z" fill="#b4541a"/></g>
+</svg>

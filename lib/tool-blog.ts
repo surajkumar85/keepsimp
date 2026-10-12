@@ -3,16 +3,17 @@ import type { BlogPost } from "./blog"
 /** The post that goes through every tool on the site, with a link to each. */
 export const overviewPost: BlogPost = {
   slug: "free-online-tools-no-upload",
-  title: "Eight free tools that never ask for your files.",
+  title: "Nine free tools that never ask for your files.",
   searchTitle:
     "Free online PDF, image and JSON tools that work without uploading",
   description:
-    "Every KeepSimp tool in one place: compress, merge and split PDFs, compress, resize and convert images, convert GIFs, and format JSON. Free, no sign-up, and your files stay on your device.",
+    "Every KeepSimp tool in one place: edit, compress, merge and split PDFs, resize and convert images, convert GIFs, and format JSON. Free, no sign-up, and your files stay on your device.",
   keywords: [
     "free online tools",
     "no upload",
     "PDF tools",
     "image tools",
+    "edit PDF",
     "compress PDF",
     "merge PDF",
     "split PDF",
@@ -26,7 +27,7 @@ export const overviewPost: BlogPost = {
   readingTime: "5 min read",
   image: "/images/tools-overview.svg",
   imageAlt:
-    "Eight tiles, one for each KeepSimp tool: three for PDFs, four for images and animations, and one for JSON",
+    "Nine tiles, one for each KeepSimp tool: four for PDFs, four for images and animations, and one for JSON",
   tool: "",
   intro:
     "Most online tools work the same way: you upload a file, wait, and download the result, often after a sign-up or a limit of two files a day. KeepSimp works differently. Each tool runs inside your browser, on your own computer or phone, so the file never leaves it. There is no account, no watermark and no daily limit. Here is every tool we have today, what it is good for, and where to read more.",
@@ -87,6 +88,21 @@ export const overviewPost: BlogPost = {
         {
           label: "Guide: just the pages you need",
           href: "/blog/split-pdfs-without-uploading/",
+        },
+      ],
+    },
+    {
+      id: "pdf-editor",
+      title: "PDF editor: write and draw on any page.",
+      paragraphs: [
+        "Type on a form that has no fields to fill, add a date or a name, place a picture, or mark a page with boxes, arrows and a pen. Every change is made in the real file and can be undone, and the page you see is the page you will download.",
+        "The text you add is real text in a font that travels inside the file, so it looks the same everywhere and can be searched. Before the download, the result is read back and checked. Changing the words that are already in a file comes in a later version.",
+      ],
+      links: [
+        { label: "Edit a PDF", href: "/dashboard/pdf-editor/" },
+        {
+          label: "Guide: write on a PDF without sending it anywhere",
+          href: "/blog/edit-pdfs-without-uploading/",
         },
       ],
     },
@@ -418,6 +434,122 @@ export const targetSizePost: BlogPost = {
     {
       title: "Internet Archive PDF tools: mixed raster content",
       url: "https://archive-pdf-tools.readthedocs.io/",
+    },
+  ],
+}
+
+export const editPost: BlogPost = {
+  slug: "edit-pdfs-without-uploading",
+  title: "Write on a PDF, without sending it anywhere.",
+  searchTitle: "How to edit a PDF online for free without uploading it",
+  description:
+    "How to add text, pictures, shapes and drawings to a PDF in your browser: fill a form that has no fields, mark a page, and download a file that was checked. Free, with nothing uploaded.",
+  keywords: [
+    "edit PDF",
+    "PDF editor",
+    "edit PDF online free",
+    "add text to PDF",
+    "write on PDF",
+    "add image to PDF",
+    "draw on PDF",
+    "type on PDF form",
+    "no upload",
+  ],
+  category: "A little know-how",
+  readingTime: "5 min read",
+  image: "/images/pdf-edit-guide.svg",
+  imageAlt:
+    "A page of a PDF with a line of typed text selected, a red box around a paragraph, an arrow, a pen stroke and a small picture, under a row of tools",
+  tool: "pdf-editor",
+  intro:
+    "A form arrives as a PDF with nowhere to type. A contract needs a date beside your name. A plan needs an arrow that says: this wall, not that one. These are small jobs, and most tools that do them want your file on their server first, then an account, then a subscription to take the watermark off. Here is how to do them with the KeepSimp PDF editor, on your own device, and what the editor does not do yet.",
+  sections: [
+    {
+      id: "what-it-does",
+      title: "What it does today, and what it does not.",
+      paragraphs: [
+        "The editor adds things to pages: text, pictures, boxes, ellipses, lines, arrows and freehand drawing. Everything you add can be moved, resized, turned, restyled, copied and deleted, and every step can be undone, all the way back to the file as you opened it.",
+        "It does not yet change the words that are already in a file, fill in form fields, or add notes and highlights that stay as comments. Those are being built and will arrive as later versions of the same editor. We would rather say so here than let you find out halfway through a job.",
+      ],
+      links: [{ label: "Open the PDF editor", href: "/dashboard/pdf-editor/" }],
+    },
+    {
+      id: "type",
+      title: "Type where you need words.",
+      paragraphs: [
+        "Take the text tool, click where the words should start, and type. The line you type sits where you clicked, so filling in a paper form is a matter of clicking each blank and typing. Choose a sans, a serif or a mono font, a size, bold or italic, a colour and an alignment. A box that is too wide or too narrow can be pulled by its side, and the lines break again to fit.",
+        "The three fonts are as wide, letter for letter, as Arial, Times New Roman and Courier New, so your words sit the way they would in the document's own program. The font goes into the file, cut down to the letters you used. That is why your text looks the same on every device, and why it is real text that can be selected and found by a search, not a picture of text.",
+      ],
+    },
+    {
+      id: "pictures-and-shapes",
+      title: "Pictures, shapes and a pen.",
+      paragraphs: [
+        "A picture lands in the middle of the page you are reading, and from there you drag it into place. PNG and JPEG files go into the PDF as they are, without being saved again, so nothing is lost; a PNG keeps its see-through parts. That makes a scan of your signature with a clear background a tidy way to sign a page. It is a picture of a signature, not a digital signature that proves who signed.",
+        "Boxes, ellipses, lines and arrows are for pointing things out. Draw with a mouse, a pen or a finger for anything looser. Guides appear when a thing lines up with the middle or the edge of the page, or with something else on it.",
+      ],
+    },
+    {
+      id: "cover",
+      title: "Covering is not removing.",
+      paragraphs: [
+        "The cover tool puts a filled box over part of a page, white by default. It is useful for hiding an old date before you type a new one. But it only covers. The words under it are still in the file, and anyone can select the area, copy it and paste what was there.",
+        "Many editors call this whiteout or even redaction, and people have published court papers and reports that way with the names still inside. Do not use a cover for anything private. True redaction, which takes the words and the pixels out of the file and proves it, is one of the versions to come.",
+      ],
+    },
+    {
+      id: "what-you-see",
+      title: "What you see is the file.",
+      paragraphs: [
+        "Many browser editors draw your changes on a layer of their own and only write the PDF at the end, which is when surprises happen: a font that changed, a picture that moved. Here every change is made in the real document on your device, and the page is drawn again from that document. The screen cannot disagree with the download, because it is the download.",
+        "Before the file is handed to you it is checked. The text you added is read back out of the result, and pages you did not touch are drawn and compared with the original, pixel for pixel. Links, bookmarks, form fields and accessibility tags stay as they were. You can read the result in the built-in reader before you save it.",
+      ],
+    },
+    {
+      id: "later",
+      title: "Finish now, or come back to it.",
+      paragraphs: [
+        "By default the things you add become part of the page, like everything else on it, which is what you want before sending a file to someone. If you expect to change them again, turn on Keep what you added editable. They are then stored as separate things, and when you open the file in the editor another day they can be moved, restyled and deleted as before.",
+        "The file lives only in the tab while you work, and the page asks before you leave with changes you have not downloaded. A password can be set on the result if it should not be opened by just anyone.",
+      ],
+      links: [
+        {
+          label: "Join the edited file with others: the PDF merger",
+          href: "/dashboard/pdf-merger/",
+        },
+        {
+          label: "Make the result smaller: the PDF compressor",
+          href: "/dashboard/pdf-compressor/",
+        },
+      ],
+    },
+    {
+      id: "private",
+      title: "Your documents stay with you.",
+      paragraphs: [
+        "The PDFs people edit are contracts, applications, medical forms and school papers. With KeepSimp they are opened and changed on your own device and are never uploaded. There is no account, no watermark and no limit on files or pages, and once the page has loaded the editor works without a connection.",
+      ],
+      links: [
+        {
+          label: "Every KeepSimp tool in one place",
+          href: "/blog/free-online-tools-no-upload/",
+        },
+      ],
+    },
+  ],
+  sources: [
+    {
+      title: "Edit PDFs in Firefox: what a browser's own editor can do",
+      url: "https://www.firefox.com/features/pdf-editor/",
+    },
+    {
+      title: "Liberation Fonts, the open fonts the editor embeds",
+      url: "https://github.com/liberationfonts/liberation-fonts",
+    },
+    {
+      title:
+        "Sanitization of documents: why a box drawn over text does not remove it, Wikipedia",
+      url: "https://en.wikipedia.org/wiki/Sanitization_(classified_information)",
     },
   ],
 }

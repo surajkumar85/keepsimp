@@ -1,6 +1,6 @@
 "use client"
 
-import { Fragment, useEffect, useRef, useState } from "react"
+import { Fragment, useEffect, useRef, useState, type ReactNode } from "react"
 import { cn } from "cn"
 import { drawEdge } from "@/lib/pdf-reader/layout"
 import type { Match } from "@/lib/pdf-reader/search"
@@ -56,6 +56,7 @@ export function ReaderPage({
   currentMatch,
   linkTo,
   onLink,
+  overlay,
 }: {
   entry: ReaderEntry
   /** Its place among the pages, counted from 1. */
@@ -74,9 +75,13 @@ export function ReaderPage({
   /** The place among the pages that a link to a page of this file leads to; -1 when it is not shown. */
   linkTo: (page: number) => number
   onLink: (to: number) => void
+  /** What a tool lays over the page, in the page's own points. Text and links are then out of reach under it. */
+  overlay?: ReactNode
 }) {
   const canvas = useRef<HTMLCanvasElement>(null)
   const drawnOnce = useRef(false)
+  /** The size the picture on screen was drawn for. */
+  const drawnEdge = useRef(0)
   const [picture, setPicture] = useState<"drawing" | "drawn" | "failed">(
     "drawing"
   )
@@ -84,6 +89,7 @@ export function ReaderPage({
 
   const file = entry.kind === "page" ? entry.file : null
   const page = entry.kind === "page" ? entry.page : null
+  const version = entry.kind === "page" ? (entry.version ?? 0) : 0
   const sideways = turn % 180 !== 0
   // The page before its turn, in screen pixels.
   const width = sideways ? box.height : box.width
@@ -116,17 +122,19 @@ export function ReaderPage({
           target.getContext("2d")?.drawImage(bitmap, 0, 0)
           bitmap.close()
           drawnOnce.current = true
+          drawnEdge.current = edge
           setPicture("drawn")
         })
       },
-      drawnOnce.current ? 160 : 0
+      // A zoom waits to settle; a page that changed is drawn again at once.
+      drawnOnce.current && drawnEdge.current !== edge ? 160 : 0
     )
     return () => {
       alive = false
       clearTimeout(timer)
       if (request !== null) source.forget([request])
     }
-  }, [file, page, edge, source])
+  }, [file, page, edge, source, version])
 
   useEffect(() => {
     if (file === null || page === null) return
@@ -153,7 +161,7 @@ export function ReaderPage({
       alive = false
       if (waiting) source.forget([asked.request])
     }
-  }, [file, page, source])
+  }, [file, page, source, version])
 
   const state = entry.kind === "blank" ? "drawn" : picture
   return (
@@ -269,6 +277,7 @@ export function ReaderPage({
                   />
                 )
               })}
+              {overlay}
             </div>
             {layer && layer.lines.length === 0 && (
               <p className="sr-only">

@@ -15,6 +15,8 @@ import { ImageResizerTutorial } from "@/components/image-resizer/tutorial"
 import { JsonTool } from "@/components/json-tool"
 import { PdfCompressor } from "@/components/pdf-compressor/pdf-compressor"
 import { PdfCompressorTutorial } from "@/components/pdf-compressor/tutorial"
+import { PdfEditor } from "@/components/pdf-editor/pdf-editor"
+import { PdfEditorTutorial } from "@/components/pdf-editor/tutorial"
 import { PdfMerger } from "@/components/pdf-merger/pdf-merger"
 import { PdfMergerTutorial } from "@/components/pdf-merger/tutorial"
 import { PdfSplitter } from "@/components/pdf-splitter/pdf-splitter"
@@ -114,6 +116,8 @@ export default async function ToolPage({
         <PdfSplitter />
       ) : id === "pdf-compressor" ? (
         <PdfCompressor />
+      ) : id === "pdf-editor" ? (
+        <PdfEditor />
       ) : (
         <JsonTool />
       )}
@@ -131,6 +135,8 @@ export default async function ToolPage({
         <PdfSplitterTutorial />
       ) : id === "pdf-compressor" ? (
         <PdfCompressorTutorial />
+      ) : id === "pdf-editor" ? (
+        <PdfEditorTutorial />
       ) : (
         <JsonTutorial />
       )}

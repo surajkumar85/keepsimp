@@ -178,3 +178,76 @@ export async function resourceNames(bytes: Uint8Array, kind: string) {
       : []
   })
 }
+
+/** A run of text as pdf.js finds it on a page, placed as the page is shown: points from its top left corner. */
+export interface PlacedText {
+  text: string
+  /** Where its baseline starts. */
+  x: number
+  y: number
+  /** The height of its letters, in points. */
+  size: number
+  /** The way it runs, clockwise in degrees: 0 for left to right. */
+  angle: number
+  font: string
+}
+
+/** Every run of text on every page, with where pdf.js says it is. */
+export async function textPlaces(bytes: Uint8Array, password?: string) {
+  const doc = await getDocument({
+    data: bytes.slice(),
+    password,
+    verbosity: 0,
+    useSystemFonts: false,
+  }).promise
+  try {
+    const pages: PlacedText[][] = []
+    for (let number = 1; number <= doc.numPages; number++) {
+      const page = await doc.getPage(number)
+      const [a, b, c, d, e, f] = page.getViewport({ scale: 1 }).transform
+      const content = await page.getTextContent()
+      const runs: PlacedText[] = []
+      for (const item of content.items) {
+        if (!("str" in item) || !item.str.trim()) continue
+        const [ia, ib, , , ie, iF] = item.transform as number[]
+        // The run's own matrix, carried into the page as it is shown.
+        const dx = a * ia + c * ib
+        const dy = b * ia + d * ib
+        runs.push({
+          text: item.str,
+          x: a * ie + c * iF + e,
+          y: b * ie + d * iF + f,
+          size: Math.hypot(dx, dy),
+          angle: ((((Math.atan2(dy, dx) * 180) / Math.PI) % 360) + 360) % 360,
+          font: item.fontName,
+        })
+      }
+      pages.push(runs)
+    }
+    return pages
+  } finally {
+    await doc.loadingTask.destroy()
+  }
+}
+
+/** The fonts a file embeds: the name each gives itself and the size of its font file, read with pdf-lib. */
+export async function embeddedFonts(bytes: Uint8Array) {
+  const doc = await PDFDocument.load(bytes, { ignoreEncryption: true })
+  const fonts: { name: string; bytes: number }[] = []
+  for (const [, object] of doc.context.enumerateIndirectObjects()) {
+    if (!("get" in object) || "contents" in object) continue
+    const dict = object as unknown as { get(key: unknown): unknown }
+    if (String(dict.get(PDFName.of("Type"))) !== "/FontDescriptor") continue
+    let size = 0
+    for (const key of ["FontFile", "FontFile2", "FontFile3"]) {
+      const ref = dict.get(PDFName.of(key))
+      if (!ref) continue
+      const file = doc.context.lookup(ref as never) as unknown as {
+        contents?: Uint8Array
+      }
+      size = file?.contents?.length ?? 0
+    }
+    fonts.push({ name: String(dict.get(PDFName.of("FontName"))), bytes: size })
+  }
+  return fonts
+}

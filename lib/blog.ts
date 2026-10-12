@@ -582,6 +582,7 @@ export const posts: readonly BlogPost[] = [
     ],
   },
   targetSizePost,
+  editPost,
   {
     slug: "format-json-without-losing-precision",
     searchTitle:
@@ -672,4 +673,4 @@ export function findPost(slug: string) {
   return posts.find((post) => post.slug === slug)
 }
 import { jsonPosts } from "./json-blog"
-import { overviewPost, resizePost, targetSizePost } from "./tool-blog"
+import { editPost, overviewPost, resizePost, targetSizePost } from "./tool-blog"
