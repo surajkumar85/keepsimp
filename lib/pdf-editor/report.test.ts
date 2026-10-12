@@ -8,6 +8,7 @@ const report = (change: Partial<ExportReport> = {}): ExportReport => ({
   untouched: { checked: 0, differ: [] },
   fontsCut: false,
   locked: false,
+  comments: { had: 0, how: "keep", has: 0 },
   ...change,
 })
 
@@ -96,5 +97,59 @@ describe("checkLines", () => {
       "Locked with your password.",
     ])
     expect(lines.every((line) => line.good)).toBe(true)
+  })
+
+  it("does not say nothing was added when the file carries comments", () => {
+    expect(
+      checkLines(
+        report({ added: 0, comments: { had: 2, how: "keep", has: 2 } })
+      ).map((line) => line.text)
+    ).toEqual([
+      "2 comments are in the file, where other programs show them too.",
+    ])
+  })
+
+  it("says what became of comments", () => {
+    const told = (comments: ExportReport["comments"]) =>
+      checkLines(report({ comments }))
+    expect(told({ had: 1, how: "keep", has: 1 })).toEqual([
+      {
+        text: "1 comment is in the file, where other programs show it too.",
+        good: true,
+      },
+    ])
+    expect(told({ had: 1200, how: "keep", has: 1200 })[0].text).toBe(
+      "1,200 comments are in the file, where other programs show them too."
+    )
+    expect(told({ had: 3, how: "flatten", has: 0 })[0]).toEqual({
+      text: "3 comments were made part of the page.",
+      good: true,
+    })
+    expect(told({ had: 1, how: "flatten", has: 0 })[0].text).toBe(
+      "1 comment was made part of the page."
+    )
+    expect(told({ had: 2, how: "remove", has: 0 })[0].text).toBe(
+      "2 comments were left out."
+    )
+    expect(told({ had: 1, how: "remove", has: 0 })[0].text).toBe(
+      "1 comment was left out."
+    )
+  })
+
+  it("warns when comments are not where they were meant to be", () => {
+    const told = (comments: ExportReport["comments"]) =>
+      checkLines(report({ comments }))[0]
+    expect(told({ had: 5, how: "keep", has: 3 })).toEqual({
+      text: "2 of 5 comments did not reach the result. Read the result before you rely on it.",
+      good: false,
+    })
+    expect(told({ had: 5, how: "remove", has: 1 })).toEqual({
+      text: "1 comment could not be left out and is still in the result as a comment.",
+      good: false,
+    })
+    expect(told({ had: 5, how: "flatten", has: 2 })).toEqual({
+      text: "2 comments could not be made part of the page and are still in the result as comments.",
+      good: false,
+    })
   })
 })

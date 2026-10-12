@@ -36,6 +36,7 @@ A tool that does more than read hands the window `extras` (`ReaderExtras`), as t
 - `overlay` is laid over each page, inside a box that is the page's own size in points and scaled with it. Text and links are out of reach under it.
 - `onKey` is offered every key before the reader has it and says whether it used it. A key it used and called `preventDefault` on does not close the window, so Escape can put a tool down first.
 - `onPage` is told which page is being read. `fixed` takes the button that turns the view away, for what is laid over the pages counts on their turn. `name` is what the close button calls the window.
+- `panel` is a panel of the tool's own beside the pages, over their lower part on a small screen (the editor's list of comments). `showPage` sends the reader to a page each time its `turn` changes, as when a comment is pressed in that list.
 - A page entry may carry a `version`. When it goes up, the page's picture and its small picture in the strip are drawn again at once, which is how the editor shows a change made to the file.
 
 - `reading` is "opening", "failed" with a message, or "ready" with a title, the entries to show, the page to start at and, for one file, its bookmarks.

@@ -13,7 +13,7 @@ const content: TutorialContent = {
     },
     {
       title: "Pick a tool",
-      text: "The tools are in the row under the title: select, text, box, ellipse, line, arrow, draw, cover, and a button that adds a picture. Each has a letter on the keyboard, shown when you rest the pointer on it.",
+      text: "The tools are in the row under the title. The first group adds things to a page: text, box, ellipse, line, arrow, draw, cover and a picture. The second marks and comments: highlight, underline, strike out, squiggle, a highlighter pen and notes. Each has a letter on the keyboard, shown when you rest the pointer on it.",
     },
     {
       title: "Add what you need",
@@ -49,6 +49,11 @@ const content: TutorialContent = {
         "A filled box that hides what is under it. It only covers: the words underneath are still in the file and can be copied out by anyone. Do not use it to hide private information. Redaction, which removes what is under it, comes in a later version.",
     },
     {
+      term: "Comments",
+      detail:
+        "Highlight, underline, strike out and squiggle are laid on words by dragging across them; the highlighter pen marks anything, also on a scan. A note is placed with one press and typed in the list of comments, where every comment of the file can be read, answered and deleted, the ones it came with included. On download they are kept as comments, drawn into the page, or left out.",
+    },
+    {
       term: "Undo and redo",
       detail:
         "Everything can be undone, back to the file as you opened it, with Ctrl or ⌘ Z, and done again with Ctrl or ⌘ Shift Z. The buttons say what they would undo.",
@@ -82,6 +87,87 @@ const content: TutorialContent = {
   guideHref: "/blog/edit-pdfs-without-uploading/",
 }
 
+const annotating: TutorialContent = {
+  name: "How to annotate a PDF with KeepSimp",
+  description:
+    "Highlight, underline and strike out text in a PDF, add notes and reply to comments, in your browser. The comments are ones every PDF program reads, and nothing is uploaded.",
+  intro:
+    "Follow the steps below. Every tool and option is explained underneath.",
+  steps: [
+    {
+      title: "Open a PDF",
+      text: "Drop a PDF, choose it from your device or paste it. A locked file asks for its password. The file opens over the page with the highlighter in hand, and any comments it already has are counted in the bar.",
+    },
+    {
+      title: "Mark the words",
+      text: "Drag across the words to highlight them, or press a single word. Underline, strike out and squiggle work the same way. Pick the colour in the second row before or after.",
+    },
+    {
+      title: "Mark a scan",
+      text: "A scanned page is a picture, with no words to take hold of. Take the highlighter pen and draw over what matters; choose how thick it is.",
+    },
+    {
+      title: "Add a note",
+      text: "Take the note tool and press where the note belongs. The list of comments opens with the note ready to be typed. Drag a note's icon to move it.",
+    },
+    {
+      title: "Read and answer",
+      text: "The list shows every comment page by page, with the words each mark lies on. Type under a comment to say something about it, reply to it, or delete it. Pressing a comment takes the pages to it.",
+    },
+    {
+      title: "Download",
+      text: "Press Download. Choose whether the comments stay comments, become part of the page, or are left out. The file is checked before it is handed to you.",
+    },
+  ],
+  options: [
+    {
+      term: "Highlight, underline, strike out, squiggle",
+      detail:
+        "These lie on the words themselves, so they follow the text line by line and stay sharp at any zoom. They are the PDF's own kinds of mark, so other PDF programs show them too, and those with a list of comments list them there. Keys: H, U, S and W.",
+    },
+    {
+      term: "Highlighter pen",
+      detail:
+        "A wide see-through stroke, for scans and for anything that is not text: a figure, a signature, a part of a drawing. Three thicknesses. Key: P.",
+    },
+    {
+      term: "Notes and replies",
+      detail:
+        "A note is a small icon on the page with words in the list. Anyone who opens the file can read it and reply. Replies are kept under the comment they answer, with who wrote them and when. Key: N.",
+    },
+    {
+      term: "Your name",
+      detail:
+        "Typed once at the top of the list, it signs the comments you make from then on. It is kept on this device only and can be left empty: comments are then not signed.",
+    },
+    {
+      term: "Comments a file already has",
+      detail:
+        "They are listed with yours and can be read, answered and deleted. Marks on words, notes and pen strokes can be given another colour. Other kinds, such as a stamp or a call-out made in another program, keep the look they came with.",
+    },
+    {
+      term: "Keep as comments, part of the page, or leave out",
+      detail:
+        "Kept, comments stay separate from the page: they can be hidden, answered and removed in any program. As part of the page, marks are drawn into it for good, which is right for a final copy; a note keeps its icon, and its words are no longer shown. Left out, the download has no comments at all.",
+    },
+    {
+      term: "Find in comments",
+      detail:
+        "Type a word to see only the comments that hold it, in what they say, the words they mark, their replies or their author.",
+    },
+    {
+      term: "Undo, and leaving",
+      detail:
+        "Every mark, note, reply and deletion can be undone with Ctrl or ⌘ Z. The file lives in this tab only; closing it with changes that were not downloaded asks first.",
+    },
+  ],
+  guideHref: "/blog/annotate-pdfs-without-uploading/",
+}
+
 export function PdfEditorTutorial() {
   return <ToolTutorial content={content} />
+}
+
+export function PdfAnnotatorTutorial() {
+  return <ToolTutorial content={annotating} />
 }

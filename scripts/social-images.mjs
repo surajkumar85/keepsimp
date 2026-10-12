@@ -80,7 +80,7 @@ const cards = [
   ],
   [
     "free-online-tools-no-upload",
-    "Nine free tools. No uploads.",
+    "Ten free tools. No uploads.",
     "PDFs, images, GIFs and JSON, all in your browser.",
     "/images/tools-overview.svg",
   ],
@@ -101,6 +101,12 @@ const cards = [
     "Write on a PDF. Keep it yours.",
     "Add text, pictures and shapes in your browser.",
     "/images/pdf-edit-guide.svg",
+  ],
+  [
+    "annotate-pdfs-without-uploading",
+    "Mark it up. Keep it yours.",
+    "Highlight, note and reply on any PDF.",
+    "/images/pdf-annotate-guide.svg",
   ],
   [
     "repair-compare-json-patch",

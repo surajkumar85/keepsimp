@@ -115,6 +115,10 @@ export interface ReaderExtras {
   onPage?: (index: number) => void
   /** Keys the tool wants before the reader has them. True when it took one. */
   onKey?: (event: KeyboardEvent) => boolean
+  /** A panel of the tool's own beside the pages; over their lower part on a small screen. */
+  panel?: ReactNode
+  /** A page to go to, counted from 0. The reader goes there each time `turn` changes. */
+  showPage?: { page: number; turn: number }
 }
 
 const NO_MATCHES: Match[] = []
@@ -263,6 +267,15 @@ function ReaderBody({
     element.scrollTop = top
     setScroll(top)
   }
+
+  // The tool sends the reader to a page, as when a comment is chosen from a list.
+  const wanted = extras?.showPage
+  const lastTurn = useRef(wanted?.turn)
+  useEffect(() => {
+    if (!wanted || wanted.turn === lastTurn.current) return
+    lastTurn.current = wanted.turn
+    goTo(wanted.page)
+  })
 
   /** Go to a page from the side panel, which covers the pages on a small screen. */
   const pick = (index: number) => {
@@ -734,6 +747,7 @@ function ReaderBody({
             {pageBoxes}
           </div>
         </div>
+        {extras?.panel}
       </div>
     </div>
   )

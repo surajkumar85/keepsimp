@@ -1,8 +1,8 @@
 # PDF editor
 
-Changes PDFs in the browser. Nothing is uploaded: the file is opened, changed, drawn and written by MuPDF as WebAssembly in the worker the other PDF tools use. Live at `/dashboard/pdf-editor/`.
+Changes PDFs in the browser. Nothing is uploaded: the file is opened, changed, drawn and written by MuPDF as WebAssembly in the worker the other PDF tools use. Live at `/dashboard/pdf-editor/`, and at `/dashboard/pdf-annotator/`, which is the same editor opened for marking up and commenting.
 
-The editor is built in ten phases, each shipped before the next begins. **Phase 1 is built:** the workspace, and adding things to pages. The plan for the rest is at the end.
+The editor is built in ten phases, each shipped before the next begins. **Phase 1 is built** (the workspace, and adding things to pages), **and the first part of phase 2** (comments). Stamps, call-outs and measuring lines are the second part of phase 2. The plan for the rest is at the end.
 
 ## What it does (phase 1)
 
@@ -21,6 +21,33 @@ The editor is built in ten phases, each shipped before the next begins. **Phase 
   - **Password**, with the shared lock fields (`components/pdf/lock-fields.tsx`). A file that came with a password keeps it unless a new one is set.
   - **The check** (below), the size, "Download again" and "Read the result".
 - **Leaving:** the browser asks before a tab with changes that were not downloaded is closed, and "Close the file" asks in the page. A download makes the file "saved" at that point in its list of changes; a change, an undo or a redo after it makes it unsaved again.
+
+## Comments (phase 2, first part)
+
+Two families live on a page. **Things** (text boxes, pictures, shapes) become part of the page on download. **Comments** are the PDF's own kinds of note: other programs show them as comments, and the ones a file comes with are read the same way.
+
+- **Marks on words:** highlight (H), underline (U), strike out (S) and squiggle (W). With the tool in hand, a drag across words marks from the word it began on to the word it ended on, through every line between, as text is selected; a press marks one word. A drag over empty paper marks nothing, and the bar says why ("No words there. On a scanned page, mark with the highlighter pen.").
+- **Highlighter pen** (P): a wide see-through stroke drawn by hand, in three thicknesses, for scans and for what is not text.
+- **Notes** (N): one press places the icon; the list of comments opens with the note ready to be typed. A note is dragged to move it.
+- **The list of comments** is a panel beside the pages (over their lower part on a phone), opened by the button that shows how many comments there are. Page by page, each comment has its kind and colour, who wrote it and when as far as the file says, the words a mark lies on, its own words (typed in place, saved when the field is left), its replies, a field to reply, and a button to delete. Pressing a comment takes the pages to it. A field finds comments by their words, their replies, the words they mark or their author.
+- **Your name** is typed once in the list and signs what is made from then on. It is kept in `localStorage` on this device only (`keepsimp.comment-author`); empty, comments are not signed.
+- **Comments a file comes with** are listed with the new ones and can be read, answered, given other words and deleted. Marks on words, notes and pen strokes can be given another colour. Any other kind (a stamp, a call-out, a shape from another program) is shown and answered, and keeps the look it came with.
+- **Picking:** a press on a comment picks it (a dashed frame), and the second row of the bar offers delete, "show in the list" and colours. Delete removes it, Enter opens its words in the list, Escape lets go. One thing is in hand at a time: picking a comment lets go of a selected thing, and the other way round.
+- **Download** asks what becomes of comments when the file has any: **kept as comments** (the usual), **part of the page** (drawn in for good; a note keeps its icon and its words are no longer shown), or **left out** (also the ones the file came with).
+- **The annotator** (`/dashboard/pdf-annotator/`, `mode="annotate"`) opens with the highlighter in hand and the comment tools first in the row. It has its own title, description, help and article.
+
+### How comments are built
+
+- `lib/pdf-editor/comments.ts` is the pure part: what a comment is, `selectWords` (from two points and a page's letters to a box for each line's run of words), `wordsUnder`, and `readCommentOp`, which checks every change the page asks for before it reaches the file.
+- `lib/pdf-editor/mupdf-comments.ts` touches the engine: `lettersOn` (every letter of a page with its box, in the page as it is shown), `commentsOn` (the comments of a page, each with its replies; a reply to a reply is listed under the comment the talk began with) and `applyComments`.
+- **A comment is known by the file's own number for it** (`c16`), which stays the same while the file is open, also across undo and redo, because the working copy is never tidied.
+- **A change to comments is a step in the same journal** as everything else (`inStep`), so undo and redo run through comments and things alike.
+- **Marks are given their look by the engine** (`update()`), the way the format says, so other programs draw the same thing. **A reply is given an empty look,** set last: it is read in the talk it belongs to and draws nothing on the page. Dates are written by us; the engine writes none.
+- **Only the kinds the editor makes are given a new look.** A change to another program's stamp or call-out sets its words and nothing else, and never calls `update()` on it.
+- **Annotations are taken off a page one at a time, from a fresh list each time** (`takeAway`). Removing a note takes the window it opens in along, which changes the list the others were found in; a second removal from the old list silently does nothing.
+- **Drawing comments into the page** uses the same routine as the editor's things (`flatten(session, doc, "comments")`), not the engine's `bake`, which takes every annotation of a file at once, the editor's kept-editable things included. A comment that is hidden is not drawn. Flattened and unflattened pages differ by at most two parts in 255, from rounding where a mark is blended in.
+- **The check** counts comments in the result: all of them when kept, none when drawn in or left out. A page that only got a comment is known from the journal and is not compared with the original as if it were untouched.
+- On the page, `use-comments.ts` holds the tool in hand, the comment that is picked and the list; `comment-layer.tsx` lays a button over every comment and draws the frame of the picked one and what a drag would take in; `comments-panel.tsx` is the list. Comments are not shown before the file has answered: they are whatever the file says its pages hold.
 
 ## How it is built
 
@@ -81,7 +108,10 @@ The report (`ExportReport`) becomes the lines in the download card (`lib/pdf-edi
 
 ## Limits
 
-- Words that are already in the file cannot be changed yet (phase 4), nor can notes, highlights and form fields be added or filled (phases 2, 3 and 8).
+- Words that are already in the file cannot be changed yet (phase 4), nor can form fields be added or filled (phases 3 and 8).
+- A mark on words cannot be moved or stretched once made; it is deleted and made again. A comment of a kind the editor does not make keeps its place and its look.
+- A page that is a picture has no words to mark; the highlighter pen is what works there until OCR arrives (phase 9).
+- Drawn into the page, a note is only its icon.
 - A font has the letters its file has: Latin, Greek and Cyrillic among them. A letter without a shape is left out of the file, and the bar names it. Text that needs shaping (Arabic, Indic scripts) is not supported.
 - Text in a box that is kept editable is a stamp to other apps: they show it, and may let a reader move or delete it.
 - The fonts are fetched when text is first typed; each is about 400 KB.
@@ -92,12 +122,13 @@ The report (`ExportReport`) becomes the lines in the download card (`lib/pdf-edi
 - **Unit** (`lib/pdf-editor/*.test.ts`, 100% of statements and branches): geometry, objects, tools, text layout, ink, history, styles, fonts and the report.
 - **Real engine in Node** (`edit.node.test.ts`): results are read back with pdf.js and pdf-lib, never with the engine alone. Added text is found where it was put, in an embedded font cut to its letters; pages the file shows turned every way; every kind of thing, turned and see-through; a PNG with see-through parts and a JPEG, with the pixels they came with; links, bookmarks, fields, notes, tags, page numbers and attachments survive; "Keep editable" reads back; undo to the start gives the original; a locked result; a stop; and a seeded run of many edits that must never lose a page or a word.
 - **Browser** (`e2e/pdf-editor.spec.ts`, five profiles): every tool with the mouse, the look row, handles, keys and undo, with the page's own picture sampled to see that the file changed; typing with a look chosen midway; "Keep editable" and opening the result again; a locked file and a new lock; a damaged file and one that is no PDF; leaving with unsaved changes; touch; axe in both themes and in every state of the window, 320 px, control sizes, no outside requests.
+- **Comments:** `comments.test.ts` (100%), `comments.node.test.ts` with the real engine (marks on plain and turned pages, read back by pdf.js with author, colour and date; notes and a reply to a reply; a pen; a file's own note; another program's shapes left as they are; undo among the editor's other steps; kept, drawn in and left out, with links and fields surviving), and `e2e/pdf-annotator.spec.ts` on five profiles.
 - **Offline** (`e2e/offline.spec.ts`): text is typed and downloaded with the server stopped, which needs the font from the saved copy.
 
 ## The phases
 
 1. **The workspace, and adding things.** Built.
-2. **Mark up and comment:** highlight, underline and strike out by selecting words; sticky notes and replies; stamps; marks that are already in the file. Focused page: Annotate PDF.
+2. **Mark up and comment.** First part built: marks on words, the highlighter pen, notes and replies, the list of comments, comments a file comes with, and the PDF annotator page. Second part to come: stamps (Approved, Draft, your own), call-outs and measuring lines.
 3. **Fill and sign:** form fields, paper forms, drawn, typed and pictured signatures, drafts kept on the device when asked. Focused pages: Sign PDF, Fill PDF form.
 4. **Change the text that is there,** in the file's own font where it has the letters, with the old words gone from the file.
 5. **Paragraphs, pictures in the page, links, find and replace.**

@@ -34,6 +34,7 @@ import {
   type Reading,
 } from "@/components/pdf-reader/pdf-reader"
 import { Button, buttonVariants } from "@/components/ui/button"
+import { ChoiceChips } from "@/components/ui/choice-chips"
 import { sizeLabel } from "@/lib/image-compressor/formats"
 import {
   defaultExtras,
@@ -41,6 +42,7 @@ import {
   lockOf,
   type Extras,
 } from "@/lib/pdf-compressor/options"
+import { countComments, type CommentTool } from "@/lib/pdf-editor/comments"
 import { changeCount, unsaved } from "@/lib/pdf-editor/history"
 import type { ExportReport } from "@/lib/pdf-editor/mupdf-edit"
 import { checkLines, editedName } from "@/lib/pdf-editor/report"
@@ -48,8 +50,10 @@ import { PdfClient, type EditState } from "@/lib/pdf-merger/client"
 import type { FileFacts } from "@/lib/pdf-merger/files"
 import { looksLikePdf, megabytes } from "@/lib/pdf-merger/settings"
 import { cn } from "cn"
+import { CommentsPanel } from "./comments-panel"
 import { PageLayer } from "./page-layer"
 import { EditorToolbar } from "./toolbar"
+import { useComments } from "./use-comments"
 import { useEditor } from "./use-editor"
 
 const INPUT_ID = "editor-file"
@@ -82,6 +86,61 @@ interface Result {
 
 const plural = (count: number, word: string) =>
   `${count.toLocaleString("en")} ${word}${count === 1 ? "" : "s"}`
+
+/** What the tool is opened for: every kind of change, or marking up and commenting first. */
+export type EditorMode = "edit" | "annotate"
+
+/** The keys that take a comment tool in hand. */
+const COMMENT_KEYS: Record<string, CommentTool> = {
+  h: "highlight",
+  u: "underline",
+  s: "strike",
+  w: "squiggle",
+  p: "pen",
+  n: "note",
+}
+
+/** What becomes of comments in the download, and what each choice means. */
+const COMMENT_CHOICES = [
+  {
+    value: "keep",
+    label: "Keep as comments",
+    hint: "Other programs show them as comments too, and they can be answered and removed later.",
+  },
+  {
+    value: "flatten",
+    label: "Part of the page",
+    hint: "Marks are drawn into the page and can no longer be removed. A note keeps its icon; its words are not shown.",
+  },
+  {
+    value: "remove",
+    label: "Leave out",
+    hint: "The download has no comments at all, also none of those the file came with.",
+  },
+] as const
+
+const ANNOTATE_ABILITIES = [
+  {
+    icon: IconTypography,
+    title: "Mark the words themselves",
+    text: "Highlight, underline, strike out or squiggle by dragging across text. On a scan, a highlighter pen marks anything.",
+  },
+  {
+    icon: IconEdit,
+    title: "Notes and replies",
+    text: "Place a note, type what you think, and answer the comments a file already has. Every comment is in one list, page by page.",
+  },
+  {
+    icon: IconShieldCheck,
+    title: "Real comments, or part of the page",
+    text: "Download with comments that any PDF program shows as comments, with the marks drawn into the page, or with every comment left out.",
+  },
+  {
+    icon: IconLock,
+    title: "Nothing is uploaded",
+    text: "The file is opened and marked on your device. Its text, links, bookmarks and form fields stay as they were.",
+  },
+]
 
 const ABILITIES = [
   {
@@ -116,15 +175,21 @@ function Workspace({
   opened,
   reader,
   onClose,
+  mode,
 }: {
   client: RefObject<PdfClient | null>
   doc: OpenFile
   opened: EditState
   reader: ReturnType<typeof usePdfReader>
   onClose: () => void
+  mode: EditorMode
 }) {
   const ids = useId()
   const editor = useEditor(client, doc.id, opened)
+  const comments = useComments(editor, mode === "annotate" ? "highlight" : null)
+  const commentCount = countComments(editor.comments)
+  const [commentsHow, setCommentsHow] =
+    useState<(typeof COMMENT_CHOICES)[number]["value"]>("keep")
   const { history } = editor
   /** The page the window opens at; null while it is closed. */
   const [window_, setWindow] = useState<number | null>(0)
@@ -243,6 +308,7 @@ function Workspace({
   const key = JSON.stringify([
     history.position,
     keepEditable,
+    commentCount ? commentsHow : "keep",
     extras.protect
       ? [
           extras.password,
@@ -265,7 +331,11 @@ function Workspace({
       // What was typed or drawn last has to be in the file first.
       await editor.settled()
       const lock = lockOf(extras, () => crypto.randomUUID())
-      const job = worker.editExport(doc.id, { keepEditable, lock })
+      const job = worker.editExport(doc.id, {
+        keepEditable,
+        comments: commentsHow,
+        lock,
+      })
       cancel.current = job.cancel
       const made = await job.promise
       if (!made) return
@@ -320,9 +390,44 @@ function Workspace({
       target.closest("button, a")
     )
       return false
+    const plain =
+      !event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey
+    const letter = event.key.toLowerCase()
+    const used = () => {
+      event.preventDefault()
+      return true
+    }
+    // The comment tools have keys of their own, and Escape puts one down.
+    if (plain && COMMENT_KEYS[letter]) {
+      editor.setTool("select")
+      editor.deselect()
+      comments.setTool(COMMENT_KEYS[letter])
+      return used()
+    }
+    if (event.key === "Escape" && comments.tool) {
+      comments.setTool(null)
+      return used()
+    }
+    if (comments.chosen && !editor.state.selection) {
+      if (event.key === "Escape") {
+        comments.unpick()
+        return used()
+      }
+      if (event.key === "Delete" || event.key === "Backspace") {
+        void comments.remove(comments.chosen.page, comments.chosen.comment.id)
+        return used()
+      }
+      if (event.key === "Enter") {
+        comments.setTyping(comments.chosen.comment.id)
+        comments.setListed(true)
+        return used()
+      }
+    }
+    // Any other tool's key puts a comment tool down.
+    if (plain && comments.tool && "vtboladc".includes(letter))
+      comments.setTool(null)
     if (!editor.key(event)) return false
-    event.preventDefault()
-    return true
+    return used()
   }
 
   // The keyboard is not always inside the window: Safari does not give it to
@@ -350,6 +455,10 @@ function Workspace({
     fixed: true,
     onPage,
     onKey,
+    showPage: comments.showPage,
+    panel: comments.listed ? (
+      <CommentsPanel editor={editor} comments={comments} />
+    ) : undefined,
     actions: (
       <>
         <Button
@@ -365,7 +474,11 @@ function Workspace({
     ),
     toolbar: (
       <>
-        <EditorToolbar editor={editor} />
+        <EditorToolbar
+          editor={editor}
+          comments={comments}
+          first={mode === "annotate" ? "comments" : "things"}
+        />
         {editor.problem && (
           <p
             role="alert"
@@ -395,6 +508,7 @@ function Workspace({
       entry.kind === "page" ? (
         <PageLayer
           editor={editor}
+          comments={comments}
           page={entry.page}
           size={entry.size}
           scale={scale}
@@ -418,6 +532,7 @@ function Workspace({
       data-testid="pdf-editor"
       data-ready="true"
       data-changes={history.position}
+      data-comments={commentCount}
       data-unsaved={dirty || undefined}
       data-busy={editor.busy || undefined}
     >
@@ -440,6 +555,7 @@ function Workspace({
               </h2>
               <p className="text-sm text-muted-foreground">
                 {plural(pages, "page")} · {sizeLabel(doc.file.size)} ·{" "}
+                {commentCount > 0 && `${plural(commentCount, "comment")} · `}
                 <span data-testid="editor-changes">
                   {changeCount(history)}
                   {dirty && history.saved !== null
@@ -540,6 +656,21 @@ function Workspace({
             checked={keepEditable}
             onCheckedChange={setKeepEditable}
           />
+          {commentCount > 0 && (
+            <ChoiceChips
+              label="Comments"
+              value={commentsHow}
+              onValueChange={setCommentsHow}
+              options={COMMENT_CHOICES.map(({ value, label }) => ({
+                value,
+                label,
+              }))}
+              hint={
+                COMMENT_CHOICES.find((choice) => choice.value === commentsHow)!
+                  .hint
+              }
+            />
+          )}
           <LockFields
             settings={extras}
             update={(change) =>
@@ -683,7 +814,7 @@ function Workspace({
   )
 }
 
-export function PdfEditor() {
+export function PdfEditor({ mode = "edit" }: { mode?: EditorMode }) {
   const limits = useDeviceLimits()
   const client = useRef<PdfClient | null>(null)
   const counter = useRef(0)
@@ -820,6 +951,7 @@ export function PdfEditor() {
         opened={doc.opened}
         reader={reader}
         onClose={closeFile}
+        mode={mode}
       />
     )
 
@@ -883,9 +1015,15 @@ export function PdfEditor() {
             busy={false}
             inputId={INPUT_ID}
             copy={{
-              heading: "Drop a PDF to edit",
+              heading:
+                mode === "annotate"
+                  ? "Drop a PDF to annotate"
+                  : "Drop a PDF to edit",
               dropping: "Drop to open this file",
-              body: "Add text, pictures, shapes and drawings to any page, then download the result. You can also paste a file with ⌘V or Ctrl+V.",
+              body:
+                mode === "annotate"
+                  ? "Highlight, underline and strike out words, place notes and answer comments, then download the result. You can also paste a file with ⌘V or Ctrl+V."
+                  : "Add text, pictures, shapes and drawings to any page, mark words and place notes, then download the result. You can also paste a file with ⌘V or Ctrl+V.",
               inputLabel: "Choose a PDF file",
               action: "Choose a file",
               limits: `Stays on your device · up to ${megabytes(limits.fileBytes)}`,
@@ -905,21 +1043,23 @@ export function PdfEditor() {
         <div className="space-y-4 rounded-xl border bg-card p-4 sm:p-5">
           <h2 className="section-title">What you can do</h2>
           <ul className="space-y-3 text-sm">
-            {ABILITIES.map((item) => (
-              <li key={item.title} className="flex gap-3">
-                <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
-                  <item.icon className="size-4" aria-hidden="true" />
-                </span>
-                <span>
-                  <span className="block font-medium">{item.title}</span>
-                  <span className="text-muted-foreground">{item.text}</span>
-                </span>
-              </li>
-            ))}
+            {(mode === "annotate" ? ANNOTATE_ABILITIES : ABILITIES).map(
+              (item) => (
+                <li key={item.title} className="flex gap-3">
+                  <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
+                    <item.icon className="size-4" aria-hidden="true" />
+                  </span>
+                  <span>
+                    <span className="block font-medium">{item.title}</span>
+                    <span className="text-muted-foreground">{item.text}</span>
+                  </span>
+                </li>
+              )
+            )}
           </ul>
           <p className="text-xs text-muted-foreground">
-            Changing the words that are already in a file, notes, forms and
-            signatures come in later versions.
+            Changing the words that are already in a file, forms and signatures
+            come in later versions.
           </p>
         </div>
       </div>

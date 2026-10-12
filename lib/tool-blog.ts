@@ -3,17 +3,18 @@ import type { BlogPost } from "./blog"
 /** The post that goes through every tool on the site, with a link to each. */
 export const overviewPost: BlogPost = {
   slug: "free-online-tools-no-upload",
-  title: "Nine free tools that never ask for your files.",
+  title: "Ten free tools that never ask for your files.",
   searchTitle:
     "Free online PDF, image and JSON tools that work without uploading",
   description:
-    "Every KeepSimp tool in one place: edit, compress, merge and split PDFs, resize and convert images, convert GIFs, and format JSON. Free, no sign-up, and your files stay on your device.",
+    "Every KeepSimp tool in one place: edit, annotate, compress, merge and split PDFs, resize and convert images, convert GIFs, and format JSON. Free, no sign-up, your files stay with you.",
   keywords: [
     "free online tools",
     "no upload",
     "PDF tools",
     "image tools",
     "edit PDF",
+    "annotate PDF",
     "compress PDF",
     "merge PDF",
     "split PDF",
@@ -27,7 +28,7 @@ export const overviewPost: BlogPost = {
   readingTime: "5 min read",
   image: "/images/tools-overview.svg",
   imageAlt:
-    "Nine tiles, one for each KeepSimp tool: four for PDFs, four for images and animations, and one for JSON",
+    "Ten tiles, one for each KeepSimp tool: five for PDFs, four for images and animations, and one for JSON",
   tool: "",
   intro:
     "Most online tools work the same way: you upload a file, wait, and download the result, often after a sign-up or a limit of two files a day. KeepSimp works differently. Each tool runs inside your browser, on your own computer or phone, so the file never leaves it. There is no account, no watermark and no daily limit. Here is every tool we have today, what it is good for, and where to read more.",
@@ -103,6 +104,21 @@ export const overviewPost: BlogPost = {
         {
           label: "Guide: write on a PDF without sending it anywhere",
           href: "/blog/edit-pdfs-without-uploading/",
+        },
+      ],
+    },
+    {
+      id: "pdf-annotator",
+      title: "PDF annotator: mark it up and comment.",
+      paragraphs: [
+        "For reading with a pen in hand. Highlight, underline or strike out words by dragging across them, place notes, and reply to the comments a file already has. On a scanned page, a highlighter pen marks anything.",
+        "These are real PDF comments, so the next person sees them as comments in their own program. For a final copy they can be drawn into the page instead, or left out altogether.",
+      ],
+      links: [
+        { label: "Annotate a PDF", href: "/dashboard/pdf-annotator/" },
+        {
+          label: "Guide: mark up a PDF without sending it anywhere",
+          href: "/blog/annotate-pdfs-without-uploading/",
         },
       ],
     },
@@ -469,9 +485,15 @@ export const editPost: BlogPost = {
       title: "What it does today, and what it does not.",
       paragraphs: [
         "The editor adds things to pages: text, pictures, boxes, ellipses, lines, arrows and freehand drawing. Everything you add can be moved, resized, turned, restyled, copied and deleted, and every step can be undone, all the way back to the file as you opened it.",
-        "It does not yet change the words that are already in a file, fill in form fields, or add notes and highlights that stay as comments. Those are being built and will arrive as later versions of the same editor. We would rather say so here than let you find out halfway through a job.",
+        "It also marks and comments: highlights, underlines, notes and replies, which have a guide of their own. It does not yet change the words that are already in a file or fill in form fields. Those are being built and will arrive as later versions of the same editor. We would rather say so here than let you find out halfway through a job.",
       ],
-      links: [{ label: "Open the PDF editor", href: "/dashboard/pdf-editor/" }],
+      links: [
+        { label: "Open the PDF editor", href: "/dashboard/pdf-editor/" },
+        {
+          label: "Guide: highlights, notes and replies",
+          href: "/blog/annotate-pdfs-without-uploading/",
+        },
+      ],
     },
     {
       id: "type",
@@ -550,6 +572,114 @@ export const editPost: BlogPost = {
       title:
         "Sanitization of documents: why a box drawn over text does not remove it, Wikipedia",
       url: "https://en.wikipedia.org/wiki/Sanitization_(classified_information)",
+    },
+  ],
+}
+
+export const annotatePost: BlogPost = {
+  slug: "annotate-pdfs-without-uploading",
+  title: "Mark it up, and keep it to yourself.",
+  searchTitle: "How to annotate a PDF online for free without uploading it",
+  description:
+    "How to highlight, underline and strike out text in a PDF, add notes and reply to comments in your browser, and download real comments or a clean final copy. Free, nothing uploaded.",
+  keywords: [
+    "annotate PDF",
+    "highlight PDF",
+    "PDF annotator",
+    "add comments to PDF",
+    "underline PDF",
+    "strikethrough PDF",
+    "sticky notes PDF",
+    "review PDF online free",
+    "no upload",
+  ],
+  category: "A little know-how",
+  readingTime: "4 min read",
+  image: "/images/pdf-annotate-guide.svg",
+  imageAlt:
+    "A page of a PDF with a sentence highlighted, a word struck out and a note, beside a list of comments with a reply",
+  tool: "pdf-annotator",
+  intro:
+    "A draft arrives and someone wants your thoughts by Friday. A contract needs a second pair of eyes. A paper needs reading with a pen in hand. Marking up a PDF is the oldest job there is to do with one, and the files it is done to are rarely ones to hand to a stranger's server. Here is how to do it with the KeepSimp PDF annotator, on your own device.",
+  sections: [
+    {
+      id: "marks",
+      title: "Marks that lie on the words.",
+      paragraphs: [
+        "Take the highlighter and drag across the words, as if you were selecting them. The mark follows the text line by line, from the word you started on to the word you ended on. Press a single word to mark just that word. Underline, strike out and squiggle work the same way, and each remembers its colour.",
+        "Because the mark is tied to the words and not painted on top, it stays sharp at any zoom and prints cleanly. The list of comments shows the words each mark lies on, so a long document can be skimmed by its highlights alone.",
+      ],
+      links: [
+        { label: "Open the PDF annotator", href: "/dashboard/pdf-annotator/" },
+      ],
+    },
+    {
+      id: "scans",
+      title: "When the page is a scan.",
+      paragraphs: [
+        "A scanned page is a photograph of paper. There are no words in it to take hold of, which is why highlighting fails in so many tools without saying why. Here the bar tells you, and offers the highlighter pen instead: a wide, see-through stroke you draw by hand, over a line, a figure or a signature. It works with a mouse, a pen or a finger.",
+      ],
+    },
+    {
+      id: "notes",
+      title: "Notes, and the talk under them.",
+      paragraphs: [
+        "A note is a small icon on the page with your words behind it. Press where it belongs and type. Drag the icon if it covers something.",
+        "Files that have been round a team already carry comments. They are all listed, page by page, with who wrote them and when, as far as the file says. You can answer any of them, and your reply is kept under the comment it answers. Type your name once at the top of the list and your comments are signed with it; leave it empty and they are not.",
+      ],
+    },
+    {
+      id: "real-comments",
+      title: "Real comments, not a drawing of them.",
+      paragraphs: [
+        "Some tools turn your marks into part of the page the moment you save, or worse, turn the whole page into a picture. The next reader then cannot hide your highlights, answer your notes, or remove them from the final copy.",
+        "The annotator writes the PDF's own kinds of comment, the same ones Acrobat and Preview write. Another program shows them as comments, and one with a comments list puts them in it. The text of the file is not touched, so it can still be selected and searched.",
+      ],
+    },
+    {
+      id: "final-copy",
+      title: "A final copy, your way.",
+      paragraphs: [
+        "When you download, you choose what becomes of the comments. Keep them as comments while the document is still being discussed. Make them part of the page for a copy where the marks must stay, such as an exhibit; a note then keeps its icon, and its words are no longer shown. Or leave them out, and send a clean copy without the discussion in it, the file's earlier comments included.",
+        "Before the file is handed to you it is checked: the comments are counted in the result, and pages you did not touch are compared with the original.",
+      ],
+      links: [
+        {
+          label: "Add text, pictures and shapes too: the PDF editor",
+          href: "/dashboard/pdf-editor/",
+        },
+        {
+          label: "Send only some pages: the PDF splitter",
+          href: "/dashboard/pdf-splitter/",
+        },
+      ],
+    },
+    {
+      id: "private",
+      title: "Your documents stay with you.",
+      paragraphs: [
+        "Drafts, contracts and reviews are opened and marked on your own device and are never uploaded. There is no account, no watermark and no limit on files or pages, and once the page has loaded it works without a connection.",
+      ],
+      links: [
+        {
+          label: "Every KeepSimp tool in one place",
+          href: "/blog/free-online-tools-no-upload/",
+        },
+      ],
+    },
+  ],
+  sources: [
+    {
+      title: "Annotate a PDF in Preview on Mac, Apple Support",
+      url: "https://support.apple.com/guide/preview/annotate-a-pdf-prvw11580/mac",
+    },
+    {
+      title: "PDF: annotations as part of the file format, Wikipedia",
+      url: "https://en.wikipedia.org/wiki/PDF#Annotation",
+    },
+    {
+      title: "Edit PDFs in Firefox: what a browser's own editor can do",
+      url: "https://www.firefox.com/features/pdf-editor/",
     },
   ],
 }

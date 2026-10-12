@@ -9,6 +9,11 @@ import {
   type RefObject,
 } from "react"
 import type { Size } from "@/lib/image-compressor/geometry"
+import type {
+  Comment,
+  CommentChange,
+  LetterLine,
+} from "@/lib/pdf-editor/comments"
 import { fontUrls, screenFamily } from "@/lib/pdf-editor/fonts"
 import type { Point } from "@/lib/pdf-editor/geometry"
 import { emptyHistory, markSaved, type History } from "@/lib/pdf-editor/history"
@@ -110,6 +115,8 @@ export function useEditor(
   opened: EditState
 ) {
   const [objects, setObjects] = useState<EditorObject[][]>(opened.objects)
+  /** The comments on each page, as the file has them. */
+  const [comments, setComments] = useState<Comment[][]>(opened.comments)
   const [versions, setVersions] = useState<number[]>(() =>
     opened.sizes.map(() => 0)
   )
@@ -128,6 +135,7 @@ export function useEditor(
   /** Changes are made one after another, in the order they were asked for. */
   const queue = useRef<Promise<unknown>>(Promise.resolve())
   const fonts = useRef(new Map<string, Promise<void>>())
+  const lettersRead = useRef(new Map<string, Promise<LetterLine[]>>())
   /** What the file last said its pages hold. */
   const truth = useRef(opened.objects)
   /** Changes that have been asked for and not yet answered, oldest first. */
@@ -219,6 +227,11 @@ export function useEditor(
       for (const { page, objects: now } of news.pages) next[page] = now
       truth.current = next
       show()
+      setComments((was) => {
+        const now = [...was]
+        for (const { page, comments: here } of news.pages) now[page] = here
+        return now
+      })
       setVersions((was) => {
         const drawn = [...was]
         for (const { page } of news.pages) drawn[page] = (drawn[page] ?? 0) + 1
@@ -358,6 +371,38 @@ export function useEditor(
       show()
     },
     [sizes, flush, show]
+  )
+
+  /**
+   * Make a change to comments. It is seen when the file has answered.
+   * @returns What the pages hold afterwards; null when the change could not be made.
+   */
+  const comment = useCallback(
+    async (change: CommentChange) => {
+      flush()
+      let news: Awaited<ReturnType<PdfClient["editComment"]>> | null = null
+      await enqueue(async (worker) => {
+        news = await worker.editComment(file, change)
+        return news
+      })
+      return news as Awaited<ReturnType<PdfClient["editComment"]>> | null
+    },
+    [flush, enqueue, file]
+  )
+
+  /** The letters of a page with their boxes, read once for each state of the page. */
+  const letters = useCallback(
+    (page: number, version: number) => {
+      const key = `${page}/${version}`
+      let reading = lettersRead.current.get(key)
+      if (!reading) {
+        reading = (async () =>
+          (await client.current?.lettersOf(file, page)) ?? [])()
+        lettersRead.current.set(key, reading)
+      }
+      return reading
+    },
+    [client, file]
   )
 
   const undo = useCallback(() => {
@@ -753,6 +798,9 @@ export function useEditor(
   return {
     sizes,
     objects,
+    comments,
+    comment,
+    letters,
     versions,
     history,
     state,

@@ -2,6 +2,7 @@
 
 import { poolSize } from "@/lib/image-batch/pool"
 import type { Size } from "@/lib/image-compressor/geometry"
+import type { CommentChange, LetterLine } from "@/lib/pdf-editor/comments"
 import type { ExportReport } from "@/lib/pdf-editor/mupdf-edit"
 import type { Change } from "@/lib/pdf-editor/tools"
 import type { Audit } from "@/lib/pdf-compressor/mupdf-audit"
@@ -148,6 +149,10 @@ export class PdfClient {
     (state: EditState | null) => void
   >()
   private readonly editPictures = new Map<number, (size: Size | null) => void>()
+  private readonly editLetters = new Map<
+    number,
+    (lines: LetterLine[] | null) => void
+  >()
   private readonly editNews = new Map<
     number,
     { resolve: (news: EditNews) => void; reject: (error: Error) => void }
@@ -208,6 +213,9 @@ export class PdfClient {
     } else if (message.type === "edit-picture") {
       this.editPictures.get(message.request)?.(message.size)
       this.editPictures.delete(message.request)
+    } else if (message.type === "edit-letters") {
+      this.editLetters.get(message.request)?.(message.lines)
+      this.editLetters.delete(message.request)
     } else if (message.type === "edit-news") {
       const waiting = this.editNews.get(message.request)
       this.editNews.delete(message.request)
@@ -365,6 +373,8 @@ export class PdfClient {
     this.editStates.clear()
     for (const done of this.editPictures.values()) done(null)
     this.editPictures.clear()
+    for (const done of this.editLetters.values()) done(null)
+    this.editLetters.clear()
     for (const waiting of this.editNews.values())
       waiting.reject(reason ?? new EditFailed(""))
     this.editNews.clear()
@@ -444,6 +454,27 @@ export class PdfClient {
     })
   }
 
+  /**
+   * Make a change to the comments of a file being edited.
+   * @throws EditFailed with words for the page when it could not be made.
+   */
+  editComment(id: string, change: CommentChange) {
+    return new Promise<EditNews>((resolve, reject) => {
+      const request = ++this.requests
+      this.editNews.set(request, { resolve, reject })
+      this.send({ type: "edit-comment", id, request, change })
+    })
+  }
+
+  /** The letters of a page with their boxes; null when the page cannot be read. */
+  lettersOf(id: string, page: number) {
+    return new Promise<LetterLine[] | null>((resolve) => {
+      const request = ++this.requests
+      this.editLetters.set(request, resolve)
+      this.send({ type: "edit-letters", id, request, page })
+    })
+  }
+
   /** Undo the last change (`back`), or make it again. */
   editStep(id: string, back: boolean) {
     return new Promise<EditNews>((resolve, reject) => {
@@ -456,7 +487,11 @@ export class PdfClient {
   /** Write an edited file out. The promise gives null when it was cancelled. */
   editExport(
     id: string,
-    options: { keepEditable: boolean; lock: Lock | null }
+    options: {
+      keepEditable: boolean
+      comments: "keep" | "flatten" | "remove"
+      lock: Lock | null
+    }
   ) {
     const job = ++this.jobs
     const promise = new Promise<{

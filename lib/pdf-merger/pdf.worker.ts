@@ -36,9 +36,15 @@ import {
   stepForward,
   type EditSession,
 } from "@/lib/pdf-editor/mupdf-edit"
+import {
+  applyComments,
+  commentsOn,
+  lettersOn,
+} from "@/lib/pdf-editor/mupdf-comments"
 import { HelperCodecs, type HelperPort } from "@/lib/pdf-compressor/helpers"
 import { auditPdf, type Audit } from "@/lib/pdf-compressor/mupdf-audit"
 import type { Stage } from "@/lib/pdf-compressor/report"
+import type { LetterLine } from "@/lib/pdf-editor/comments"
 import {
   compressCustom,
   compressPdf,
@@ -522,6 +528,7 @@ function editState(request: Extract<PdfRequest, { type: "edit-state" }>) {
       state = {
         sizes,
         objects: sizes.map((_, page) => objectsOn(session, page)),
+        comments: sizes.map((_, page) => commentsOn(session, page)),
         history: historyOf(session),
         bookmarks: pdf.bookmarks,
       }
@@ -550,7 +557,11 @@ function newsOf(
       }
   }
   return {
-    pages: pages.map((page) => ({ page, objects: objectsOn(session, page) })),
+    pages: pages.map((page) => ({
+      page,
+      objects: objectsOn(session, page),
+      comments: commentsOn(session, page),
+    })),
     history: historyOf(session),
     lacking: [...lacking],
   }
@@ -574,6 +585,40 @@ async function editApply(request: Extract<PdfRequest, { type: "edit-apply" }>) {
       message: readable(error, EDIT_FAILED),
     })
   }
+}
+
+async function editComment(
+  request: Extract<PdfRequest, { type: "edit-comment" }>
+) {
+  const session = editing.get(request.id)
+  try {
+    if (!session) throw new Error(EDIT_FAILED)
+    const pages = applyComments(await engine, session, request.change)
+    post({
+      type: "edit-news",
+      request: request.request,
+      news: newsOf(session, pages),
+    })
+  } catch (error) {
+    post({
+      type: "edit-news",
+      request: request.request,
+      news: null,
+      message: readable(error, EDIT_FAILED),
+    })
+  }
+}
+
+function editLetters(request: Extract<PdfRequest, { type: "edit-letters" }>) {
+  const session = editing.get(request.id)
+  let lines: LetterLine[] | null = null
+  try {
+    if (session && request.page < session.doc.countPages())
+      lines = lettersOn(session, request.page)
+  } catch {
+    // The page says that the words of this page could not be read.
+  }
+  post({ type: "edit-letters", request: request.request, lines })
 }
 
 function editStep(request: Extract<PdfRequest, { type: "edit-step" }>) {
@@ -637,6 +682,7 @@ async function editExport(
     let paused = performance.now()
     const result = await exportEdited(await engine, session, {
       keepEditable: request.keepEditable,
+      comments: request.comments,
       lock: request.lock ?? undefined,
       checkpoint: async () => {
         if (job <= cancelled) throw new Cancelled()
@@ -922,6 +968,10 @@ self.onmessage = (event: MessageEvent<PdfRequest>) => {
     enqueue({ run: () => editPicture(request) })
   else if (request.type === "edit-apply")
     enqueue({ run: () => editApply(request) })
+  else if (request.type === "edit-comment")
+    enqueue({ run: () => editComment(request) })
+  else if (request.type === "edit-letters")
+    enqueue({ run: async () => editLetters(request) })
   else if (request.type === "edit-step")
     enqueue({ run: async () => editStep(request) })
   else if (request.type === "edit-export")

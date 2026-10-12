@@ -251,3 +251,67 @@ export async function embeddedFonts(bytes: Uint8Array) {
   }
   return fonts
 }
+
+/** A comment as pdf.js reads it. */
+export interface ReadComment {
+  /** What the file calls it: "Highlight", "Text", "Ink" and so on. */
+  kind: string
+  text: string
+  author: string
+  /** Red, green and blue from 0 to 1; null when it has no colour. */
+  colour: number[] | null
+  /** How many boxes of words it lies on. */
+  quads: number
+  /** Left, bottom, right, top, in the file's own points. */
+  rect: number[]
+  /** It answers another comment. */
+  reply: boolean
+  /** When it was last changed, as the file writes it. */
+  modified: string
+}
+
+/** Every comment on every page, read with pdf.js: links, form fields and the windows of notes are left out. */
+export async function readComments(bytes: Uint8Array, password?: string) {
+  const doc = await getDocument({
+    data: bytes.slice(),
+    password,
+    verbosity: 0,
+    useSystemFonts: false,
+  }).promise
+  try {
+    const pages: ReadComment[][] = []
+    for (let number = 1; number <= doc.numPages; number++) {
+      const page = await doc.getPage(number)
+      const found: ReadComment[] = []
+      for (const annotation of await page.getAnnotations()) {
+        if (["Link", "Widget", "Popup"].includes(annotation.subtype)) continue
+        const quads = annotation.quadPoints as
+          ArrayLike<number> | ArrayLike<unknown>[] | undefined
+        found.push({
+          kind: annotation.subtype,
+          text: annotation.contentsObj?.str ?? "",
+          author: annotation.titleObj?.str ?? "",
+          colour: annotation.color
+            ? Array.from(
+                annotation.color as ArrayLike<number>,
+                (part) => Math.round((part / 255) * 100) / 100
+              )
+            : null,
+          // pdf.js has given these as a list of boxes and, later, as one list of numbers.
+          quads: !quads
+            ? 0
+            : typeof quads[0] === "number"
+              ? quads.length / 8
+              : quads.length,
+          rect: Array.from(annotation.rect as ArrayLike<number>),
+          reply: Boolean(annotation.inReplyTo),
+          modified: annotation.modificationDate ?? "",
+        })
+      }
+      pages.push(found)
+    }
+    return pages
+  } finally {
+    await doc.loadingTask.destroy()
+  }
+}

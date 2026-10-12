@@ -26,7 +26,7 @@ function pageList(pages: readonly number[], most = 5) {
 /** What the check found, a line for each thing that was looked at. */
 export function checkLines(report: ExportReport): CheckLine[] {
   const lines: CheckLine[] = []
-  if (report.added === 0)
+  if (report.added === 0 && report.comments.had === 0)
     lines.push({
       text: "Nothing was added. The file was written again as it is.",
       good: true,
@@ -67,6 +67,31 @@ export function checkLines(report: ExportReport): CheckLine[] {
       text: "The fonts of your text are in the file, cut down to the letters used.",
       good: true,
     })
+  const { had, how, has } = report.comments
+  const comments = (count: number) =>
+    `${count.toLocaleString("en")} comment${count === 1 ? "" : "s"}`
+  if (had > 0) {
+    // Kept, every one has to be there; made part of the page or left out, none may be.
+    const left = how === "keep" ? had - has : has
+    if (left > 0)
+      lines.push({
+        text:
+          how === "keep"
+            ? `${left.toLocaleString("en")} of ${comments(had)} did not reach the result. Read the result before you rely on it.`
+            : `${comments(left)} could not be ${how === "flatten" ? "made part of the page" : "left out"} and ${left === 1 ? "is" : "are"} still in the result as ${left === 1 ? "a comment" : "comments"}.`,
+        good: false,
+      })
+    else
+      lines.push({
+        text:
+          how === "keep"
+            ? `${comments(had)} ${had === 1 ? "is" : "are"} in the file, where other programs show ${had === 1 ? "it" : "them"} too.`
+            : how === "flatten"
+              ? `${comments(had)} ${had === 1 ? "was" : "were"} made part of the page.`
+              : `${comments(had)} ${had === 1 ? "was" : "were"} left out.`,
+        good: true,
+      })
+  }
   if (report.locked)
     lines.push({ text: "Locked with your password.", good: true })
   return lines

@@ -25,6 +25,19 @@ describe("shouldPrecache", () => {
       expect(shouldPrecache(file), file).toBe(false)
   })
 
+  it("leaves out the copies a syncing program makes beside a file", () => {
+    for (const file of [
+      "images/pdf-edit-guide 2.svg",
+      "fonts/editor/LICENSE 3.txt",
+      "samples/handbook 2",
+    ])
+      expect(shouldPrecache(file), file).toBe(false)
+    // A number that is part of a name is not such a copy.
+    expect(shouldPrecache("images/chapter 12.svg")).toBe(true)
+    expect(shouldPrecache("images/step2.svg")).toBe(true)
+    expect(shouldPrecache("images 2/guide.svg")).toBe(true)
+  })
+
   it("does not mistake similar names for skipped ones", () => {
     expect(shouldPrecache("images/videos/clip.mp4.png")).toBe(true)
     expect(shouldPrecache("images/social.png")).toBe(true)

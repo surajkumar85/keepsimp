@@ -23,6 +23,8 @@ import {
 import { cssColour } from "@/lib/pdf-editor/styles"
 import { shown, turnHandle, turns } from "@/lib/pdf-editor/tools"
 import { cn } from "cn"
+import { CommentMarks, CommentSpots } from "./comment-layer"
+import type { Comments } from "./use-comments"
 import { laidOut, pagePoint, type Editor } from "./use-editor"
 
 const points = (list: readonly Point[]) =>
@@ -95,8 +97,10 @@ export function PageLayer({
   page,
   size,
   scale,
+  comments,
 }: {
   editor: Editor
+  comments: Comments
   /** Counted from 0. */
   page: number
   size: Size
@@ -153,7 +157,10 @@ export function PageLayer({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mine?.object.id])
 
-  const drawing = state.tool !== "select"
+  const marks = editor.comments[page] ?? []
+  /** A tool that makes comments is in hand: the page is marked, not edited. */
+  const marking = comments.tool !== null
+  const drawing = state.tool !== "select" || marking
   const moving = gesture && (gesture.kind !== "move" || gesture.begun)
 
   return (
@@ -162,10 +169,13 @@ export function PageLayer({
       data-testid="editor-layer"
       data-page={page + 1}
       data-objects={objects.length}
+      data-comments={marks.length}
       className={cn(
         "absolute inset-0 select-none",
         drawing ? "cursor-crosshair touch-none" : "touch-pan-x touch-pan-y",
-        state.tool === "text" && "cursor-text"
+        (state.tool === "text" ||
+          (marking && comments.tool !== "pen" && comments.tool !== "note")) &&
+          "cursor-text"
       )}
       onPointerDown={(event) => {
         if (event.button !== 0) return
@@ -182,12 +192,23 @@ export function PageLayer({
           if (!target.closest("[data-hold]")) return
         }
         event.currentTarget.setPointerCapture(event.pointerId)
+        if (marking) {
+          comments.pointerDown(page, pagePoint(layer.current!, size, event))
+          return
+        }
+        // A press anywhere but on a comment lets go of the comment that was picked.
+        comments.unpick()
         editor.pointerDown(page, at(event))
       }}
       onPointerMove={(event) => {
-        if (editor.dragging()) editor.pointerMove(page, at(event))
+        if (comments.dragging())
+          comments.pointerMove(pagePoint(layer.current!, size, event))
+        else if (editor.dragging()) editor.pointerMove(page, at(event))
       }}
-      onPointerUp={() => editor.pointerUp(page, reach)}
+      onPointerUp={() => {
+        if (comments.dragging()) void comments.pointerUp()
+        else editor.pointerUp(page, reach)
+      }}
       onClick={(event) => {
         // A finger on empty paper scrolls, so it never starts a gesture; a
         // tap that did not scroll lets go of what is selected, as a click does.
@@ -197,10 +218,15 @@ export function PageLayer({
           !ended &&
           !drawing &&
           !(event.target as HTMLElement).closest("[data-hold], textarea")
-        )
+        ) {
           editor.deselect()
+          comments.unpick()
+        }
       }}
-      onPointerCancel={editor.pointerCancel}
+      onPointerCancel={() => {
+        comments.pointerCancel()
+        editor.pointerCancel()
+      }}
       onDoubleClick={(event) => {
         const point = pagePoint(layer.current!, size, event)
         const [only] = chosen
@@ -213,6 +239,13 @@ export function PageLayer({
           editor.retype(page, only)
       }}
     >
+      <CommentSpots
+        comments={comments}
+        list={marks}
+        page={page}
+        scale={scale}
+        idle={!drawing && !gesture && !mine}
+      />
       {objects.map((object) => {
         const corners = cornersOf(object.box, object.rotation)
         const left = Math.min(...corners.map((corner) => corner.x)) - reach / 2
@@ -248,6 +281,7 @@ export function PageLayer({
         viewBox={`0 0 ${size.width} ${size.height}`}
         className="pointer-events-none absolute top-0 left-0 overflow-visible"
       >
+        <CommentMarks comments={comments} list={marks} page={page} />
         {moving &&
           chosen.map((object) => <Ghost key={object.id} object={object} />)}
         {!gesture &&

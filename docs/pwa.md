@@ -37,10 +37,11 @@ After one visit to the tools, the whole site works without a connection: every t
 
 Both files in `service-worker/` are plain JavaScript with JSDoc types, because their text is copied into the worker as it is. There is no bundler and no step after the build, so any host that serves the export serves the worker. An earlier version wrote `out/sw.js` after `next build`; Vercel did not publish that file.
 
-- **Saved:** every page, the build files in `.next/static` (scripts, styles, fonts, WebAssembly codecs), and the files in `public/` (images, icons, tutorial posters and captions). This is about 34 MB in 195 files on disk and about 12 MB to download with Brotli compression; the PDF engine, which the merger, the splitter, the compressor and the editor share, is 10.4 MB of that on disk and 3.6 MB of the download. The PDF editor's twelve font files (`public/fonts/editor/`) are 4.2 MB on disk and 1.9 MB of the download: they are what text is typed in and what goes into the file, so the editor cannot type offline without them. The animation converter's caption font is a second copy of the Outfit file (32 KB), because the worker loads it by its own address.
+- **Saved:** every page, the build files in `.next/static` (scripts, styles, fonts, WebAssembly codecs), and the files in `public/` (images, icons, tutorial posters and captions). This is about 34 MB in 199 files on disk and about 12 MB to download with Brotli compression; the PDF engine, which the merger, the splitter, the compressor and the editor share, is 10.4 MB of that on disk and 3.6 MB of the download. The PDF editor's twelve font files (`public/fonts/editor/`) are 4.2 MB on disk and 1.9 MB of the download: they are what text is typed in and what goes into the file, so the editor cannot type offline without them. The animation converter's caption font is a second copy of the Outfit file (32 KB), because the worker loads it by its own address.
 - **Not saved:**
   - tutorial videos (56 MB), which stream on demand
   - link-preview images, which only other sites read
+  - copies a file-syncing program leaves beside a file in `public/` ("guide 2.svg"), which Git ignores and which exist on one machine only
   - the data Next.js fetches for page transitions, whose file names only exist after the build
 
 Because page data is not saved, following a link offline loads the page in full from the saved copy instead of swapping it in place. When a video cannot load, the player says so and points at the written steps.

@@ -123,7 +123,7 @@ export function letGo(session: EditSession) {
  * hands back the page it already has open when asked again, with what it
  * knew of it then, so a page kept across a change or an undo would be stale.
  */
-function withPage<T>(
+export function withPage<T>(
   doc: Doc,
   index: number,
   work: (page: MuPDF.PDFPage) => T
@@ -530,7 +530,37 @@ function checked(object: EditorObject) {
 }
 
 /**
- * Make a change to the file, as one step that can be undone.
+ * Do some work on the file as one step that can be undone. The work says
+ * which pages it touches as it goes.
+ * @returns The pages that changed, counted from 0.
+ */
+export function inStep(
+  session: EditSession,
+  label: string,
+  work: (touch: (page: number) => void) => void
+): number[] {
+  const { doc } = session
+  const touched = new Set<number>()
+  doc.beginOperation(label)
+  try {
+    work((page) => void touched.add(page))
+    doc.endOperation()
+  } catch (error) {
+    doc.abandonOperation()
+    throw error
+  }
+  // A change that changed nothing is not a step. One that did replaces
+  // whatever had been undone before it.
+  const { position } = doc.getJournal()
+  if (position > 0) {
+    session.touched.length = position - 1
+    session.touched[position - 1] = [...touched]
+  }
+  return [...touched]
+}
+
+/**
+ * Make a change to the things on pages, as one step that can be undone.
  * @returns The pages that changed, counted from 0.
  */
 export function applyChange(
@@ -539,11 +569,9 @@ export function applyChange(
   change: Change
 ): number[] {
   const { doc } = session
-  const touched = new Set<number>()
-  doc.beginOperation(change.label)
-  try {
+  return inStep(session, change.label, (touch) => {
     for (const op of change.ops) {
-      touched.add(op.page)
+      touch(op.page)
       withPage(doc, op.page, (page) => {
         const find = (id: string) =>
           page.getAnnotations().find((annot) => thingOf(annot)?.id === id)
@@ -564,19 +592,7 @@ export function applyChange(
         } else reorder(doc, page.getObject(), op.id, op.to)
       })
     }
-    doc.endOperation()
-  } catch (error) {
-    doc.abandonOperation()
-    throw error
-  }
-  // A change that changed nothing is not a step. One that did replaces
-  // whatever had been undone before it.
-  const { position } = doc.getJournal()
-  if (position > 0) {
-    session.touched.length = position - 1
-    session.touched[position - 1] = [...touched]
-  }
-  return [...touched]
+  })
 }
 
 export function historyOf(session: EditSession): History {
@@ -615,21 +631,85 @@ function matrixOf(value: Obj): number[] {
 const numbers = (values: readonly number[]) =>
   values.map((value) => String(Math.round(value * 1e5) / 1e5)).join(" ")
 
+/** Kinds of annotation that are not comments: links, form fields, and the windows notes open in. */
+const NOT_COMMENTS = new Set(["Link", "Widget", "Popup"])
+/** Not shown at all, or not shown on the screen. */
+const UNSEEN = 1 | 2 | 32
+
+/** One of the things the editor adds, as opposed to anything the file came with. */
+const isThing = (annot: MuPDF.PDFAnnotation) =>
+  annot.getObject().get(DATA_KEY).isString()
+
+/** A comment, as opposed to a link, a field, or one of the things the editor adds. */
+export const isComment = (annot: MuPDF.PDFAnnotation) =>
+  !NOT_COMMENTS.has(annot.getType()) && !isThing(annot)
+
+/** The pages of a document that hold comments, and how many comments there are, each reply counted. */
+export function commentPages(doc: Doc) {
+  const pages: number[] = []
+  let count = 0
+  for (let index = 0; index < doc.countPages(); index++) {
+    const here = withPage(
+      doc,
+      index,
+      (page) => page.getAnnotations().filter(isComment).length
+    )
+    if (here) pages.push(index)
+    count += here
+  }
+  return { pages, count }
+}
+
 /**
- * Draw the things that were added into their pages and take the annotations
- * away. An annotation's appearance is already a small drawing of its own;
- * the page is given a line that paints it where the annotation was (the way
- * the standard says a viewer must place it), after everything the page had.
- * @returns How many things were made part of their pages.
+ * Take annotations off a page, one at a time and looking afresh each time:
+ * taking one away (a note, with the window it opens in) can change the list
+ * the others were found in.
  */
-export function flatten(session: EditSession, doc: Doc) {
+function takeAway(
+  page: MuPDF.PDFPage,
+  which: (annot: MuPDF.PDFAnnotation) => boolean
+) {
+  for (;;) {
+    const next = page.getAnnotations().find(which)
+    if (!next) return
+    page.deleteAnnotation(next)
+  }
+}
+
+/** Take every comment out of a document. Links, form fields and what the editor added stay. */
+export function removeComments(doc: Doc) {
+  for (let index = 0; index < doc.countPages(); index++)
+    withPage(doc, index, (page) => takeAway(page, isComment))
+}
+
+/**
+ * Draw the things that were added, or the comments, into their pages and
+ * take the annotations away. An annotation's appearance is already a small
+ * drawing of its own; the page is given a line that paints it where the
+ * annotation was (the way the standard says a viewer must place it), after
+ * everything the page had. The engine's own way of doing this takes every
+ * annotation of a file at once, the editor's things and the comments alike.
+ * @returns How many were made part of their pages.
+ */
+export function flatten(
+  session: EditSession,
+  doc: Doc,
+  what: "things" | "comments" = "things"
+) {
   let made = 0
   for (let index = 0; index < doc.countPages(); index++)
     withPage(doc, index, (page) => {
-      const ours = page
-        .getAnnotations()
-        .filter((annot) => annot.getObject().get(DATA_KEY).isString())
+      const comments = what === "comments"
+      const ours = page.getAnnotations().filter(comments ? isComment : isThing)
       if (!ours.length) return
+      if (comments)
+        for (const annot of ours)
+          // A comment that came without a drawing of itself is given one.
+          try {
+            annot.update()
+          } catch {
+            // It is taken away without having been drawn.
+          }
       const pageObject = page.getObject()
       // What the page inherits is written onto it before it is changed.
       let resources = pageObject.getInheritable("Resources")
@@ -646,7 +726,9 @@ export function flatten(session: EditSession, doc: Doc) {
       for (const annot of ours) {
         const object = annot.getObject()
         const form = object.get("AP", "N")
-        if (form.isStream()) {
+        const flags = object.get("F")
+        const seen = !(flags.isNumber() && flags.asNumber() & UNSEEN)
+        if (form.isStream() && seen) {
           const rect = [0, 1, 2, 3].map((at) =>
             object.get("Rect", at).asNumber()
           )
@@ -667,14 +749,14 @@ export function flatten(session: EditSession, doc: Doc) {
           const sy = top > bottom ? (rect[3] - rect[1]) / (top - bottom) : 1
           let name = ""
           for (let count = made; !name || taken.has(name); count++)
-            name = `KsAdded${count}`
+            name = `${comments ? "KsNote" : "KsAdded"}${count}`
           taken.add(name)
           forms.put(name, form)
           lines += `q ${numbers([sx, 0, 0, sy, rect[0] - left * sx, rect[1] - bottom * sy])} cm /${name} Do Q\n`
           made++
         }
-        page.deleteAnnotation(annot)
       }
+      takeAway(page, comments ? isComment : isThing)
       if (!lines) return
       // Whatever state the page's own content leaves behind must not reach
       // what is added, so the old content is wrapped.
@@ -692,6 +774,11 @@ export function flatten(session: EditSession, doc: Doc) {
 export interface ExportOptions {
   /** Leave what was added as annotations, so it can be moved again later. */
   keepEditable?: boolean
+  /**
+   * What becomes of comments, the file's own and new ones alike: kept as
+   * comments (when nothing is said), drawn into their pages, or left out.
+   */
+  comments?: "keep" | "flatten" | "remove"
   /** A password for the result, in place of any the file has. */
   lock?: Lock
   /** Called between pages; it may pause, or throw to stop. */
@@ -708,6 +795,8 @@ export interface ExportReport {
   /** The added fonts were cut down to the letters in use. */
   fontsCut: boolean
   locked: boolean
+  /** How many comments the file held, each reply counted, what became of them, and how many the result holds. */
+  comments: { had: number; how: "keep" | "flatten" | "remove"; has: number }
 }
 
 const squeezed = (text: string) => text.replace(/\s+/g, " ").trim()
@@ -746,7 +835,18 @@ export async function exportEdited(
       for (const object of objectsOn({ ...session, doc }, index))
         things.push({ page: index, object })
     const touched = new Set(things.map((thing) => thing.page))
+    // A page is also touched when a step that is in force changed it, which
+    // is how a page that only got a comment is known.
+    for (const pagesOfStep of session.touched.slice(0, position))
+      for (const page of pagesOfStep) touched.add(page)
     if (!options.keepEditable) flatten(session, doc)
+    const commented = commentPages(doc)
+    const how = commented.count ? (options.comments ?? "keep") : "keep"
+    if (how !== "keep") {
+      for (const page of commented.pages) touched.add(page)
+      if (how === "flatten") flatten(session, doc, "comments")
+      else removeComments(doc)
+    }
     await options.checkpoint?.()
 
     // Our fonts went in whole. Cut them down to the letters used, and keep
@@ -878,6 +978,7 @@ export async function exportEdited(
         untouched,
         fontsCut,
         locked: Boolean(lock),
+        comments: { had: commented.count, how, has: commentPages(doc).count },
       },
     }
   } finally {

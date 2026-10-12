@@ -7,6 +7,11 @@ import type {
   Level,
   ScanChoice,
 } from "@/lib/pdf-compressor/settings"
+import type {
+  Comment,
+  CommentChange,
+  LetterLine,
+} from "@/lib/pdf-editor/comments"
 import type { History } from "@/lib/pdf-editor/history"
 import type { ExportReport } from "@/lib/pdf-editor/mupdf-edit"
 import type { EditorObject } from "@/lib/pdf-editor/objects"
@@ -176,6 +181,10 @@ export type PdfRequest =
     }
   /** Make a change to the file, as one step. */
   | { type: "edit-apply"; id: string; request: number; change: Change }
+  /** Make a change to comments, as one step. */
+  | { type: "edit-comment"; id: string; request: number; change: CommentChange }
+  /** The letters of a page with their boxes, for marks to be laid on words. */
+  | { type: "edit-letters"; id: string; request: number; page: number }
   /** Undo the last change, or make it again. */
   | { type: "edit-step"; id: string; request: number; back: boolean }
   /** Write the file out as it stands. */
@@ -184,6 +193,8 @@ export type PdfRequest =
       id: string
       job: number
       keepEditable: boolean
+      /** What becomes of comments: kept as comments, drawn into their pages, or left out. */
+      comments: "keep" | "flatten" | "remove"
       lock: Lock | null
     }
   /** One end of a line to a helper that runs the picture codecs on a core of its own. */
@@ -193,7 +204,7 @@ export type PdfRequest =
 
 /** What changed in a file being edited: the pages to draw again with what is now on them, and the list of changes. */
 export interface EditNews {
-  pages: { page: number; objects: EditorObject[] }[]
+  pages: { page: number; objects: EditorObject[]; comments: Comment[] }[]
   history: History
   /** Letters a text box holds that its font has no shape for. */
   lacking: string[]
@@ -289,12 +300,16 @@ export type PdfResponse =
       state: {
         sizes: Size[]
         objects: EditorObject[][]
+        /** The comments on each page, the file's own among them. */
+        comments: Comment[][]
         history: History
         bookmarks: Bookmark[]
       } | null
     }
   /** A picture's size in pixels; null when it could not be read. */
   | { type: "edit-picture"; request: number; size: Size | null }
+  /** Null when the page could not be read. */
+  | { type: "edit-letters"; request: number; lines: LetterLine[] | null }
   /** `news` is null when the change could not be made; `message` then says why. */
   | {
       type: "edit-news"

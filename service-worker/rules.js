@@ -27,6 +27,9 @@ const SKIPPED = [
   /^images\/social\//,
   // Dotfiles such as .gitkeep.
   /(^|\/)\.[^/]*$/,
+  // Copies a file-syncing program leaves beside a file ("guide 2.svg"). Git
+  // ignores them, so they are on one machine only and no part of a release.
+  /(^|\/)[^/]* [2-9](\.[^/]*)?$/,
 ]
 
 /**

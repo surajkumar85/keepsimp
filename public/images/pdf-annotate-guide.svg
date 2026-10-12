@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 600" role="img" aria-labelledby="title desc">
+  <title id="title">Annotate a PDF in your browser</title><desc id="desc">A page of a PDF with a sentence highlighted, a word struck out and a note, beside a list of comments with a reply.</desc>
+  <rect width="900" height="600" rx="24" fill="#f5f5f0"/>
+  <rect x="60" y="60" width="470" height="540" fill="#fff" stroke="#d4d4d4"/>
+  <rect x="100" y="100" width="200" height="18" rx="4" fill="#0a0a0a"/>
+  <g fill="#ffdb33"><rect x="96" y="150" width="300" height="22" rx="6"/><rect x="96" y="176" width="240" height="22" rx="6"/></g>
+  <g fill="#b9b9b9"><rect x="100" y="156" width="290" height="10" rx="5"/><rect x="100" y="182" width="230" height="10" rx="5"/><rect x="100" y="208" width="390" height="10" rx="5"/><rect x="100" y="254" width="390" height="10" rx="5"/><rect x="100" y="280" width="120" height="10" rx="5"/><rect x="238" y="280" width="252" height="10" rx="5"/><rect x="100" y="306" width="330" height="10" rx="5"/><rect x="100" y="352" width="390" height="10" rx="5"/><rect x="100" y="378" width="360" height="10" rx="5"/><rect x="100" y="404" width="200" height="10" rx="5"/></g>
+  <path d="M96 285 h128" stroke="#dc2626" stroke-width="3" stroke-linecap="round"/>
+  <path d="M100 394 q6 -6 12 0 t12 0 t12 0 t12 0 t12 0 t12 0 t12 0 t12 0 t12 0 t12 0" fill="none" stroke="#dc2626" stroke-width="2.5" stroke-linecap="round"/>
+  <g><rect x="436" y="296" width="30" height="30" rx="5" fill="#ffdb33" stroke="#0a0a0a" stroke-width="2"/><path d="M443 305 h16 M443 311 h16 M443 317 h10" stroke="#0a0a0a" stroke-width="2" stroke-linecap="round"/></g>
+  <rect x="560" y="60" width="280" height="480" rx="16" fill="#fff" stroke="#d4d4d4"/>
+  <text x="582" y="98" font-family="sans-serif" font-size="18" font-weight="600" fill="#0a0a0a">Comments</text>
+  <text x="686" y="98" font-family="sans-serif" font-size="16" fill="#737373">3</text>
+  <g fill="none" stroke="#d4d4d4"><rect x="576" y="120" width="248" height="118" rx="10"/><rect x="576" y="406" width="248" height="110" rx="10"/></g>
+  <rect x="576" y="252" width="248" height="140" rx="10" fill="none" stroke="#00786f" stroke-width="2"/>
+  <g><circle cx="598" cy="146" r="7" fill="#ffdb33" stroke="#a3a3a3"/><circle cx="598" cy="278" r="7" fill="#ffdb33" stroke="#a3a3a3"/><circle cx="598" cy="432" r="7" fill="#dc2626"/></g>
+  <g font-family="sans-serif" font-size="15" font-weight="600" fill="#0a0a0a"><text x="614" y="151">Highlight</text><text x="614" y="283">Note</text><text x="614" y="437">Strike-out</text></g>
+  <g font-family="sans-serif" font-size="12" fill="#737373"><text x="592" y="174">Ada · 12 Oct, 9:30</text><text x="592" y="306">Ada · 12 Oct, 9:32</text><text x="592" y="460">Bo · 12 Oct, 10:05</text></g>
+  <g fill="#d4d4d4"><rect x="592" y="190" width="200" height="8" rx="4"/><rect x="592" y="206" width="150" height="8" rx="4"/><rect x="592" y="476" width="170" height="8" rx="4"/></g>
+  <text x="592" y="330" font-family="sans-serif" font-size="14" fill="#0a0a0a">Is this figure still right?</text>
+  <path d="M592 344 v34" stroke="#d4d4d4" stroke-width="2"/>
+  <text x="602" y="358" font-family="sans-serif" font-size="12" fill="#737373">Bo · 12 Oct, 10:04</text>
+  <text x="602" y="376" font-family="sans-serif" font-size="14" fill="#0a0a0a">Yes, checked.</text>
+</svg>

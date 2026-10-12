@@ -8,6 +8,7 @@ import {
   IconFilePencil,
   IconFileZip,
   IconGif,
+  IconHighlight,
   IconHeadphones,
   IconLayersUnion,
   IconMovie,
@@ -35,6 +36,7 @@ const icons: Record<string, typeof IconBraces> = {
   "pdf-splitter": IconArrowsSplit2,
   "pdf-compressor": IconArrowsDiagonalMinimize2,
   "pdf-editor": IconFilePencil,
+  "pdf-annotator": IconHighlight,
   "json-formatter": IconBraces,
 }
 

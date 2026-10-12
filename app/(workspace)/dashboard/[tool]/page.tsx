@@ -16,7 +16,10 @@ import { JsonTool } from "@/components/json-tool"
 import { PdfCompressor } from "@/components/pdf-compressor/pdf-compressor"
 import { PdfCompressorTutorial } from "@/components/pdf-compressor/tutorial"
 import { PdfEditor } from "@/components/pdf-editor/pdf-editor"
-import { PdfEditorTutorial } from "@/components/pdf-editor/tutorial"
+import {
+  PdfAnnotatorTutorial,
+  PdfEditorTutorial,
+} from "@/components/pdf-editor/tutorial"
 import { PdfMerger } from "@/components/pdf-merger/pdf-merger"
 import { PdfMergerTutorial } from "@/components/pdf-merger/tutorial"
 import { PdfSplitter } from "@/components/pdf-splitter/pdf-splitter"
@@ -40,6 +43,12 @@ export async function generateMetadata({
     return pageMetadata(
       "Free JSON formatter, validator & viewer",
       "Format, repair, explore and query JSON. Compare documents, apply JSON Patch, validate schemas and convert YAML, CSV or JSON Lines locally. No uploads.",
+      `/dashboard/${id}/`
+    )
+  if (id === "pdf-annotator")
+    return pageMetadata(
+      "Annotate a PDF online for free",
+      "Highlight, underline and strike out text, add notes and reply to comments on any PDF, in your browser. Comments other programs can read. No account, no file uploads.",
       `/dashboard/${id}/`
     )
   return pageMetadata(
@@ -118,6 +127,8 @@ export default async function ToolPage({
         <PdfCompressor />
       ) : id === "pdf-editor" ? (
         <PdfEditor />
+      ) : id === "pdf-annotator" ? (
+        <PdfEditor mode="annotate" />
       ) : (
         <JsonTool />
       )}
@@ -137,6 +148,8 @@ export default async function ToolPage({
         <PdfCompressorTutorial />
       ) : id === "pdf-editor" ? (
         <PdfEditorTutorial />
+      ) : id === "pdf-annotator" ? (
+        <PdfAnnotatorTutorial />
       ) : (
         <JsonTutorial />
       )}
