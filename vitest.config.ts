@@ -76,6 +76,7 @@ export default defineConfig({
         "lib/pdf-editor/measure.ts",
         "lib/pdf-editor/objects.ts",
         "lib/pdf-editor/report.ts",
+        "lib/pdf-editor/signature.ts",
         "lib/pdf-editor/styles.ts",
         "lib/pdf-editor/text-layout.ts",
         "lib/pdf-editor/tools.ts",

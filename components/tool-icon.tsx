@@ -14,6 +14,7 @@ import {
   IconMovie,
   IconMusicDown,
   IconPlayerTrackNext,
+  IconSignature,
   IconTransform,
   IconWaveSine,
 } from "@tabler/icons-react"
@@ -37,6 +38,7 @@ const icons: Record<string, typeof IconBraces> = {
   "pdf-compressor": IconArrowsDiagonalMinimize2,
   "pdf-editor": IconFilePencil,
   "pdf-annotator": IconHighlight,
+  "sign-pdf": IconSignature,
   "json-formatter": IconBraces,
 }
 

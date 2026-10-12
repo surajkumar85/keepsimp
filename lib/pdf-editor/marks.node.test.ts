@@ -30,6 +30,7 @@ import {
   type StampObject,
   type TextObject,
 } from "./objects"
+import { checkMark, drawnSignature, typedSignature } from "./signature"
 import { breakLines } from "./text-layout"
 
 const RED = [0.86, 0.15, 0.15] as const
@@ -297,5 +298,75 @@ describe("kept movable", () => {
     expect((await readPdf(flat.bytes)).pages[0].kinds).toEqual([])
     stopEditing(session)
     stopEditing(again)
+  })
+})
+
+describe("signing", () => {
+  it("writes a typed signature in a font that looks written by hand, cut down to the name", async () => {
+    const session = editing(await makePdf("sig", { size: () => [400, 600] }))
+    const width = textWidth(session, "greatvibes", 30, "Ada Lovelace")
+    const signed = typedSignature(
+      "Ada Lovelace",
+      "greatvibes",
+      "signature",
+      { x: 200, y: 300 },
+      [0.1, 0.25, 0.75],
+      "typed",
+      width
+    )
+    add(session, 0, signed)
+    const { bytes, report } = await exportEdited(mupdf, session)
+    expect(report.text).toEqual({ boxes: 1, found: 1 })
+    expect(report.fontsCut).toBe(true)
+    expect((await texts(bytes))[0]).toContain("Ada Lovelace")
+    const [run] = (await textPlaces(bytes))[0].filter((one) =>
+      one.text.includes("Ada")
+    )
+    expect(run.size).toBeCloseTo(30, 0)
+    // About the point it was placed at.
+    expect(run.x).toBeGreaterThan(200 - width / 2 - 12)
+    expect(run.x).toBeLessThan(200 - width / 2 + 4)
+    const fonts = (await embeddedFonts(bytes)).filter((font) =>
+      font.name.includes("GreatVibes")
+    )
+    expect(fonts).toHaveLength(1)
+    // The whole font is 458 kB; a name needs a few of its letters.
+    expect(fonts[0].bytes).toBeLessThan(60_000)
+    stopEditing(session)
+  })
+
+  it("draws a signature, and the tick, cross and dot of a paper form", async () => {
+    const session = editing(await makePdf("ink", { size: () => [400, 600] }))
+    add(
+      session,
+      0,
+      drawnSignature(
+        [
+          [
+            { x: 0, y: 0 },
+            { x: 100, y: 0 },
+          ],
+        ],
+        "signature",
+        { x: 200, y: 100 },
+        BLACK,
+        "drawn"
+      ),
+      checkMark("tick", { x: 100, y: 300 }, BLACK, "tick", 20),
+      checkMark("cross", { x: 200, y: 300 }, BLACK, "cross", 20),
+      checkMark("dot", { x: 300, y: 300 }, BLACK, "dot", 20)
+    )
+    // The drawn line, the corner of the tick, the middle of the cross and the dot.
+    expect(isDark(pixelAt(session.doc, 0, 200, 100))).toBe(true)
+    expect(isDark(pixelAt(session.doc, 0, 97, 309))).toBe(true)
+    expect(isDark(pixelAt(session.doc, 0, 200, 300))).toBe(true)
+    expect(isDark(pixelAt(session.doc, 0, 300, 300))).toBe(true)
+    // Beside them, paper.
+    expect(isWhite(pixelAt(session.doc, 0, 200, 318))).toBe(true)
+    expect(isWhite(pixelAt(session.doc, 0, 315, 300))).toBe(true)
+    const { report } = await exportEdited(mupdf, session)
+    expect(report.added).toBe(4)
+    expect(report.text).toEqual({ boxes: 0, found: 0 })
+    stopEditing(session)
   })
 })

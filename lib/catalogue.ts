@@ -230,6 +230,27 @@ export const tools: readonly Tool[] = [
     status: "available",
   },
   {
+    id: "sign-pdf",
+    name: "Sign PDF",
+    description:
+      "Draw or type your signature, or use a picture of it, and place it on a PDF.",
+    partOf: "pdf-editor",
+    category: "document",
+    keywords: [
+      "pdf",
+      "sign",
+      "signature",
+      "esign",
+      "e-sign",
+      "initials",
+      "fill",
+      "form",
+      "date",
+      "tick",
+    ],
+    status: "available",
+  },
+  {
     id: "json-formatter",
     name: "JSON formatter",
     description: "Format, explore, query, compare and convert JSON locally.",

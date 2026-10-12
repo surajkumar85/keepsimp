@@ -19,6 +19,7 @@ import { PdfEditor } from "@/components/pdf-editor/pdf-editor"
 import {
   PdfAnnotatorTutorial,
   PdfEditorTutorial,
+  PdfSignerTutorial,
 } from "@/components/pdf-editor/tutorial"
 import { PdfMerger } from "@/components/pdf-merger/pdf-merger"
 import { PdfMergerTutorial } from "@/components/pdf-merger/tutorial"
@@ -49,6 +50,12 @@ export async function generateMetadata({
     return pageMetadata(
       "Annotate a PDF online for free",
       "Highlight, underline and strike out text, add notes and reply to comments on any PDF, in your browser. Comments other programs can read. No account, no file uploads.",
+      `/dashboard/${id}/`
+    )
+  if (id === "sign-pdf")
+    return pageMetadata(
+      "Sign a PDF online for free",
+      "Draw or type your signature, or use a picture of it, and place it on any PDF. Fill in the blanks and add the date, in your browser. No account, no file uploads.",
       `/dashboard/${id}/`
     )
   return pageMetadata(
@@ -129,6 +136,8 @@ export default async function ToolPage({
         <PdfEditor />
       ) : id === "pdf-annotator" ? (
         <PdfEditor mode="annotate" />
+      ) : id === "sign-pdf" ? (
+        <PdfEditor mode="sign" />
       ) : (
         <JsonTool />
       )}
@@ -150,6 +159,8 @@ export default async function ToolPage({
         <PdfEditorTutorial />
       ) : id === "pdf-annotator" ? (
         <PdfAnnotatorTutorial />
+      ) : id === "sign-pdf" ? (
+        <PdfSignerTutorial />
       ) : (
         <JsonTutorial />
       )}

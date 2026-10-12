@@ -33,8 +33,23 @@ export type Colour = readonly [number, number, number]
 export const BLACK: Colour = [0, 0, 0]
 export const WHITE: Colour = [1, 1, 1]
 
-export type FontFamily = "sans" | "serif" | "mono"
-export const FONT_FAMILIES: readonly FontFamily[] = ["sans", "serif", "mono"]
+/** Fonts that look written by hand, for signatures. Each has one style: there is no bold or italic of them. */
+export const HAND_FAMILIES = [
+  "greatvibes",
+  "sacramento",
+  "kalam",
+  "aurore",
+] as const
+export type HandFamily = (typeof HAND_FAMILIES)[number]
+export type FontFamily = "sans" | "serif" | "mono" | HandFamily
+export const FONT_FAMILIES: readonly FontFamily[] = [
+  "sans",
+  "serif",
+  "mono",
+  ...HAND_FAMILIES,
+]
+export const isHand = (font: FontFamily): font is HandFamily =>
+  (HAND_FAMILIES as readonly string[]).includes(font)
 export type TextAlign = "left" | "centre" | "right"
 
 interface Base {
@@ -539,13 +554,17 @@ export function readObject(value: unknown): EditorObject | null {
 
 /** Which of the font files a text box is written with. */
 export const fontKey = (text: Pick<TextObject, "font" | "bold" | "italic">) =>
-  `${text.font}${text.bold ? "-bold" : ""}${text.italic ? "-italic" : ""}`
+  isHand(text.font)
+    ? text.font
+    : `${text.font}${text.bold ? "-bold" : ""}${text.italic ? "-italic" : ""}`
 
 /** Every font file there is, by its key. */
 export const FONT_KEYS: readonly string[] = FONT_FAMILIES.flatMap((font) =>
-  [false, true].flatMap((bold) =>
-    [false, true].map((italic) => fontKey({ font, bold, italic }))
-  )
+  isHand(font)
+    ? [font]
+    : [false, true].flatMap((bold) =>
+        [false, true].map((italic) => fontKey({ font, bold, italic }))
+      )
 )
 
 /**

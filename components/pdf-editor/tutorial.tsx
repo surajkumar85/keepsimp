@@ -49,6 +49,11 @@ const content: TutorialContent = {
         "A filled box that hides what is under it. It only covers: the words underneath are still in the file and can be copied out by anyone. Do not use it to hide private information. Redaction, which removes what is under it, comes in a later version.",
     },
     {
+      term: "Signing, dates and ticks",
+      detail:
+        "Sign opens a window where your signature is drawn, typed in a hand of your choice, or taken from a picture with the paper removed; it lands in the middle of the page to be dragged into place. One button adds today's date. The tick tool marks the boxes of a paper form with ticks, crosses or dots, one press each. A signature made here is like ink on paper, not a certificate.",
+    },
+    {
       term: "Stamps",
       detail:
         "A word or two in capitals inside a frame: Approved, Draft, Final, Confidential, Paid, Void, or words of your own. Click to place one, or drag it out; resize and turn it like any shape. Its words are real text in the file. For a stamp that is a picture, such as a company seal, add the picture instead.",
@@ -76,7 +81,7 @@ const content: TutorialContent = {
     {
       term: "Keyboard",
       detail:
-        "Tab moves through the things on a page. Delete removes what is selected, Ctrl or ⌘ C, X, V and D copy, cut, paste and duplicate, and the square brackets move a thing forward or back. V, T, B, O, L, A, D, C, K, Q and R choose a tool. Escape puts the tool down.",
+        "Tab moves through the things on a page. Delete removes what is selected, Ctrl or ⌘ C, X, V and D copy, cut, paste and duplicate, and the square brackets move a thing forward or back. V, T, B, O, L, A, D, C, X, K, Q and R choose a tool, and G opens the signature window. Escape puts the tool down.",
     },
     {
       term: "Keep what you added editable",
@@ -177,6 +182,87 @@ const annotating: TutorialContent = {
     },
   ],
   guideHref: "/blog/annotate-pdfs-without-uploading/",
+}
+
+const signing: TutorialContent = {
+  name: "How to sign a PDF with KeepSimp",
+  description:
+    "Sign a PDF in your browser: draw your signature, type it or use a picture of it, place it on the page, fill in the blanks and the date, and download. Nothing is uploaded.",
+  intro: "Follow the steps below. Every option is explained underneath.",
+  steps: [
+    {
+      title: "Open the PDF",
+      text: "Drop the PDF, choose it from your device or paste it. A locked file asks for its password. The signature window opens as soon as the file does.",
+    },
+    {
+      title: "Make your signature",
+      text: "Draw it on the line with a mouse, a pen or a finger. Or type your name and pick one of four hands. Or choose a photo of your signature on paper: the paper is taken out and only the ink is kept.",
+    },
+    {
+      title: "Place it",
+      text: "Press Place it on the page. The signature lands in the middle of the page you are reading; drag it to the line and pull a corner to size it. Go to another page and press Sign again for the next one.",
+    },
+    {
+      title: "Fill in the rest",
+      text: "The text tool types into the blanks of a form. The tick tool marks its boxes with a tick, a cross or a dot. The calendar button adds today's date.",
+    },
+    {
+      title: "Download",
+      text: "Press Download. What you added becomes part of the page, the file is read back and checked, and your browser saves it.",
+    },
+  ],
+  options: [
+    {
+      term: "Draw",
+      detail:
+        "A pad to sign on, in black or blue ink. It is kept as lines, not as a picture, so it stays sharp at any size and adds almost nothing to the file. Clear starts again.",
+    },
+    {
+      term: "Type",
+      detail:
+        "Your name in one of four fonts that look written by hand: Great Vibes, Sacramento, Kalam and La Belle Aurore. The font is put into the file, cut down to the letters of your name.",
+    },
+    {
+      term: "Picture",
+      detail:
+        "A photo or scan of your signature on light paper, as PNG, JPEG or WebP. The paper is made see-through and the picture is cut to the ink, so it sits on a form without a white patch around it. If no ink can be told from the paper, the window says so.",
+    },
+    {
+      term: "Initials",
+      detail:
+        "The same three ways, for the smaller mark that goes at the foot of each page. Signature and initials are remembered apart.",
+    },
+    {
+      term: "Remember it on this device",
+      detail:
+        "Off unless you turn it on, each time. On, the signature is kept in this browser's own storage for the next time you sign, on this device only. It is never sent anywhere. Forget it removes it. Do not turn it on at a computer other people use.",
+    },
+    {
+      term: "What kind of signature this is",
+      detail:
+        "A picture or drawing of your signature placed on the page, as you would sign paper. That is what most forms and letters ask for. It is not a digital signature made with a certificate, which proves who signed and that the file has not changed since; that is planned for a later version.",
+    },
+    {
+      term: "Ticks, crosses and dots",
+      detail:
+        "For the boxes and circles of a paper form. Choose the mark, then press each box; the tool stays in hand. A mark can be moved and resized afterwards like anything else. Key: X.",
+    },
+    {
+      term: "Today's date",
+      detail:
+        "Written the way your device writes dates, as a text box you can move, restyle or retype.",
+    },
+    {
+      term: "All tools",
+      detail:
+        "This page is the PDF editor, opened for signing. All tools shows the rest: pictures, shapes, stamps, highlights and notes.",
+    },
+  ],
+  guideHref: "/blog/sign-pdfs-without-uploading/",
+}
+
+export function PdfSignerTutorial() {
+  return <ToolTutorial content={signing} />
 }
 
 export function PdfEditorTutorial() {

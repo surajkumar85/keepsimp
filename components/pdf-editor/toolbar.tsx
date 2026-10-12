@@ -18,6 +18,8 @@ import {
   IconBold,
   IconBrush,
   IconBubbleText,
+  IconCalendar,
+  IconCheckbox,
   IconCircle,
   IconCopy,
   IconDots,
@@ -32,6 +34,7 @@ import {
   IconRectangleFilled,
   IconRubberStamp,
   IconRulerMeasure,
+  IconSignature,
   IconSquare,
   IconStackBack,
   IconStackFront,
@@ -67,6 +70,7 @@ import {
   SMALLEST_TEXT,
   type Colour,
 } from "@/lib/pdf-editor/objects"
+import { CHECK_SHAPES, type CheckShape } from "@/lib/pdf-editor/signature"
 import {
   cssColour,
   PALETTE,
@@ -127,6 +131,12 @@ const TOOLS: { tool: Tool; label: string; key: string; icon: ReactNode }[] = [
     icon: <IconRectangleFilled aria-hidden="true" />,
   },
   {
+    tool: "check",
+    label: "Tick or cross",
+    key: "X",
+    icon: <IconCheckbox aria-hidden="true" />,
+  },
+  {
     tool: "stamp",
     label: "Stamp",
     key: "K",
@@ -145,6 +155,15 @@ const TOOLS: { tool: Tool; label: string; key: string; icon: ReactNode }[] = [
     icon: <IconRulerMeasure aria-hidden="true" />,
   },
 ]
+
+const CHECK_LABELS: Record<CheckShape, string> = {
+  tick: "Tick",
+  cross: "Cross",
+  dot: "Dot",
+}
+
+/** The tools a page that is opened for signing shows, of those that add things. */
+const SIGNING: readonly Tool[] = ["text", "check"]
 
 /** The words a stamp says most often. Any others can be typed. */
 const STAMPS = ["Approved", "Draft", "Final", "Confidential", "Paid", "Void"]
@@ -198,6 +217,8 @@ const HINTS: Record<Tool, string> = {
   ink: "Draw with the mouse, a pen or a finger.",
   cover:
     "Drag a box over something to hide it. What is under it stays in the file.",
+  check:
+    "Press a box of a paper form to mark it. The tool stays in hand for the next box.",
   stamp:
     "Click to place the stamp, or drag it out. Choose its words and colour here.",
   callout:
@@ -369,19 +390,23 @@ export function EditorToolbar({
   editor,
   comments,
   first = "things",
-  focused = false,
+  focus = null,
   onAllTools,
+  onSign,
 }: {
   editor: Editor
   comments: Comments
   /** Which tools come first in the row: those that add things, or those that comment. */
   first?: "things" | "comments"
   /**
-   * Only the tools of the job the page was opened for are shown, with a
-   * button for the rest. A tool that is in hand is always shown.
+   * Only the tools of the job the page was opened for are shown (marking
+   * up, or signing and filling in), with a button for the rest. A tool that
+   * is in hand is always shown.
    */
-  focused?: boolean
+  focus?: "comments" | "signing" | null
   onAllTools?: () => void
+  /** Open the window a signature is made in. */
+  onSign: () => void
 }) {
   const ids = useId()
   const picker = useRef<HTMLInputElement>(null)
@@ -397,8 +422,57 @@ export function EditorToolbar({
     editor.deselect()
     comments.setTool(comments.tool === tool ? null : tool)
   }
+  /** Things that are placed with one press of a button, not with a tool: a signature, and today's date. */
+  const placed = (
+    <>
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon"
+        aria-label="Sign"
+        title="Sign: draw, type or use a picture of your signature (G)"
+        aria-keyshortcuts="G"
+        onClick={onSign}
+        className="shrink-0"
+        data-testid="editor-sign"
+      >
+        <IconSignature aria-hidden="true" />
+      </Button>
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon"
+        aria-label="Add today's date"
+        title="Add today's date"
+        onClick={() =>
+          void editor.addDate(
+            new Date().toLocaleDateString(undefined, { dateStyle: "long" })
+          )
+        }
+        className="shrink-0"
+      >
+        <IconCalendar aria-hidden="true" />
+      </Button>
+    </>
+  )
+  const toolButton = ({ tool, label, key, icon }: (typeof TOOLS)[number]) => (
+    <Toggle
+      key={tool}
+      label={label}
+      shortcut={key}
+      pressed={!comments.tool && state.tool === tool}
+      onPress={() => {
+        comments.setTool(null)
+        editor.setTool(tool)
+      }}
+    >
+      {icon}
+    </Toggle>
+  )
   const things = (
     <>
+      {placed}
+      <Rule />
       {TOOLS.map(({ tool, label, key, icon }) => (
         <Toggle
           key={tool}
@@ -439,8 +513,14 @@ export function EditorToolbar({
       </Button>
     </>
   )
-  // Focused on marking up, the tools that add things are put away, unless one of them is in hand.
-  const narrow = focused && (comments.tool !== null || state.tool === "select")
+  // Focused on one job, the other tools are put away, unless one of them is in hand.
+  const narrow =
+    focus === "comments"
+      ? comments.tool !== null || state.tool === "select"
+      : focus === "signing"
+        ? comments.tool === null &&
+          (state.tool === "select" || SIGNING.includes(state.tool))
+        : false
   const marks = COMMENT_TOOLS.map(({ tool, label, key, icon }) => (
     <Toggle
       key={tool}
@@ -496,12 +576,21 @@ export function EditorToolbar({
         <Rule />
         {narrow ? (
           <>
-            {marks}
+            {focus === "signing" ? (
+              <>
+                {placed}
+                {TOOLS.filter(({ tool }) => SIGNING.includes(tool)).map(
+                  toolButton
+                )}
+              </>
+            ) : (
+              marks
+            )}
             <Rule />
             <Toggle
               label="Select"
               shortcut="V"
-              pressed={!comments.tool}
+              pressed={!comments.tool && state.tool === "select"}
               onPress={() => {
                 comments.setTool(null)
                 editor.setTool("select")
@@ -777,6 +866,27 @@ export function EditorToolbar({
                   </Toggle>
                 </div>
               </>
+            )}
+            {has("shape") && (
+              <div
+                role="group"
+                aria-label="Mark"
+                className="flex shrink-0 items-center gap-1"
+              >
+                {CHECK_SHAPES.map((shape) => (
+                  <Button
+                    key={shape}
+                    type="button"
+                    size="sm"
+                    variant={look.shape === shape ? "secondary" : "ghost"}
+                    aria-pressed={look.shape === shape}
+                    onClick={() => editor.setLook({ shape })}
+                    className="h-11 md:h-9"
+                  >
+                    {CHECK_LABELS[shape]}
+                  </Button>
+                ))}
+              </div>
             )}
             {has("label") && (
               <div

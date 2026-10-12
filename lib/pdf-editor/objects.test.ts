@@ -8,6 +8,7 @@ import {
   FONT_KEYS,
   fontKey,
   handlesOf,
+  isHand,
   KIND_NAMES,
   LINE_HEIGHT,
   MOST_LETTERS,
@@ -382,8 +383,13 @@ describe("fonts and arrows", () => {
     expect(fontKey({ font: "mono", bold: true, italic: true })).toBe(
       "mono-bold-italic"
     )
-    expect(FONT_KEYS).toHaveLength(12)
+    // A font that looks written by hand has one file, whatever is asked of it.
+    expect(fontKey({ font: "kalam", bold: true, italic: true })).toBe("kalam")
+    expect(isHand("kalam")).toBe(true)
+    expect(isHand("serif")).toBe(false)
+    expect(FONT_KEYS).toHaveLength(16)
     expect(FONT_KEYS).toContain("sans-italic")
+    expect(FONT_KEYS).toContain("greatvibes")
   })
 
   it("draws an arrow's head at the end of its line, growing with its weight", () => {

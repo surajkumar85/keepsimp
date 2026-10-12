@@ -109,6 +109,12 @@ const cards = [
     "/images/pdf-annotate-guide.svg",
   ],
   [
+    "sign-pdfs-without-uploading",
+    "Sign it. Keep it yours.",
+    "Draw, type or photograph your signature.",
+    "/images/pdf-sign-guide.svg",
+  ],
+  [
     "repair-compare-json-patch",
     "Preview every JSON change.",
     "Repair, compare and apply JSON Patch locally.",

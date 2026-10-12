@@ -98,6 +98,7 @@ export const overviewPost: BlogPost = {
       paragraphs: [
         "Type on a form that has no fields to fill, add a date or a name, place a picture, or mark a page with boxes, arrows and a pen. Every change is made in the real file and can be undone, and the page you see is the page you will download.",
         "The text you add is real text in a font that travels inside the file, so it looks the same everywhere and can be searched. Before the download, the result is read back and checked. Changing the words that are already in a file comes in a later version.",
+        "It signs, too: draw your signature, type it or use a photo of it, and fill in the blanks, boxes and date of a form that has no fields.",
         "The same editor marks up and comments: highlight, underline or strike out words by dragging across them, place notes, and reply to the comments a file already has. These are real PDF comments, so the next person sees them as comments in their own program; for a final copy they can be drawn into the page or left out.",
       ],
       links: [
@@ -113,6 +114,14 @@ export const overviewPost: BlogPost = {
         {
           label: "Guide: mark up a PDF without sending it anywhere",
           href: "/blog/annotate-pdfs-without-uploading/",
+        },
+        {
+          label: "Only signing? Open it as Sign PDF",
+          href: "/dashboard/sign-pdf/",
+        },
+        {
+          label: "Guide: sign a PDF without sending it anywhere",
+          href: "/blog/sign-pdfs-without-uploading/",
         },
       ],
     },
@@ -675,6 +684,108 @@ export const annotatePost: BlogPost = {
     {
       title: "Edit PDFs in Firefox: what a browser's own editor can do",
       url: "https://www.firefox.com/features/pdf-editor/",
+    },
+  ],
+}
+
+export const signPost: BlogPost = {
+  slug: "sign-pdfs-without-uploading",
+  title: "Sign it, and keep it to yourself.",
+  searchTitle: "How to sign a PDF online for free without uploading it",
+  description:
+    "How to sign a PDF in your browser: draw, type or photograph your signature, place it, fill in the blanks and the date, and download. Free, with no account and nothing uploaded.",
+  keywords: [
+    "sign PDF",
+    "sign PDF online free",
+    "add signature to PDF",
+    "electronic signature PDF",
+    "draw signature",
+    "fill and sign PDF",
+    "signature from photo",
+    "sign PDF without printing",
+    "no upload",
+  ],
+  category: "A little know-how",
+  readingTime: "4 min read",
+  image: "/images/pdf-sign-guide.svg",
+  imageAlt:
+    "A form in a PDF with a typed name, two ticked boxes, a date and a handwritten signature on its line, beside a pad a signature is drawn on",
+  tool: "sign-pdf",
+  intro:
+    "The form says print, sign, scan and return. You have no printer, and the scanner is a phone held over a kitchen table. There is a shorter way, and it does not need to pass your signature and your tenancy agreement through a website's servers on the way. Here is how to sign a PDF with KeepSimp, on your own device.",
+  sections: [
+    {
+      id: "three-ways",
+      title: "Three ways to make a signature.",
+      paragraphs: [
+        "Draw it. A pad opens with a line to sign on; use a mouse, a trackpad, a pen or a finger. It is kept as lines, not as a picture, so it stays sharp however large you make it.",
+        "Type it. Write your name and choose one of four hands. This is the tidy option, and the only one that needs no steady hand.",
+        "Photograph it. Sign a sheet of plain paper, take a picture, and choose the photo. The paper is taken out of the picture and only the ink is kept, so the signature sits on the form without a grey rectangle around it. A light, evenly lit background works best; if the ink cannot be told from the paper, you are told so.",
+      ],
+      links: [{ label: "Open Sign PDF", href: "/dashboard/sign-pdf/" }],
+    },
+    {
+      id: "place",
+      title: "Put it on the line.",
+      paragraphs: [
+        "The signature lands in the middle of the page you are reading. Drag it to where it belongs and pull a corner to size it. For a second place, a witness line or the next page, press Sign again.",
+        "Initials work the same way and are kept apart from your signature, for contracts that want every page initialled.",
+      ],
+    },
+    {
+      id: "fill",
+      title: "Fill in what the form asks.",
+      paragraphs: [
+        "Most things that need signing need a few more things as well. The text tool types into the blanks: click where the words go and type. The tick tool marks boxes with a tick, a cross or a dot, one press each. A button adds today's date.",
+        "This works on any PDF, also one that is only a picture of a form. Forms with real fields to tab through are coming to the same page.",
+      ],
+    },
+    {
+      id: "what-kind",
+      title: "What kind of signature is this?",
+      paragraphs: [
+        "It is the electronic equivalent of signing paper: your mark, placed on the page by you. For letters, consent forms, applications and most agreements between people, that is what is being asked for.",
+        "It is not a certificate signature, the kind made with a digital certificate that proves who signed and that the file has not been changed since. Some filings and regulated contracts require that. If yours does, this is not it; a later version of the editor will sign with certificates. Whether a signature is enough for a particular document depends on the document and where you are, so ask whoever is receiving it when it matters.",
+      ],
+    },
+    {
+      id: "remember",
+      title: "Remembered only if you ask.",
+      paragraphs: [
+        "By default nothing is kept: close the tab and your signature is gone with it. A switch in the signature window keeps it in this browser's own storage for next time, on this device only, and a button forgets it. It is off each time until you turn it on. Leave it off at a shared computer.",
+      ],
+    },
+    {
+      id: "private",
+      title: "Your documents stay with you.",
+      paragraphs: [
+        "The file is opened and signed on your own device and is never uploaded; neither is your signature. There is no account, no watermark and no limit on how many documents you sign, and once the page has loaded it works without a connection.",
+      ],
+      links: [
+        {
+          label: "Add text, pictures and comments too: the PDF editor",
+          href: "/dashboard/pdf-editor/",
+        },
+        {
+          label: "Every KeepSimp tool in one place",
+          href: "/blog/free-online-tools-no-upload/",
+        },
+      ],
+    },
+  ],
+  sources: [
+    {
+      title: "Electronic signature: kinds and legal standing, Wikipedia",
+      url: "https://en.wikipedia.org/wiki/Electronic_signature",
+    },
+    {
+      title: "Fill out and sign PDF forms in Preview on Mac, Apple Support",
+      url: "https://support.apple.com/guide/preview/fill-out-and-sign-pdf-forms-prvw35725/mac",
+    },
+    {
+      title:
+        "SIL Open Font License, under which the handwriting fonts are used",
+      url: "https://openfontlicense.org/",
     },
   ],
 }

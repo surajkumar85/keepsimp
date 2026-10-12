@@ -15,12 +15,13 @@ import type {
   LetterLine,
 } from "@/lib/pdf-editor/comments"
 import { fontUrls, screenFamily } from "@/lib/pdf-editor/fonts"
-import type { Point } from "@/lib/pdf-editor/geometry"
+import { keepOnPage, seenMiddle, type Point } from "@/lib/pdf-editor/geometry"
 import { emptyHistory, markSaved, type History } from "@/lib/pdf-editor/history"
 import {
   fontKey,
   fontsFor,
   retyped,
+  type Colour,
   type EditorObject,
   type TextObject,
 } from "@/lib/pdf-editor/objects"
@@ -31,6 +32,14 @@ import {
   withLook,
   type Look,
 } from "@/lib/pdf-editor/styles"
+import {
+  drawnSignature,
+  SIGNATURE_SIZE,
+  SIGNATURE_TEXT,
+  typedSignature,
+  type Signature,
+  type SignatureSlot,
+} from "@/lib/pdf-editor/signature"
 import { breakLines } from "@/lib/pdf-editor/text-layout"
 import {
   applied,
@@ -104,6 +113,9 @@ export const laidOut = (object: TextObject, text = object.text): TextObject =>
 
 let made = 0
 const newId = () => `k${Date.now().toString(36)}${(made++).toString(36)}`
+
+/** How far from a page's edges the middle of a thing placed for you is kept, in points. */
+const PLACED_ROOM = 48
 
 /**
  * Everything the editor's screen needs for one open file: what is on its
@@ -635,9 +647,32 @@ export function useEditor(
     [view, apply, ensureFont, setStyles, setTyping]
   )
 
+  /** The middle of the page being read, where things without a place of their own are put. */
+  const middle = useCallback(() => {
+    const page = reading.current
+    const sheet = sizes[page] as Size
+    // Of the part that can be seen: a page is often taller than its window.
+    const shown = document.querySelector(
+      `[data-testid=editor-layer][data-page="${page + 1}"]`
+    )
+    const view = shown?.closest("[data-testid=reader-pages]")
+    return {
+      page,
+      at:
+        shown && view
+          ? seenMiddle(
+              shown.getBoundingClientRect(),
+              view.getBoundingClientRect(),
+              sheet,
+              PLACED_ROOM
+            )
+          : { x: sheet.width / 2, y: sheet.height / 2 },
+    }
+  }, [sizes])
+
   /** Place a picture in the middle of the page being read, no larger than most of it. */
   const addPicture = useCallback(
-    async (picture: File) => {
+    async (picture: Blob, most?: { width: number; height: number }) => {
       const worker = client.current
       if (!worker) return
       const name = newId()
@@ -650,13 +685,14 @@ export function useEditor(
           )
           return
         }
-        const page = reading.current
+        const { page, at } = middle()
         const sheet = sizes[page]
-        // A picture's own size, at 96 pixels to the inch, within 60% of the page.
+        // A picture's own size, at 96 pixels to the inch, within 60% of the
+        // page; a signature, within the size signatures are placed at.
         const fit = Math.min(
           1,
-          (sheet.width * 0.6) / (size.width * 0.75),
-          (sheet.height * 0.6) / (size.height * 0.75)
+          (most?.width ?? sheet.width * 0.6) / (size.width * 0.75),
+          (most?.height ?? sheet.height * 0.6) / (size.height * 0.75)
         )
         const width = size.width * 0.75 * fit
         const height = size.height * 0.75 * fit
@@ -678,12 +714,16 @@ export function useEditor(
                 picture: name,
                 rotation: 0,
                 opacity: 1,
-                box: {
-                  x: (sheet.width - width) / 2,
-                  y: (sheet.height - height) / 2,
-                  width,
-                  height,
-                },
+                box: keepOnPage(
+                  {
+                    x: at.x - width / 2,
+                    y: at.y - height / 2,
+                    width,
+                    height,
+                  },
+                  sheet,
+                  Math.min(width, height)
+                ),
               },
             },
           ],
@@ -692,7 +732,94 @@ export function useEditor(
         setBusy((count) => count - 1)
       }
     },
-    [client, file, sizes, apply, setState]
+    [client, file, sizes, apply, setState, middle]
+  )
+
+  /** Put a thing on the page being read, selected, to be dragged into place. */
+  const place = useCallback(
+    (page: number, object: EditorObject, label: string) => {
+      setState({
+        tool: "select",
+        gesture: null,
+        selection: { page, ids: [object.id] },
+      })
+      return apply({ label, ops: [{ do: "add", page, object }] })
+    },
+    [apply, setState]
+  )
+
+  /**
+   * Place a signature in the middle of the page being read: what was drawn
+   * as a drawing, what was typed as text in its font, a picture as a picture.
+   */
+  const addSignature = useCallback(
+    async (signature: Signature, slot: SignatureSlot, colour: Colour) => {
+      const { page, at } = middle()
+      const label = slot === "initials" ? "Add initials" : "Add signature"
+      if (signature.kind === "draw")
+        return place(
+          page,
+          drawnSignature(signature.strokes, slot, at, colour, newId()),
+          label
+        )
+      if (signature.kind === "type") {
+        try {
+          await ensureFont(signature.font)
+        } catch {
+          setProblem("The font could not be loaded. Check your connection.")
+          return
+        }
+        const width = measureWith(
+          signature.font,
+          SIGNATURE_TEXT[slot]
+        )(signature.text.trim())
+        return place(
+          page,
+          typedSignature(
+            signature.text,
+            signature.font,
+            slot,
+            at,
+            colour,
+            newId(),
+            width
+          ),
+          label
+        )
+      }
+      const picture = await (await fetch(signature.data)).blob()
+      return addPicture(picture, SIGNATURE_SIZE[slot])
+    },
+    [middle, place, ensureFont, addPicture]
+  )
+
+  /** Place today's date as a line of text in the middle of the page being read. */
+  const addDate = useCallback(
+    async (words: string) => {
+      const { page, at: centre } = middle()
+      // A little under the middle, where a signature that was just placed is not.
+      const at = { x: centre.x, y: centre.y + 56 }
+      const look = latest.current.styles
+      const object = makeText(at, look, newId(), sizes[page] as Size)
+      try {
+        await ensureFont(fontKey(object))
+      } catch {
+        setProblem("The font could not be loaded. Check your connection.")
+        return
+      }
+      const width = measureWith(fontKey(object), object.size)(words)
+      return place(
+        page,
+        {
+          ...object,
+          text: words,
+          lines: [words],
+          box: { ...object.box, x: at.x - width / 2, width: width + 2 },
+        },
+        "Add date"
+      )
+    },
+    [middle, place, ensureFont, sizes]
   )
 
   /**
@@ -773,6 +900,7 @@ export function useEditor(
         a: "arrow",
         d: "ink",
         c: "cover",
+        x: "check",
         k: "stamp",
         r: "measure",
         q: "callout",
@@ -863,6 +991,9 @@ export function useEditor(
     duplicate,
     order,
     addPicture,
+    addSignature,
+    addDate,
+    loadFont: ensureFont,
     key,
     select,
     deselect,

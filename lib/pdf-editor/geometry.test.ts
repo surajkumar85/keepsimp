@@ -15,6 +15,7 @@ import {
   opposite,
   overlap,
   pullHandle,
+  seenMiddle,
   settleAngle,
   SMALLEST,
   snap,
@@ -153,6 +154,52 @@ describe("boxes", () => {
       x: 580,
       y: 780,
     })
+  })
+})
+
+describe("the part of a page that is seen", () => {
+  const page = { width: 600, height: 800 }
+  const view = { x: 0, y: 100, width: 1000, height: 400 }
+
+  it("finds the middle of what shows of a page taller than its window", () => {
+    // Shown at twice its size, with its top a hundred above the window's.
+    const shown = { x: 100, y: 0, width: 1200, height: 1600 }
+    // Across, 100 to 1000 of the screen shows; down, 100 to 500.
+    expect(seenMiddle(shown, view, page)).toEqual({ x: 225, y: 150 })
+  })
+
+  it("is the page's own middle when the whole page shows", () => {
+    const shown = { x: 200, y: 150, width: 300, height: 300 }
+    expect(seenMiddle(shown, view, { width: 600, height: 600 })).toEqual({
+      x: 300,
+      y: 300,
+    })
+  })
+
+  it("falls back on the page's middle when none of it shows, or it has no size", () => {
+    const middle = { x: 300, y: 400 }
+    expect(
+      seenMiddle({ x: 0, y: 900, width: 600, height: 800 }, view, page)
+    ).toEqual(middle)
+    expect(
+      seenMiddle({ x: 2000, y: 100, width: 600, height: 800 }, view, page)
+    ).toEqual(middle)
+    expect(
+      seenMiddle({ x: 0, y: 100, width: 0, height: 0 }, view, page)
+    ).toEqual(middle)
+  })
+
+  it("keeps away from the page's edges when asked to", () => {
+    // Only the last strip of the page shows.
+    const shown = { x: 0, y: -660, width: 600, height: 800 }
+    expect(seenMiddle(shown, view, page).y).toBe(780)
+    expect(seenMiddle(shown, view, page, 60).y).toBe(740)
+    // And its first strip.
+    const low = { x: 0, y: 480, width: 600, height: 800 }
+    expect(seenMiddle(low, view, page).y).toBe(10)
+    expect(seenMiddle(low, view, page, 60).y).toBe(60)
+    // Room that a small page does not have is half of it at most.
+    expect(seenMiddle(low, view, { width: 600, height: 80 }, 60).y).toBe(40)
   })
 })
 

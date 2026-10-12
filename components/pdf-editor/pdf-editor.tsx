@@ -53,6 +53,7 @@ import { looksLikePdf, megabytes } from "@/lib/pdf-merger/settings"
 import { cn } from "cn"
 import { CommentsPanel } from "./comments-panel"
 import { PageLayer } from "./page-layer"
+import { SignatureDialog } from "./signature-dialog"
 import { EditorToolbar } from "./toolbar"
 import { useComments } from "./use-comments"
 import { useEditor } from "./use-editor"
@@ -89,7 +90,7 @@ const plural = (count: number, word: string) =>
   `${count.toLocaleString("en")} ${word}${count === 1 ? "" : "s"}`
 
 /** What the tool is opened for: every kind of change, or marking up and commenting first. */
-export type EditorMode = "edit" | "annotate"
+export type EditorMode = "edit" | "annotate" | "sign"
 
 /** The keys that take a comment tool in hand. */
 const COMMENT_KEYS: Record<string, CommentTool> = {
@@ -143,6 +144,52 @@ const ANNOTATE_ABILITIES = [
   },
 ]
 
+const SIGN_ABILITIES = [
+  {
+    icon: IconEdit,
+    title: "Draw, type or use a picture",
+    text: "Sign with a mouse, a pen or a finger, type your name in a hand of your choice, or use a photo of your signature: the paper is taken out and only the ink is placed.",
+  },
+  {
+    icon: IconTypography,
+    title: "Fill in the rest",
+    text: "Type into the blanks of a form, tick and cross its boxes, and add today's date with one press.",
+  },
+  {
+    icon: IconShieldCheck,
+    title: "Remembered only if you ask",
+    text: "Your signature can be kept in this browser for the next time, and forgotten again. It is never sent anywhere.",
+  },
+  {
+    icon: IconLock,
+    title: "Nothing is uploaded",
+    text: "The file is opened and signed on your device. A signature made here is like ink on paper; it is not a certificate that proves who signed.",
+  },
+]
+
+/** The words of the page before a file is opened, for each thing the editor is opened for. */
+const DOORS: Record<EditorMode, { heading: string; body: string }> = {
+  edit: {
+    heading: "Drop a PDF to edit",
+    body: "Add text, pictures, shapes and drawings to any page, mark words, place notes and sign, then download the result. You can also paste a file with ⌘V or Ctrl+V.",
+  },
+  annotate: {
+    heading: "Drop a PDF to annotate",
+    body: "Highlight, underline and strike out words, place notes and answer comments, then download the result. You can also paste a file with ⌘V or Ctrl+V.",
+  },
+  sign: {
+    heading: "Drop a PDF to sign",
+    body: "Draw your signature, type it or use a picture of it, place it where it belongs, fill in what else the page asks for, and download the result. You can also paste a file with ⌘V or Ctrl+V.",
+  },
+}
+
+/** What a page opened for one job says it is, with a way to the whole editor. */
+const FOCUSED: Partial<Record<EditorMode, string>> = {
+  annotate:
+    ", opened for marking up. Its other tools (text, pictures, shapes, stamps, signing) are behind “All tools”.",
+  sign: ", opened for signing and filling in. Its other tools (pictures, shapes, stamps, highlights and notes) are behind “All tools”.",
+}
+
 const ABILITIES = [
   {
     icon: IconTypography,
@@ -188,8 +235,10 @@ function Workspace({
   const ids = useId()
   const editor = useEditor(client, doc.id, opened)
   const comments = useComments(editor, mode === "annotate" ? "highlight" : null)
-  /** The annotator shows the marking tools alone until the others are asked for. */
+  /** A page opened for one job shows the tools of that job alone until the others are asked for. */
   const [allTools, setAllTools] = useState(false)
+  /** The window a signature is made in is open. A page opened for signing begins with it. */
+  const [signing, setSigning] = useState(mode === "sign")
   const commentCount = countComments(editor.comments)
   const [commentsHow, setCommentsHow] =
     useState<(typeof COMMENT_CHOICES)[number]["value"]>("keep")
@@ -431,8 +480,12 @@ function Workspace({
         return used()
       }
     }
+    if (plain && letter === "g") {
+      setSigning(true)
+      return used()
+    }
     // Any other tool's key puts a comment tool down.
-    if (plain && comments.tool && "vtboladckrq".includes(letter))
+    if (plain && comments.tool && "vtboladckrqx".includes(letter))
       comments.setTool(null)
     if (!editor.key(event)) return false
     return used()
@@ -486,8 +539,17 @@ function Workspace({
           editor={editor}
           comments={comments}
           first={mode === "annotate" ? "comments" : "things"}
-          focused={mode === "annotate" && !allTools}
+          focus={
+            allTools
+              ? null
+              : mode === "annotate"
+                ? "comments"
+                : mode === "sign"
+                  ? "signing"
+                  : null
+          }
           onAllTools={() => setAllTools(true)}
+          onSign={() => setSigning(true)}
         />
         {editor.problem && (
           <p
@@ -512,6 +574,15 @@ function Workspace({
         <p className="sr-only" role="status" aria-live="polite">
           {changeCount(history)}
         </p>
+        {/* Inside the editor's window, so that it is a window of that window: one beside it would be out of reach of a screen reader. */}
+        <SignatureDialog
+          open={signing && open}
+          onClose={() => setSigning(false)}
+          onUse={(signature, slot, colour) =>
+            void editor.addSignature(signature, slot, colour)
+          }
+          loadFont={editor.loadFont}
+        />
       </>
     ),
     overlay: ({ entry, scale }) =>
@@ -1025,15 +1096,9 @@ export function PdfEditor({ mode = "edit" }: { mode?: EditorMode }) {
             busy={false}
             inputId={INPUT_ID}
             copy={{
-              heading:
-                mode === "annotate"
-                  ? "Drop a PDF to annotate"
-                  : "Drop a PDF to edit",
+              heading: DOORS[mode].heading,
               dropping: "Drop to open this file",
-              body:
-                mode === "annotate"
-                  ? "Highlight, underline and strike out words, place notes and answer comments, then download the result. You can also paste a file with ⌘V or Ctrl+V."
-                  : "Add text, pictures, shapes and drawings to any page, mark words and place notes, then download the result. You can also paste a file with ⌘V or Ctrl+V.",
+              body: DOORS[mode].body,
               inputLabel: "Choose a PDF file",
               action: "Choose a file",
               limits: `Stays on your device · up to ${megabytes(limits.fileBytes)}`,
@@ -1053,22 +1118,25 @@ export function PdfEditor({ mode = "edit" }: { mode?: EditorMode }) {
         <div className="space-y-4 rounded-xl border bg-card p-4 sm:p-5">
           <h2 className="section-title">What you can do</h2>
           <ul className="space-y-3 text-sm">
-            {(mode === "annotate" ? ANNOTATE_ABILITIES : ABILITIES).map(
-              (item) => (
-                <li key={item.title} className="flex gap-3">
-                  <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
-                    <item.icon className="size-4" aria-hidden="true" />
-                  </span>
-                  <span>
-                    <span className="block font-medium">{item.title}</span>
-                    <span className="text-muted-foreground">{item.text}</span>
-                  </span>
-                </li>
-              )
-            )}
+            {(mode === "sign"
+              ? SIGN_ABILITIES
+              : mode === "annotate"
+                ? ANNOTATE_ABILITIES
+                : ABILITIES
+            ).map((item) => (
+              <li key={item.title} className="flex gap-3">
+                <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
+                  <item.icon className="size-4" aria-hidden="true" />
+                </span>
+                <span>
+                  <span className="block font-medium">{item.title}</span>
+                  <span className="text-muted-foreground">{item.text}</span>
+                </span>
+              </li>
+            ))}
           </ul>
           <p className="text-xs text-muted-foreground">
-            {mode === "annotate" ? (
+            {FOCUSED[mode] ? (
               <>
                 This is the{" "}
                 <Link
@@ -1077,21 +1145,26 @@ export function PdfEditor({ mode = "edit" }: { mode?: EditorMode }) {
                 >
                   PDF editor
                 </Link>
-                , opened for marking up. Its other tools (text, pictures,
-                shapes, stamps) are behind “All tools”.
+                {FOCUSED[mode]}
               </>
             ) : (
               <>
-                Only here to highlight and comment? The{" "}
+                Here for one job? The same editor opens focused as the{" "}
                 <Link
                   href="/dashboard/pdf-annotator/"
                   className="underline underline-offset-4 hover:text-foreground"
                 >
                   PDF annotator
                 </Link>{" "}
-                opens this editor with just those tools. Changing the words that
-                are already in a file, forms and signatures come in later
-                versions.
+                for highlights and comments, and as{" "}
+                <Link
+                  href="/dashboard/sign-pdf/"
+                  className="underline underline-offset-4 hover:text-foreground"
+                >
+                  Sign PDF
+                </Link>{" "}
+                for signing and filling in. Changing the words that are already
+                in a file and form fields come in later versions.
               </>
             )}
           </p>

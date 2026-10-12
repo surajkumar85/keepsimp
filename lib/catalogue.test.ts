@@ -11,7 +11,7 @@ import {
 describe("doors", () => {
   it("lists every tool once, without the pages that open another tool for one job", () => {
     const doors = tools.filter((tool) => tool.partOf)
-    expect(doors.map((tool) => tool.id)).toEqual(["pdf-annotator"])
+    expect(doors.map((tool) => tool.id)).toEqual(["pdf-annotator", "sign-pdf"])
     expect(listed).toHaveLength(tools.length - doors.length)
     expect(listed.some((tool) => tool.partOf)).toBe(false)
     // A door opens a tool that is there, is ready, and is of the same kind.
@@ -27,6 +27,9 @@ describe("doors", () => {
     expect(filterTools("highlight", "all").map((tool) => tool.id)).toContain(
       "pdf-annotator"
     )
+    expect(filterTools("signature", "all").map((tool) => tool.id)).toEqual([
+      "sign-pdf",
+    ])
   })
 })
 

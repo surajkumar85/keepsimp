@@ -4,6 +4,7 @@
  * holds them.
  */
 import { LARGEST_SCALE, SMALLEST_SCALE, type MeasureUnit } from "./measure"
+import type { CheckShape } from "./signature"
 import {
   LONGEST_STAMP,
   retyped,
@@ -61,6 +62,7 @@ export type Look =
   | { label: string }
   | { unit: MeasureUnit }
   | { scale: number }
+  | { shape: CheckShape }
 
 /** Which parts of a look a kind of thing has. */
 export type LookPart =
@@ -76,6 +78,7 @@ export type LookPart =
   | "label"
   | "unit"
   | "scale"
+  | "shape"
 
 const PARTS: Record<EditorObject["kind"], LookPart[]> = {
   text: ["font", "size", "bold", "italic", "align", "stroke", "opacity"],
@@ -103,6 +106,7 @@ const TOOL_PARTS: Record<Tool, LookPart[]> = {
   stamp: ["label", "stroke"],
   measure: ["unit", "scale", "stroke", "weight"],
   callout: ["font", "size", "bold", "italic", "align", "stroke"],
+  check: ["shape", "stroke"],
 }
 
 /** The words a stamp may say, kept to a length; empty when there are none. */
@@ -207,6 +211,10 @@ export function stylesWith(styles: Styles, tool: Tool, look: Look): Styles {
         : { ...styles, [tool === "text" ? "textColour" : "stroke"]: value }
     return { ...styles, [part]: value }
   }
+  if (tool === "check") {
+    if (part === "shape") return { ...styles, checkShape: value }
+    return value === null ? styles : { ...styles, checkColour: value }
+  }
   if (tool === "stamp") {
     if (part === "stroke")
       return value === null ? styles : { ...styles, stampColour: value }
@@ -259,6 +267,7 @@ export function lookOf(
   label: string
   unit: MeasureUnit
   scale: number
+  shape: CheckShape
 } {
   const [first] = objects
   const base = {
@@ -269,7 +278,9 @@ export function lookOf(
           ? styles.inkColour
           : tool === "stamp"
             ? styles.stampColour
-            : styles.stroke,
+            : tool === "check"
+              ? styles.checkColour
+              : styles.stroke,
     fill: tool === "cover" ? styles.coverFill : styles.fill,
     weight: tool === "ink" ? styles.inkWeight : styles.weight,
     font: styles.font,
@@ -281,6 +292,7 @@ export function lookOf(
     label: styles.stampLabel,
     unit: styles.unit,
     scale: styles.scale,
+    shape: styles.checkShape,
   }
   if (!first) return base
   const seen = { ...base, opacity: first.opacity }

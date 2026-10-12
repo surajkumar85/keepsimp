@@ -19,7 +19,11 @@ describe("fonts", () => {
     expect(fontUrl("sans-bold-italic")).toBe(
       "/fonts/editor/LiberationSans-BoldItalic.ttf"
     )
+    expect(fontUrl("greatvibes")).toBe("/fonts/editor/GreatVibes-Regular.ttf")
+    expect(fontUrl("aurore")).toBe("/fonts/editor/LaBelleAurore-Regular.ttf")
     expect(Object.keys(fontUrls)).toEqual([...FONT_KEYS])
+    // Three families in four styles each, and four that look written by hand.
+    expect(FONT_KEYS).toHaveLength(16)
     for (const url of Object.values(fontUrls))
       expect(existsSync(`public${url}`), url).toBe(true)
   })
@@ -28,12 +32,25 @@ describe("fonts", () => {
     expect(() => fontUrl("comic")).toThrow('There is no font "comic".')
     expect(() => fontUrl("sans-heavy")).toThrow()
     expect(() => fontUrl("sansbold")).toThrow()
+    // A font that looks written by hand has one style.
+    expect(() => fontUrl("kalam-bold")).toThrow(
+      'There is no font "kalam-bold".'
+    )
   })
 
   it("names each file for the screen and each family for the panel", () => {
     expect(screenFamily("serif-bold")).toBe("KeepSimp serif-bold")
     expect(fontName("serif-bold")).toBe("LiberationSerif-Bold")
     expect(fontName("mono")).toBe("LiberationMono-Regular")
-    expect(Object.keys(FAMILY_LABELS)).toEqual(["sans", "serif", "mono"])
+    expect(fontName("sacramento")).toBe("Sacramento-Regular")
+    expect(Object.keys(FAMILY_LABELS)).toEqual([
+      "sans",
+      "serif",
+      "mono",
+      "greatvibes",
+      "sacramento",
+      "kalam",
+      "aurore",
+    ])
   })
 })

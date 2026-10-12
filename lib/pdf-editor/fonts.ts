@@ -5,12 +5,21 @@
  * expect in a document. The same file draws the letters on the screen and is
  * embedded in the PDF.
  */
-import { FONT_KEYS, type FontFamily } from "./objects"
+import { FONT_KEYS, isHand, type FontFamily } from "./objects"
 
+/**
+ * The fonts for signatures look written by hand: Great Vibes, Sacramento,
+ * Kalam and La Belle Aurore, each under the SIL Open Font License. Each has
+ * one style.
+ */
 const FAMILY_FILES: Record<FontFamily, string> = {
   sans: "LiberationSans",
   serif: "LiberationSerif",
   mono: "LiberationMono",
+  greatvibes: "GreatVibes",
+  sacramento: "Sacramento",
+  kalam: "Kalam",
+  aurore: "LaBelleAurore",
 }
 
 const STYLES: Record<string, string> = {
@@ -25,8 +34,10 @@ export function fontUrl(key: string) {
   const family = (Object.keys(FAMILY_FILES) as FontFamily[]).find(
     (name) => key === name || key.startsWith(`${name}-`)
   )
+  const rest = family === undefined ? "?" : key.slice(family.length)
+  // A font that looks written by hand has no bold and no italic.
   const style =
-    family === undefined ? undefined : STYLES[key.slice(family.length)]
+    family !== undefined && isHand(family) && rest ? undefined : STYLES[rest]
   if (family === undefined || style === undefined)
     throw new Error(`There is no font "${key}".`)
   return `/fonts/editor/${FAMILY_FILES[family]}-${style}.ttf`
@@ -49,4 +60,8 @@ export const FAMILY_LABELS: Record<FontFamily, string> = {
   sans: "Sans",
   serif: "Serif",
   mono: "Mono",
+  greatvibes: "Great Vibes",
+  sacramento: "Sacramento",
+  kalam: "Kalam",
+  aurore: "La Belle Aurore",
 }

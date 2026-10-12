@@ -3,7 +3,7 @@ import { readdir, readFile } from "node:fs/promises"
 import { join, relative, sep } from "node:path"
 import { test, expect, type Download, type Page } from "@playwright/test"
 import sharp from "sharp"
-import { readPdf } from "../tests/pdf-reader"
+import { embeddedFonts, readPdf } from "../tests/pdf-reader"
 import { serveExport, type Site } from "./static-server"
 
 // The other suites block service workers; these journeys are about the worker.
@@ -344,6 +344,31 @@ test("every tool works offline after one visit", async ({ page }) => {
   await expect(page.getByTestId("editor-check")).toContainText(
     "The text you added was read back from the result."
   )
+
+  // Signing needs a font that looks written by hand, from the saved copy too.
+  await page.getByRole("button", { name: "Keep editing" }).click()
+  await page.getByTestId("editor-sign").click()
+  const signing = page.getByTestId("signature-dialog")
+  await signing.getByRole("radio", { name: "Type" }).click()
+  await signing.getByLabel("Your name").fill("Ada Lovelace")
+  await signing
+    .getByRole("button", { name: "Place it on the page" })
+    .last()
+    .click()
+  await expect(page.getByTestId("pdf-editor")).toHaveAttribute(
+    "data-changes",
+    "2",
+    { timeout: 60_000 }
+  )
+  pending = page.waitForEvent("download")
+  await page.getByTestId("editor-download").click()
+  const signed = new Uint8Array(await bytesOf(await pending))
+  expect((await readPdf(signed)).pages[0].text).toContain("Ada Lovelace")
+  expect(
+    (await embeddedFonts(signed)).some((font) =>
+      font.name.includes("Sacramento")
+    )
+  ).toBe(true)
 
   await page.goto(`${site.origin}/dashboard/json-formatter/`)
   await replaceEditor(

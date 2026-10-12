@@ -449,7 +449,7 @@ describe("how the tools make and change them", () => {
     expect(TOOLS).toEqual(
       expect.arrayContaining(["stamp", "measure", "callout"])
     )
-    expect(TOOLS).toHaveLength(11)
+    expect(TOOLS).toHaveLength(12)
   })
 
   it("turns a stamp by its handle, and neither a measuring line nor a call-out", () => {
@@ -667,5 +667,61 @@ describe("how the tools make and change them", () => {
     expect(nudge(selecting(["measure"]), view, 5, 0)?.label).toBe(
       "Move measuring line"
     )
+  })
+
+  it("leaves a tick, a cross or a dot where a paper form is pressed, and keeps the tool in hand", () => {
+    const pressed = press(
+      {
+        tool: "check",
+        selection: selecting(["stamp"]).selection,
+        gesture: null,
+      },
+      view,
+      at(250, 650)
+    )
+    expect(pressed.selection).toBeNull()
+    const done = release(pressed, view, defaultStyles, REACH, "tick")
+    expect(done.state).toEqual({
+      tool: "check",
+      selection: null,
+      gesture: null,
+    })
+    expect(done.change?.label).toBe("Add tick")
+    expect(done.change?.ops[0]).toMatchObject({
+      do: "add",
+      page: 0,
+      object: { id: "tick", kind: "ink", stroke: defaultStyles.checkColour },
+    })
+    const crossed = release(
+      pressed,
+      view,
+      { ...defaultStyles, checkShape: "cross", checkColour: BLUE },
+      REACH,
+      "cross"
+    )
+    expect(crossed.change?.label).toBe("Add cross")
+    expect(crossed.change?.ops[0]).toMatchObject({
+      object: { stroke: BLUE, box: { x: 244, y: 644, width: 12, height: 12 } },
+    })
+    expect(TOOLS).toContain("check")
+  })
+
+  it("chooses the mark and its colour for the next press", () => {
+    expect(partsFor([], "check")).toEqual(["shape", "stroke"])
+    expect(stylesWith(defaultStyles, "check", { shape: "dot" })).toMatchObject({
+      checkShape: "dot",
+    })
+    expect(stylesWith(defaultStyles, "check", { stroke: BLUE })).toMatchObject({
+      checkColour: BLUE,
+    })
+    expect(stylesWith(defaultStyles, "check", { stroke: null })).toBe(
+      defaultStyles
+    )
+    expect(lookOf([], "check", defaultStyles)).toMatchObject({
+      shape: "tick",
+      stroke: defaultStyles.checkColour,
+    })
+    // A thing has no mark to choose.
+    expect(withLook(stamp, { shape: "dot" })).toBe(stamp)
   })
 })

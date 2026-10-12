@@ -26,6 +26,7 @@ import {
 } from "./geometry"
 import { thin } from "./ink"
 import type { MeasureUnit } from "./measure"
+import { CHECK_NAMES, checkMark, type CheckShape } from "./signature"
 import {
   BLACK,
   calloutFrame,
@@ -61,6 +62,7 @@ export type Tool =
   | "stamp"
   | "measure"
   | "callout"
+  | "check"
 
 export const TOOLS: readonly Tool[] = [
   "select",
@@ -74,6 +76,7 @@ export const TOOLS: readonly Tool[] = [
   "stamp",
   "measure",
   "callout",
+  "check",
 ]
 
 /** What new things look like. The last choice made for a kind is kept for the next of its kind. */
@@ -96,6 +99,9 @@ export interface Styles {
   /** The unit and the scale the next measuring line measures by. */
   unit: MeasureUnit
   scale: number
+  /** The mark the next press on a paper form leaves, and its colour. */
+  checkShape: CheckShape
+  checkColour: Colour
 }
 
 export const defaultStyles: Styles = {
@@ -115,6 +121,8 @@ export const defaultStyles: Styles = {
   stampColour: [0.09, 0.56, 0.24],
   unit: "mm",
   scale: 1,
+  checkShape: "tick",
+  checkColour: BLACK,
 }
 
 /** One change to the things on a page. */
@@ -484,7 +492,7 @@ const label = (verb: string, objects: readonly EditorObject[]) =>
 
 /** A thing made by a shape tool between two points, in the styles in use. */
 export function makeObject(
-  tool: Exclude<Tool, "select" | "ink" | "text" | "callout">,
+  tool: Exclude<Tool, "select" | "ink" | "text" | "callout" | "check">,
   from: Point,
   to: Point,
   styles: Styles,
@@ -648,6 +656,26 @@ export function release(
       // A call-out is typed before it is anything: whoever holds the typing
       // makes it, with `makeCallout`.
       if (gesture.tool === "callout") return { state: idle, change: null }
+      if (gesture.tool === "check")
+        return {
+          // The tool stays in hand: a form has many boxes to mark.
+          state: idle,
+          change: {
+            label: `Add ${CHECK_NAMES[styles.checkShape]}`,
+            ops: [
+              {
+                do: "add",
+                page,
+                object: checkMark(
+                  styles.checkShape,
+                  gesture.to,
+                  styles.checkColour,
+                  newId
+                ),
+              },
+            ],
+          },
+        }
       const tool = gesture.tool
       const dragged =
         Math.hypot(

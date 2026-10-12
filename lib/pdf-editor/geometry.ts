@@ -237,6 +237,38 @@ export function keepOnPage(box: Box, page: Size, keep = 8): Box {
   }
 }
 
+/**
+ * The middle of the part of a page that can be seen, in the page's points.
+ * A page is often taller than the window it is read in, and a thing placed
+ * in the middle of the whole page would land out of sight.
+ * @param shown Where the page is on the screen.
+ * @param view The part of the screen its pages are read through.
+ * @param room How far from the page's edges the point is kept, in points.
+ */
+export function seenMiddle(shown: Box, view: Box, page: Size, room = 0): Point {
+  const left = Math.max(shown.x, view.x)
+  const right = Math.min(shown.x + shown.width, view.x + view.width)
+  const top = Math.max(shown.y, view.y)
+  const bottom = Math.min(shown.y + shown.height, view.y + view.height)
+  // A page that is out of sight, or has no size yet, is given its own middle.
+  if (!(right > left && bottom > top))
+    return { x: page.width / 2, y: page.height / 2 }
+  const within = (value: number, most: number) => {
+    const edge = Math.min(room, most / 2)
+    return Math.min(most - edge, Math.max(edge, value))
+  }
+  return {
+    x: within(
+      (((left + right) / 2 - shown.x) / shown.width) * page.width,
+      page.width
+    ),
+    y: within(
+      (((top + bottom) / 2 - shown.y) / shown.height) * page.height,
+      page.height
+    ),
+  }
+}
+
 /** A line that a moved box has lined up with, to be shown while it does. */
 export interface Guide {
   /** A line down the page ("x") or across it ("y"), and where. */
