@@ -127,7 +127,9 @@ const PLACED_ROOM = 48
 export function useEditor(
   client: RefObject<PdfClient | null>,
   file: string,
-  opened: EditState
+  opened: EditState,
+  /** Told of every picture that is placed, for a draft to keep. */
+  onPicture?: (name: string, picture: Blob) => void
 ) {
   const [objects, setObjects] = useState<EditorObject[][]>(opened.objects)
   /** The comments on each page, as the file has them. */
@@ -712,6 +714,7 @@ export function useEditor(
           )
           return
         }
+        onPicture?.(name, picture)
         const { page, at } = middle()
         const sheet = sizes[page]
         // A picture's own size, at 96 pixels to the inch, within 60% of the
@@ -759,7 +762,7 @@ export function useEditor(
         setBusy((count) => count - 1)
       }
     },
-    [client, file, sizes, apply, setState, middle]
+    [client, file, sizes, apply, setState, middle, onPicture]
   )
 
   /** Put a thing on the page being read, selected, to be dragged into place. */

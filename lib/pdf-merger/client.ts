@@ -4,7 +4,7 @@ import { poolSize } from "@/lib/image-batch/pool"
 import type { Size } from "@/lib/image-compressor/geometry"
 import type { CommentChange, LetterLine } from "@/lib/pdf-editor/comments"
 import type { FieldChange } from "@/lib/pdf-editor/forms"
-import type { ExportReport } from "@/lib/pdf-editor/mupdf-edit"
+import type { ExportReport, Step } from "@/lib/pdf-editor/mupdf-edit"
 import type { Change } from "@/lib/pdf-editor/tools"
 import type { Audit } from "@/lib/pdf-compressor/mupdf-audit"
 import type { CompressReport, Stage } from "@/lib/pdf-compressor/mupdf-compress"
@@ -150,6 +150,10 @@ export class PdfClient {
     (state: EditState | null) => void
   >()
   private readonly editPictures = new Map<number, (size: Size | null) => void>()
+  private readonly editDrafts = new Map<
+    number,
+    (draft: { steps: Step[]; position: number } | null) => void
+  >()
   private readonly editLetters = new Map<
     number,
     (lines: LetterLine[] | null) => void
@@ -211,6 +215,9 @@ export class PdfClient {
     } else if (message.type === "edit-state") {
       this.editStates.get(message.request)?.(message.state)
       this.editStates.delete(message.request)
+    } else if (message.type === "edit-draft") {
+      this.editDrafts.get(message.request)?.(message.draft)
+      this.editDrafts.delete(message.request)
     } else if (message.type === "edit-picture") {
       this.editPictures.get(message.request)?.(message.size)
       this.editPictures.delete(message.request)
@@ -374,6 +381,8 @@ export class PdfClient {
     this.editStates.clear()
     for (const done of this.editPictures.values()) done(null)
     this.editPictures.clear()
+    for (const done of this.editDrafts.values()) done(null)
+    this.editDrafts.clear()
     for (const done of this.editLetters.values()) done(null)
     this.editLetters.clear()
     for (const waiting of this.editNews.values())
@@ -482,6 +491,30 @@ export class PdfClient {
       const request = ++this.requests
       this.editLetters.set(request, resolve)
       this.send({ type: "edit-letters", id, request, page })
+    })
+  }
+
+  /** The steps that were made, for a draft to keep; null when the file is not open for editing. */
+  editDraft(id: string) {
+    return new Promise<{ steps: Step[]; position: number } | null>(
+      (resolve) => {
+        const request = ++this.requests
+        this.editDrafts.set(request, resolve)
+        this.send({ type: "edit-draft", id, request })
+      }
+    )
+  }
+
+  /**
+   * Take a draft up on a file that has just been opened. Its fonts and
+   * pictures must have been handed over first.
+   * @returns Where the file then stands; null when the draft could not be taken up.
+   */
+  editTakeUp(id: string, steps: unknown, position: number) {
+    return new Promise<EditState | null>((resolve) => {
+      const request = ++this.requests
+      this.editStates.set(request, resolve)
+      this.send({ type: "edit-take-up", id, request, steps, position })
     })
   }
 

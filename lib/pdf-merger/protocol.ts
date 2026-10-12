@@ -14,7 +14,7 @@ import type {
 } from "@/lib/pdf-editor/comments"
 import type { FieldChange, FormFacts, FormField } from "@/lib/pdf-editor/forms"
 import type { History } from "@/lib/pdf-editor/history"
-import type { ExportReport } from "@/lib/pdf-editor/mupdf-edit"
+import type { ExportReport, Step } from "@/lib/pdf-editor/mupdf-edit"
 import type { EditorObject } from "@/lib/pdf-editor/objects"
 import type { Change } from "@/lib/pdf-editor/tools"
 import type { PageText, Quad } from "@/lib/pdf-reader/text"
@@ -188,6 +188,16 @@ export type PdfRequest =
   | { type: "edit-field"; id: string; request: number; change: FieldChange }
   /** The letters of a page with their boxes, for marks to be laid on words. */
   | { type: "edit-letters"; id: string; request: number; page: number }
+  /** The steps that were made, as a draft keeps them. */
+  | { type: "edit-draft"; id: string; request: number }
+  /** Take a draft up: steps as they were kept, checked before they are made again. */
+  | {
+      type: "edit-take-up"
+      id: string
+      request: number
+      steps: unknown
+      position: number
+    }
   /** Undo the last change, or make it again. */
   | { type: "edit-step"; id: string; request: number; back: boolean }
   /** Write the file out as it stands. */
@@ -326,6 +336,12 @@ export type PdfResponse =
         history: History
         bookmarks: Bookmark[]
       } | null
+    }
+  /** Null when the file is not open for editing. */
+  | {
+      type: "edit-draft"
+      request: number
+      draft: { steps: Step[]; position: number } | null
     }
   /** A picture's size in pixels; null when it could not be read. */
   | { type: "edit-picture"; request: number; size: Size | null }

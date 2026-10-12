@@ -44,6 +44,15 @@ import {
   type Extras,
 } from "@/lib/pdf-compressor/options"
 import { countComments, type CommentTool } from "@/lib/pdf-editor/comments"
+import { draftLine, fontsOf } from "@/lib/pdf-editor/draft"
+import {
+  clearDraft,
+  draftsWanted,
+  loadDraft,
+  wantDrafts,
+  type KeptDraft,
+} from "@/lib/pdf-editor/draft-store"
+import { fontUrls } from "@/lib/pdf-editor/fonts"
 import { changeCount, unsaved } from "@/lib/pdf-editor/history"
 import type { ExportReport } from "@/lib/pdf-editor/mupdf-edit"
 import { formLine, unfilled } from "@/lib/pdf-editor/forms"
@@ -57,6 +66,7 @@ import { PageLayer } from "./page-layer"
 import { SignatureDialog } from "./signature-dialog"
 import { EditorToolbar } from "./toolbar"
 import { useComments } from "./use-comments"
+import { useDraft, type DraftStatus } from "./use-draft"
 import { useEditor } from "./use-editor"
 
 const INPUT_ID = "editor-file"
@@ -77,6 +87,41 @@ interface OpenFile {
   message: string
   facts: FileFacts | null
   opened: EditState | null
+  /** The draft the file is opened from, to be taken up once it is open. */
+  draft?: KeptDraft
+  /** There was a draft, and it could not be taken up: the file is as it came. */
+  draftFailed?: boolean
+}
+
+/** What the switch that keeps drafts says, and what it says of the open file. */
+const DRAFT_HINT =
+  "Off, nothing is kept: closing the tab loses changes that were not downloaded. On, the file and your changes are kept in this browser until you close the file or throw the draft away. Nothing is sent anywhere."
+const DRAFT_SAYS: Record<DraftStatus, string> = {
+  none: "",
+  keeping: "Keeping a draft…",
+  kept: "A draft of this file is kept on this device.",
+  large: "This file is over 50 MB, which is more than a draft is kept of.",
+  failed:
+    "The draft could not be kept: this browser has no room for it, or keeps nothing.",
+}
+
+/**
+ * Hand a draft's fonts and pictures to the worker and take its steps up.
+ * @returns Where the file then stands; null when the draft could not be taken up.
+ */
+async function takeUpDraft(client: PdfClient, id: string, kept: KeptDraft) {
+  try {
+    for (const key of fontsOf(kept.draft.steps)) {
+      const response = await fetch(fontUrls[key])
+      if (!response.ok) return null
+      client.editFont(id, key, await response.arrayBuffer())
+    }
+    for (const [name, picture] of kept.pictures)
+      if (!(await client.editPicture(id, name, picture))) return null
+    return await client.editTakeUp(id, kept.draft.steps, kept.draft.position)
+  } catch {
+    return null
+  }
 }
 
 interface Result {
@@ -283,6 +328,8 @@ function Workspace({
   reader,
   onClose,
   mode,
+  drafts,
+  onDrafts,
 }: {
   client: RefObject<PdfClient | null>
   doc: OpenFile
@@ -290,9 +337,18 @@ function Workspace({
   reader: ReturnType<typeof usePdfReader>
   onClose: () => void
   mode: EditorMode
+  /** The switch that keeps drafts is on. */
+  drafts: boolean
+  onDrafts: (on: boolean) => void
 }) {
   const ids = useId()
-  const editor = useEditor(client, doc.id, opened)
+  /** Every picture that was placed, for a draft to keep; those of the draft the file was opened from to begin with. */
+  const [pictures] = useState(() => new Map(doc.draft?.pictures))
+  const onPicture = useCallback(
+    (name: string, picture: Blob) => void pictures.set(name, picture),
+    [pictures]
+  )
+  const editor = useEditor(client, doc.id, opened, onPicture)
   const comments = useComments(editor, mode === "annotate" ? "highlight" : null)
   /** A page opened for one job shows the tools of that job alone until the others are asked for. */
   const [allTools, setAllTools] = useState(false)
@@ -359,13 +415,24 @@ function Workspace({
   )
 
   const dirty = unsaved(history)
-  // The browser asks before a page with unsaved changes is left.
+  const draft = useDraft({
+    client,
+    id: doc.id,
+    file: doc.file,
+    history,
+    wanted: drafts,
+    begun: Boolean(doc.draft),
+    pictures,
+  })
+  // The browser asks before a page with unsaved changes is left, unless a
+  // draft holds them.
+  const atRisk = dirty && !draft.current
   useEffect(() => {
-    if (!dirty) return
+    if (!atRisk) return
     const ask = (event: BeforeUnloadEvent) => event.preventDefault()
     window.addEventListener("beforeunload", ask)
     return () => window.removeEventListener("beforeunload", ask)
-  }, [dirty])
+  }, [atRisk])
 
   const { onPage: tellEditor, addPicture } = editor
   const onPage = useCallback(
@@ -719,6 +786,10 @@ function Workspace({
 
   const lines = current ? checkLines(current.report) : []
   const notes = [
+    doc.draft &&
+      "This is the draft that was kept on this device, with your changes as you left them.",
+    doc.draftFailed &&
+      "The draft of this file could not be taken up. The file is open as it was before your changes.",
     doc.facts?.repaired &&
       "This file was damaged and was repaired while it was opened.",
     doc.facts?.signed &&
@@ -828,6 +899,22 @@ function Workspace({
               <IconX aria-hidden="true" /> Close the file
             </Button>
           </div>
+          <ToggleRow
+            label="Keep a draft on this device"
+            hint={DRAFT_HINT}
+            checked={drafts}
+            onCheckedChange={onDrafts}
+          />
+          {DRAFT_SAYS[draft.status] && (
+            <p
+              role="status"
+              className="text-sm text-muted-foreground"
+              data-testid="draft-status"
+              data-status={draft.status}
+            >
+              {DRAFT_SAYS[draft.status]}
+            </p>
+          )}
           {leaving && (
             <div
               role="alertdialog"
@@ -836,7 +923,7 @@ function Workspace({
             >
               <p id={`${ids}-leaving`} className="text-sm">
                 Your changes have not been downloaded. Closing the file throws
-                them away.
+                them away{drafts ? ", and the draft with them" : ""}.
               </p>
               <div className="flex flex-wrap gap-2">
                 <Button variant="destructive" onClick={onClose}>
@@ -1072,6 +1159,34 @@ export function PdfEditor({ mode = "edit" }: { mode?: EditorMode }) {
   useEffect(() => {
     live.current = doc
   })
+  /** The switch that keeps drafts, and the draft that is kept, when there is one. */
+  const [drafts, setDrafts] = useState(false)
+  const [kept, setKept] = useState<KeptDraft | null>(null)
+  const [now, setNow] = useState(0)
+  // What this device keeps is asked for once the page is on the screen.
+  useEffect(() => {
+    let stale = false
+    void (async () => {
+      const on = draftsWanted()
+      const found = on ? await loadDraft().catch(() => null) : null
+      if (stale) return
+      setDrafts(on)
+      setKept(found)
+      setNow(Date.now())
+    })()
+    return () => {
+      stale = true
+    }
+  }, [])
+  const switchDrafts = useCallback((on: boolean) => {
+    setDrafts(on)
+    if (!on) setKept(null)
+    void wantDrafts(on).catch(() => {})
+  }, [])
+  const dropDraft = useCallback(() => {
+    setKept(null)
+    void clearDraft().catch(() => {})
+  }, [])
 
   useEffect(() => {
     const instance = new PdfClient((event) => {
@@ -1080,12 +1195,25 @@ export function PdfEditor({ mode = "edit" }: { mode?: EditorMode }) {
       if (event.id !== live.current?.id) return
       if (event.type === "opened") {
         const { facts } = event
-        void instance.editState(event.id).then((opened) =>
+        const draft = live.current.draft
+        void (async () => {
+          // A file opened from a draft has the draft's steps made again first.
+          const taken = draft
+            ? await takeUpDraft(instance, event.id, draft)
+            : null
+          const opened = taken ?? (await instance.editState(event.id))
           setDoc((was) =>
             was?.id !== event.id
               ? was
               : opened
-                ? { ...was, status: "ready", facts, opened }
+                ? {
+                    ...was,
+                    status: "ready",
+                    facts,
+                    opened,
+                    draft: taken ? draft : undefined,
+                    draftFailed: Boolean(draft) && !taken,
+                  }
                 : {
                     ...was,
                     status: "failed",
@@ -1093,7 +1221,7 @@ export function PdfEditor({ mode = "edit" }: { mode?: EditorMode }) {
                       "This file could not be opened for editing. Try another file.",
                   }
           )
-        )
+        })()
       } else if (event.type === "locked")
         setDoc((was) =>
           was?.id === event.id
@@ -1115,7 +1243,7 @@ export function PdfEditor({ mode = "edit" }: { mode?: EditorMode }) {
   }, [claims])
 
   const openFile = useCallback(
-    async (files: File[]) => {
+    async (files: File[], draft?: KeptDraft) => {
       // One file is edited at a time; the one that is open stays until it is closed.
       if (live.current) return
       const [file] = files
@@ -1147,6 +1275,7 @@ export function PdfEditor({ mode = "edit" }: { mode?: EditorMode }) {
         message: "",
         facts: null,
         opened: null,
+        draft,
       }
       live.current = next
       setDoc(next)
@@ -1197,8 +1326,14 @@ export function PdfEditor({ mode = "edit" }: { mode?: EditorMode }) {
         doc={doc}
         opened={doc.opened}
         reader={reader}
-        onClose={closeFile}
+        onClose={() => {
+          closeFile()
+          // The file is closed for good: its draft goes with it.
+          if (drafts) dropDraft()
+        }}
         mode={mode}
+        drafts={drafts}
+        onDrafts={switchDrafts}
       />
     )
 
@@ -1278,6 +1413,54 @@ export function PdfEditor({ mode = "edit" }: { mode?: EditorMode }) {
           <p role="alert" className="text-sm text-destructive">
             {notice}
           </p>
+        )}
+        {!doc && kept && (
+          <section
+            className="space-y-3 rounded-xl border bg-card p-4"
+            aria-labelledby={`${INPUT_ID}-draft`}
+            data-testid="draft-card"
+          >
+            <div>
+              <h2
+                id={`${INPUT_ID}-draft`}
+                className="font-heading text-base font-medium"
+              >
+                Unfinished on this device
+              </h2>
+              <p className="text-sm break-all text-muted-foreground">
+                {kept.draft.name} · {draftLine(kept.draft, now)}
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                onClick={() =>
+                  void openFile(
+                    [
+                      new File([kept.file], kept.draft.name, {
+                        type: "application/pdf",
+                      }),
+                    ],
+                    kept
+                  )
+                }
+              >
+                Take it up
+              </Button>
+              <Button variant="outline" onClick={dropDraft}>
+                Throw it away
+              </Button>
+            </div>
+          </section>
+        )}
+        {!doc && (
+          <div className="rounded-xl border bg-card p-4">
+            <ToggleRow
+              label="Keep a draft on this device"
+              hint={DRAFT_HINT}
+              checked={drafts}
+              onCheckedChange={switchDrafts}
+            />
+          </div>
         )}
       </div>
       <div className="lg:col-span-2">

@@ -101,6 +101,19 @@ A digital signature covers the bytes of the file as it was signed. A file that i
 - **When it cannot be done** (`canWriteAfter`): a file that had to be repaired cannot be added to. The page then says that a changed copy no longer counts as signed, as before.
 - **Tests:** `tests/pdf-signing.ts` makes a truly signed file (pdf-lib writes it, `@signpdf` signs it with a certificate made on the spot) and `readSignature` works out with node-forge, not with the engine, whether the signature still holds and whether it covers the whole file. `signed.node.test.ts` and `e2e/pdf-signed.spec.ts` (five profiles) check both ways of downloading, again and again with undoing in between. Poppler's `pdfsig` agrees when run by hand.
 
+## Drafts (phase 3, fourth part)
+
+Nothing is kept unless a switch is turned on: "Keep a draft on this device", off by default, on the tool's page and beside the open file. On, unfinished work survives a closed tab.
+
+- **A draft is the file as it came and the list of steps** (`EditSession.steps`), with the pictures that were placed. That is all the editor needs: taking a draft up opens the file and makes the steps in force again (`takeUp`, which is `madeAgain` on a fresh session). The undo list comes with it, the undone steps too.
+- **Where it is kept** (`lib/pdf-editor/draft-store.ts`): IndexedDB, database `keepsimp-drafts`, in this browser only. The file and each picture are kept as bytes, not as files: WebKit keeps no files there in a private window. The steps are written again a moment after every change (`use-draft.ts`); the file is written once, when the first change is made, so a file that was only opened replaces no draft. One keeping follows another, since two at once could clear what the other had just kept.
+- **One draft at a time,** of the file that was last changed with the switch on. Files over 50 MB are not kept (`DRAFT_LIMIT`), and the page says so. When the browser will not keep it (no room, or a window that keeps nothing), the page says that too.
+- **What is read back is trusted no more than a file** (`readDraft` in `lib/pdf-editor/draft.ts`): every step goes through the checks a change from the page goes through (`readOp`, `readCommentOp`, `readFieldOp`), in the page and again in the worker. What is not a draft is not offered.
+- **The page:** a card "Unfinished on this device" with the file's name, how many changes are in force and when it was kept, and two buttons: Take it up, Throw it away. The line beside the open file says "Keeping a draft…" until the file as it now stands is really kept; only then does the browser stop asking before the page is left.
+- **When it goes:** closing the file for good, throwing it away, turning the switch off, or beginning a draft of another file. A download does not remove it.
+- **A locked file** is kept locked and asks for its password again when it is taken up. No password is kept.
+- **The privacy page** (`app/(marketing)/privacy/page.tsx`) lists everything the editor can keep on the device: the name comments are signed with, a remembered signature, and a draft.
+
 ## One editor, several doors
 
 There is one PDF editor. The annotator, Sign PDF and Fill PDF form are **doors**: each is a catalogue entry with `partOf: "pdf-editor"`. A door has an address, a title, a description, written help and an article of its own, is in the sitemap and the offline copy, and is found by the search in the header. It is not a card on the tools page, not counted in the sidebar and not an app shortcut (`listed` in `lib/catalogue.ts` is the tools without their doors), and the article that goes through every tool names it under the editor. Each page says what it is and links to the other.
@@ -145,21 +158,22 @@ The report (`ExportReport`) becomes the lines in the download card (`lib/pdf-edi
 
 ### Files
 
-| File                                          | What it holds                                                                                                                         |
-| --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
-| `lib/pdf-editor/objects.ts`                   | What an added thing is, how it moves, resizes and turns, and `readObject`, which checks one.                                          |
-| `lib/pdf-editor/geometry.ts`                  | Turned boxes, handles, hit tests, snapping, staying on the page.                                                                      |
-| `lib/pdf-editor/tools.ts`                     | The tools: press, drag, release; nudge, paste, order, restyle; `applied`.                                                             |
-| `lib/pdf-editor/text-layout.ts`, `ink.ts`     | Breaking lines by measured widths; thinning and smoothing a stroke.                                                                   |
-| `lib/pdf-editor/measure.ts`                   | Units and scale, what a measuring line says, where its end marks and its label go.                                                    |
-| `lib/pdf-editor/signature.ts`                 | Signatures drawn, typed and from a picture; ticks, crosses and dots; what is remembered.                                              |
-| `lib/pdf-editor/styles.ts`, `fonts.ts`        | The palette and what a look changes; which font file is which.                                                                        |
-| `lib/pdf-editor/history.ts`, `report.ts`      | What the undo list says and what is unsaved; the words of the check.                                                                  |
-| `lib/pdf-editor/forms.ts`, `mupdf-forms.ts`   | What a field is, what it takes, dates, what is missing, how a list is drawn; reading and filling fields in the engine.                |
-| `lib/pdf-editor/mupdf-edit.ts`                | Sessions, changes, undo, flattening, the export. With `mupdf-comments.ts` and `mupdf-forms.ts`, the only files that touch the engine. |
-| `lib/pdf-merger/{protocol,pdf.worker,client}` | The `edit-*` requests, beside the other tools' in the one worker.                                                                     |
-| `components/pdf-editor/`                      | The tool's page, the state hook, the toolbar, the layer over a page, the written help.                                                |
-| `public/fonts/editor/`                        | Twelve Liberation font files and four that look written by hand (5.4 MB), with their licences. Part of the offline copy.              |
+| File                                                           | What it holds                                                                                                                         |
+| -------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| `lib/pdf-editor/objects.ts`                                    | What an added thing is, how it moves, resizes and turns, and `readObject`, which checks one.                                          |
+| `lib/pdf-editor/geometry.ts`                                   | Turned boxes, handles, hit tests, snapping, staying on the page.                                                                      |
+| `lib/pdf-editor/tools.ts`                                      | The tools: press, drag, release; nudge, paste, order, restyle; `applied`.                                                             |
+| `lib/pdf-editor/text-layout.ts`, `ink.ts`                      | Breaking lines by measured widths; thinning and smoothing a stroke.                                                                   |
+| `lib/pdf-editor/measure.ts`                                    | Units and scale, what a measuring line says, where its end marks and its label go.                                                    |
+| `lib/pdf-editor/signature.ts`                                  | Signatures drawn, typed and from a picture; ticks, crosses and dots; what is remembered.                                              |
+| `lib/pdf-editor/styles.ts`, `fonts.ts`                         | The palette and what a look changes; which font file is which.                                                                        |
+| `lib/pdf-editor/history.ts`, `report.ts`                       | What the undo list says and what is unsaved; the words of the check.                                                                  |
+| `lib/pdf-editor/forms.ts`, `mupdf-forms.ts`                    | What a field is, what it takes, dates, what is missing, how a list is drawn; reading and filling fields in the engine.                |
+| `lib/pdf-editor/draft.ts`, `draft-store.ts`, `mupdf-signed.ts` | What a draft is and how it is checked; where it is kept; writing changes after a signed file.                                         |
+| `lib/pdf-editor/mupdf-edit.ts`                                 | Sessions, changes, undo, flattening, the export. With `mupdf-comments.ts` and `mupdf-forms.ts`, the only files that touch the engine. |
+| `lib/pdf-merger/{protocol,pdf.worker,client}`                  | The `edit-*` requests, beside the other tools' in the one worker.                                                                     |
+| `components/pdf-editor/`                                       | The tool's page, the state hook, the toolbar, the layer over a page, the written help.                                                |
+| `public/fonts/editor/`                                         | Twelve Liberation font files and four that look written by hand (5.4 MB), with their licences. Part of the offline copy.              |
 
 ## Rules
 
@@ -200,13 +214,14 @@ The report (`ExportReport`) becomes the lines in the download card (`lib/pdf-edi
 - **Signing:** `signature.test.ts` (100%), the signing part of `marks.node.test.ts` with the real engine (a typed signature read by pdf.js in a hand font cut to its letters; a drawn one, a tick, a cross and a dot in the page's pixels), and `e2e/pdf-signer.spec.ts` on five profiles: drawn, typed and pictured signatures (the picture read back from the download with its paper see-through and its ink still blue), initials, the date, ticks and crosses, remembering and forgetting, things landing where the page is being read, and the window's accessibility in each of its states.
 - **Forms:** `forms.test.ts` (100%), `forms.node.test.ts` with the real engine (every kind read with its label, limits and place, also on a turned page; every kind filled in and read back by pdf-lib and pdf.js; round buttons across pages; a field shown on two pages; clearing; undo and redo; what is refused makes no step; a list's tinted bar in the page's pixels, upright on a turned page; fields made part of the page with their words read by pdf.js, in a locked result), and `e2e/pdf-form-filler.spec.ts` on five profiles: every kind by mouse and keyboard, Tab order, Escape, what is missing and the way to it, typing that is still under way at Download, the final copy, files with no form, XFA and scripts, a tool drawn over a field, the sample, axe in every state.
 - **After an undo** (`undo.node.test.ts`, and a journey in `e2e/pdf-editor.spec.ts`): text in a font, a picture and a filled field, each made, undone and made again, give results in which no reference points at nothing (`danglingRefs`, read with pdf-lib) and whose words and pictures other software reads. The seeded run of many edits checks the same.
+- **Drafts:** `draft.test.ts` (100%), `draft.node.test.ts` with the real engine (steps kept as text and read back make a fresh copy what the session's copy was, undo list and all; a draft whose font was not handed over is not taken up and leaves the file as it came), and `e2e/pdf-draft.spec.ts` on five profiles: nothing kept with the switch off; a field, a text box, a picture and an undone step kept, the page reloaded, the draft taken up, redone and downloaded; thrown away; switched off and on; steps that are not steps offered as nothing.
 - **Offline** (`e2e/offline.spec.ts`): text is typed, a signature is typed in a hand font, and both are downloaded with the server stopped, which needs the fonts from the saved copy.
 
 ## The phases
 
 1. **The workspace, and adding things.** Built.
 2. **Mark up and comment.** Built: marks on words, the highlighter pen, notes and replies, the list of comments, comments a file comes with, the PDF annotator page, stamps, call-outs and measuring lines.
-3. **Fill and sign.** Built so far: drawn, typed and pictured signatures, initials, the date, ticks and crosses, and the Sign PDF page. Also built: filling in a form's own fields, with the Fill PDF form page. Also built: saving after a signed file so that its signature stays valid. Still to come: text in comb boxes on forms without fields, and drafts kept on the device when asked.
+3. **Fill and sign.** Built so far: drawn, typed and pictured signatures, initials, the date, ticks and crosses, and the Sign PDF page. Also built: filling in a form's own fields, with the Fill PDF form page. Also built: saving after a signed file so that its signature stays valid, and drafts kept on the device when asked. Still to come: text in comb boxes on forms without fields.
 4. **Change the text that is there,** in the file's own font where it has the letters, with the old words gone from the file.
 5. **Paragraphs, pictures in the page, links, find and replace.**
 6. **Pages and the document:** reorder, crop, numbers, watermarks, bookmarks, details. Focused pages: Add page numbers, Watermark PDF, Crop PDF.

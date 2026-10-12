@@ -801,6 +801,29 @@ function remake(session: EditSession) {
 }
 
 /**
+ * Take a draft up: the steps that were kept are this session's steps, and
+ * the working copy is made anew with those in force. The session must not
+ * have been changed yet, and the steps must have been checked (`readDraft`).
+ * @throws When a step cannot be made again; the session is then as it was.
+ */
+export function takeUp(
+  session: EditSession,
+  steps: readonly Step[],
+  position: number
+) {
+  if (session.steps.length) throw new Error("This file has been changed.")
+  session.steps = [...steps]
+  session.position = position
+  try {
+    remake(session)
+  } catch (error) {
+    session.steps = []
+    session.position = 0
+    throw error
+  }
+}
+
+/**
  * Do some work on the file as one step that can be undone. The work says
  * which pages it touches as it goes.
  * @param done What was asked for, so that the step can be made again.

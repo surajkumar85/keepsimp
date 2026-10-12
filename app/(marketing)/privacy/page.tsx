@@ -13,17 +13,31 @@ export default function PrivacyPage() {
         A straightforward approach to privacy.
       </h1>
       <p className="mt-4 text-sm text-muted-foreground">
-        Updated 10 October 2026
+        Updated 12 October 2026
       </p>
       <div className="article-copy">
         <h2>Files and text stay in your browser.</h2>
         <p>
-          The image tools read selected files on your device and export results
-          using browser APIs. The JSON formatter processes pasted text in the
-          current tab. KeepSimp’s application does not upload this content,
-          store it on a server, or save it in browser storage. Leaving or
-          refreshing a tool page clears its working state. Downloads are saved
-          wherever your browser normally saves them.
+          The image and PDF tools read the files you choose on your device and
+          hand you the results through your browser. The JSON formatter
+          processes pasted text in the current tab. KeepSimp’s application does
+          not upload this content or store it on a server, and it saves none of
+          it in browser storage unless you ask it to (see below). Otherwise,
+          leaving or refreshing a tool page clears what you were working on.
+          Downloads are saved wherever your browser normally saves them.
+        </p>
+        <h2>What is kept only when you ask.</h2>
+        <p>
+          The PDF editor can keep three things in this browser’s own storage, on
+          this device. Each is kept only after you turn it on or type it, and
+          none is sent anywhere. The name you sign your comments with is kept
+          once you type one. A signature or your initials are kept when you
+          switch on “Remember this signature on this device”, until you press
+          “Forget it”. A draft of a PDF you are editing (the file, the pictures
+          you placed and your changes) is kept when you switch on “Keep a draft
+          on this device”, until you close the file, throw the draft away or
+          switch it off. Do not turn these on at a computer other people use.
+          You can also remove them through your browser’s site-data settings.
         </p>
         <h2>The website still loads from a host.</h2>
         <p>
@@ -44,7 +58,7 @@ export default function PrivacyPage() {
         <h2>A copy of the tools for offline use.</h2>
         <p>
           Once you open the tools, your browser keeps a copy of KeepSimp’s own
-          pages, scripts and image codecs, about 17 MB, so they work without a
+          pages, scripts, fonts and codecs, about 37 MB, so they work without a
           connection. That copy contains none of your files or text. It is
           replaced when a new version is published, and you can remove it
           through your browser’s site-data settings.
@@ -59,10 +73,10 @@ export default function PrivacyPage() {
         </p>
         <h2>Future tools follow the same direction.</h2>
         <p>
-          Video, audio and document tools remain marked as coming soon. Their
-          data handling will be documented when they are implemented. If a
-          future tool needs a different approach, the interface and this page
-          must explain it before a user provides content.
+          Video and audio tools remain marked as coming soon. Their data
+          handling will be documented when they are implemented. If a future
+          tool needs a different approach, the interface and this page must
+          explain it before a user provides content.
         </p>
       </div>
     </div>

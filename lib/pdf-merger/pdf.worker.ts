@@ -34,6 +34,7 @@ import {
   pageSizes as editSizes,
   stepBack,
   stepForward,
+  takeUp,
   type EditSession,
 } from "@/lib/pdf-editor/mupdf-edit"
 import {
@@ -46,6 +47,7 @@ import { auditPdf, type Audit } from "@/lib/pdf-compressor/mupdf-audit"
 import type { Stage } from "@/lib/pdf-compressor/report"
 import type { LetterLine } from "@/lib/pdf-editor/comments"
 import { applyFields, fieldsOn, formFacts } from "@/lib/pdf-editor/mupdf-forms"
+import { readDraft } from "@/lib/pdf-editor/draft"
 import { canWriteAfter, exportAfter } from "@/lib/pdf-editor/mupdf-signed"
 import {
   compressCustom,
@@ -527,12 +529,39 @@ const EDIT_FAILED =
 const EXPORT_FAILED =
   "The file could not be written. Try again, or add the file once more."
 
-function editState(request: Extract<PdfRequest, { type: "edit-state" }>) {
+/** The steps that were made, for a draft to keep. */
+function editDraft(request: Extract<PdfRequest, { type: "edit-draft" }>) {
+  const session = editing.get(request.id)
+  post({
+    type: "edit-draft",
+    request: request.request,
+    draft: session
+      ? { steps: session.steps, position: session.position }
+      : null,
+  })
+}
+
+function editState(
+  request: Extract<PdfRequest, { type: "edit-state" | "edit-take-up" }>
+) {
   const session = editing.get(request.id)
   const pdf = files.get(request.id)
   let state: Extract<PdfResponse, { type: "edit-state" }>["state"] = null
   try {
     if (session && pdf) {
+      // A draft is taken up before the file is told about: its steps are
+      // checked like changes that arrive from the page, and made again.
+      if (request.type === "edit-take-up") {
+        const draft = readDraft({
+          name: "draft",
+          size: 1,
+          when: 0,
+          steps: request.steps,
+          position: request.position,
+        })
+        if (!draft) throw new Error("That is not a draft.")
+        takeUp(session, draft.steps, draft.position)
+      }
       const sizes = editSizes(session)
       const fields = sizes.map((_, page) => fieldsOn(session, page))
       state = {
@@ -987,8 +1016,10 @@ self.onmessage = (event: MessageEvent<PdfRequest>) => {
     })
   else if (request.type === "halve") enqueue({ run: () => halve(request) })
   else if (request.type === "audit") enqueue({ run: () => audit(request) })
-  else if (request.type === "edit-state")
+  else if (request.type === "edit-state" || request.type === "edit-take-up")
     enqueue({ run: async () => editState(request) })
+  else if (request.type === "edit-draft")
+    enqueue({ run: async () => editDraft(request) })
   else if (request.type === "edit-font")
     enqueue({
       run: async () => {

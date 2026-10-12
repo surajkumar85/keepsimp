@@ -69,6 +69,7 @@ export default defineConfig({
         "lib/pdf-compressor/target.ts",
         "lib/pdf-compressor/usage.ts",
         "lib/pdf-editor/comments.ts",
+        "lib/pdf-editor/draft.ts",
         "lib/pdf-editor/fonts.ts",
         "lib/pdf-editor/forms.ts",
         "lib/pdf-editor/geometry.ts",

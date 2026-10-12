@@ -54,6 +54,11 @@ const content: TutorialContent = {
         "A form's own fields are tinted and can be typed in, ticked and chosen from; Tab goes from one to the next, and a line above the page says what must still be filled in. When you download, the form keeps its fields or they become part of the page. A form's scripts are never run, so totals it would work out are yours to fill in.",
     },
     {
+      term: "Keep a draft on this device",
+      detail:
+        "Off unless you turn it on. On, the file and your changes are kept in this browser, so closing the tab loses nothing: the next time you open this page, the unfinished file is offered again with its changes and its undo list. It is never sent anywhere. It goes when you close the file, throw it away or turn the switch off. Files over 50 MB are not kept. Do not turn it on at a computer other people use.",
+    },
+    {
       term: "Signing, dates and ticks",
       detail:
         "Sign opens a window where your signature is drawn, typed in a hand of your choice, or taken from a picture with the paper removed; it lands in the middle of the page to be dragged into place. One button adds today's date. The tick tool marks the boxes of a paper form with ticks, crosses or dots, one press each. A signature made here is like ink on paper, not a certificate.",
