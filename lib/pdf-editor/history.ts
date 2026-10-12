@@ -1,7 +1,7 @@
 /**
- * What the undo list says. The list itself is kept by the engine, which
- * journals every change to the file; this is how it is put into words and
- * how the page knows whether there is unsaved work.
+ * What the undo list says. The list itself is kept with the file in the
+ * worker, a step for every change that was made; this is how it is put
+ * into words and how the page knows whether there is unsaved work.
  */
 
 /** Where the file stands in its list of changes. */

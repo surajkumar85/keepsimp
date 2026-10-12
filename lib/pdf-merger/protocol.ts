@@ -200,6 +200,11 @@ export type PdfRequest =
       comments: "keep" | "flatten" | "remove"
       /** What becomes of a form's fields: kept as fields, or drawn into their pages. */
       fields: "keep" | "flatten"
+      /**
+       * A signed file: its changes are written after it, so that the
+       * signature stays valid, and nothing else is done to it.
+       */
+      after: boolean
       lock: Lock | null
     }
   /** One end of a line to a helper that runs the picture codecs on a core of its own. */
@@ -316,6 +321,8 @@ export type PdfResponse =
         /** The places of a form on each page, and what the form is as a whole. */
         fields: FormField[][]
         form: FormFacts
+        /** Changes to this file can be written after it, which keeps a signature in it valid. */
+        after: boolean
         history: History
         bookmarks: Bookmark[]
       } | null

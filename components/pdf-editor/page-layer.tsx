@@ -203,6 +203,12 @@ export function PageLayer({
           (marking && comments.tool !== "pen" && comments.tool !== "note")) &&
           "cursor-text"
       )}
+      onMouseDown={(event) => {
+        // A press with the text tool starts a box and puts the keyboard in
+        // it. The browser would then move the keyboard to the pages, as it
+        // does on any press, and the empty box would close again.
+        if (state.tool === "text" || typing) event.preventDefault()
+      }}
       onPointerDown={(event) => {
         if (event.button !== 0) return
         pressed.current = { touch: event.pointerType === "touch", ended: false }

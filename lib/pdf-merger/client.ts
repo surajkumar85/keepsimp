@@ -501,6 +501,7 @@ export class PdfClient {
       keepEditable: boolean
       comments: "keep" | "flatten" | "remove"
       fields: "keep" | "flatten"
+      after: boolean
       lock: Lock | null
     }
   ) {

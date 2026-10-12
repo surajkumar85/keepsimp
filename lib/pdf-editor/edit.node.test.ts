@@ -18,7 +18,13 @@ import {
   samePixels,
   scene,
 } from "@/tests/pdf-pictures"
-import { embeddedFonts, readPdf, textPlaces, texts } from "@/tests/pdf-reader"
+import {
+  danglingRefs,
+  embeddedFonts,
+  readPdf,
+  textPlaces,
+  texts,
+} from "@/tests/pdf-reader"
 import { fontUrls } from "./fonts"
 import {
   addFont,
@@ -982,6 +988,8 @@ describe("many edits of many kinds", () => {
     const { bytes, report } = await exportEdited(mupdf, session)
     const before = await texts(input)
     const after = await texts(bytes)
+    // Whatever was undone on the way, nothing in the result points at what is gone.
+    expect(await danglingRefs(bytes)).toEqual([])
     expect(after).toHaveLength(5)
     for (let page = 0; page < 5; page++) {
       expect(after[page]).toContain(pageText("many", page + 1))

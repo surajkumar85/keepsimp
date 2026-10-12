@@ -2,7 +2,7 @@
  * Read a PDF back with pdf.js, which shares no code with the engine that
  * writes our results.
  */
-import { PDFDocument, PDFName } from "@cantoo/pdf-lib"
+import { PDFDocument, PDFName, PDFRef } from "@cantoo/pdf-lib"
 import { getDocument, OPS } from "pdfjs-dist/legacy/build/pdf.mjs"
 
 export interface ReadBookmark {
@@ -314,4 +314,43 @@ export async function readComments(bytes: Uint8Array, password?: string) {
   } finally {
     await doc.loadingTask.destroy()
   }
+}
+
+/**
+ * References in a file that point at nothing, read with pdf-lib: every
+ * object is gone through, and each reference in it must lead to an object
+ * that is there. A viewer that meets one draws without the font or the
+ * picture it stood for, so a result must have none.
+ * @returns Each as "<from> -> <to>", by object number.
+ */
+export async function danglingRefs(bytes: Uint8Array, password?: string) {
+  const doc = await PDFDocument.load(bytes, {
+    ignoreEncryption: true,
+    password,
+    updateMetadata: false,
+  } as never)
+  const { context } = doc
+  const dangling: string[] = []
+  const walk = (value: unknown, from: number, depth: number) => {
+    if (depth > 40 || value === null || typeof value !== "object") return
+    if (value instanceof PDFRef) {
+      if (context.lookup(value) === undefined)
+        dangling.push(`${from} -> ${value.objectNumber}`)
+      return
+    }
+    const holder = value as {
+      dict?: unknown
+      entries?: () => [unknown, unknown][]
+      asArray?: () => unknown[]
+    }
+    // A stream keeps its entries in a dictionary of its own.
+    if (holder.dict) walk(holder.dict, from, depth + 1)
+    else if (typeof holder.asArray === "function")
+      for (const item of holder.asArray()) walk(item, from, depth + 1)
+    else if (typeof holder.entries === "function")
+      for (const [, item] of holder.entries()) walk(item, from, depth + 1)
+  }
+  for (const [ref, object] of context.enumerateIndirectObjects())
+    walk(object, ref.objectNumber, 0)
+  return dangling
 }

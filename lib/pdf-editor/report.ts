@@ -26,6 +26,19 @@ function pageList(pages: readonly number[], most = 5) {
 /** What the check found, a line for each thing that was looked at. */
 export function checkLines(report: ExportReport): CheckLine[] {
   const lines: CheckLine[] = []
+  // A signed file whose changes were written after it: that is said first.
+  if (report.signature)
+    lines.push(
+      report.signature.intact
+        ? {
+            text: "The signed part of the file is untouched, so its signature still holds. What you changed was written after it.",
+            good: true,
+          }
+        : {
+            text: "The signed part of the file is not what it was. Its signature will not hold; read the result before you rely on it.",
+            good: false,
+          }
+    )
   if (
     report.added === 0 &&
     report.comments.had === 0 &&

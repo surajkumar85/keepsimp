@@ -21,7 +21,13 @@ import {
   type Reply,
 } from "./comments"
 import type { Box } from "./geometry"
-import { inStep, isComment, withPage, type EditSession } from "./mupdf-edit"
+import {
+  canDo,
+  inStep,
+  isComment,
+  withPage,
+  type EditSession,
+} from "./mupdf-edit"
 import type { Colour } from "./objects"
 
 type Engine = typeof MuPDF
@@ -331,13 +337,19 @@ export function applyComments(
     if (!read) throw new Error("That is not a change to comments.")
     return read
   })
-  return inStep(session, change.label, (touch) => {
-    for (const op of ops) {
-      if (op.page >= session.doc.countPages()) continue
-      touch(op.page)
-      withPage(session.doc, op.page, (page) =>
-        carryOut(mupdf, session.doc, page, op)
-      )
-    }
-  })
+  return inStep(
+    session,
+    change.label,
+    (touch) => {
+      for (const op of ops) {
+        if (op.page >= session.doc.countPages()) continue
+        touch(op.page)
+        withPage(session.doc, op.page, (page) =>
+          carryOut(mupdf, session.doc, page, op)
+        )
+      }
+    },
+    { kind: "comments", change: { label: change.label, ops } }
+  )
 }
+canDo("comments", applyComments)

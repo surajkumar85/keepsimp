@@ -138,6 +138,20 @@ const FIELD_CHOICES = [
   },
 ] as const
 
+/** What becomes of a signature the file carries, and what each choice means. */
+const SIGNED_CHOICES = [
+  {
+    value: "keep",
+    label: "Keep it valid",
+    hint: "Your changes are written after the signed part, which stays as it is, so the signature still holds. Fields stay fields, comments stay comments, and other things you added stay stamps. A program that checks the signature will say that the file was added to after it was signed.",
+  },
+  {
+    value: "anew",
+    label: "Write the file anew",
+    hint: "The file is written again from the start, with the choices below. The signature in it will no longer hold.",
+  },
+] as const
+
 const FILL_ABILITIES = [
   {
     icon: IconEdit,
@@ -290,6 +304,11 @@ function Workspace({
   const [fieldsHow, setFieldsHow] =
     useState<(typeof FIELD_CHOICES)[number]["value"]>("keep")
   const fieldCount = opened.form.fields
+  /** The file is signed, and its changes can be written after it. */
+  const signed = Boolean(doc.facts?.signed) && opened.after
+  const [signedHow, setSignedHow] =
+    useState<(typeof SIGNED_CHOICES)[number]["value"]>("keep")
+  const after = signed && signedHow === "keep"
   const formSays = formLine(editor.fields)
   const [missing] = unfilled(editor.fields)
   // The reader is sent to a page by the list of comments and by the form's
@@ -427,7 +446,8 @@ function Workspace({
     [window_, name, doc.id, opened, versions]
   )
 
-  const problem = extrasProblem(extras)
+  // Written after a signed file, nothing else is chosen: no lock to be wrong about.
+  const problem = after ? "" : extrasProblem(extras)
   /** What a result is made from, at a number of changes; anything else makes it out of date. */
   const keyAt = (position: number) =>
     JSON.stringify([
@@ -435,6 +455,7 @@ function Workspace({
       keepEditable,
       commentCount ? commentsHow : "keep",
       fieldCount ? fieldsHow : "keep",
+      after,
       extras.protect
         ? [
             extras.password,
@@ -466,11 +487,12 @@ function Workspace({
     try {
       // What was typed or drawn last has to be in the file first.
       await editor.settled()
-      const lock = lockOf(extras, () => crypto.randomUUID())
+      const lock = after ? null : lockOf(extras, () => crypto.randomUUID())
       const job = worker.editExport(doc.id, {
         keepEditable,
         comments: commentsHow,
         fields: fieldsHow,
+        after,
         lock,
       })
       cancel.current = job.cancel
@@ -700,7 +722,9 @@ function Workspace({
     doc.facts?.repaired &&
       "This file was damaged and was repaired while it was opened.",
     doc.facts?.signed &&
-      "This file carries a digital signature. A changed copy no longer counts as signed.",
+      (opened.after
+        ? "This file carries a digital signature. It still holds after your changes if they are written after the signed part, which is what Download does unless you choose otherwise."
+        : "This file carries a digital signature, and it cannot be added to as it is. A changed copy no longer counts as signed."),
     doc.facts?.restricted &&
       "The author of this file asked that it not be changed. The limits are lifted in your copy.",
     opened.form.xfa &&
@@ -839,13 +863,30 @@ function Workspace({
           >
             Download
           </h2>
-          <ToggleRow
-            label="Keep what you added editable"
-            hint="Off, the things you added become part of the page. On, they stay separate, so this editor can move and change them again later; other apps show them as stamps."
-            checked={keepEditable}
-            onCheckedChange={setKeepEditable}
-          />
-          {commentCount > 0 && (
+          {signed && (
+            <ChoiceChips
+              label="The signature in this file"
+              value={signedHow}
+              onValueChange={setSignedHow}
+              options={SIGNED_CHOICES.map(({ value, label }) => ({
+                value,
+                label,
+              }))}
+              hint={
+                SIGNED_CHOICES.find((choice) => choice.value === signedHow)!
+                  .hint
+              }
+            />
+          )}
+          {!after && (
+            <ToggleRow
+              label="Keep what you added editable"
+              hint="Off, the things you added become part of the page. On, they stay separate, so this editor can move and change them again later; other apps show them as stamps."
+              checked={keepEditable}
+              onCheckedChange={setKeepEditable}
+            />
+          )}
+          {!after && commentCount > 0 && (
             <ChoiceChips
               label="Comments"
               value={commentsHow}
@@ -860,7 +901,7 @@ function Workspace({
               }
             />
           )}
-          {fieldCount > 0 && (
+          {!after && fieldCount > 0 && (
             <ChoiceChips
               label="Form fields"
               value={fieldsHow}
@@ -874,13 +915,15 @@ function Workspace({
               }
             />
           )}
-          <LockFields
-            settings={extras}
-            update={(change) =>
-              setExtras((before) => ({ ...before, ...change }))
-            }
-            label="Lock the result with a password"
-          />
+          {!after && (
+            <LockFields
+              settings={extras}
+              update={(change) =>
+                setExtras((before) => ({ ...before, ...change }))
+              }
+              label="Lock the result with a password"
+            />
+          )}
           {problem && (
             <p
               role="alert"

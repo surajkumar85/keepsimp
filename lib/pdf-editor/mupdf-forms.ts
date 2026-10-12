@@ -26,6 +26,7 @@ import {
 } from "./forms"
 import type { Box } from "./geometry"
 import {
+  canDo,
   heldBy,
   inStep,
   turnOf,
@@ -343,7 +344,7 @@ export function applyFields(
     if (!read) throw new Error("That is not a change to a form.")
     return read
   })
-  return inStep(session, change.label, (touch) => {
+  const work = (touch: (page: number) => void) => {
     for (const op of ops) {
       if (op.page >= doc.countPages()) continue
       const changed = withPage(doc, op.page, (page) => {
@@ -369,5 +370,10 @@ export function applyFields(
           }
         })
     }
+  }
+  return inStep(session, change.label, work, {
+    kind: "fields",
+    change: { label: change.label, ops },
   })
 }
+canDo("fields", applyFields)

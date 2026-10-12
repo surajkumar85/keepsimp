@@ -4,7 +4,13 @@ import { PDFDocument, PDFName } from "@cantoo/pdf-lib"
 import { damage, makePdf } from "../tests/pdf-fixtures"
 import sharp from "sharp"
 import { readPictures, scene } from "../tests/pdf-pictures"
-import { embeddedFonts, readPdf, textPlaces, texts } from "../tests/pdf-reader"
+import {
+  danglingRefs,
+  embeddedFonts,
+  readPdf,
+  textPlaces,
+  texts,
+} from "../tests/pdf-reader"
 import { bytesOf, pdf, reader, readerReady, type Upload } from "./pdf"
 
 const ROUTE = "/dashboard/pdf-editor/"
@@ -420,6 +426,35 @@ test("puts what is still being typed into the file when Download is pressed", as
   )
   await expect(tool(page)).not.toHaveAttribute("data-unsaved")
   expect((await texts(got.bytes))[0]).toContain("Not finished typing")
+})
+
+test("writes text that other software can read after the first text was undone", async ({
+  page,
+}) => {
+  // The engine remembers a font it has put into a file, and an undo that
+  // took the font out again once left the next text pointing at nothing.
+  await open(page, await sample("again.pdf", 1))
+  await write(page, 60, 80, "First try")
+  await changes(page, 1)
+  await page.getByTestId("editor-undo").click()
+  await changes(page, 0)
+  await write(page, 60, 80, "Second try")
+  await changes(page, 1)
+  await page.getByTestId("editor-undo").click()
+  await page.getByTestId("editor-redo").click()
+  await changes(page, 1)
+  await write(page, 60, 140, "And a third")
+  await changes(page, 2)
+  const got = await saved(page, page.getByTestId("editor-download"))
+  expect(await danglingRefs(got.bytes)).toEqual([])
+  const [text] = await texts(got.bytes)
+  expect(text).toContain("Second try")
+  expect(text).toContain("And a third")
+  expect(text).not.toContain("First try")
+  const fonts = (await embeddedFonts(got.bytes)).filter((font) =>
+    font.name.includes("LiberationSans")
+  )
+  expect(fonts).toHaveLength(1)
 })
 
 test("stamps a page with chosen words, and with words of one's own", async ({

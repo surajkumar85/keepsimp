@@ -65,19 +65,44 @@ const KAPPA = 0.5522847498
 const CHECK_PAGES = 12
 const CHECK_EDGE = 700
 
+/**
+ * One change that was made to a file, as it was asked for. The list of
+ * them is how the file came to be what it is, and every one can be made
+ * again to a fresh copy of the file: that is how a change is undone, how
+ * changes are written after a signed file, and how a draft is taken up.
+ */
+export interface Done {
+  kind: "things" | "comments" | "fields"
+  change: unknown
+}
+
+/** A change with what it is called and the pages it changed. */
+export interface Step {
+  done: Done
+  label: string
+  touched: number[]
+}
+
 export interface EditSession {
+  engine: Engine
   doc: Doc
-  /** The file as it came, for the check before a download. */
+  /** The file as it came: what the working copy is made from, and what a result is checked against. */
   original: Uint8Array
   password?: string
   /** The font files in use, by their key (`fontKey`). */
   fonts: Map<string, MuPDF.Font>
   /** Pictures that were added, by the name they were given. */
   pictures: Map<string, { image: MuPDF.Image; size: Size }>
-  /** The journal position the last download was made at. */
+  /** How many steps were in force when the last download was made. */
   saved: number | null
-  /** The pages each step of the journal changed, so that an undo knows what to draw again. */
-  touched: number[][]
+  /** Every change that was made, oldest first. */
+  steps: Step[]
+  /** How many of them are in force. The rest have been undone and can be made again. */
+  position: number
+  /** Steps are being made again, and are not to be listed a second time. */
+  again?: boolean
+  /** Told when the working copy has become another document: after an undo it is made anew. */
+  moved?: (doc: Doc) => void
 }
 
 /** A font file was asked for that the session has not been given. */
@@ -96,7 +121,7 @@ export function startEditing(
   bytes: Uint8Array,
   password?: string
 ): EditSession {
-  return editingOf(open(mupdf, bytes, password), bytes, password)
+  return editingOf(mupdf, open(mupdf, bytes, password), bytes, password)
 }
 
 /**
@@ -104,19 +129,24 @@ export function startEditing(
  * untouched since it was read: it is the copy that is changed and written out.
  */
 export function editingOf(
+  mupdf: Engine,
   doc: Doc,
   bytes: Uint8Array,
   password?: string
 ): EditSession {
+  // The journal makes each change whole: one that fails is taken back
+  // entirely. It is not what undoes a change; see `stepBack`.
   doc.enableJournal()
   return {
+    engine: mupdf,
     doc,
     original: bytes,
     password,
     fonts: new Map(),
     pictures: new Map(),
     saved: null,
-    touched: [],
+    steps: [],
+    position: 0,
   }
 }
 
@@ -713,34 +743,98 @@ function checked(object: EditorObject) {
   return read
 }
 
+/** How each kind of change is made, so that a step can be made again whichever module made it first. */
+type Doer = (mupdf: Engine, session: EditSession, change: never) => number[]
+const doers: Partial<Record<Done["kind"], Doer>> = {}
+
+/** Say how a kind of change is made. The modules that make changes each say so for their own. */
+export function canDo(kind: Done["kind"], doer: Doer) {
+  doers[kind] = doer
+}
+
+function again(session: EditSession, step: Step) {
+  const doer = doers[step.done.kind]
+  if (!doer) throw new Error("This change cannot be made again.")
+  doer(session.engine, session, step.done.change as never)
+}
+
+/**
+ * A second session on a fresh copy of the file as it came, with every step
+ * that is in force made again, in order. It shares the fonts and pictures
+ * of the session it is made from, so only its document is to be let go of.
+ */
+export function madeAgain(session: EditSession): EditSession {
+  const copy: EditSession = {
+    ...session,
+    doc: open(session.engine, session.original, session.password),
+    steps: session.steps.slice(0, session.position),
+    again: true,
+    moved: undefined,
+  }
+  copy.doc.enableJournal()
+  try {
+    for (const step of copy.steps) again(copy, step)
+  } catch (error) {
+    copy.doc.destroy()
+    throw error
+  }
+  copy.again = false
+  return copy
+}
+
+/**
+ * Make the working copy anew: the file as it came, with the steps in force
+ * made again.
+ *
+ * This is how a change is undone, and not the engine's own undo. The engine
+ * remembers where in a file it has put each font and picture, and its undo
+ * takes them out without its forgetting: the next text in that font would
+ * point at where the font no longer is, and other programs would show it
+ * without one. A fresh copy remembers nothing.
+ */
+function remake(session: EditSession) {
+  const { doc } = madeAgain(session)
+  const old = session.doc
+  session.doc = doc
+  old.destroy()
+  session.moved?.(doc)
+}
+
 /**
  * Do some work on the file as one step that can be undone. The work says
  * which pages it touches as it goes.
+ * @param done What was asked for, so that the step can be made again.
  * @returns The pages that changed, counted from 0.
  */
 export function inStep(
   session: EditSession,
   label: string,
-  work: (touch: (page: number) => void) => void
+  work: (touch: (page: number) => void) => void,
+  done: Done
 ): number[] {
   const { doc } = session
   const touched = new Set<number>()
+  const before = doc.getJournal().position
   doc.beginOperation(label)
   try {
     work((page) => void touched.add(page))
     doc.endOperation()
   } catch (error) {
     doc.abandonOperation()
+    // What the step had put into the file is out again, and the engine
+    // has not forgotten it: see `remake`.
+    if (!session.again) remake(session)
     throw error
   }
+  const pages = [...touched]
   // A change that changed nothing is not a step. One that did replaces
   // whatever had been undone before it.
-  const { position } = doc.getJournal()
-  if (position > 0) {
-    session.touched.length = position - 1
-    session.touched[position - 1] = [...touched]
+  if (doc.getJournal().position > before && !session.again) {
+    session.steps.length = session.position
+    session.steps.push({ done, label, touched: pages })
+    session.position++
   }
-  return [...touched]
+  return pages
 }
 
 /**
@@ -753,7 +847,7 @@ export function applyChange(
   change: Change
 ): number[] {
   const { doc } = session
-  return inStep(session, change.label, (touch) => {
+  const work = (touch: (page: number) => void) => {
     for (const op of change.ops) {
       touch(op.page)
       withPage(doc, op.page, (page) => {
@@ -776,34 +870,55 @@ export function applyChange(
         } else reorder(doc, page.getObject(), op.id, op.to)
       })
     }
-  })
+  }
+  return inStep(session, change.label, work, { kind: "things", change })
 }
+canDo("things", applyChange)
 
 export function historyOf(session: EditSession): History {
-  const journal = session.doc.getJournal()
   return {
-    steps: journal.steps,
-    position: journal.position,
+    steps: session.steps.map((step) => step.label),
+    position: session.position,
     saved: session.saved,
   }
 }
 
 /**
- * Take back the last change, or make it again.
- * @returns The pages that changed; null when there was nothing to take back or make again.
+ * Undo the last step: the working copy is made anew without it.
+ * @returns The pages to draw again; null when there is nothing to undo.
  */
 export function stepBack(session: EditSession): number[] | null {
-  if (!session.doc.canUndo()) return null
-  const { position } = session.doc.getJournal()
-  session.doc.undo()
-  return session.touched[position - 1] ?? []
+  const step = session.steps[session.position - 1]
+  if (!step) return null
+  session.position--
+  try {
+    remake(session)
+  } catch (error) {
+    session.position++
+    throw error
+  }
+  return step.touched
 }
 
+/**
+ * Make the step that was undone last again, on the working copy as it is.
+ * @returns The pages to draw again; null when there is nothing to make again.
+ */
 export function stepForward(session: EditSession): number[] | null {
-  if (!session.doc.canRedo()) return null
-  const { position } = session.doc.getJournal()
-  session.doc.redo()
-  return session.touched[position] ?? []
+  const step = session.steps[session.position]
+  if (!step) return null
+  session.again = true
+  try {
+    again(session, step)
+  } catch (error) {
+    session.again = false
+    remake(session)
+    throw error
+  } finally {
+    session.again = false
+  }
+  session.position++
+  return step.touched
 }
 
 /** The six numbers of a matrix in a file; the identity when there is none. */
@@ -989,6 +1104,12 @@ export interface ExportReport {
   /** How many comments the file held, each reply counted, what became of them, and how many the result holds. */
   comments: { had: number; how: "keep" | "flatten" | "remove"; has: number }
   /**
+   * Only for a signed file whose changes were written after it: whether
+   * the file as it came is still there, byte for byte, at the start of the
+   * result, which is what its signature covers.
+   */
+  signature?: { intact: boolean }
+  /**
    * How many fields the form had, what became of them, and what the written
    * file says when it is read again: how many hold what they held (kept),
    * and how many are still fields (drawn in, none should be).
@@ -1059,7 +1180,7 @@ export async function exportEdited(
 ): Promise<{ bytes: Uint8Array; report: ExportReport }> {
   const snapshot = bufferBytes(session.doc.saveToBuffer({}))
   // What is written is the file as it stands now, whatever is changed while it is written.
-  const { position } = session.doc.getJournal()
+  const { position } = session
   let doc = open(mupdf, snapshot, session.password)
   try {
     const pages = doc.countPages()
@@ -1070,8 +1191,8 @@ export async function exportEdited(
     const touched = new Set(things.map((thing) => thing.page))
     // A page is also touched when a step that is in force changed it, which
     // is how a page that only got a comment is known.
-    for (const pagesOfStep of session.touched.slice(0, position))
-      for (const page of pagesOfStep) touched.add(page)
+    for (const step of session.steps.slice(0, position))
+      for (const page of step.touched) touched.add(page)
     if (!options.keepEditable) flatten(session, doc)
     const commented = commentPages(doc)
     const how = commented.count ? (options.comments ?? "keep") : "keep"
@@ -1245,7 +1366,7 @@ export async function exportEdited(
   }
 }
 
-function bufferBytes(buffer: MuPDF.Buffer) {
+export function bufferBytes(buffer: MuPDF.Buffer) {
   try {
     return buffer.asUint8Array().slice()
   } finally {

@@ -8,7 +8,7 @@ import * as mupdf from "mupdf"
 import { describe, expect, it } from "vitest"
 import { drawPage } from "@/lib/pdf-merger/mupdf-engine"
 import { makeFormPdf, makePdf } from "@/tests/pdf-fixtures"
-import { readPdf } from "@/tests/pdf-reader"
+import { danglingRefs, readPdf } from "@/tests/pdf-reader"
 import type { FieldOp, FormField } from "./forms"
 import type { Box } from "./geometry"
 import {
@@ -198,6 +198,7 @@ describe("filling a form in", () => {
     const { bytes, report } = await exportEdited(mupdf, session)
     expect(report.fields).toEqual({ had: 11, how: "keep", same: 11, left: 11 })
     expect(report.added).toBe(0)
+    expect(await danglingRefs(bytes)).toEqual([])
     const form = await formOf(bytes)
     expect(form.getTextField("applicant.full_name").getText()).toBe(
       "Ada Lovelace"

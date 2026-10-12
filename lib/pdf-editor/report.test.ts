@@ -230,3 +230,21 @@ describe("what became of a form", () => {
     )
   })
 })
+
+describe("what became of a signature", () => {
+  it("says first that the signed part is untouched", () => {
+    expect(
+      everyLine(report({ signature: { intact: true }, editable: true }))[0]
+    ).toEqual({
+      text: "The signed part of the file is untouched, so its signature still holds. What you changed was written after it.",
+      good: true,
+    })
+  })
+
+  it("warns when it is not", () => {
+    expect(everyLine(report({ signature: { intact: false } }))[0]).toEqual({
+      text: "The signed part of the file is not what it was. Its signature will not hold; read the result before you rely on it.",
+      good: false,
+    })
+  })
+})

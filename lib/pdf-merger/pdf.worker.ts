@@ -46,6 +46,7 @@ import { auditPdf, type Audit } from "@/lib/pdf-compressor/mupdf-audit"
 import type { Stage } from "@/lib/pdf-compressor/report"
 import type { LetterLine } from "@/lib/pdf-editor/comments"
 import { applyFields, fieldsOn, formFacts } from "@/lib/pdf-editor/mupdf-forms"
+import { canWriteAfter, exportAfter } from "@/lib/pdf-editor/mupdf-signed"
 import {
   compressCustom,
   compressPdf,
@@ -177,8 +178,15 @@ async function open(request: Extract<PdfRequest, { type: "open" }>) {
       ? openPdf(mupdf, bytes, request.password, request.edit)
       : await picture(mupdf, request.file)
     files.set(request.id, pdf)
-    if (bytes && request.edit)
-      editing.set(request.id, editingOf(pdf.doc, bytes, request.password))
+    if (bytes && request.edit) {
+      const session = editingOf(mupdf, pdf.doc, bytes, request.password)
+      // After an undo the working copy is another document: the reader
+      // draws its pages from the same one.
+      session.moved = (doc) => {
+        pdf.doc = doc
+      }
+      editing.set(request.id, session)
+    }
     post({ type: "opened", id: request.id, facts: pdf.facts })
   } catch (error) {
     if (error instanceof PasswordNeeded)
@@ -533,6 +541,7 @@ function editState(request: Extract<PdfRequest, { type: "edit-state" }>) {
         comments: sizes.map((_, page) => commentsOn(session, page)),
         fields,
         form: formFacts(session.doc, fields),
+        after: canWriteAfter(session),
         history: historyOf(session),
         bookmarks: pdf.bookmarks,
       }
@@ -705,19 +714,22 @@ async function editExport(
     const session = editing.get(request.id)
     if (!session) throw new Error(EXPORT_FAILED)
     let paused = performance.now()
-    const result = await exportEdited(await engine, session, {
-      keepEditable: request.keepEditable,
-      comments: request.comments,
-      fields: request.fields,
-      lock: request.lock ?? undefined,
-      checkpoint: async () => {
-        if (job <= cancelled) throw new Cancelled()
-        if (performance.now() - paused < 16) return
-        await new Promise((resolve) => setTimeout(resolve, 0))
-        paused = performance.now()
-        if (job <= cancelled) throw new Cancelled()
-      },
-    })
+    const checkpoint = async () => {
+      if (job <= cancelled) throw new Cancelled()
+      if (performance.now() - paused < 16) return
+      await new Promise((resolve) => setTimeout(resolve, 0))
+      paused = performance.now()
+      if (job <= cancelled) throw new Cancelled()
+    }
+    const result = request.after
+      ? await exportAfter(await engine, session, { checkpoint })
+      : await exportEdited(await engine, session, {
+          keepEditable: request.keepEditable,
+          comments: request.comments,
+          fields: request.fields,
+          lock: request.lock ?? undefined,
+          checkpoint,
+        })
     const out = result.bytes.buffer as ArrayBuffer
     post({ type: "edit-exported", job, bytes: out, report: result.report }, [
       out,
