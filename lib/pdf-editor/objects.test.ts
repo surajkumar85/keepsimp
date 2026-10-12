@@ -241,7 +241,7 @@ describe("readObject", () => {
     }
     expect(readObject({ ...shape, kind: "ellipse" })?.kind).toBe("ellipse")
     expect(readObject({ ...line, kind: "arrow" })?.kind).toBe("arrow")
-    expect(Object.keys(KIND_NAMES)).toHaveLength(8)
+    expect(Object.keys(KIND_NAMES)).toHaveLength(10)
   })
 
   it("refuses what is not an object of ours", () => {

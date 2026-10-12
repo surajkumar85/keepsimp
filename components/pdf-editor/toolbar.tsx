@@ -1,6 +1,12 @@
 "use client"
 
-import { useId, useRef, type ReactNode } from "react"
+import {
+  useId,
+  useRef,
+  useState,
+  type InputHTMLAttributes,
+  type ReactNode,
+} from "react"
 import {
   IconAlignCenter,
   IconAlignLeft,
@@ -11,6 +17,7 @@ import {
   IconBan,
   IconBold,
   IconBrush,
+  IconBubbleText,
   IconCircle,
   IconCopy,
   IconHighlight,
@@ -22,6 +29,8 @@ import {
   IconPhotoPlus,
   IconPointer,
   IconRectangleFilled,
+  IconRubberStamp,
+  IconRulerMeasure,
   IconSquare,
   IconStackBack,
   IconStackFront,
@@ -46,8 +55,14 @@ import {
   undoLabel,
 } from "@/lib/pdf-editor/history"
 import {
+  LARGEST_SCALE,
+  MEASURE_UNITS,
+  SMALLEST_SCALE,
+} from "@/lib/pdf-editor/measure"
+import {
   FONT_FAMILIES,
   LARGEST_TEXT,
+  LONGEST_STAMP,
   SMALLEST_TEXT,
   type Colour,
 } from "@/lib/pdf-editor/objects"
@@ -110,7 +125,65 @@ const TOOLS: { tool: Tool; label: string; key: string; icon: ReactNode }[] = [
     key: "C",
     icon: <IconRectangleFilled aria-hidden="true" />,
   },
+  {
+    tool: "stamp",
+    label: "Stamp",
+    key: "K",
+    icon: <IconRubberStamp aria-hidden="true" />,
+  },
+  {
+    tool: "callout",
+    label: "Call-out",
+    key: "Q",
+    icon: <IconBubbleText aria-hidden="true" />,
+  },
+  {
+    tool: "measure",
+    label: "Measure",
+    key: "R",
+    icon: <IconRulerMeasure aria-hidden="true" />,
+  },
 ]
+
+/** The words a stamp says most often. Any others can be typed. */
+const STAMPS = ["Approved", "Draft", "Final", "Confidential", "Paid", "Void"]
+
+/**
+ * A field whose words are taken when it is left or Enter is pressed, not
+ * letter by letter: every letter would be a step of its own to undo.
+ */
+function Settled({
+  value,
+  onSettle,
+  ...props
+}: {
+  value: string
+  onSettle: (value: string) => void
+} & Omit<InputHTMLAttributes<HTMLInputElement>, "value" | "onChange">) {
+  const [draft, setDraft] = useState(value)
+  // What it stands for wins over what was last typed, as after an undo.
+  const [held, setHeld] = useState(value)
+  if (value !== held) {
+    setHeld(value)
+    setDraft(value)
+  }
+  const settle = () => {
+    if (draft.trim() && draft !== value) onSettle(draft)
+    else setDraft(value)
+  }
+  return (
+    <input
+      {...props}
+      value={draft}
+      onChange={(event) => setDraft(event.target.value)}
+      onBlur={settle}
+      onKeyDown={(event) => {
+        if (event.key === "Enter") event.currentTarget.blur()
+      }}
+      className="h-11 rounded-md border bg-background px-2 text-base text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring md:h-9 md:text-sm"
+    />
+  )
+}
 
 /** What the bar says about the tool in hand, so that each tool explains itself once. */
 const HINTS: Record<Tool, string> = {
@@ -124,6 +197,12 @@ const HINTS: Record<Tool, string> = {
   ink: "Draw with the mouse, a pen or a finger.",
   cover:
     "Drag a box over something to hide it. What is under it stays in the file.",
+  stamp:
+    "Click to place the stamp, or drag it out. Choose its words and colour here.",
+  callout:
+    "Drag from what you want to point at to where the words should go, then type.",
+  measure:
+    "Drag along what you want to measure. Set the unit, and the scale of a drawing.",
 }
 
 const COMMENT_TOOLS: {
@@ -654,6 +733,83 @@ export function EditorToolbar({
                     <IconAlignRight aria-hidden="true" />
                   </Toggle>
                 </div>
+              </>
+            )}
+            {has("label") && (
+              <div
+                role="group"
+                aria-label="What the stamp says"
+                className="flex shrink-0 items-center gap-1"
+              >
+                {STAMPS.map((words) => (
+                  <Button
+                    key={words}
+                    type="button"
+                    size="sm"
+                    variant={look.label === words ? "secondary" : "ghost"}
+                    aria-pressed={look.label === words}
+                    onClick={() => editor.setLook({ label: words })}
+                    className="h-11 md:h-9"
+                  >
+                    {words}
+                  </Button>
+                ))}
+                <label className="flex shrink-0 items-center gap-2 pl-2 text-xs text-muted-foreground">
+                  Your own
+                  <span className="w-32">
+                    <Settled
+                      type="text"
+                      value={look.label}
+                      maxLength={LONGEST_STAMP}
+                      autoComplete="off"
+                      spellCheck={false}
+                      onSettle={(label) => editor.setLook({ label })}
+                      style={{ width: "100%" }}
+                    />
+                  </span>
+                </label>
+              </div>
+            )}
+            {has("unit") && (
+              <>
+                <div
+                  role="group"
+                  aria-label="Unit"
+                  className="flex shrink-0 items-center gap-1"
+                >
+                  {MEASURE_UNITS.map((unit) => (
+                    <Button
+                      key={unit}
+                      type="button"
+                      size="sm"
+                      variant={look.unit === unit ? "secondary" : "ghost"}
+                      aria-pressed={look.unit === unit}
+                      aria-label={`Unit: ${unit}`}
+                      onClick={() => editor.setLook({ unit })}
+                      className="h-11 md:h-9"
+                    >
+                      {unit}
+                    </Button>
+                  ))}
+                </div>
+                <label className="flex shrink-0 items-center gap-2 text-xs text-muted-foreground">
+                  Scale 1 to
+                  <span className="w-20">
+                    <Settled
+                      type="number"
+                      inputMode="decimal"
+                      min={SMALLEST_SCALE}
+                      max={LARGEST_SCALE}
+                      step="any"
+                      value={String(look.scale)}
+                      onSettle={(typed) => {
+                        const scale = Number(typed)
+                        if (scale > 0) editor.setLook({ scale })
+                      }}
+                      style={{ width: "100%" }}
+                    />
+                  </span>
+                </label>
               </>
             )}
             {has("stroke") && (

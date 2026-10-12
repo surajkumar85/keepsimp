@@ -6,6 +6,7 @@
 import {
   boundsOf,
   centreOf,
+  handlePoint,
   pullHandle,
   SMALLEST,
   turnAbout,
@@ -15,6 +16,16 @@ import {
   type Handle,
   type Point,
 } from "./geometry"
+import {
+  LARGEST_SCALE,
+  lengthOf,
+  measured,
+  MEASURE_ROOM,
+  MEASURE_TEXT,
+  MEASURE_UNITS,
+  SMALLEST_SCALE,
+  type MeasureUnit,
+} from "./measure"
 
 /** Red, green and blue, each from 0 to 1. */
 export type Colour = readonly [number, number, number]
@@ -49,6 +60,12 @@ export interface TextObject extends Base {
   size: number
   colour: Colour
   align: TextAlign
+  /**
+   * What a call-out points at. With it, the box has a frame round it and a
+   * line from the frame to this point; the point stays where it is when the
+   * box is moved.
+   */
+  tip?: Point
 }
 
 export interface PictureObject extends Base {
@@ -84,6 +101,25 @@ export interface InkObject extends Base {
   weight: number
 }
 
+/** A line that says how long it is, between two marks. */
+export interface MeasureObject extends Base {
+  kind: "measure"
+  from: Point
+  to: Point
+  stroke: Colour
+  weight: number
+  unit: MeasureUnit
+  /** One on the page is this many in the world. */
+  scale: number
+}
+
+/** A word or two in capitals inside a frame, as a rubber stamp leaves them. */
+export interface StampObject extends Base {
+  kind: "stamp"
+  label: string
+  colour: Colour
+}
+
 /** A filled box laid over something. It hides; it does not remove. */
 export interface CoverObject extends Base {
   kind: "cover"
@@ -95,7 +131,9 @@ export type EditorObject =
   | PictureObject
   | ShapeObject
   | LineObject
+  | MeasureObject
   | InkObject
+  | StampObject
   | CoverObject
 
 export type ObjectKind = EditorObject["kind"]
@@ -105,6 +143,12 @@ export const LINE_HEIGHT = 1.2
 export const SMALLEST_TEXT = 4
 export const LARGEST_TEXT = 288
 export const THICKEST = 24
+/** The longest a stamp's words may be. */
+export const LONGEST_STAMP = 40
+/** How far a call-out's frame stands off its words, how thick it and its line are, and the room its arrow's head takes. */
+export const CALLOUT_PAD = 4
+export const CALLOUT_WEIGHT = 1.5
+const CALLOUT_HEAD = 6
 
 const clamp = (value: number, least: number, most: number) =>
   Math.min(most, Math.max(least, value))
@@ -113,14 +157,22 @@ const clamp = (value: number, least: number, most: number) =>
 export const textHeight = (lines: number, size: number) =>
   Math.max(1, lines) * size * LINE_HEIGHT
 
+type Pointed = LineObject | MeasureObject | InkObject
+
+/** A line, an arrow or a measuring line: a thing with two ends. */
+export const isLine = (
+  object: EditorObject
+): object is LineObject | MeasureObject =>
+  object.kind === "line" || object.kind === "arrow" || object.kind === "measure"
+
 /** Things made of points have no box of their own: it follows the points. */
-function fitted<T extends LineObject | InkObject>(object: T): T {
+function fitted<T extends Pointed>(object: T): T {
   const points =
     object.kind === "ink" ? object.strokes.flat() : [object.from, object.to]
   return { ...object, box: boundsOf(points), rotation: 0 }
 }
 
-const mapPoints = <T extends LineObject | InkObject>(
+const mapPoints = <T extends Pointed>(
   object: T,
   change: (point: Point) => Point
 ): T =>
@@ -130,19 +182,79 @@ const mapPoints = <T extends LineObject | InkObject>(
       : { ...object, from: change(object.from), to: change(object.to) }
   )
 
-const made = (object: EditorObject): object is LineObject | InkObject =>
-  object.kind === "line" || object.kind === "arrow" || object.kind === "ink"
+const made = (object: EditorObject): object is Pointed =>
+  isLine(object) || object.kind === "ink"
+
+/** How thick a stamp's frame is: it grows with the stamp. */
+export const stampWeight = (box: Box) =>
+  clamp(Math.min(box.width, box.height) * 0.08, 1, 6)
+
+/** The frame of a call-out: its box with room round the words. */
+export const calloutFrame = (box: Box): Box => ({
+  x: box.x - CALLOUT_PAD,
+  y: box.y - CALLOUT_PAD,
+  width: box.width + CALLOUT_PAD * 2,
+  height: box.height + CALLOUT_PAD * 2,
+})
+
+/**
+ * The line from a call-out's frame to what it points at: from the place on
+ * the frame nearest the point. There is none when the point is inside the frame.
+ */
+export function calloutLine(
+  object: TextObject
+): { from: Point; to: Point } | null {
+  if (!object.tip) return null
+  const frame = calloutFrame(object.box)
+  const from = {
+    x: clamp(object.tip.x, frame.x, frame.x + frame.width),
+    y: clamp(object.tip.y, frame.y, frame.y + frame.height),
+  }
+  return from.x === object.tip.x && from.y === object.tip.y
+    ? null
+    : { from, to: { ...object.tip } }
+}
 
 /** The upright box that holds all of an object, turn and edge included. */
 export function reach(object: EditorObject): Box {
+  if (object.kind === "text" && object.tip) {
+    // The frame, and the point with room for the arrow's head.
+    const frame = calloutFrame(object.box)
+    const half = CALLOUT_WEIGHT / 2
+    return boundsOf([
+      { x: frame.x - half, y: frame.y - half },
+      {
+        x: frame.x + frame.width + half,
+        y: frame.y + frame.height + half,
+      },
+      { x: object.tip.x - CALLOUT_HEAD, y: object.tip.y - CALLOUT_HEAD },
+      { x: object.tip.x + CALLOUT_HEAD, y: object.tip.y + CALLOUT_HEAD },
+    ])
+  }
   const box = turnedBounds(object.box, object.rotation)
   const edge =
-    "weight" in object && (made(object) || object.stroke)
-      ? // An arrow's head is wider than its line.
-        object.kind === "arrow"
-        ? Math.max(6, object.weight * 4) * 0.45
-        : object.weight / 2
-      : 0
+    object.kind === "stamp"
+      ? stampWeight(object.box) / 2
+      : object.kind === "measure"
+        ? // Its end marks and its label stand off the line, and on a short
+          // line the label is longer than the line itself.
+          MEASURE_ROOM +
+          object.weight / 2 +
+          Math.max(
+            0,
+            (measured(object.from, object.to, object.unit, object.scale)
+              .length *
+              MEASURE_TEXT *
+              0.62 -
+              lengthOf(object.from, object.to)) /
+              2
+          )
+        : "weight" in object && (made(object) || object.stroke)
+          ? // An arrow's head is wider than its line.
+            object.kind === "arrow"
+            ? Math.max(6, object.weight * 4) * 0.45
+            : object.weight / 2
+          : 0
   return {
     x: box.x - edge,
     y: box.y - edge,
@@ -168,11 +280,24 @@ export function moved<T extends EditorObject>(
   }
 }
 
+/** Something a thing is taken hold of by: one of its handles, or the point a call-out points at. */
+export type Grip = Handle | "tip"
+
 /** Which handles a kind of object has. Text keeps its height to its lines; a line has only its two ends. */
-export function handlesOf(object: EditorObject): Handle[] {
-  if (object.kind === "line" || object.kind === "arrow") return ["w", "e"]
-  if (object.kind === "text") return ["w", "e"]
+export function handlesOf(object: EditorObject): Grip[] {
+  if (isLine(object)) return ["w", "e"]
+  if (object.kind === "text") return object.tip ? ["w", "e", "tip"] : ["w", "e"]
   return ["nw", "n", "ne", "e", "se", "s", "sw", "w"]
+}
+
+/** Where on the page one of a thing's handles is. */
+export function handleSpot(object: EditorObject, grip: Grip): Point {
+  if (isLine(object)) return grip === "w" ? object.from : object.to
+  if (grip === "tip")
+    return object.kind === "text" && object.tip
+      ? object.tip
+      : centreOf(object.box)
+  return handlePoint(object.box, object.rotation, grip)
 }
 
 /**
@@ -181,14 +306,18 @@ export function handlesOf(object: EditorObject): Handle[] {
  */
 export function pulled<T extends EditorObject>(
   object: T,
-  handle: Handle,
+  handle: Grip,
   to: Point,
   keepShape = object.kind === "picture"
 ): T {
-  if (object.kind === "line" || object.kind === "arrow")
+  if (isLine(object))
     return fitted(
       handle === "w" ? { ...object, from: to } : { ...object, to }
     ) as T
+  if (handle === "tip")
+    return object.kind === "text" && object.tip
+      ? { ...object, tip: { ...to } }
+      : object
   const box = pullHandle(object.box, object.rotation, handle, to, keepShape)
   if (object.kind === "ink") {
     const was = object.box
@@ -318,8 +447,42 @@ export function readObject(value: unknown): EditorObject | null {
           data.align === "centre" || data.align === "right"
             ? data.align
             : "left",
+        // A call-out stands upright: its frame and its line are worked out that way.
+        ...(isPoint(data.tip)
+          ? { tip: { x: data.tip.x, y: data.tip.y }, rotation: 0 }
+          : null),
       }
     }
+    case "stamp": {
+      const label =
+        typeof data.label === "string"
+          ? data.label.trim().slice(0, LONGEST_STAMP)
+          : ""
+      if (!label) return null
+      return {
+        ...base,
+        kind: "stamp",
+        label,
+        colour: isColour(data.colour) ? data.colour : BLACK,
+      }
+    }
+    case "measure":
+      if (!isPoint(data.from) || !isPoint(data.to)) return null
+      return fitted({
+        ...base,
+        kind: "measure",
+        from: { x: data.from.x, y: data.from.y },
+        to: { x: data.to.x, y: data.to.y },
+        stroke: isColour(data.stroke) ? data.stroke : BLACK,
+        weight,
+        unit: MEASURE_UNITS.includes(data.unit as MeasureUnit)
+          ? (data.unit as MeasureUnit)
+          : "mm",
+        scale:
+          isNumber(data.scale) && data.scale > 0
+            ? clamp(data.scale, SMALLEST_SCALE, LARGEST_SCALE)
+            : 1,
+      })
     case "picture":
       if (typeof data.picture !== "string" || !data.picture) return null
       return { ...base, kind: "picture", picture: data.picture }
@@ -421,6 +584,49 @@ export const KIND_NAMES: Record<ObjectKind, string> = {
   arrow: "arrow",
   ink: "drawing",
   cover: "cover",
+  stamp: "stamp",
+  measure: "measuring line",
+}
+
+/** The fonts stamps and the labels of measuring lines are set in. */
+export const STAMP_FONT = "sans-bold"
+export const MEASURE_FONT = "sans"
+
+/** What a thing is called: its kind, or "call-out" for a text box that points at something. */
+export const nameOf = (object: EditorObject) =>
+  object.kind === "text" && object.tip ? "call-out" : KIND_NAMES[object.kind]
+
+/** The font files a thing is drawn with, by their keys: none for what has no letters. */
+export function fontsFor(object: EditorObject): string[] {
+  if (object.kind === "text") return [fontKey(object)]
+  if (object.kind === "stamp") return [STAMP_FONT]
+  if (object.kind === "measure") return [MEASURE_FONT]
+  return []
+}
+
+/**
+ * Where a stamp's words go and how large they are: as large as the frame
+ * has room for, in its middle.
+ * @param width How wide the words are at a size of one point.
+ * @returns The size of the letters and where their baseline starts.
+ */
+export function stampLayout(box: Box, width: number) {
+  const edge = stampWeight(box) * 2.5
+  const room = {
+    width: Math.max(1, box.width - edge * 2),
+    height: Math.max(1, box.height - edge * 2),
+  }
+  // Capitals are about seven tenths of the size of the letters tall.
+  const size = Math.max(
+    1,
+    Math.min(room.height / 0.9, room.width / (width || 1))
+  )
+  const centre = centreOf(box)
+  return {
+    size,
+    x: centre.x - (width * size) / 2,
+    y: centre.y + size * 0.36,
+  }
 }
 
 /** A box no smaller than the smallest in either direction. */

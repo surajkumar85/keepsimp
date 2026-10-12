@@ -1,9 +1,10 @@
 import { describe, expect, it } from "vitest"
 import type { ExportReport } from "./mupdf-edit"
-import { checkLines, editedName } from "./report"
+import { checkLines as everyLine, editedName } from "./report"
 
 const report = (change: Partial<ExportReport> = {}): ExportReport => ({
   added: 1,
+  editable: false,
   text: { boxes: 0, found: 0 },
   untouched: { checked: 0, differ: [] },
   fontsCut: false,
@@ -22,6 +23,34 @@ describe("editedName", () => {
   it("has a name for a file without one", () => {
     expect(editedName(".pdf")).toBe("document-edited.pdf")
     expect(editedName("  ")).toBe("document-edited.pdf")
+  })
+})
+
+/** What became of the things that were added is always said first; the tests of the rest leave it out. */
+const became = (line: { text: string }) =>
+  / you added (is|are) /.test(line.text)
+const checkLines = (told: ExportReport) =>
+  everyLine(told).filter((line) => !became(line))
+
+describe("what became of what was added", () => {
+  it("says so first, for one thing and for many, part of the page or kept movable", () => {
+    const first = (change: Partial<ExportReport>) =>
+      everyLine(report(change))[0]
+    expect(first({})).toEqual({
+      text: "1 thing you added is part of its page now.",
+      good: true,
+    })
+    expect(first({ added: 1200 }).text).toBe(
+      "1,200 things you added are part of their pages now."
+    )
+    expect(first({ editable: true }).text).toBe(
+      "1 thing you added is kept as a thing that can be moved again."
+    )
+    expect(first({ added: 3, editable: true }).text).toBe(
+      "3 things you added are kept as things that can be moved again."
+    )
+    // Nothing added, nothing said of it.
+    expect(everyLine(report({ added: 0 })).some(became)).toBe(false)
   })
 })
 
@@ -47,7 +76,7 @@ describe("checkLines", () => {
     ).toEqual(["The text you added was read back from the result."])
     const [three] = checkLines(report({ text: { boxes: 3, found: 3 } }))
     expect(three).toEqual({
-      text: "All 3 text boxes you added were read back from the result.",
+      text: "All 3 pieces of text you added were read back from the result.",
       good: true,
     })
   })
@@ -55,9 +84,9 @@ describe("checkLines", () => {
   it("warns of text that was not found", () => {
     const [line] = checkLines(report({ text: { boxes: 3, found: 1 } }))
     expect(line.good).toBe(false)
-    expect(line.text).toContain("2 of 3 text boxes could not be read back")
+    expect(line.text).toContain("2 of 3 pieces of text could not be read back")
     const [one] = checkLines(report({ text: { boxes: 1, found: 0 } }))
-    expect(one.text).toContain("1 of 1 text box could not be read back")
+    expect(one.text).toContain("1 of 1 piece of text could not be read back")
   })
 
   it("tells how many untouched pages were compared", () => {

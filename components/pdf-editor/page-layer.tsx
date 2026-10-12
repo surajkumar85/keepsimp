@@ -7,16 +7,20 @@ import {
   boxBetween,
   centreOf,
   cornersOf,
-  handlePoint,
   type Point,
 } from "@/lib/pdf-editor/geometry"
 import { strokePath } from "@/lib/pdf-editor/ink"
+import { measured } from "@/lib/pdf-editor/measure"
 import {
   arrowHead,
   arrowShaft,
   fontKey,
+  calloutFrame,
+  calloutLine,
   handlesOf,
-  KIND_NAMES,
+  handleSpot,
+  isLine,
+  nameOf,
   LINE_HEIGHT,
   type EditorObject,
 } from "@/lib/pdf-editor/objects"
@@ -32,15 +36,36 @@ const points = (list: readonly Point[]) =>
 
 /** What a thing is called for someone who cannot see it. */
 function describe(object: EditorObject) {
+  const name = nameOf(object).replace(/^./, (first) => first.toUpperCase())
   if (object.kind === "text")
-    return `Text box: ${object.text.slice(0, 80) || "empty"}`
-  return KIND_NAMES[object.kind].replace(/^./, (first) => first.toUpperCase())
+    return `${name}: ${object.text.slice(0, 80) || "empty"}`
+  if (object.kind === "stamp") return `${name}: ${object.label}`
+  if (object.kind === "measure")
+    return `${name}: ${measured(object.from, object.to, object.unit, object.scale)}`
+  return name
 }
 
 /** A thing as it is dragged, pulled or turned: its outline, and its shape where it has one. */
 function Ghost({ object }: { object: EditorObject }) {
   const line = "stroke-primary [vector-effect:non-scaling-stroke]"
-  if (object.kind === "line" || object.kind === "arrow")
+  if (object.kind === "text" && object.tip) {
+    // A call-out: its frame, and the line to what it points at.
+    const lead = calloutLine(object)
+    return (
+      <g className={line} fill="none" strokeWidth={1.5} strokeDasharray="4 3">
+        <rect {...calloutFrame(object.box)} />
+        {lead && (
+          <line
+            x1={lead.from.x}
+            y1={lead.from.y}
+            x2={lead.to.x}
+            y2={lead.to.y}
+          />
+        )}
+      </g>
+    )
+  }
+  if (isLine(object))
     return (
       <line
         x1={object.from.x}
@@ -286,7 +311,7 @@ export function PageLayer({
           chosen.map((object) => <Ghost key={object.id} object={object} />)}
         {!gesture &&
           chosen.map((object) =>
-            object.kind === "line" || object.kind === "arrow" ? (
+            isLine(object) ? (
               <line
                 key={object.id}
                 x1={object.from.x}
@@ -349,7 +374,10 @@ export function PageLayer({
           />
         )}
         {gesture?.kind === "make" &&
-          (gesture.tool === "line" || gesture.tool === "arrow" ? (
+          (gesture.tool === "line" ||
+          gesture.tool === "arrow" ||
+          gesture.tool === "measure" ||
+          gesture.tool === "callout" ? (
             <g
               stroke={cssColour(editor.styles.stroke)}
               fill={cssColour(editor.styles.stroke)}
@@ -402,7 +430,11 @@ export function PageLayer({
               stroke={
                 gesture.tool === "cover"
                   ? "none"
-                  : cssColour(editor.styles.stroke)
+                  : cssColour(
+                      gesture.tool === "stamp"
+                        ? editor.styles.stampColour
+                        : editor.styles.stroke
+                    )
               }
               strokeWidth={editor.styles.weight}
               className={
@@ -418,17 +450,15 @@ export function PageLayer({
         !mine &&
         (() => {
           const [object] = chosen
-          const spots: { key: string; at: Point; label: string }[] =
-            object.kind === "line" || object.kind === "arrow"
-              ? [
-                  { key: "w", at: object.from, label: "start" },
-                  { key: "e", at: object.to, label: "end" },
-                ]
-              : handlesOf(object).map((handle) => ({
-                  key: handle,
-                  at: handlePoint(object.box, object.rotation, handle),
-                  label: handle,
-                }))
+          const ends = isLine(object)
+          const spots: { key: string; at: Point; label: string }[] = handlesOf(
+            object
+          ).map((handle) => ({
+            key: handle,
+            at: handleSpot(object, handle),
+            // A line is held by its start and its end.
+            label: ends ? (handle === "w" ? "start" : "end") : handle,
+          }))
           if (turns(object))
             spots.push({
               key: "turn",
@@ -445,7 +475,9 @@ export function PageLayer({
               aria-hidden="true"
               className={cn(
                 "absolute touch-none border border-primary bg-white",
-                spot.key === "turn" ? "rounded-full" : "rounded-xs"
+                spot.key === "turn" || spot.key === "tip"
+                  ? "rounded-full"
+                  : "rounded-xs"
               )}
               style={{
                 left: spot.at.x - edge / 2,

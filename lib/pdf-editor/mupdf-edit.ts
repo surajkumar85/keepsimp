@@ -22,9 +22,24 @@ import { centreOf, type Box, type Point } from "./geometry"
 import type { History } from "./history"
 import { curvesThrough } from "./ink"
 import {
+  labelPlace,
+  measured,
+  MEASURE_LIFT,
+  MEASURE_TEXT,
+  measureTicks,
+} from "./measure"
+import {
   arrowHead,
   arrowShaft,
+  CALLOUT_WEIGHT,
+  calloutFrame,
+  calloutLine,
   fontKey,
+  fontsFor,
+  MEASURE_FONT,
+  STAMP_FONT,
+  stampLayout,
+  stampWeight,
   LINE_HEIGHT,
   reach,
   readObject,
@@ -178,12 +193,22 @@ export function addPicture(
   return size
 }
 
-const fontOf = (session: EditSession, text: TextObject) => {
-  const key = fontKey(text)
+const fontBy = (session: EditSession, key: string) => {
   const font = session.fonts.get(key)
   if (!font) throw new FontMissing(key)
   return font
 }
+
+const fontOf = (session: EditSession, text: TextObject) =>
+  fontBy(session, fontKey(text))
+
+/** The letters of some words as a font draws them: which shape each is, and how far it moves the pen at a size of one. */
+const glyphsOf = (font: MuPDF.Font, words: string) =>
+  Array.from(words).map((letter) => {
+    const code = letter.codePointAt(0)!
+    const glyph = font.encodeCharacter(code)
+    return { code, glyph, advance: font.advanceGlyph(glyph) }
+  })
 
 /** How wide some text is in a font of the session, at a size. */
 export function textWidth(
@@ -271,9 +296,162 @@ function appearance(mupdf: Engine, session: EditSession, object: EditorObject) {
       miterLimit: 10,
     })
   const alpha = object.opacity
+  /** Words set from a point, in a size, by a matrix of their own on top of the thing's. */
+  const write = (
+    font: MuPDF.Font,
+    words: string,
+    x: number,
+    y: number,
+    size: number,
+    ink: Colour,
+    turn: Matrix = mupdf.Matrix.identity
+  ) => {
+    const text = new mupdf.Text()
+    let at = x
+    for (const glyph of glyphsOf(font, words)) {
+      text.showGlyph(font, [size, 0, 0, -size, at, y], glyph.glyph, glyph.code)
+      at += glyph.advance * size
+    }
+    device.fillText(
+      text,
+      mupdf.Matrix.concat(turn, place),
+      rgb,
+      colour(ink),
+      alpha
+    )
+  }
+  const widthOf = (font: MuPDF.Font, words: string) =>
+    glyphsOf(font, words).reduce((sum, glyph) => sum + glyph.advance, 0)
   try {
     switch (object.kind) {
+      case "stamp": {
+        const weight = stampWeight(object.box)
+        const { box } = object
+        // A frame with rounded corners, a third of its height at most.
+        const round = Math.min(box.height / 3, box.width / 6)
+        const k = round * (1 - KAPPA)
+        const right = box.x + box.width
+        const bottom = box.y + box.height
+        const path = new mupdf.Path()
+        path.moveTo(box.x + round, box.y)
+        path.lineTo(right - round, box.y)
+        path.curveTo(right - k, box.y, right, box.y + k, right, box.y + round)
+        path.lineTo(right, bottom - round)
+        path.curveTo(
+          right,
+          bottom - k,
+          right - k,
+          bottom,
+          right - round,
+          bottom
+        )
+        path.lineTo(box.x + round, bottom)
+        path.curveTo(
+          box.x + k,
+          bottom,
+          box.x,
+          bottom - k,
+          box.x,
+          bottom - round
+        )
+        path.lineTo(box.x, box.y + round)
+        path.curveTo(box.x, box.y + k, box.x + k, box.y, box.x + round, box.y)
+        path.closePath()
+        device.strokePath(
+          path,
+          pen(weight),
+          place,
+          rgb,
+          colour(object.colour),
+          alpha
+        )
+        const font = fontBy(session, STAMP_FONT)
+        const words = object.label.toUpperCase()
+        const laid = stampLayout(box, widthOf(font, words))
+        write(font, words, laid.x, laid.y, laid.size, object.colour)
+        break
+      }
+      case "measure": {
+        const stroke = (points: readonly Point[]) =>
+          device.strokePath(
+            through(mupdf, points),
+            pen(object.weight),
+            place,
+            rgb,
+            colour(object.stroke),
+            alpha
+          )
+        stroke([object.from, object.to])
+        for (const tick of measureTicks(object.from, object.to)) stroke(tick)
+        // The label sits over the middle of the line, turned with it.
+        const font = fontBy(session, MEASURE_FONT)
+        const words = measured(
+          object.from,
+          object.to,
+          object.unit,
+          object.scale
+        )
+        const { middle, angle } = labelPlace(object.from, object.to)
+        const width = widthOf(font, words) * MEASURE_TEXT
+        write(
+          font,
+          words,
+          -width / 2,
+          -(MEASURE_LIFT + object.weight / 2),
+          MEASURE_TEXT,
+          object.stroke,
+          mupdf.Matrix.concat(
+            mupdf.Matrix.rotate(angle),
+            mupdf.Matrix.translate(middle.x, middle.y)
+          )
+        )
+        break
+      }
       case "text": {
+        if (object.tip) {
+          // A call-out: a white frame round the words, and a line from it
+          // to what it points at, in the colour of the words.
+          const frame = through(
+            mupdf,
+            cornersUpright(calloutFrame(object.box)),
+            true
+          )
+          const line = calloutLine(object)
+          if (line) {
+            device.strokePath(
+              through(mupdf, [
+                line.from,
+                arrowShaft(line.from, line.to, CALLOUT_WEIGHT),
+              ]),
+              pen(CALLOUT_WEIGHT),
+              place,
+              rgb,
+              colour(object.colour),
+              alpha
+            )
+            device.fillPath(
+              through(
+                mupdf,
+                arrowHead(line.from, line.to, CALLOUT_WEIGHT),
+                true
+              ),
+              false,
+              place,
+              rgb,
+              colour(object.colour),
+              alpha
+            )
+          }
+          device.fillPath(frame, false, place, rgb, [1, 1, 1], alpha)
+          device.strokePath(
+            frame,
+            pen(CALLOUT_WEIGHT),
+            place,
+            rgb,
+            colour(object.colour),
+            alpha
+          )
+        }
         const font = fontOf(session, object)
         const text = new mupdf.Text()
         object.lines.forEach((line, index) => {
@@ -448,7 +626,13 @@ function write(
       bounds.y + bounds.height,
     ])
     annot.setFlags(PRINTED)
-    annot.setContents(object.kind === "text" ? object.text : "")
+    annot.setContents(
+      object.kind === "text"
+        ? object.text
+        : object.kind === "stamp"
+          ? object.label
+          : ""
+    )
     annot
       .getObject()
       .put(DATA_KEY, session.doc.newString(JSON.stringify(object)))
@@ -788,7 +972,9 @@ export interface ExportOptions {
 export interface ExportReport {
   /** How many things were added, over all pages. */
   added: number
-  /** Of the text boxes among them, how many were read back word for word from the result. */
+  /** They were left as separate things that can be moved again, not made part of their pages. */
+  editable: boolean
+  /** Of the things with words among them (text boxes, call-outs, stamps, measuring lines), how many were read back word for word from the result. */
   text: { boxes: number; found: number }
   /** Pages nothing was added to, compared with the original: how many were looked at, and which differ. */
   untouched: { checked: number; differ: number[] }
@@ -800,6 +986,16 @@ export interface ExportReport {
 }
 
 const squeezed = (text: string) => text.replace(/\s+/g, " ").trim()
+
+/** The words a thing writes on its page, as they are written. */
+const lettersIn = (object: EditorObject) =>
+  object.kind === "text"
+    ? object.lines.join(" ")
+    : object.kind === "stamp"
+      ? object.label.toUpperCase()
+      : object.kind === "measure"
+        ? measured(object.from, object.to, object.unit, object.scale)
+        : ""
 
 const wordsOf = (text: string) => squeezed(text).split(" ").filter(Boolean)
 
@@ -857,7 +1053,7 @@ export async function exportEdited(
     const textPages = [
       ...new Set(
         things
-          .filter((thing) => thing.object.kind === "text")
+          .filter((thing) => fontsFor(thing.object).length > 0)
           .map((thing) => thing.page)
       ),
     ]
@@ -912,17 +1108,15 @@ export async function exportEdited(
     // that overlap are read mixed together, and words that touch are read
     // as one.
     let found = 0
-    const boxes = things.filter((thing) => thing.object.kind === "text")
+    // Everything with letters is read back: text boxes and call-outs, the
+    // words of stamps, and what measuring lines say.
+    const boxes = things.filter((thing) => fontsFor(thing.object).length > 0)
     const pageLetters = new Map<number, string>()
     for (const { page, object } of boxes) {
       if (!pageLetters.has(page))
         pageLetters.set(page, textOf(doc, page).replace(/\s+/g, ""))
       const letters = pageLetters.get(page)!
-      if (
-        wordsOf((object as TextObject).lines.join(" ")).every((word) =>
-          letters.includes(word)
-        )
-      )
+      if (wordsOf(lettersIn(object)).every((word) => letters.includes(word)))
         found++
     }
     const untouched = { checked: 0, differ: [] as number[] }
@@ -974,6 +1168,7 @@ export async function exportEdited(
       bytes,
       report: {
         added: things.length,
+        editable: Boolean(options.keepEditable),
         text: { boxes: boxes.length, found },
         untouched,
         fontsCut,

@@ -509,6 +509,7 @@ export const editPost: BlogPost = {
       paragraphs: [
         "A picture lands in the middle of the page you are reading, and from there you drag it into place. PNG and JPEG files go into the PDF as they are, without being saved again, so nothing is lost; a PNG keeps its see-through parts. That makes a scan of your signature with a clear background a tidy way to sign a page. It is a picture of a signature, not a digital signature that proves who signed.",
         "Boxes, ellipses, lines and arrows are for pointing things out. Draw with a mouse, a pen or a finger for anything looser. Guides appear when a thing lines up with the middle or the edge of the page, or with something else on it.",
+        "Three more tools are for marking up. A stamp says Approved, Draft, Paid or words of your own in a frame. A call-out puts a few words in a box with an arrow to what they are about. A measuring line says how long something is, in the unit you choose, and by the scale of a plan when the page is one.",
       ],
     },
     {

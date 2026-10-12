@@ -422,6 +422,165 @@ test("puts what is still being typed into the file when Download is pressed", as
   expect((await texts(got.bytes))[0]).toContain("Not finished typing")
 })
 
+test("stamps a page with chosen words, and with words of one's own", async ({
+  page,
+}) => {
+  await open(page, await sample("invoice.pdf", 1))
+  await pick(page, "Stamp").click()
+  await expect(page.getByTestId("editor-hint")).toHaveCount(0)
+  // One of the usual words, placed with a click.
+  await reader(page).getByRole("button", { name: "Draft", exact: true }).click()
+  await click(page, 200, 150)
+  await changes(page, 1)
+  const stamp = things(page).first()
+  await expect(stamp).toHaveAccessibleName("Stamp: Draft")
+  await expect(stamp).toHaveAttribute("data-selected", "true")
+  await expect(page.getByTestId("editor-handle")).toHaveCount(9)
+
+  // Words of one's own are taken when the field is left, as one step.
+  const own = reader(page).getByLabel("Your own")
+  await own.fill("Paid in full")
+  await own.press("Enter")
+  await changes(page, 2)
+  await expect(stamp).toHaveAccessibleName("Stamp: Paid in full")
+  await reader(page).getByRole("button", { name: "Colour: Blue" }).click()
+  await changes(page, 3)
+  // Its frame is on the page, in its colour, around where it was placed.
+  await expect.poll(() => lineNear(page, 200, 127, isBlue)).toBe(true)
+  // One undo takes the words back.
+  await page.getByTestId("editor-undo").click()
+  await page.getByTestId("editor-undo").click()
+  await changes(page, 1)
+  await expect(stamp).toHaveAccessibleName("Stamp: Draft")
+  await page.getByTestId("editor-redo").click()
+  await changes(page, 2)
+
+  const got = await saved(page, page.getByTestId("editor-download"))
+  // The words are real text, in capitals, in a font cut down to them, and
+  // the check read them back.
+  await expect(page.getByTestId("editor-check")).toContainText(
+    "1 thing you added is part of its page now."
+  )
+  await expect(page.getByTestId("editor-check")).toContainText(
+    "The text you added was read back from the result."
+  )
+  expect((await texts(got.bytes))[0]).toContain("PAID IN FULL")
+  const fonts = (await embeddedFonts(got.bytes)).filter((font) =>
+    font.name.includes("LiberationSans-Bold")
+  )
+  expect(fonts).toHaveLength(1)
+  expect(fonts[0].bytes).toBeLessThan(40_000)
+})
+
+test("measures a length in a unit, and by the scale of a drawing", async ({
+  page,
+}) => {
+  await open(page, await sample("drawing.pdf", 1))
+  await page.keyboard.press("r")
+  await expect(pick(page, "Measure")).toHaveAttribute("aria-pressed", "true")
+  // Two hundred points along the page: a little over seven centimetres.
+  await drag(page, [60, 200], [260, 200])
+  await changes(page, 1)
+  const line = things(page).first()
+  await expect(line).toHaveAccessibleName(/^Measuring line: 7\d(\.\d)? mm$/)
+  await reader(page).getByRole("button", { name: "Unit: cm" }).click()
+  await changes(page, 2)
+  await expect(line).toHaveAccessibleName(/^Measuring line: 7(\.\d\d?)? cm$/)
+  // At one to fifty the same line is some three and a half metres.
+  const scale = reader(page).getByLabel("Scale 1 to")
+  await scale.fill("50")
+  await scale.press("Enter")
+  await changes(page, 3)
+  await reader(page)
+    .getByRole("button", { name: "Unit: m", exact: true })
+    .click()
+  await changes(page, 4)
+  await expect(line).toHaveAccessibleName(/^Measuring line: 3\.\d\d? m$/)
+  const said = (await line.getAttribute("aria-label"))!.replace(
+    "Measuring line: ",
+    ""
+  )
+  // The line and its label are drawn on the page.
+  await expect.poll(() => lineNear(page, 160, 200, isRed)).toBe(true)
+
+  // Pulled by its end, it says its new length.
+  const end = page.locator("[data-testid=editor-handle][data-handle=end]")
+  const from = (await end.boundingBox())!
+  const to = await spot(page, 360, 200)
+  await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(to.x, to.y, { steps: 5 })
+  await page.mouse.up()
+  await changes(page, 5)
+  await expect(line).not.toHaveAccessibleName(`Measuring line: ${said}`)
+  await expect(line).toHaveAccessibleName(/^Measuring line: 5\.\d\d? m$/)
+
+  const got = await saved(page, page.getByTestId("editor-download"))
+  expect((await texts(got.bytes))[0]).toMatch(/5\.\d\d? m/)
+})
+
+test("points at something with a call-out, and moves what it points at", async ({
+  page,
+}) => {
+  await open(page, await sample("review.pdf", 1))
+  await page.keyboard.press("q")
+  await expect(pick(page, "Call-out")).toHaveAttribute("aria-pressed", "true")
+  // From what is pointed at, to where the words go.
+  await drag(page, [80, 240], [200, 120])
+  const field = page.getByTestId("editor-typing")
+  await expect(field).toBeFocused()
+  await page.keyboard.type("Check this")
+  await page.keyboard.press("Control+Enter")
+  await changes(page, 1)
+  const callout = things(page).first()
+  await expect(callout).toHaveAccessibleName("Call-out: Check this")
+  // It has its two sides and the point; it is not turned.
+  await expect(
+    page
+      .getByTestId("editor-handle")
+      .evaluateAll((list) =>
+        list.map((one) => (one as HTMLElement).dataset.handle)
+      )
+  ).resolves.toEqual(["w", "e", "tip"])
+  // Its frame and its line are on the page, in the colour of arrows.
+  await expect.poll(() => lineNear(page, 196, 110, isRed)).toBe(true)
+  await expect.poll(() => lineNear(page, 140, 183, isRed)).toBe(true)
+
+  // The point is dragged elsewhere: the line follows, the words stay.
+  const before = (await callout.boundingBox())!
+  const tip = page.locator("[data-testid=editor-handle][data-handle=tip]")
+  const from = (await tip.boundingBox())!
+  const to = await spot(page, 330, 240)
+  await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(to.x, to.y, { steps: 5 })
+  await page.mouse.up()
+  await changes(page, 2)
+  await expect(page.getByTestId("editor-undo")).toHaveAttribute(
+    "aria-label",
+    "Undo: Resize call-out"
+  )
+  await expect.poll(() => lineNear(page, 140, 183, isRed)).toBe(false)
+  await expect.poll(() => lineNear(page, 330, 200, isRed)).toBe(true)
+  const after = (await callout.boundingBox())!
+  expect(Math.abs(after.x - before.x)).toBeLessThan(1)
+  expect(Math.abs(after.y - before.y)).toBeLessThan(1)
+
+  // Its words are changed like any text box's.
+  await callout.focus()
+  await page.keyboard.press("Enter")
+  await expect(field).toHaveValue("Check this")
+  await page.keyboard.type(" figure")
+  await page.keyboard.press("Control+Enter")
+  await changes(page, 3)
+
+  const got = await saved(page, page.getByTestId("editor-download"))
+  expect((await texts(got.bytes))[0]).toContain("Check this figure")
+  await expect(page.getByTestId("editor-check")).toContainText(
+    "The text you added was read back from the result."
+  )
+})
+
 test("keeps what was added movable when asked, and goes on with it when the file is opened again", async ({
   page,
 }) => {

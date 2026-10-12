@@ -19,6 +19,7 @@ import type { Point } from "@/lib/pdf-editor/geometry"
 import { emptyHistory, markSaved, type History } from "@/lib/pdf-editor/history"
 import {
   fontKey,
+  fontsFor,
   retyped,
   type EditorObject,
   type TextObject,
@@ -35,6 +36,7 @@ import {
   applied,
   defaultStyles,
   drag,
+  makeCallout,
   makeText,
   nextThing,
   nudge,
@@ -301,13 +303,17 @@ export function useEditor(
       enqueue(async (worker) => {
         const ops = []
         for (const op of change.ops) {
-          if (
-            (op.do === "add" || op.do === "change") &&
+          if (op.do !== "add" && op.do !== "change") {
+            ops.push(op)
+            continue
+          }
+          // Whatever has letters needs its font in the worker: text, a stamp, the label of a measuring line.
+          for (const key of fontsFor(op.object)) await ensureFont(key)
+          ops.push(
             op.object.kind === "text"
-          ) {
-            await ensureFont(fontKey(op.object))
-            ops.push({ ...op, object: laidOut(op.object) })
-          } else ops.push(op)
+              ? { ...op, object: laidOut(op.object) }
+              : op
+          )
         }
         return worker.editApply(file, { label: change.label, ops })
       }, change),
@@ -516,12 +522,32 @@ export function useEditor(
   const pointerUp = useCallback(
     (page: number, reach: number) => {
       const { state: now, styles: look } = latest.current
-      if (!now.gesture) return
+      const { gesture } = now
+      if (!gesture) return
+      if (gesture.kind === "make" && gesture.tool === "callout") {
+        // A call-out is typed before it is anything: from what it points
+        // at, the pointer went to where its words go.
+        const object = makeCallout(
+          gesture.from,
+          gesture.to,
+          look,
+          newId(),
+          sizes[page] as Size,
+          reach
+        )
+        setState({ tool: "select", selection: null, gesture: null })
+        void ensureFont(fontKey(object)).then(
+          () => setTyping({ page, object, fresh: true }),
+          () =>
+            setProblem("The font could not be loaded. Check your connection.")
+        )
+        return
+      }
       const outcome = release(now, view(page), look, reach, newId())
       setState(outcome.state)
       void apply(outcome.change)
     },
-    [view, apply, setState]
+    [view, apply, setState, sizes, ensureFont, setTyping]
   )
 
   const pointerCancel = useCallback(
@@ -747,6 +773,9 @@ export function useEditor(
         a: "arrow",
         d: "ink",
         c: "cover",
+        k: "stamp",
+        r: "measure",
+        q: "callout",
       }
       if (tools[letter] && !event.shiftKey)
         return (void setTool(tools[letter]), true)

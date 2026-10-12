@@ -13,7 +13,7 @@ const content: TutorialContent = {
     },
     {
       title: "Pick a tool",
-      text: "The tools are in the row under the title. The first group adds things to a page: text, box, ellipse, line, arrow, draw, cover and a picture. The second marks and comments: highlight, underline, strike out, squiggle, a highlighter pen and notes. Each has a letter on the keyboard, shown when you rest the pointer on it.",
+      text: "The tools are in the row under the title. The first group adds things to a page: text, box, ellipse, line, arrow, draw, cover, stamp, call-out, measure and a picture. The second marks and comments: highlight, underline, strike out, squiggle, a highlighter pen and notes. Each has a letter on the keyboard, shown when you rest the pointer on it.",
     },
     {
       title: "Add what you need",
@@ -49,6 +49,21 @@ const content: TutorialContent = {
         "A filled box that hides what is under it. It only covers: the words underneath are still in the file and can be copied out by anyone. Do not use it to hide private information. Redaction, which removes what is under it, comes in a later version.",
     },
     {
+      term: "Stamps",
+      detail:
+        "A word or two in capitals inside a frame: Approved, Draft, Final, Confidential, Paid, Void, or words of your own. Click to place one, or drag it out; resize and turn it like any shape. Its words are real text in the file. For a stamp that is a picture, such as a company seal, add the picture instead.",
+    },
+    {
+      term: "Call-outs",
+      detail:
+        "Words in a frame with an arrow to what they are about. Drag from the thing you want to point at to where the words should go, then type. The round handle at the arrow's end moves what it points at; the words stay where they are when you do, and the other way round.",
+    },
+    {
+      term: "Measuring",
+      detail:
+        "Drag along something to see how long it is: in millimetres, centimetres, metres, inches, feet or points. A page drawn at full size is measured as it is. For a plan drawn to a scale, type the scale (50 for one to fifty) and the line says the length in the world. The label is part of the line and changes when you pull an end.",
+    },
+    {
       term: "Comments",
       detail:
         "Highlight, underline, strike out and squiggle are laid on words by dragging across them; the highlighter pen marks anything, also on a scan. A note is placed with one press and typed in the list of comments, where every comment of the file can be read, answered and deleted, the ones it came with included. On download they are kept as comments, drawn into the page, or left out.",
@@ -61,7 +76,7 @@ const content: TutorialContent = {
     {
       term: "Keyboard",
       detail:
-        "Tab moves through the things on a page. Delete removes what is selected, Ctrl or ⌘ C, X, V and D copy, cut, paste and duplicate, and the square brackets move a thing forward or back. V, T, B, O, L, A, D and C choose a tool. Escape puts the tool down.",
+        "Tab moves through the things on a page. Delete removes what is selected, Ctrl or ⌘ C, X, V and D copy, cut, paste and duplicate, and the square brackets move a thing forward or back. V, T, B, O, L, A, D, C, K, Q and R choose a tool. Escape puts the tool down.",
     },
     {
       term: "Keep what you added editable",

@@ -2,7 +2,7 @@
 
 Changes PDFs in the browser. Nothing is uploaded: the file is opened, changed, drawn and written by MuPDF as WebAssembly in the worker the other PDF tools use. Live at `/dashboard/pdf-editor/`, and at `/dashboard/pdf-annotator/`, which is the same editor opened for marking up and commenting.
 
-The editor is built in ten phases, each shipped before the next begins. **Phase 1 is built** (the workspace, and adding things to pages), **and the first part of phase 2** (comments). Stamps, call-outs and measuring lines are the second part of phase 2. The plan for the rest is at the end.
+The editor is built in ten phases, each shipped before the next begins. **Phases 1 and 2 are built:** the workspace and adding things to pages; comments; and stamps, call-outs and measuring lines. The plan for the rest is at the end.
 
 ## What it does (phase 1)
 
@@ -49,6 +49,16 @@ Two families live on a page. **Things** (text boxes, pictures, shapes) become pa
 - **The check** counts comments in the result: all of them when kept, none when drawn in or left out. A page that only got a comment is known from the journal and is not compared with the original as if it were untouched.
 - On the page, `use-comments.ts` holds the tool in hand, the comment that is picked and the list; `comment-layer.tsx` lays a button over every comment and draws the frame of the picked one and what a drag would take in; `comments-panel.tsx` is the list. Comments are not shown before the file has answered: they are whatever the file says its pages hold.
 
+## Stamps, call-outs and measuring lines (phase 2, second part)
+
+These three are **things**, like text boxes and shapes: they are moved, resized, restyled and undone the same way, become part of the page on download, or stay movable with "Keep what you added editable".
+
+- **Stamp** (K): a word or two in capitals inside a rounded frame. The bar offers six usual ones (Approved, Draft, Final, Confidential, Paid, Void) and a field for words of one's own, which are taken when the field is left, as one step. A click places a stamp of a usual size; a drag makes one of any size. It has eight handles and turns. The frame's thickness and the size of the letters follow the stamp's size (`stampWeight`, `stampLayout`). The words are real text, set in Liberation Sans Bold. A stamp that is a picture is the picture tool.
+- **Call-out** (Q): a text box with a white frame and an arrow to a point. The pointer goes from what is pointed at to where the words go, and the box is typed straight away; a click puts the words up and to the right. It is a `TextObject` with a `tip`, so typing, fonts and looks are the text box's. The line leaves the frame at the place nearest the point (`calloutLine`). Moving the box leaves the point where it is; the round handle at the point moves the point and leaves the box. A call-out does not turn. It takes the colour of arrows and lines, for its words, frame and arrow alike.
+- **Measuring line** (R): a line with a mark across each end and its length written over its middle, turned with the line and never upside down (an upright one is read from below). Units: mm, cm, m, in, ft, pt. A scale of N measures a drawing made at one to N. The label is worked out from the ends each time the line is drawn (`measured`), so it cannot disagree with the line. It is a line for every purpose of the tools (`isLine`): two ends, no turning handle.
+- **Fonts:** a stamp needs the bold sans and a measuring line the regular sans, whether or not any text box uses them. `fontsFor` says which fonts a thing is drawn with; the page loads them before a change is sent, and the download counts such pages among those whose fonts are cut and checked.
+- **Handles** are now "grips" (`Grip`): one of the eight handles, or `tip`. `handleSpot` says where each is, for the tools and the screen alike.
+
 ## How it is built
 
 ### The document is the truth
@@ -67,10 +77,10 @@ The worker holds a **working copy** of the file. It is opened as it is (`openPdf
 
 1. **Flatten** (unless "Keep editable"): each of our annotations' appearances is drawn into its page's content, and the annotation is removed. MuPDF's `bake` is all or nothing, and would take the file's own notes and form fields with it.
 2. **Cut the fonts.** Our fonts go in whole (about 400 KB each) and are cut down to the letters used with `subsetFonts`. The engine calls that step experimental, so the cut is kept only if every page with added text, and a spread of the others, reads and draws the same before and after. Both sides of that comparison are read from the same written file: a picture that was just placed is drawn from what it was made of, and a hair differently once it has been written, which must not be taken for a fault of the cut. A file with form fields is not cut.
-3. **The check.** Each text box's words are looked for in the result's text (word by word, since boxes that overlap are read mixed together), and pages nothing was added to are drawn from the original and from the result and compared pixel for pixel (`pagesToCheck` chooses up to twelve, spread through the file).
+3. **The check.** The words of everything that has letters (text boxes, call-outs, stamps, what measuring lines say) are looked for in the result's text (word by word, since boxes that overlap are read mixed together), and pages nothing was added to are drawn from the original and from the result and compared pixel for pixel (`pagesToCheck` chooses up to twelve, spread through the file).
 4. **Write,** through `shareDuplicates` and `garbage: 2` like the other tools, with the lock when one is set.
 
-The report (`ExportReport`) becomes the lines in the download card (`lib/pdf-editor/report.ts`). A line that is not good news is red and says which pages to look at.
+The report (`ExportReport`) becomes the lines in the download card (`lib/pdf-editor/report.ts`). The first line always says what became of what was added (part of the page, or kept movable), so that a download never comes without a word: a one-page file with a single shape has nothing else to check. A line that is not good news is red and says which pages to look at.
 
 ### The page
 
@@ -90,6 +100,7 @@ The report (`ExportReport`) becomes the lines in the download card (`lib/pdf-edi
 | `lib/pdf-editor/geometry.ts`                  | Turned boxes, handles, hit tests, snapping, staying on the page.                             |
 | `lib/pdf-editor/tools.ts`                     | The tools: press, drag, release; nudge, paste, order, restyle; `applied`.                    |
 | `lib/pdf-editor/text-layout.ts`, `ink.ts`     | Breaking lines by measured widths; thinning and smoothing a stroke.                          |
+| `lib/pdf-editor/measure.ts`                   | Units and scale, what a measuring line says, where its end marks and its label go.           |
 | `lib/pdf-editor/styles.ts`, `fonts.ts`        | The palette and what a look changes; which font file is which.                               |
 | `lib/pdf-editor/history.ts`, `report.ts`      | What the undo list says and what is unsaved; the words of the check.                         |
 | `lib/pdf-editor/mupdf-edit.ts`                | The only file that touches the engine: sessions, changes, undo, flattening, the export.      |
@@ -112,6 +123,7 @@ The report (`ExportReport`) becomes the lines in the download card (`lib/pdf-edi
 - A mark on words cannot be moved or stretched once made; it is deleted and made again. A comment of a kind the editor does not make keeps its place and its look.
 - A page that is a picture has no words to mark; the highlighter pen is what works there until OCR arrives (phase 9).
 - Drawn into the page, a note is only its icon.
+- A call-out has one colour for its words, frame and arrow, a white inside, and does not turn. A measuring line measures the page: it knows a drawing's scale only when told.
 - A font has the letters its file has: Latin, Greek and Cyrillic among them. A letter without a shape is left out of the file, and the bar names it. Text that needs shaping (Arabic, Indic scripts) is not supported.
 - Text in a box that is kept editable is a stamp to other apps: they show it, and may let a reader move or delete it.
 - The fonts are fetched when text is first typed; each is about 400 KB.
@@ -122,13 +134,14 @@ The report (`ExportReport`) becomes the lines in the download card (`lib/pdf-edi
 - **Unit** (`lib/pdf-editor/*.test.ts`, 100% of statements and branches): geometry, objects, tools, text layout, ink, history, styles, fonts and the report.
 - **Real engine in Node** (`edit.node.test.ts`): results are read back with pdf.js and pdf-lib, never with the engine alone. Added text is found where it was put, in an embedded font cut to its letters; pages the file shows turned every way; every kind of thing, turned and see-through; a PNG with see-through parts and a JPEG, with the pixels they came with; links, bookmarks, fields, notes, tags, page numbers and attachments survive; "Keep editable" reads back; undo to the start gives the original; a locked result; a stop; and a seeded run of many edits that must never lose a page or a word.
 - **Browser** (`e2e/pdf-editor.spec.ts`, five profiles): every tool with the mouse, the look row, handles, keys and undo, with the page's own picture sampled to see that the file changed; typing with a look chosen midway; "Keep editable" and opening the result again; a locked file and a new lock; a damaged file and one that is no PDF; leaving with unsaved changes; touch; axe in both themes and in every state of the window, 320 px, control sizes, no outside requests.
+- **Stamps, call-outs and measuring lines:** `measure.test.ts` and `marks.test.ts` (100%), `marks.node.test.ts` with the real engine (a stamp's words read by pdf.js inside its frame, turned, and on a turned page; labels in every unit and by a scale, also on a line shorter than its label; a call-out's frame, white inside and arrow, and its point moved and undone; all three read back from a file that kept them), and three journeys in `e2e/pdf-editor.spec.ts`.
 - **Comments:** `comments.test.ts` (100%), `comments.node.test.ts` with the real engine (marks on plain and turned pages, read back by pdf.js with author, colour and date; notes and a reply to a reply; a pen; a file's own note; another program's shapes left as they are; undo among the editor's other steps; kept, drawn in and left out, with links and fields surviving), and `e2e/pdf-annotator.spec.ts` on five profiles.
 - **Offline** (`e2e/offline.spec.ts`): text is typed and downloaded with the server stopped, which needs the font from the saved copy.
 
 ## The phases
 
 1. **The workspace, and adding things.** Built.
-2. **Mark up and comment.** First part built: marks on words, the highlighter pen, notes and replies, the list of comments, comments a file comes with, and the PDF annotator page. Second part to come: stamps (Approved, Draft, your own), call-outs and measuring lines.
+2. **Mark up and comment.** Built: marks on words, the highlighter pen, notes and replies, the list of comments, comments a file comes with, the PDF annotator page, stamps, call-outs and measuring lines.
 3. **Fill and sign:** form fields, paper forms, drawn, typed and pictured signatures, drafts kept on the device when asked. Focused pages: Sign PDF, Fill PDF form.
 4. **Change the text that is there,** in the file's own font where it has the letters, with the old words gone from the file.
 5. **Paragraphs, pictures in the page, links, find and replace.**

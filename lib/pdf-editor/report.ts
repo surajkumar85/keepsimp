@@ -31,8 +31,21 @@ export function checkLines(report: ExportReport): CheckLine[] {
       text: "Nothing was added. The file was written again as it is.",
       good: true,
     })
+  // What became of what was added is always said, so that a download never
+  // comes without a word about it.
+  if (report.added > 0) {
+    const many = report.added !== 1
+    const things = `${report.added.toLocaleString("en")} thing${many ? "s" : ""} you added`
+    lines.push({
+      text: report.editable
+        ? `${things} ${many ? "are" : "is"} kept as ${many ? "things" : "a thing"} that can be moved again.`
+        : `${things} ${many ? "are" : "is"} part of ${many ? "their pages" : "its page"} now.`,
+      good: true,
+    })
+  }
   const { boxes, found } = report.text
-  const textBoxes = `${boxes.toLocaleString("en")} text box${boxes === 1 ? "" : "es"}`
+  // Text boxes, call-outs, stamps and what measuring lines say.
+  const textBoxes = `${boxes.toLocaleString("en")} piece${boxes === 1 ? "" : "s"} of text`
   if (boxes > 0)
     lines.push(
       found === boxes

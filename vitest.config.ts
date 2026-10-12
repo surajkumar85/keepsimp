@@ -73,6 +73,7 @@ export default defineConfig({
         "lib/pdf-editor/geometry.ts",
         "lib/pdf-editor/history.ts",
         "lib/pdf-editor/ink.ts",
+        "lib/pdf-editor/measure.ts",
         "lib/pdf-editor/objects.ts",
         "lib/pdf-editor/report.ts",
         "lib/pdf-editor/styles.ts",

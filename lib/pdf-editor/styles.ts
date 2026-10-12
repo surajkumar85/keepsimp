@@ -3,7 +3,9 @@
  * new look. Colours are kept as three numbers from 0 to 1, the way a PDF
  * holds them.
  */
+import { LARGEST_SCALE, SMALLEST_SCALE, type MeasureUnit } from "./measure"
 import {
+  LONGEST_STAMP,
   retyped,
   THICKEST,
   type Colour,
@@ -11,6 +13,7 @@ import {
   type FontFamily,
   type InkObject,
   type LineObject,
+  type MeasureObject,
   type ShapeObject,
   type TextAlign,
 } from "./objects"
@@ -55,6 +58,9 @@ export type Look =
   | { italic: boolean }
   | { align: TextAlign }
   | { opacity: number }
+  | { label: string }
+  | { unit: MeasureUnit }
+  | { scale: number }
 
 /** Which parts of a look a kind of thing has. */
 export type LookPart =
@@ -67,6 +73,9 @@ export type LookPart =
   | "italic"
   | "align"
   | "opacity"
+  | "label"
+  | "unit"
+  | "scale"
 
 const PARTS: Record<EditorObject["kind"], LookPart[]> = {
   text: ["font", "size", "bold", "italic", "align", "stroke", "opacity"],
@@ -77,6 +86,8 @@ const PARTS: Record<EditorObject["kind"], LookPart[]> = {
   arrow: ["stroke", "weight", "opacity"],
   ink: ["stroke", "weight", "opacity"],
   cover: ["fill"],
+  stamp: ["label", "stroke", "opacity"],
+  measure: ["unit", "scale", "stroke", "weight", "opacity"],
 }
 
 /** The parts of a look that can be set for a tool about to make something. */
@@ -89,7 +100,13 @@ const TOOL_PARTS: Record<Tool, LookPart[]> = {
   arrow: ["stroke", "weight"],
   ink: ["stroke", "weight"],
   cover: ["fill"],
+  stamp: ["label", "stroke"],
+  measure: ["unit", "scale", "stroke", "weight"],
+  callout: ["font", "size", "bold", "italic", "align", "stroke"],
 }
+
+/** The words a stamp may say, kept to a length; empty when there are none. */
+const stampWords = (value: string) => value.trim().slice(0, LONGEST_STAMP)
 
 /** The parts every one of some things has; those of the tool when there are none. */
 export function partsFor(objects: readonly EditorObject[], tool: Tool) {
@@ -114,6 +131,23 @@ export function withLook(object: EditorObject, look: Look): EditorObject {
   if (part === "opacity") {
     const opacity = clamp(value as number, 0.05, 1)
     return opacity === object.opacity ? object : { ...object, opacity }
+  }
+  if (object.kind === "stamp") {
+    if (part === "label") {
+      const label = stampWords(value as string)
+      return !label || label === object.label ? object : { ...object, label }
+    }
+    // A stamp has one colour, for its frame and its words.
+    const colour = value as Colour | null
+    return colour === null || sameColour(colour, object.colour)
+      ? object
+      : { ...object, colour }
+  }
+  if (object.kind === "measure" && (part === "unit" || part === "scale")) {
+    if (part === "unit")
+      return object.unit === value ? object : { ...object, unit: value }
+    const scale = clamp(value as number, SMALLEST_SCALE, LARGEST_SCALE)
+    return scale === object.scale ? object : { ...object, scale }
   }
   if (object.kind === "text") {
     if (part === "stroke") {
@@ -155,7 +189,7 @@ export function withLook(object: EditorObject, look: Look): EditorObject {
       : { ...object, stroke: colour }
   }
   // Lines and drawings are left, which always have a colour.
-  const drawn = object as LineObject | InkObject
+  const drawn = object as LineObject | MeasureObject | InkObject
   return colour === null || sameColour(colour, drawn.stroke)
     ? object
     : { ...drawn, stroke: colour }
@@ -165,11 +199,26 @@ export function withLook(object: EditorObject, look: Look): EditorObject {
 export function stylesWith(styles: Styles, tool: Tool, look: Look): Styles {
   const [part, value] = Object.entries(look)[0] as [LookPart, never]
   if (!TOOL_PARTS[tool].includes(part)) return styles
-  if (tool === "text") {
+  if (tool === "text" || tool === "callout") {
+    // A call-out takes the colour of arrows and lines; text has its own.
     if (part === "stroke")
-      return value === null ? styles : { ...styles, textColour: value }
+      return value === null
+        ? styles
+        : { ...styles, [tool === "text" ? "textColour" : "stroke"]: value }
     return { ...styles, [part]: value }
   }
+  if (tool === "stamp") {
+    if (part === "stroke")
+      return value === null ? styles : { ...styles, stampColour: value }
+    const label = stampWords(value as string)
+    return label ? { ...styles, stampLabel: label } : styles
+  }
+  if (part === "unit") return { ...styles, unit: value }
+  if (part === "scale")
+    return {
+      ...styles,
+      scale: clamp(value as number, SMALLEST_SCALE, LARGEST_SCALE),
+    }
   if (tool === "ink") {
     if (part === "stroke")
       return value === null ? styles : { ...styles, inkColour: value }
@@ -183,7 +232,10 @@ export function stylesWith(styles: Styles, tool: Tool, look: Look): Styles {
   // Lines have to have a colour; shapes may go without an edge when they are filled.
   if (
     value === null &&
-    (tool === "line" || tool === "arrow" || styles.fill === null)
+    (tool === "line" ||
+      tool === "arrow" ||
+      tool === "measure" ||
+      styles.fill === null)
   )
     return styles
   return value === null ? styles : { ...styles, stroke: value }
@@ -204,6 +256,9 @@ export function lookOf(
   italic: boolean
   align: TextAlign
   opacity: number
+  label: string
+  unit: MeasureUnit
+  scale: number
 } {
   const [first] = objects
   const base = {
@@ -212,7 +267,9 @@ export function lookOf(
         ? styles.textColour
         : tool === "ink"
           ? styles.inkColour
-          : styles.stroke,
+          : tool === "stamp"
+            ? styles.stampColour
+            : styles.stroke,
     fill: tool === "cover" ? styles.coverFill : styles.fill,
     weight: tool === "ink" ? styles.inkWeight : styles.weight,
     font: styles.font,
@@ -221,6 +278,9 @@ export function lookOf(
     italic: styles.italic,
     align: styles.align,
     opacity: 1,
+    label: styles.stampLabel,
+    unit: styles.unit,
+    scale: styles.scale,
   }
   if (!first) return base
   const seen = { ...base, opacity: first.opacity }
@@ -236,6 +296,16 @@ export function lookOf(
     }
   if (first.kind === "cover") return { ...seen, fill: first.fill }
   if (first.kind === "picture") return seen
+  if (first.kind === "stamp")
+    return { ...seen, stroke: first.colour, label: first.label }
+  if (first.kind === "measure")
+    return {
+      ...seen,
+      stroke: first.stroke,
+      weight: first.weight,
+      unit: first.unit,
+      scale: first.scale,
+    }
   return {
     ...seen,
     stroke: first.stroke,

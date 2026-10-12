@@ -429,7 +429,7 @@ function Workspace({
       }
     }
     // Any other tool's key puts a comment tool down.
-    if (plain && comments.tool && "vtboladc".includes(letter))
+    if (plain && comments.tool && "vtboladckrq".includes(letter))
       comments.setTool(null)
     if (!editor.key(event)) return false
     return used()

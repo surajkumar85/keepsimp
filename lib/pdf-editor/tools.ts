@@ -22,16 +22,20 @@ import {
   turnedBounds,
   type Box,
   type Guide,
-  type Handle,
   type Point,
 } from "./geometry"
 import { thin } from "./ink"
+import type { MeasureUnit } from "./measure"
 import {
   BLACK,
+  calloutFrame,
+  calloutLine,
   copyOf,
   handlesOf,
-  KIND_NAMES,
+  handleSpot,
+  isLine,
   moved,
+  nameOf,
   pulled,
   reach,
   textHeight,
@@ -40,12 +44,23 @@ import {
   type Colour,
   type EditorObject,
   type FontFamily,
+  type Grip,
   type TextAlign,
   type TextObject,
 } from "./objects"
 
 export type Tool =
-  "select" | "text" | "box" | "ellipse" | "line" | "arrow" | "ink" | "cover"
+  | "select"
+  | "text"
+  | "box"
+  | "ellipse"
+  | "line"
+  | "arrow"
+  | "ink"
+  | "cover"
+  | "stamp"
+  | "measure"
+  | "callout"
 
 export const TOOLS: readonly Tool[] = [
   "select",
@@ -56,6 +71,9 @@ export const TOOLS: readonly Tool[] = [
   "arrow",
   "ink",
   "cover",
+  "stamp",
+  "measure",
+  "callout",
 ]
 
 /** What new things look like. The last choice made for a kind is kept for the next of its kind. */
@@ -72,6 +90,12 @@ export interface Styles {
   bold: boolean
   italic: boolean
   align: TextAlign
+  /** What the next stamp says, and its colour. */
+  stampLabel: string
+  stampColour: Colour
+  /** The unit and the scale the next measuring line measures by. */
+  unit: MeasureUnit
+  scale: number
 }
 
 export const defaultStyles: Styles = {
@@ -87,6 +111,10 @@ export const defaultStyles: Styles = {
   bold: false,
   italic: false,
   align: "left",
+  stampLabel: "Approved",
+  stampColour: [0.09, 0.56, 0.24],
+  unit: "mm",
+  scale: 1,
 }
 
 /** One change to the things on a page. */
@@ -128,7 +156,7 @@ export type Gesture =
       kind: "pull"
       page: number
       id: string
-      handle: Handle
+      handle: Grip
       to: Point
       keepShape: boolean
     }
@@ -176,6 +204,10 @@ const TURN_GAP = 4
 const DRAG_START = 0.5
 /** A click with a shape tool makes a thing of this size. */
 export const CLICK_SIZE: Size = { width: 120, height: 80 }
+/** A click with the stamp tool makes a stamp of this size. */
+export const STAMP_SIZE: Size = { width: 150, height: 46 }
+/** Where a call-out's words go when it was placed by a click: this far from what it points at. */
+export const CALLOUT_AWAY: Point = { x: 50, y: -50 }
 /** A new text box is this wide unless it is dragged out. */
 export const TEXT_WIDTH = 220
 
@@ -196,17 +228,28 @@ export function turnHandle(object: EditorObject, reachNow: number): Point {
   }
 }
 
-/** Whether a thing can be turned by its handle. Lines are turned by their ends. */
+/**
+ * Whether a thing can be turned by its handle. Lines are turned by their
+ * ends, and a call-out stands upright beside what it points at.
+ */
 export const turns = (object: EditorObject) =>
-  object.kind !== "line" && object.kind !== "arrow"
+  !isLine(object) && !(object.kind === "text" && object.tip)
 
 /** Whether a point touches a thing. */
 export function touches(object: EditorObject, point: Point, room: number) {
-  if (object.kind === "line" || object.kind === "arrow")
+  if (isLine(object))
     return (
       distanceToSegment(point, object.from, object.to) <=
       object.weight / 2 + room
     )
+  if (object.kind === "text" && object.tip) {
+    // Its frame, or the line from the frame to what it points at.
+    const line = calloutLine(object)
+    return (
+      insideBox(point, calloutFrame(object.box), 0, room / 2) ||
+      (line !== null && distanceToSegment(point, line.from, line.to) <= room)
+    )
+  }
   if (object.kind === "ink")
     return object.strokes.some(
       (stroke) => distanceToPath(point, stroke) <= object.weight / 2 + room
@@ -226,16 +269,11 @@ export function handleAt(
   object: EditorObject,
   point: Point,
   room: number
-): Handle | "turn" | null {
+): Grip | "turn" | null {
   const near = (at: Point) => Math.hypot(point.x - at.x, point.y - at.y) <= room
   if (turns(object) && near(turnHandle(object, room))) return "turn"
-  if (object.kind === "line" || object.kind === "arrow") {
-    if (near(object.from)) return "w"
-    if (near(object.to)) return "e"
-    return null
-  }
   for (const handle of handlesOf(object))
-    if (near(handlePoint(object.box, object.rotation, handle))) return handle
+    if (near(handleSpot(object, handle))) return handle
   return null
 }
 
@@ -441,29 +479,40 @@ export function shown(state: EditorState, view: PageView): EditorObject[] {
 
 const label = (verb: string, objects: readonly EditorObject[]) =>
   objects.length === 1
-    ? `${verb} ${KIND_NAMES[objects[0].kind]}`
+    ? `${verb} ${nameOf(objects[0])}`
     : `${verb} ${objects.length} things`
 
 /** A thing made by a shape tool between two points, in the styles in use. */
 export function makeObject(
-  tool: Exclude<Tool, "select" | "ink" | "text">,
+  tool: Exclude<Tool, "select" | "ink" | "text" | "callout">,
   from: Point,
   to: Point,
   styles: Styles,
   id: string
 ): EditorObject {
   const base = { id, rotation: 0, opacity: 1 }
-  if (tool === "line" || tool === "arrow")
-    return {
+  if (tool === "line" || tool === "arrow" || tool === "measure") {
+    const line = {
       ...base,
-      kind: tool,
       box: boxBetween(from, to),
       from,
       to,
       stroke: styles.stroke,
       weight: styles.weight,
     }
+    return tool === "measure"
+      ? { ...line, kind: tool, unit: styles.unit, scale: styles.scale }
+      : { ...line, kind: tool }
+  }
   const box = boxBetween(from, to)
+  if (tool === "stamp")
+    return {
+      ...base,
+      kind: "stamp",
+      box,
+      label: styles.stampLabel,
+      colour: styles.stampColour,
+    }
   if (tool === "cover")
     return { ...base, kind: "cover", box, fill: styles.coverFill }
   return {
@@ -503,6 +552,38 @@ export function makeText(
     size: styles.size,
     colour: styles.textColour,
     align: styles.align,
+  }
+}
+
+/**
+ * An empty call-out, ready to be typed into: it points at one place and its
+ * words go at another. When the two are the same place, as after a click,
+ * the words go up and to the right of what is pointed at.
+ */
+export function makeCallout(
+  tip: Point,
+  at: Point,
+  styles: Styles,
+  id: string,
+  page: Size,
+  reachNow: number
+): TextObject {
+  const dragged =
+    Math.hypot(at.x - tip.x, at.y - tip.y) >= Math.max(SMALLEST, reachNow)
+  const where = dragged
+    ? at
+    : {
+        x: Math.min(tip.x + CALLOUT_AWAY.x, Math.max(0, page.width - 120)),
+        y: Math.max(20, tip.y + CALLOUT_AWAY.y),
+      }
+  const text = makeText(where, styles, id, page)
+  return {
+    ...text,
+    // Narrower than a text box: a call-out is a few words.
+    box: { ...text.box, width: Math.min(text.box.width, 140) },
+    // In the colour of arrows and lines, which it is kin to.
+    colour: styles.stroke,
+    tip: { ...tip },
   }
 }
 
@@ -564,30 +645,35 @@ export function release(
       }
     }
     case "make": {
+      // A call-out is typed before it is anything: whoever holds the typing
+      // makes it, with `makeCallout`.
+      if (gesture.tool === "callout") return { state: idle, change: null }
+      const tool = gesture.tool
       const dragged =
         Math.hypot(
           gesture.to.x - gesture.from.x,
           gesture.to.y - gesture.from.y
         ) >= Math.max(SMALLEST, reachNow)
-      const line = gesture.tool === "line" || gesture.tool === "arrow"
+      const line = tool === "line" || tool === "arrow" || tool === "measure"
       // A click makes a thing of a usual size around the point.
+      const usual = tool === "stamp" ? STAMP_SIZE : CLICK_SIZE
       const from = dragged
         ? gesture.from
         : line
-          ? { x: gesture.from.x - CLICK_SIZE.width / 2, y: gesture.from.y }
+          ? { x: gesture.from.x - usual.width / 2, y: gesture.from.y }
           : {
-              x: gesture.from.x - CLICK_SIZE.width / 2,
-              y: gesture.from.y - CLICK_SIZE.height / 2,
+              x: gesture.from.x - usual.width / 2,
+              y: gesture.from.y - usual.height / 2,
             }
       const to = dragged
         ? gesture.to
         : line
-          ? { x: gesture.from.x + CLICK_SIZE.width / 2, y: gesture.from.y }
+          ? { x: gesture.from.x + usual.width / 2, y: gesture.from.y }
           : {
-              x: gesture.from.x + CLICK_SIZE.width / 2,
-              y: gesture.from.y + CLICK_SIZE.height / 2,
+              x: gesture.from.x + usual.width / 2,
+              y: gesture.from.y + usual.height / 2,
             }
-      let object = makeObject(gesture.tool, from, to, styles, newId)
+      let object = makeObject(tool, from, to, styles, newId)
       if (!dragged) {
         const kept = keepOnPage(reach(object), view.size, SMALLEST)
         const was = reach(object)
@@ -601,7 +687,7 @@ export function release(
           gesture: null,
         },
         change: {
-          label: `Add ${KIND_NAMES[object.kind]}`,
+          label: `Add ${nameOf(object)}`,
           ops: [{ do: "add", page, object }],
         },
       }
