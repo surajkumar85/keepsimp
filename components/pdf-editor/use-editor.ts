@@ -136,6 +136,8 @@ export function useEditor(
   const queue = useRef<Promise<unknown>>(Promise.resolve())
   const fonts = useRef(new Map<string, Promise<void>>())
   const lettersRead = useRef(new Map<string, Promise<LetterLine[]>>())
+  /** How many changes are in force this moment, ahead of what has been drawn. */
+  const position = useRef((opened.history ?? emptyHistory).position)
   /** What the file last said its pages hold. */
   const truth = useRef(opened.objects)
   /** Changes that have been asked for and not yet answered, oldest first. */
@@ -238,6 +240,7 @@ export function useEditor(
         return drawn
       })
       setHistory(news.history)
+      position.current = news.history.position
       setNotice(
         news.lacking.length
           ? `This font has no shape for ${news.lacking.join(" ")}. ${news.lacking.length === 1 ? "It is" : "They are"} left out of the file.`
@@ -785,6 +788,8 @@ export function useEditor(
   )
   /** The file was written out as it stands. */
   const saved = useCallback(() => setHistory(markSaved), [])
+  /** How many changes are in force, as the file last said: ahead of what the screen has drawn. */
+  const changesNow = useCallback(() => position.current, [])
   /** Resolves once every change asked for so far has been made. */
   const settled = useCallback(() => {
     flush()
@@ -836,6 +841,7 @@ export function useEditor(
     onPage,
     saved,
     settled,
+    changesNow,
   }
 }
 

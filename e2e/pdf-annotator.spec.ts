@@ -290,12 +290,19 @@ test("places a note, types it, answers it, moves it, and undoes its removal", as
   await changes(page, 4)
   await expect(marks(page)).toHaveCount(1)
 
+  // Words still being typed when Download is pressed are in the file, and
+  // the result is shown as the one for the file as it now stands.
+  await page.getByTestId("comments-toggle").click()
+  await list(page).getByLabel("What this note says").fill("Is this right?")
   const got = await saved(page, page.getByTestId("editor-download"))
+  await expect(page.getByTestId("editor-check")).toContainText(
+    "2 comments are in the file"
+  )
   const [found] = await readComments(got.bytes)
   expect(
     found.map((one) => [one.kind, one.text, one.author, one.reply])
   ).toEqual([
-    ["Text", "Is this still right?", "", false],
+    ["Text", "Is this right?", "", false],
     ["Text", "Yes, checked.", "Bo", true],
   ])
 })
@@ -477,6 +484,10 @@ test("stays accessible, local and responsive", async ({ page }) => {
 
   // On a phone the list lies over the lower part of the pages, and nothing spills sideways.
   await page.setViewportSize({ width: 320, height: 740 })
+  // The page takes a moment to settle at its new width.
+  await expect
+    .poll(async () => (await pick(page, "Select").boundingBox())?.height ?? 0)
+    .toBeGreaterThanOrEqual(44)
   expect(
     await page.evaluate(
       () => document.documentElement.scrollWidth <= innerWidth

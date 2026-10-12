@@ -305,20 +305,23 @@ function Workspace({
   )
 
   const problem = extrasProblem(extras)
-  const key = JSON.stringify([
-    history.position,
-    keepEditable,
-    commentCount ? commentsHow : "keep",
-    extras.protect
-      ? [
-          extras.password,
-          extras.ownerPassword,
-          extras.allowPrint,
-          extras.allowCopy,
-          extras.allowChanges,
-        ]
-      : null,
-  ])
+  /** What a result is made from, at a number of changes; anything else makes it out of date. */
+  const keyAt = (position: number) =>
+    JSON.stringify([
+      position,
+      keepEditable,
+      commentCount ? commentsHow : "keep",
+      extras.protect
+        ? [
+            extras.password,
+            extras.ownerPassword,
+            extras.allowPrint,
+            extras.allowCopy,
+            extras.allowChanges,
+          ]
+        : null,
+    ])
+  const key = keyAt(history.position)
   const current = result?.key === key ? result : null
 
   async function download() {
@@ -347,7 +350,9 @@ function Workspace({
         name: editedName(name),
         blob,
         report: made.report,
-        key,
+        // What was typed last went into the file while this was waiting: the
+        // result is of the file as it stands now, not as it was when asked for.
+        key: keyAt(editor.changesNow()),
         password: lock ? lock.password : doc.password,
       }
       setResult(next)

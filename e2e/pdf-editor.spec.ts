@@ -405,6 +405,23 @@ test("types text in a font, size and colour of its own, and changes the words la
   expect(fonts.some((name) => name.includes("LiberationSans"))).toBe(false)
 })
 
+test("puts what is still being typed into the file when Download is pressed", async ({
+  page,
+}) => {
+  await open(page, await sample("hurry.pdf", 1))
+  await pick(page, "Text").click()
+  await click(page, 60, 80)
+  await expect(page.getByTestId("editor-typing")).toBeFocused()
+  await page.keyboard.type("Not finished typing")
+  // No click away, no Enter: straight to the button.
+  const got = await saved(page, page.getByTestId("editor-download"))
+  await expect(page.getByTestId("editor-check")).toContainText(
+    "The text you added was read back from the result."
+  )
+  await expect(tool(page)).not.toHaveAttribute("data-unsaved")
+  expect((await texts(got.bytes))[0]).toContain("Not finished typing")
+})
+
 test("keeps what was added movable when asked, and goes on with it when the file is opened again", async ({
   page,
 }) => {
@@ -688,6 +705,10 @@ test("stays accessible, local and responsive", async ({ page }) => {
 
   // On a phone the bars are one line each, and every control is large enough to press.
   await page.setViewportSize({ width: 320, height: 740 })
+  // The page takes a moment to settle at its new width.
+  await expect
+    .poll(async () => (await pick(page, "Select").boundingBox())?.height ?? 0)
+    .toBeGreaterThanOrEqual(44)
   expect(
     await page.evaluate(
       () => document.documentElement.scrollWidth <= innerWidth
