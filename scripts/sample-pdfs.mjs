@@ -621,8 +621,155 @@ async function scan() {
   return doc.save()
 }
 
+/**
+ * A form with a field of every kind a person fills in, behind "Try a sample"
+ * on the page that fills forms in. Its signature is a line on the page, not
+ * a field, as on most forms that are printed and signed.
+ */
+async function form() {
+  const doc = await PDFDocument.create()
+  const bold = await doc.embedFont(StandardFonts.HelveticaBold)
+  const plain = await doc.embedFont(StandardFonts.Helvetica)
+  doc.setTitle("Membership form")
+  doc.setAuthor("KeepSimp")
+  doc.setCreationDate(written)
+  doc.setModificationDate(written)
+  const page = doc.addPage([width, height])
+  page.drawRectangle({ x: 0, y: height - 14, width, height: 14, color: teal })
+  page.drawText("Membership form", {
+    x: 56,
+    y: height - 96,
+    size: 26,
+    font: bold,
+    color: ink,
+  })
+  page.drawText("Harbour Street Library. Fields marked * must be filled in.", {
+    x: 56,
+    y: height - 120,
+    size: 11,
+    font: plain,
+    color: muted,
+  })
+  const fields = doc.getForm()
+  const label = (text, x, y) =>
+    page.drawText(text, { x, y, size: 10, font: bold, color: ink })
+  const look = { font: plain, borderWidth: 0.75, borderColor: muted }
+  /** A hint for people who use a screen reader, and for the list of what is missing. */
+  const hint = (field, text) =>
+    field.acroField.dict.set(PDFName.of("TU"), PDFHexString.fromText(text))
+
+  label("Full name *", 56, 680)
+  const name = fields.createTextField("member.full_name")
+  name.enableRequired()
+  hint(name, "Full name")
+  name.addToPage(page, { x: 56, y: 652, width: 300, height: 22, ...look })
+
+  label("Date of birth", 380, 680)
+  const born = fields.createTextField("member.born")
+  hint(born, "Date of birth")
+  born.acroField.dict.set(
+    PDFName.of("AA"),
+    doc.context.obj({
+      F: {
+        S: "JavaScript",
+        JS: PDFHexString.fromText('AFDate_FormatEx("dd/mm/yyyy");'),
+      },
+    })
+  )
+  born.addToPage(page, { x: 380, y: 652, width: 159, height: 22, ...look })
+
+  label("Email *", 56, 624)
+  const email = fields.createTextField("member.email")
+  email.enableRequired()
+  hint(email, "Email")
+  email.addToPage(page, { x: 56, y: 596, width: 300, height: 22, ...look })
+
+  label("Country", 380, 624)
+  const country = fields.createDropdown("member.country")
+  hint(country, "Country")
+  country.addOptions(["India", "France", "Japan", "Brazil", "Kenya"])
+  country.addToPage(page, { x: 380, y: 596, width: 159, height: 22, ...look })
+
+  label("Membership *", 56, 566)
+  const kind = fields.createRadioGroup("membership")
+  kind.enableRequired()
+  hint(kind, "Membership")
+  ;["Standard", "Family", "Student"].forEach((option, at) => {
+    kind.addOptionToPage(option, page, {
+      x: 56 + at * 110,
+      y: 542,
+      width: 14,
+      height: 14,
+      borderWidth: 0.75,
+      borderColor: muted,
+    })
+    page.drawText(option, {
+      x: 76 + at * 110,
+      y: 545,
+      size: 11,
+      font: plain,
+      color: ink,
+    })
+  })
+
+  label("What do you read? Choose any.", 56, 512)
+  const reads = fields.createOptionList("reads")
+  hint(reads, "What you read")
+  reads.addOptions(["Novels", "History", "Science", "Poetry", "Comics"])
+  reads.enableMultiselect()
+  reads.addToPage(page, { x: 56, y: 426, width: 180, height: 78, ...look })
+
+  label("Anything we should know?", 260, 512)
+  const notes = fields.createTextField("notes")
+  hint(notes, "Anything we should know")
+  notes.enableMultiline()
+  notes.addToPage(page, { x: 260, y: 426, width: 279, height: 78, ...look })
+  notes.setFontSize(10)
+
+  const tick = (field, text, y) => {
+    field.addToPage(page, {
+      x: 56,
+      y,
+      width: 14,
+      height: 14,
+      borderWidth: 0.75,
+      borderColor: muted,
+    })
+    page.drawText(text, { x: 78, y: y + 3, size: 11, font: plain, color: ink })
+  }
+  const news = fields.createCheckBox("newsletter")
+  hint(news, "Send me the newsletter")
+  tick(news, "Send me the monthly newsletter.", 392)
+  const rules = fields.createCheckBox("rules")
+  rules.enableRequired()
+  hint(rules, "I have read the library's rules")
+  tick(rules, "I have read the library's rules and agree to them. *", 366)
+
+  for (const [text, x] of [
+    ["Signature", 56],
+    ["Date", 380],
+  ]) {
+    page.drawLine({
+      start: { x, y: 290 },
+      end: { x: x === 56 ? 300 : 539, y: 290 },
+      thickness: 0.75,
+      color: muted,
+    })
+    page.drawText(text, { x, y: 276, size: 10, font: plain, color: muted })
+  }
+  page.drawText("Membership form · page 1", {
+    x: 56,
+    y: 40,
+    size: 9,
+    font: plain,
+    color: muted,
+  })
+  return doc.save()
+}
+
+await writeFile("public/samples/keepsimp-form.pdf", await form())
 await writeFile("public/samples/keepsimp-brochure.pdf", await brochure())
 await writeFile("public/samples/keepsimp-scan.pdf", await scan())
 console.log(
-  "Wrote public/samples/keepsimp-report.pdf, keepsimp-appendix.pdf, keepsimp-handbook.pdf, keepsimp-brochure.pdf and keepsimp-scan.pdf"
+  "Wrote public/samples/keepsimp-report.pdf, keepsimp-appendix.pdf, keepsimp-handbook.pdf, keepsimp-form.pdf, keepsimp-brochure.pdf and keepsimp-scan.pdf"
 )

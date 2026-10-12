@@ -32,6 +32,7 @@ import {
   withLook,
   type Look,
 } from "@/lib/pdf-editor/styles"
+import { stepName, type FieldOp, type FormField } from "@/lib/pdf-editor/forms"
 import {
   drawnSignature,
   SIGNATURE_SIZE,
@@ -131,6 +132,8 @@ export function useEditor(
   const [objects, setObjects] = useState<EditorObject[][]>(opened.objects)
   /** The comments on each page, as the file has them. */
   const [comments, setComments] = useState<Comment[][]>(opened.comments)
+  /** The places of a form on each page, with what each holds in the file. */
+  const [fields, setFields] = useState<FormField[][]>(opened.fields)
   const [versions, setVersions] = useState<number[]>(() =>
     opened.sizes.map(() => 0)
   )
@@ -246,6 +249,11 @@ export function useEditor(
       setComments((was) => {
         const now = [...was]
         for (const { page, comments: here } of news.pages) now[page] = here
+        return now
+      })
+      setFields((was) => {
+        const now = [...was]
+        for (const { page, fields: here } of news.pages) now[page] = here
         return now
       })
       setVersions((was) => {
@@ -407,6 +415,25 @@ export function useEditor(
         return news
       })
       return news as Awaited<ReturnType<PdfClient["editComment"]>> | null
+    },
+    [flush, enqueue, file]
+  )
+
+  /**
+   * Fill a field of a form in, or turn a tick box or a round button on or
+   * off. It is seen when the file has answered: the page is drawn again
+   * from the file, with the field as it now looks.
+   */
+  const fillField = useCallback(
+    (page: number, field: FormField, to: string | boolean) => {
+      const op: FieldOp =
+        typeof to === "string"
+          ? { do: "fill", page, id: field.id, value: to }
+          : { do: "turn", page, id: field.id, on: to }
+      flush()
+      enqueue((worker) =>
+        worker.editField(file, { label: stepName(field, op), ops: [op] })
+      )
     },
     [flush, enqueue, file]
   )
@@ -961,6 +988,9 @@ export function useEditor(
     sizes,
     objects,
     comments,
+    fields,
+    form: opened.form,
+    fillField,
     comment,
     letters,
     versions,

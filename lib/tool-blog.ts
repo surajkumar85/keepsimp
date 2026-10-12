@@ -98,7 +98,7 @@ export const overviewPost: BlogPost = {
       paragraphs: [
         "Type on a form that has no fields to fill, add a date or a name, place a picture, or mark a page with boxes, arrows and a pen. Every change is made in the real file and can be undone, and the page you see is the page you will download.",
         "The text you add is real text in a font that travels inside the file, so it looks the same everywhere and can be searched. Before the download, the result is read back and checked. Changing the words that are already in a file comes in a later version.",
-        "It signs, too: draw your signature, type it or use a photo of it, and fill in the blanks, boxes and date of a form that has no fields.",
+        "It signs and fills in forms, too: draw your signature, type it or use a photo of it; type into a form's fields, tick its boxes and choose from its lists; and fill in a form that has no fields like paper.",
         "The same editor marks up and comments: highlight, underline or strike out words by dragging across them, place notes, and reply to the comments a file already has. These are real PDF comments, so the next person sees them as comments in their own program; for a final copy they can be drawn into the page or left out.",
       ],
       links: [
@@ -122,6 +122,14 @@ export const overviewPost: BlogPost = {
         {
           label: "Guide: sign a PDF without sending it anywhere",
           href: "/blog/sign-pdfs-without-uploading/",
+        },
+        {
+          label: "A form to fill in? Open it as Fill PDF form",
+          href: "/dashboard/fill-pdf-form/",
+        },
+        {
+          label: "Guide: fill in a PDF form without sending it anywhere",
+          href: "/blog/fill-pdf-forms-without-uploading/",
         },
       ],
     },
@@ -488,7 +496,7 @@ export const editPost: BlogPost = {
       title: "What it does today, and what it does not.",
       paragraphs: [
         "The editor adds things to pages: text, pictures, boxes, ellipses, lines, arrows and freehand drawing. Everything you add can be moved, resized, turned, restyled, copied and deleted, and every step can be undone, all the way back to the file as you opened it.",
-        "It also marks and comments: highlights, underlines, notes and replies, which have a guide of their own. It does not yet change the words that are already in a file or fill in form fields. Those are being built and will arrive as later versions of the same editor. We would rather say so here than let you find out halfway through a job.",
+        "It also marks and comments, signs, and fills in a form's fields, each of which has a guide of its own. It does not yet change the words that are already in a file. That is being built and will arrive as a later version of the same editor. We would rather say so here than let you find out halfway through a job.",
       ],
       links: [
         { label: "Open the PDF editor", href: "/dashboard/pdf-editor/" },
@@ -737,7 +745,7 @@ export const signPost: BlogPost = {
       title: "Fill in what the form asks.",
       paragraphs: [
         "Most things that need signing need a few more things as well. The text tool types into the blanks: click where the words go and type. The tick tool marks boxes with a tick, a cross or a dot, one press each. A button adds today's date.",
-        "This works on any PDF, also one that is only a picture of a form. Forms with real fields to tab through are coming to the same page.",
+        "This works on any PDF, also one that is only a picture of a form. A form with real fields to tab through is filled in on the same page: click a field and type.",
       ],
     },
     {
@@ -786,6 +794,124 @@ export const signPost: BlogPost = {
       title:
         "SIL Open Font License, under which the handwriting fonts are used",
       url: "https://openfontlicense.org/",
+    },
+  ],
+}
+
+export const formPost: BlogPost = {
+  slug: "fill-pdf-forms-without-uploading",
+  title: "Fill it in, and send only what you mean to.",
+  searchTitle: "How to fill in a PDF form online for free without uploading it",
+  description:
+    "How to fill in a PDF form in your browser: type into its fields, tick boxes, choose from lists, sign and download, as a form or made final. Free, with no account and nothing uploaded.",
+  keywords: [
+    "fill PDF form",
+    "fill in PDF form online free",
+    "fillable PDF",
+    "PDF form filler",
+    "type on a PDF form",
+    "flatten PDF form",
+    "fill and sign PDF",
+    "PDF form without Acrobat",
+    "no upload",
+  ],
+  category: "A little know-how",
+  readingTime: "4 min read",
+  image: "/images/pdf-form-guide.svg",
+  imageAlt:
+    "A form in a PDF with a name typed into a field, an empty field framed in red, a round button chosen, a list with one line picked and a ticked box, beside a note that two fields are still empty",
+  tool: "fill-pdf-form",
+  intro:
+    "An application, a tax form, a consent form from a school: it arrives as a PDF, and it asks for your name, your address, your date of birth and sometimes your bank. That is exactly the file you would rather not hand to a website you found a minute ago. Here is how to fill it in with KeepSimp, where the form never leaves your device.",
+  sections: [
+    {
+      id: "two-kinds",
+      title: "Two kinds of form, and how to tell.",
+      paragraphs: [
+        "Some PDF forms have real fields: boxes the file itself knows about, each with a name, that a program can type into. Others only look like forms. They are a picture of lines and boxes, made to be printed.",
+        "Open the file and you will see which you have. Real fields are tinted, and a line above the page counts them. A form without fields says so, and is filled in like paper instead; more on that below.",
+      ],
+      links: [
+        { label: "Open Fill PDF form", href: "/dashboard/fill-pdf-form/" },
+      ],
+    },
+    {
+      id: "fill",
+      title: "Type, tick and choose.",
+      paragraphs: [
+        "Click a field and type. Tab goes to the next field, along each row and then down the page, so a long form can be filled in without touching the mouse. Tick boxes and round buttons are pressed. Drop-downs and lists are chosen from, and a list takes several choices where the form allows it.",
+        "A field the form marks as a date opens your device's calendar and writes the day the way the form wants it. A field with a limit, such as six boxes for a postcode, takes no more than fits.",
+        "Each field you fill in can be undone. What you see on the page is drawn from the file itself, so the page shows what the next person will see.",
+      ],
+    },
+    {
+      id: "missing",
+      title: "See what is still missing.",
+      paragraphs: [
+        "Fields the form says must be filled in have a red frame until they are. The line above the page says how many are still empty, and a button takes you to the next one, on whichever page it is.",
+        "Nothing stops you from downloading a form with gaps. Sometimes that is what you want: fill in your part, and send it on for someone else to finish.",
+      ],
+    },
+    {
+      id: "final",
+      title: "Keep it a form, or make it final.",
+      paragraphs: [
+        "When you download, you choose. Keep as fields gives a form that can still be filled in and changed, here or in any other program. That is right for a form that goes on to someone else, or one you may need to correct.",
+        "Part of the page draws what the fields hold into the page and takes the fields away. Nothing can be changed afterwards, and the form looks the same in every program. That is right for the copy you send in or keep for your records.",
+        "Either way the result is read back before it is saved, and the check under the download button says what was found.",
+      ],
+    },
+    {
+      id: "paper",
+      title: "Forms that are only a picture.",
+      paragraphs: [
+        "A form without fields is filled in like paper. The text tool types wherever you click. The tick tool places a tick, a cross or a dot in a box, one press each. A button adds today's date, and Sign places your signature: drawn, typed, or taken from a photo with the paper removed.",
+      ],
+      links: [
+        {
+          label: "Guide: sign a PDF without sending it anywhere",
+          href: "/blog/sign-pdfs-without-uploading/",
+        },
+      ],
+    },
+    {
+      id: "honest",
+      title: "What it does not do.",
+      paragraphs: [
+        "A form can carry small programs that work out a total or tidy a phone number as you type. KeepSimp never runs anything a file brings with it, so those fields hold what you typed and a total stays as it was: fill it in yourself. The editor tells you when a form has such fields.",
+        "A few forms, mostly from governments, are of a kind called XFA that only Adobe's programs can fill in. The editor says so when it meets one. And a place for a certificate signature is left alone: that kind of signing comes in a later version.",
+      ],
+    },
+    {
+      id: "private",
+      title: "Your answers stay with you.",
+      paragraphs: [
+        "The form is opened and filled in on your own device and is never uploaded. There is no account, no watermark and no limit on how many forms you fill in, and once the page has loaded it works without a connection.",
+      ],
+      links: [
+        {
+          label: "Add text, pictures and comments too: the PDF editor",
+          href: "/dashboard/pdf-editor/",
+        },
+        {
+          label: "Every KeepSimp tool in one place",
+          href: "/blog/free-online-tools-no-upload/",
+        },
+      ],
+    },
+  ],
+  sources: [
+    {
+      title: "PDF: interactive forms (AcroForms and XFA), Wikipedia",
+      url: "https://en.wikipedia.org/wiki/PDF",
+    },
+    {
+      title: "XFA, the form kind that only some programs read, Wikipedia",
+      url: "https://en.wikipedia.org/wiki/XFA",
+    },
+    {
+      title: "Fill out and sign PDF forms in Preview on Mac, Apple Support",
+      url: "https://support.apple.com/guide/preview/fill-out-and-sign-pdf-forms-prvw35725/mac",
     },
   ],
 }

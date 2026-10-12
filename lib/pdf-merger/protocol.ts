@@ -12,6 +12,7 @@ import type {
   CommentChange,
   LetterLine,
 } from "@/lib/pdf-editor/comments"
+import type { FieldChange, FormFacts, FormField } from "@/lib/pdf-editor/forms"
 import type { History } from "@/lib/pdf-editor/history"
 import type { ExportReport } from "@/lib/pdf-editor/mupdf-edit"
 import type { EditorObject } from "@/lib/pdf-editor/objects"
@@ -183,6 +184,8 @@ export type PdfRequest =
   | { type: "edit-apply"; id: string; request: number; change: Change }
   /** Make a change to comments, as one step. */
   | { type: "edit-comment"; id: string; request: number; change: CommentChange }
+  /** Fill fields of a form in, as one step. */
+  | { type: "edit-field"; id: string; request: number; change: FieldChange }
   /** The letters of a page with their boxes, for marks to be laid on words. */
   | { type: "edit-letters"; id: string; request: number; page: number }
   /** Undo the last change, or make it again. */
@@ -195,6 +198,8 @@ export type PdfRequest =
       keepEditable: boolean
       /** What becomes of comments: kept as comments, drawn into their pages, or left out. */
       comments: "keep" | "flatten" | "remove"
+      /** What becomes of a form's fields: kept as fields, or drawn into their pages. */
+      fields: "keep" | "flatten"
       lock: Lock | null
     }
   /** One end of a line to a helper that runs the picture codecs on a core of its own. */
@@ -204,7 +209,13 @@ export type PdfRequest =
 
 /** What changed in a file being edited: the pages to draw again with what is now on them, and the list of changes. */
 export interface EditNews {
-  pages: { page: number; objects: EditorObject[]; comments: Comment[] }[]
+  pages: {
+    page: number
+    objects: EditorObject[]
+    comments: Comment[]
+    /** The places of a form on the page, with what each now holds. */
+    fields: FormField[]
+  }[]
   history: History
   /** Letters a text box holds that its font has no shape for. */
   lacking: string[]
@@ -302,6 +313,9 @@ export type PdfResponse =
         objects: EditorObject[][]
         /** The comments on each page, the file's own among them. */
         comments: Comment[][]
+        /** The places of a form on each page, and what the form is as a whole. */
+        fields: FormField[][]
+        form: FormFacts
         history: History
         bookmarks: Bookmark[]
       } | null

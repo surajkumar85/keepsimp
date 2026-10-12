@@ -251,6 +251,27 @@ export const tools: readonly Tool[] = [
     status: "available",
   },
   {
+    id: "fill-pdf-form",
+    name: "Fill PDF form",
+    description:
+      "Fill in the fields of a PDF form, tick its boxes, sign it and download.",
+    partOf: "pdf-editor",
+    category: "document",
+    keywords: [
+      "pdf",
+      "form",
+      "forms",
+      "fill",
+      "fill in",
+      "fillable",
+      "fields",
+      "checkbox",
+      "application",
+      "tax form",
+    ],
+    status: "available",
+  },
+  {
     id: "json-formatter",
     name: "JSON formatter",
     description: "Format, explore, query, compare and convert JSON locally.",

@@ -236,7 +236,7 @@ export function lettersLacking(session: EditSession, text: TextObject) {
 }
 
 /** The turn a file gives a page: 0, 90, 180 or 270. */
-function turnOf(page: Obj) {
+export function turnOf(page: Obj) {
   const turn = page.getInheritable("Rotate")
   const degrees = turn.isNumber() ? Math.round(turn.asNumber() / 90) * 90 : 0
   return ((degrees % 360) + 360) % 360
@@ -963,6 +963,11 @@ export interface ExportOptions {
    * comments (when nothing is said), drawn into their pages, or left out.
    */
   comments?: "keep" | "flatten" | "remove"
+  /**
+   * What becomes of a form's fields: kept as fields that can be filled in
+   * again (when nothing is said), or drawn into their pages as they stand.
+   */
+  fields?: "keep" | "flatten"
   /** A password for the result, in place of any the file has. */
   lock?: Lock
   /** Called between pages; it may pause, or throw to stop. */
@@ -983,6 +988,38 @@ export interface ExportReport {
   locked: boolean
   /** How many comments the file held, each reply counted, what became of them, and how many the result holds. */
   comments: { had: number; how: "keep" | "flatten" | "remove"; has: number }
+  /**
+   * How many fields the form had, what became of them, and what the written
+   * file says when it is read again: how many hold what they held (kept),
+   * and how many are still fields (drawn in, none should be).
+   */
+  fields: { had: number; how: "keep" | "flatten"; same: number; left: number }
+}
+
+/** What a place of a form holds, as the file has it. A list that takes several holds one to a line. */
+export function heldBy(widget: MuPDF.PDFWidget) {
+  const held = widget.getObject().getInheritable("V")
+  if (!held.isArray()) return widget.getValue()
+  const lines: string[] = []
+  for (let at = 0; at < held.length; at++) lines.push(held.get(at).asString())
+  return lines.join("\n")
+}
+
+/** A form's fields by name with what each holds, and the pages they are on. */
+export function formOf(doc: Doc) {
+  const values = new Map<string, string>()
+  const pages = new Set<number>()
+  const fields = doc.getTrailer().get("Root", "AcroForm", "Fields")
+  if (!(fields.isArray() && fields.length > 0)) return { values, pages }
+  for (let index = 0; index < doc.countPages(); index++)
+    withPage(doc, index, (page) => {
+      for (const widget of page.getWidgets()) {
+        pages.add(index)
+        const name = widget.getName()
+        if (!values.has(name)) values.set(name, heldBy(widget))
+      }
+    })
+  return { values, pages }
 }
 
 const squeezed = (text: string) => text.replace(/\s+/g, " ").trim()
@@ -1042,6 +1079,14 @@ export async function exportEdited(
       for (const page of commented.pages) touched.add(page)
       if (how === "flatten") flatten(session, doc, "comments")
       else removeComments(doc)
+    }
+    // A form's fields, drawn into their pages as they stand. The engine does
+    // this for all of them at once, which is what is asked for here.
+    const form = formOf(doc)
+    const fieldsHow = form.values.size ? (options.fields ?? "keep") : "keep"
+    if (fieldsHow === "flatten") {
+      for (const page of form.pages) touched.add(page)
+      doc.bake(false, true)
     }
     await options.checkpoint?.()
 
@@ -1163,6 +1208,24 @@ export async function exportEdited(
           : null),
       })
     )
+    // What the fields hold is read from the written file, not from the one
+    // it was written from.
+    const fieldsRead = { same: 0, left: 0 }
+    if (form.values.size) {
+      const written = open(
+        mupdf,
+        bytes,
+        lock ? lock.password : session.password
+      )
+      try {
+        const now = formOf(written).values
+        fieldsRead.left = now.size
+        for (const [name, value] of form.values)
+          if (now.get(name) === value) fieldsRead.same++
+      } finally {
+        written.destroy()
+      }
+    }
     session.saved = position
     return {
       bytes,
@@ -1174,6 +1237,7 @@ export async function exportEdited(
         fontsCut,
         locked: Boolean(lock),
         comments: { had: commented.count, how, has: commentPages(doc).count },
+        fields: { had: form.values.size, how: fieldsHow, ...fieldsRead },
       },
     }
   } finally {

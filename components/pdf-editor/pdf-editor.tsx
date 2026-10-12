@@ -46,6 +46,7 @@ import {
 import { countComments, type CommentTool } from "@/lib/pdf-editor/comments"
 import { changeCount, unsaved } from "@/lib/pdf-editor/history"
 import type { ExportReport } from "@/lib/pdf-editor/mupdf-edit"
+import { formLine, unfilled } from "@/lib/pdf-editor/forms"
 import { checkLines, editedName } from "@/lib/pdf-editor/report"
 import { PdfClient, type EditState } from "@/lib/pdf-merger/client"
 import type { FileFacts } from "@/lib/pdf-merger/files"
@@ -61,6 +62,8 @@ import { useEditor } from "./use-editor"
 const INPUT_ID = "editor-file"
 const ACCEPT = "application/pdf,.pdf"
 const SAMPLE = "keepsimp-handbook.pdf"
+/** A form with fields of every kind, for the page that fills forms in. */
+const FORM_SAMPLE = "keepsimp-form.pdf"
 
 /** The file that is open, and how far opening it has come. */
 interface OpenFile {
@@ -90,7 +93,7 @@ const plural = (count: number, word: string) =>
   `${count.toLocaleString("en")} ${word}${count === 1 ? "" : "s"}`
 
 /** What the tool is opened for: every kind of change, or marking up and commenting first. */
-export type EditorMode = "edit" | "annotate" | "sign"
+export type EditorMode = "edit" | "annotate" | "sign" | "fill"
 
 /** The keys that take a comment tool in hand. */
 const COMMENT_KEYS: Record<string, CommentTool> = {
@@ -120,6 +123,43 @@ const COMMENT_CHOICES = [
     hint: "The download has no comments at all, also none of those the file came with.",
   },
 ] as const
+
+/** What becomes of a form's fields in the download, and what each choice means. */
+const FIELD_CHOICES = [
+  {
+    value: "keep",
+    label: "Keep as fields",
+    hint: "The form can be filled in again, here or in another program, and what you filled in can be changed.",
+  },
+  {
+    value: "flatten",
+    label: "Part of the page",
+    hint: "What the fields hold is drawn into the page. Nothing can be filled in or changed afterwards.",
+  },
+] as const
+
+const FILL_ABILITIES = [
+  {
+    icon: IconEdit,
+    title: "Fill in the form's own fields",
+    text: "Type into text fields, tick boxes, choose from lists and pick dates. Tab goes from field to field, and fields that must be filled in are marked until they are.",
+  },
+  {
+    icon: IconTypography,
+    title: "Forms without fields too",
+    text: "On a form that is only a picture of one, type anywhere, place ticks and crosses, add today's date and sign.",
+  },
+  {
+    icon: IconShieldCheck,
+    title: "Kept as a form, or made final",
+    text: "Download the form with its fields, so it can be filled in again, or with everything drawn into the page so nothing can be changed.",
+  },
+  {
+    icon: IconLock,
+    title: "Nothing is uploaded",
+    text: "The form is opened and filled in on your device. A form's scripts are never run, so check any totals it would work out.",
+  },
+]
 
 const ANNOTATE_ABILITIES = [
   {
@@ -177,6 +217,10 @@ const DOORS: Record<EditorMode, { heading: string; body: string }> = {
     heading: "Drop a PDF to annotate",
     body: "Highlight, underline and strike out words, place notes and answer comments, then download the result. You can also paste a file with ⌘V or Ctrl+V.",
   },
+  fill: {
+    heading: "Drop a PDF form to fill in",
+    body: "Type into its fields, tick its boxes, choose from its lists, sign it, and download the result. Forms without fields can be typed on too. You can also paste a file with ⌘V or Ctrl+V.",
+  },
   sign: {
     heading: "Drop a PDF to sign",
     body: "Draw your signature, type it or use a picture of it, place it where it belongs, fill in what else the page asks for, and download the result. You can also paste a file with ⌘V or Ctrl+V.",
@@ -187,6 +231,7 @@ const DOORS: Record<EditorMode, { heading: string; body: string }> = {
 const FOCUSED: Partial<Record<EditorMode, string>> = {
   annotate:
     ", opened for marking up. Its other tools (text, pictures, shapes, stamps, signing) are behind “All tools”.",
+  fill: ", opened for filling in forms. Its other tools (pictures, shapes, stamps, highlights and notes) are behind “All tools”.",
   sign: ", opened for signing and filling in. Its other tools (pictures, shapes, stamps, highlights and notes) are behind “All tools”.",
 }
 
@@ -242,6 +287,32 @@ function Workspace({
   const commentCount = countComments(editor.comments)
   const [commentsHow, setCommentsHow] =
     useState<(typeof COMMENT_CHOICES)[number]["value"]>("keep")
+  const [fieldsHow, setFieldsHow] =
+    useState<(typeof FIELD_CHOICES)[number]["value"]>("keep")
+  const fieldCount = opened.form.fields
+  const formSays = formLine(editor.fields)
+  const [missing] = unfilled(editor.fields)
+  // The reader is sent to a page by the list of comments and by the form's
+  // line alike; whichever asked last is what it is told.
+  const [jump, setJump] = useState(comments.showPage)
+  const [listJump, setListJump] = useState(comments.showPage)
+  if (comments.showPage !== listJump) {
+    setListJump(comments.showPage)
+    setJump(comments.showPage)
+  }
+  /** Go to a field and put the keyboard in it, once its page is on the screen. */
+  const goToField = (page: number, id: string) => {
+    setJump({ page, turn: -performance.now() })
+    let tries = 0
+    const look = () => {
+      const control = document.querySelector<HTMLElement>(
+        `[data-testid=editor-field][data-id="${CSS.escape(id)}"] :is(input, select, textarea)`
+      )
+      if (control) control.focus()
+      else if (++tries < 40) setTimeout(look, 50)
+    }
+    look()
+  }
   const { history } = editor
   /** The page the window opens at; null while it is closed. */
   const [window_, setWindow] = useState<number | null>(0)
@@ -363,6 +434,7 @@ function Workspace({
       position,
       keepEditable,
       commentCount ? commentsHow : "keep",
+      fieldCount ? fieldsHow : "keep",
       extras.protect
         ? [
             extras.password,
@@ -379,6 +451,15 @@ function Workspace({
   async function download() {
     const worker = client.current
     if (!worker || making || problem) return
+    // A field of a form that is still being typed in is left first, so that
+    // what was typed goes into the file: the window closing would take the
+    // field away without a word.
+    const active = document.activeElement
+    if (
+      active instanceof HTMLElement &&
+      active.closest("[data-testid=editor-field]")
+    )
+      active.blur()
     closeWindow()
     setMaking(true)
     setFailure("")
@@ -389,6 +470,7 @@ function Workspace({
       const job = worker.editExport(doc.id, {
         keepEditable,
         comments: commentsHow,
+        fields: fieldsHow,
         lock,
       })
       cancel.current = job.cancel
@@ -516,7 +598,7 @@ function Workspace({
     fixed: true,
     onPage,
     onKey,
-    showPage: comments.showPage,
+    showPage: jump,
     panel: comments.listed ? (
       <CommentsPanel editor={editor} comments={comments} />
     ) : undefined,
@@ -544,7 +626,7 @@ function Workspace({
               ? null
               : mode === "annotate"
                 ? "comments"
-                : mode === "sign"
+                : mode === "sign" || mode === "fill"
                   ? "signing"
                   : null
           }
@@ -570,6 +652,22 @@ function Workspace({
           >
             {editor.notice}
           </p>
+        )}
+        {formSays && (
+          <div
+            className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b px-3 py-2 text-sm text-muted-foreground"
+            data-testid="editor-form"
+          >
+            <p role="status">{formSays}</p>
+            {missing && (
+              <Button
+                variant="outline"
+                onClick={() => goToField(missing.page, missing.id)}
+              >
+                Go to the next one
+              </Button>
+            )}
+          </div>
         )}
         <p className="sr-only" role="status" aria-live="polite">
           {changeCount(history)}
@@ -605,6 +703,16 @@ function Workspace({
       "This file carries a digital signature. A changed copy no longer counts as signed.",
     doc.facts?.restricted &&
       "The author of this file asked that it not be changed. The limits are lifted in your copy.",
+    opened.form.xfa &&
+      (fieldCount
+        ? "This form also has a second form inside it, of a kind (XFA) that only some programs show. What you fill in here goes into the ordinary one."
+        : "This form is of a kind (XFA) that only Adobe's programs can fill in. Its fields are not shown here, but its pages can be typed on."),
+    opened.form.scripts &&
+      "This form works some of its fields out with scripts. Scripts are never run here, so check totals and dates yourself.",
+    mode === "fill" &&
+      !fieldCount &&
+      !opened.form.xfa &&
+      "This file has no fields to fill in. Use Text, Tick or cross and Sign to fill it in like paper.",
   ].filter((note): note is string => Boolean(note))
 
   return (
@@ -749,6 +857,20 @@ function Workspace({
               hint={
                 COMMENT_CHOICES.find((choice) => choice.value === commentsHow)!
                   .hint
+              }
+            />
+          )}
+          {fieldCount > 0 && (
+            <ChoiceChips
+              label="Form fields"
+              value={fieldsHow}
+              onValueChange={setFieldsHow}
+              options={FIELD_CHOICES.map(({ value, label }) => ({
+                value,
+                label,
+              }))}
+              hint={
+                FIELD_CHOICES.find((choice) => choice.value === fieldsHow)!.hint
               }
             />
           )}
@@ -1014,10 +1136,11 @@ export function PdfEditor({ mode = "edit" }: { mode?: EditorMode }) {
 
   async function loadSample() {
     try {
-      const response = await fetch(`/samples/${SAMPLE}`)
+      const sample = mode === "fill" ? FORM_SAMPLE : SAMPLE
+      const response = await fetch(`/samples/${sample}`)
       if (!response.ok) throw new Error()
       const blob = await response.blob()
-      await openFile([new File([blob], SAMPLE, { type: "application/pdf" })])
+      await openFile([new File([blob], sample, { type: "application/pdf" })])
     } catch {
       setNotice("The sample could not be loaded. Add a file of your own.")
     }
@@ -1118,11 +1241,13 @@ export function PdfEditor({ mode = "edit" }: { mode?: EditorMode }) {
         <div className="space-y-4 rounded-xl border bg-card p-4 sm:p-5">
           <h2 className="section-title">What you can do</h2>
           <ul className="space-y-3 text-sm">
-            {(mode === "sign"
-              ? SIGN_ABILITIES
-              : mode === "annotate"
-                ? ANNOTATE_ABILITIES
-                : ABILITIES
+            {(mode === "fill"
+              ? FILL_ABILITIES
+              : mode === "sign"
+                ? SIGN_ABILITIES
+                : mode === "annotate"
+                  ? ANNOTATE_ABILITIES
+                  : ABILITIES
             ).map((item) => (
               <li key={item.title} className="flex gap-3">
                 <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
@@ -1163,8 +1288,15 @@ export function PdfEditor({ mode = "edit" }: { mode?: EditorMode }) {
                 >
                   Sign PDF
                 </Link>{" "}
-                for signing and filling in. Changing the words that are already
-                in a file and form fields come in later versions.
+                for signing, and as{" "}
+                <Link
+                  href="/dashboard/fill-pdf-form/"
+                  className="underline underline-offset-4 hover:text-foreground"
+                >
+                  Fill PDF form
+                </Link>{" "}
+                for forms. Changing the words that are already in a file comes
+                in a later version.
               </>
             )}
           </p>

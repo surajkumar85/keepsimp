@@ -26,7 +26,11 @@ function pageList(pages: readonly number[], most = 5) {
 /** What the check found, a line for each thing that was looked at. */
 export function checkLines(report: ExportReport): CheckLine[] {
   const lines: CheckLine[] = []
-  if (report.added === 0 && report.comments.had === 0)
+  if (
+    report.added === 0 &&
+    report.comments.had === 0 &&
+    report.fields.had === 0
+  )
     lines.push({
       text: "Nothing was added. The file was written again as it is.",
       good: true,
@@ -104,6 +108,31 @@ export function checkLines(report: ExportReport): CheckLine[] {
               : `${comments(had)} ${had === 1 ? "was" : "were"} left out.`,
         good: true,
       })
+  }
+  const form = report.fields
+  const fields = (count: number) =>
+    `${count.toLocaleString("en")} field${count === 1 ? "" : "s"}`
+  if (form.had > 0) {
+    // Kept, each has to hold what it held; drawn in, none may still be a field.
+    const wrong = form.how === "keep" ? form.had - form.same : form.left
+    const one = form.had === 1
+    lines.push(
+      wrong > 0
+        ? {
+            text:
+              form.how === "keep"
+                ? `${wrong.toLocaleString("en")} of the form's ${fields(form.had)} ${wrong === 1 ? "does" : "do"} not hold in the result what ${wrong === 1 ? "it holds" : "they hold"} here. Read the result before you rely on it.`
+                : `${fields(wrong)} could not be made part of the page and ${wrong === 1 ? "is" : "are"} still in the result as ${wrong === 1 ? "a field" : "fields"}.`,
+            good: false,
+          }
+        : {
+            text:
+              form.how === "keep"
+                ? `The form's ${fields(form.had)} ${one ? "was" : "were"} read back from the result with what ${one ? "it holds" : "they hold"}, and can still be filled in.`
+                : `The form's ${fields(form.had)} ${one ? "is" : "are"} part of the page now and can no longer be changed.`,
+            good: true,
+          }
+    )
   }
   if (report.locked)
     lines.push({ text: "Locked with your password.", good: true })

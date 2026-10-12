@@ -585,6 +585,7 @@ export const posts: readonly BlogPost[] = [
   editPost,
   annotatePost,
   signPost,
+  formPost,
   {
     slug: "format-json-without-losing-precision",
     searchTitle:
@@ -679,6 +680,7 @@ import {
   annotatePost,
   editPost,
   signPost,
+  formPost,
   overviewPost,
   resizePost,
   targetSizePost,

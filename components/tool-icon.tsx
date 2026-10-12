@@ -14,6 +14,7 @@ import {
   IconMovie,
   IconMusicDown,
   IconPlayerTrackNext,
+  IconForms,
   IconSignature,
   IconTransform,
   IconWaveSine,
@@ -39,6 +40,7 @@ const icons: Record<string, typeof IconBraces> = {
   "pdf-editor": IconFilePencil,
   "pdf-annotator": IconHighlight,
   "sign-pdf": IconSignature,
+  "fill-pdf-form": IconForms,
   "json-formatter": IconBraces,
 }
 

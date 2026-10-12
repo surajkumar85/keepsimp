@@ -74,11 +74,27 @@ A signature made here is **ink on paper**: it shows that a page was signed. It i
 - **The window is a window of the editor's window.** It is rendered inside the reader's own tree (in the toolbar slot). Beside it, the reader's window would hide it from screen readers; the browser tests look for its controls by role for that reason.
 - **Sign PDF** (`/dashboard/sign-pdf/`) is a door: the editor opened with the signature window ready and only the tools for filling in a page (select, text, tick or cross, sign, date). The rest are behind "All tools".
 
+## Form fields (phase 3, second part)
+
+A form's fields are **the file's own** and stay fields. Filling one in is a step in the same list of changes as everything else, the page is drawn again from the file, and the engine writes how the filled field looks, so other programs show the same and can fill it in again.
+
+- **Reading** (`fieldsOn` in `lib/pdf-editor/mupdf-forms.ts`): every place a page has to fill in, as a `FormField`: its kind (text, check, radio, choice, list, signature, button), name, a label for people (the file's hint, or its name made readable by `labelOf`), its box as the page is shown, what it holds, its options as kept and as shown, and whether it is required, read-only, multi-line, a password, a comb, limited in length, a list that takes several, a drop-down that takes other words, or a date. Hidden places are left out. A field shown in several places is one `FormField` for each.
+- **The controls** (`components/pdf-editor/field-layer.tsx`): a real control lies over each field, seen through until it is in use, so what is shown at rest is the file's own picture of the field. They are in the order `inOrder` gives (along a row, then down), which is the order Tab goes. They take presses only while nothing is being drawn, dragged or typed: with a tool in hand, a press over a field is the tool's.
+- **Filling in** (`applyFields`): text and drop-downs through the engine (`setTextValue`, `setChoiceValue`), ticks and round buttons with `toggle`, a list by writing `/V` (one string or several) and dropping `/I`. `accepts` decides what a field takes: no line breaks in a line, no more letters than its limit, only what a list offers. A change that changes nothing is not a step.
+- **Every place of the field is given its new look**, on whichever page: a round button that went off, a name repeated on each page. `pagesOf` finds them through the field's `/Kids` and their `/P`.
+- **A list is drawn by us** (`drawList`, `listRows`): the engine writes no appearance for a list box and would leave it blank. Options one to a line, the chosen ones on a tinted bar, in the built-in Helvetica; set last with no `update()` after, turned with a turned page. Text, ticks and drop-downs are the engine's.
+- **Dates:** a field whose format script is `AFDate_FormatEx("…")` or `AFDate_Format(n)` is offered as a date control, and the day is written in that format (`dateFormat`, `writeDate`, `readDate`). The script is read as text and never run. A format without a day, month and year, or with a time, is typed like any other field.
+- **What is missing:** `unfilled` lists the required fields that are empty (round buttons of one name once, a repeated field once), `formLine` says so above the page, and "Go to the next one" sends the reader to the page and puts the keyboard in the field. Nothing stops a download with fields empty.
+- **Typing is put into the file** when a field is left or Enter is pressed. Escape gives the field back as it was and does not close the window. Download leaves a field that is still in use first, so that what was typed last is in the file.
+- **On download** (`fields` in `ExportOptions`): kept as fields, or drawn into their pages with the engine's `bake(false, true)`, which is all fields at once, as is wanted. The written file is opened again and its fields compared by name with what the working copy held (`formOf`); the check says how many read back, or that none is left.
+- **What a file's form is** (`formFacts`): how many places, whether it has an XFA part (said when the file is opened: with ordinary fields too, they are what is filled in; without, the pages can only be typed on), and whether a script works fields out (`/CO`; said too, since nothing is run).
+- **Fill PDF form** (`/dashboard/fill-pdf-form/`) is a door with the tools for filling in (select, text, tick or cross, sign, date). Its sample is a form (`public/samples/keepsimp-form.pdf`, made by `npm run samples:pdfs`).
+
 ## One editor, several doors
 
-There is one PDF editor. The annotator and Sign PDF are **doors**: each is a catalogue entry with `partOf: "pdf-editor"`. A door has an address, a title, a description, written help and an article of its own, is in the sitemap and the offline copy, and is found by the search in the header. It is not a card on the tools page, not counted in the sidebar and not an app shortcut (`listed` in `lib/catalogue.ts` is the tools without their doors), and the article that goes through every tool names it under the editor. Each page says what it is and links to the other.
+There is one PDF editor. The annotator, Sign PDF and Fill PDF form are **doors**: each is a catalogue entry with `partOf: "pdf-editor"`. A door has an address, a title, a description, written help and an article of its own, is in the sitemap and the offline copy, and is found by the search in the header. It is not a card on the tools page, not counted in the sidebar and not an app shortcut (`listed` in `lib/catalogue.ts` is the tools without their doors), and the article that goes through every tool names it under the editor. Each page says what it is and links to the other.
 
-A door must be **focused**: it shows the tools of its job and puts the others one press away. A door that offered everything the editor does was a second copy of the editor in the list, which is what this replaced. The doors planned for later phases (Fill PDF form, Redact PDF and the rest) are made the same way.
+A door must be **focused**: it shows the tools of its job and puts the others one press away. A door that offered everything the editor does was a second copy of the editor in the list, which is what this replaced. The doors planned for later phases (Redact PDF and the rest) are made the same way.
 
 ## How it is built
 
@@ -115,24 +131,26 @@ The report (`ExportReport`) becomes the lines in the download card (`lib/pdf-edi
 
 ### Files
 
-| File                                          | What it holds                                                                                                            |
-| --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| `lib/pdf-editor/objects.ts`                   | What an added thing is, how it moves, resizes and turns, and `readObject`, which checks one.                             |
-| `lib/pdf-editor/geometry.ts`                  | Turned boxes, handles, hit tests, snapping, staying on the page.                                                         |
-| `lib/pdf-editor/tools.ts`                     | The tools: press, drag, release; nudge, paste, order, restyle; `applied`.                                                |
-| `lib/pdf-editor/text-layout.ts`, `ink.ts`     | Breaking lines by measured widths; thinning and smoothing a stroke.                                                      |
-| `lib/pdf-editor/measure.ts`                   | Units and scale, what a measuring line says, where its end marks and its label go.                                       |
-| `lib/pdf-editor/signature.ts`                 | Signatures drawn, typed and from a picture; ticks, crosses and dots; what is remembered.                                 |
-| `lib/pdf-editor/styles.ts`, `fonts.ts`        | The palette and what a look changes; which font file is which.                                                           |
-| `lib/pdf-editor/history.ts`, `report.ts`      | What the undo list says and what is unsaved; the words of the check.                                                     |
-| `lib/pdf-editor/mupdf-edit.ts`                | The only file that touches the engine: sessions, changes, undo, flattening, the export.                                  |
-| `lib/pdf-merger/{protocol,pdf.worker,client}` | The `edit-*` requests, beside the other tools' in the one worker.                                                        |
-| `components/pdf-editor/`                      | The tool's page, the state hook, the toolbar, the layer over a page, the written help.                                   |
-| `public/fonts/editor/`                        | Twelve Liberation font files and four that look written by hand (5.4 MB), with their licences. Part of the offline copy. |
+| File                                          | What it holds                                                                                                                         |
+| --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| `lib/pdf-editor/objects.ts`                   | What an added thing is, how it moves, resizes and turns, and `readObject`, which checks one.                                          |
+| `lib/pdf-editor/geometry.ts`                  | Turned boxes, handles, hit tests, snapping, staying on the page.                                                                      |
+| `lib/pdf-editor/tools.ts`                     | The tools: press, drag, release; nudge, paste, order, restyle; `applied`.                                                             |
+| `lib/pdf-editor/text-layout.ts`, `ink.ts`     | Breaking lines by measured widths; thinning and smoothing a stroke.                                                                   |
+| `lib/pdf-editor/measure.ts`                   | Units and scale, what a measuring line says, where its end marks and its label go.                                                    |
+| `lib/pdf-editor/signature.ts`                 | Signatures drawn, typed and from a picture; ticks, crosses and dots; what is remembered.                                              |
+| `lib/pdf-editor/styles.ts`, `fonts.ts`        | The palette and what a look changes; which font file is which.                                                                        |
+| `lib/pdf-editor/history.ts`, `report.ts`      | What the undo list says and what is unsaved; the words of the check.                                                                  |
+| `lib/pdf-editor/forms.ts`, `mupdf-forms.ts`   | What a field is, what it takes, dates, what is missing, how a list is drawn; reading and filling fields in the engine.                |
+| `lib/pdf-editor/mupdf-edit.ts`                | Sessions, changes, undo, flattening, the export. With `mupdf-comments.ts` and `mupdf-forms.ts`, the only files that touch the engine. |
+| `lib/pdf-merger/{protocol,pdf.worker,client}` | The `edit-*` requests, beside the other tools' in the one worker.                                                                     |
+| `components/pdf-editor/`                      | The tool's page, the state hook, the toolbar, the layer over a page, the written help.                                                |
+| `public/fonts/editor/`                        | Twelve Liberation font files and four that look written by hand (5.4 MB), with their licences. Part of the offline copy.              |
 
 ## Rules
 
-- Only `lib/pdf-editor/mupdf-edit.ts` touches the engine, and it is handed the engine, so the same code runs in the worker and in Node.
+- Only `lib/pdf-editor/mupdf-edit.ts`, `mupdf-comments.ts` and `mupdf-forms.ts` touch the engine, and each is handed the engine, so the same code runs in the worker and in Node.
+- Nothing a file brings with it is run. A form's script is read as text at most (to learn how a date is written).
 - Never save the working copy with `garbage`, and never keep a page object across a change.
 - Everything that comes from a file or from the page goes through `readObject` before it is drawn. A thing it does not know is left alone.
 - An appearance is set last, with no `update()` after it.
@@ -141,7 +159,10 @@ The report (`ExportReport`) becomes the lines in the download card (`lib/pdf-edi
 
 ## Limits
 
-- Words that are already in the file cannot be changed yet (phase 4), nor can form fields be added or filled (phases 3 and 8).
+- Words that are already in the file cannot be changed yet (phase 4), nor can form fields be added (phase 8).
+- A form's scripts are never run: a field a script would format or work out holds what was typed. XFA forms are not read. Read-only fields, push buttons and places for a certificate signature are left as they are.
+- A list's look is ours, in Helvetica: a letter that font lacks is left out of the picture of the list (the choice itself is kept). A drop-down shows the value the file keeps, which a few forms make different from what they show.
+- A date field takes three presses of Tab in some browsers, one for each part of the date.
 - A signature is a mark on the page, not a certificate: it does not prove who signed, and a file that already carries a digital signature no longer counts as signed once it is changed (the editor says so when such a file is opened).
 - Taking the paper out of a picture of a signature needs light, plain paper. Lined or dark paper, or a shadow across the photo, is taken for ink.
 - A mark on words cannot be moved or stretched once made; it is deleted and made again. A comment of a kind the editor does not make keeps its place and its look.
@@ -161,13 +182,14 @@ The report (`ExportReport`) becomes the lines in the download card (`lib/pdf-edi
 - **Stamps, call-outs and measuring lines:** `measure.test.ts` and `marks.test.ts` (100%), `marks.node.test.ts` with the real engine (a stamp's words read by pdf.js inside its frame, turned, and on a turned page; labels in every unit and by a scale, also on a line shorter than its label; a call-out's frame, white inside and arrow, and its point moved and undone; all three read back from a file that kept them), and three journeys in `e2e/pdf-editor.spec.ts`.
 - **Comments:** `comments.test.ts` (100%), `comments.node.test.ts` with the real engine (marks on plain and turned pages, read back by pdf.js with author, colour and date; notes and a reply to a reply; a pen; a file's own note; another program's shapes left as they are; undo among the editor's other steps; kept, drawn in and left out, with links and fields surviving), and `e2e/pdf-annotator.spec.ts` on five profiles.
 - **Signing:** `signature.test.ts` (100%), the signing part of `marks.node.test.ts` with the real engine (a typed signature read by pdf.js in a hand font cut to its letters; a drawn one, a tick, a cross and a dot in the page's pixels), and `e2e/pdf-signer.spec.ts` on five profiles: drawn, typed and pictured signatures (the picture read back from the download with its paper see-through and its ink still blue), initials, the date, ticks and crosses, remembering and forgetting, things landing where the page is being read, and the window's accessibility in each of its states.
+- **Forms:** `forms.test.ts` (100%), `forms.node.test.ts` with the real engine (every kind read with its label, limits and place, also on a turned page; every kind filled in and read back by pdf-lib and pdf.js; round buttons across pages; a field shown on two pages; clearing; undo and redo; what is refused makes no step; a list's tinted bar in the page's pixels, upright on a turned page; fields made part of the page with their words read by pdf.js, in a locked result), and `e2e/pdf-form-filler.spec.ts` on five profiles: every kind by mouse and keyboard, Tab order, Escape, what is missing and the way to it, typing that is still under way at Download, the final copy, files with no form, XFA and scripts, a tool drawn over a field, the sample, axe in every state.
 - **Offline** (`e2e/offline.spec.ts`): text is typed, a signature is typed in a hand font, and both are downloaded with the server stopped, which needs the fonts from the saved copy.
 
 ## The phases
 
 1. **The workspace, and adding things.** Built.
 2. **Mark up and comment.** Built: marks on words, the highlighter pen, notes and replies, the list of comments, comments a file comes with, the PDF annotator page, stamps, call-outs and measuring lines.
-3. **Fill and sign.** Built so far: drawn, typed and pictured signatures, initials, the date, ticks and crosses, and the Sign PDF page. Still to come: form fields and the Fill PDF form page, text in comb boxes, saving so that a digital signature stays valid, and drafts kept on the device when asked.
+3. **Fill and sign.** Built so far: drawn, typed and pictured signatures, initials, the date, ticks and crosses, and the Sign PDF page. Also built: filling in a form's own fields, with the Fill PDF form page. Still to come: text in comb boxes on forms without fields, saving so that a digital signature stays valid, and drafts kept on the device when asked.
 4. **Change the text that is there,** in the file's own font where it has the letters, with the old words gone from the file.
 5. **Paragraphs, pictures in the page, links, find and replace.**
 6. **Pages and the document:** reorder, crop, numbers, watermarks, bookmarks, details. Focused pages: Add page numbers, Watermark PDF, Crop PDF.

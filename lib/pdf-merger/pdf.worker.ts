@@ -45,6 +45,7 @@ import { HelperCodecs, type HelperPort } from "@/lib/pdf-compressor/helpers"
 import { auditPdf, type Audit } from "@/lib/pdf-compressor/mupdf-audit"
 import type { Stage } from "@/lib/pdf-compressor/report"
 import type { LetterLine } from "@/lib/pdf-editor/comments"
+import { applyFields, fieldsOn, formFacts } from "@/lib/pdf-editor/mupdf-forms"
 import {
   compressCustom,
   compressPdf,
@@ -525,10 +526,13 @@ function editState(request: Extract<PdfRequest, { type: "edit-state" }>) {
   try {
     if (session && pdf) {
       const sizes = editSizes(session)
+      const fields = sizes.map((_, page) => fieldsOn(session, page))
       state = {
         sizes,
         objects: sizes.map((_, page) => objectsOn(session, page)),
         comments: sizes.map((_, page) => commentsOn(session, page)),
+        fields,
+        form: formFacts(session.doc, fields),
         history: historyOf(session),
         bookmarks: pdf.bookmarks,
       }
@@ -561,6 +565,7 @@ function newsOf(
       page,
       objects: objectsOn(session, page),
       comments: commentsOn(session, page),
+      fields: fieldsOn(session, page),
     })),
     history: historyOf(session),
     lacking: [...lacking],
@@ -594,6 +599,26 @@ async function editComment(
   try {
     if (!session) throw new Error(EDIT_FAILED)
     const pages = applyComments(await engine, session, request.change)
+    post({
+      type: "edit-news",
+      request: request.request,
+      news: newsOf(session, pages),
+    })
+  } catch (error) {
+    post({
+      type: "edit-news",
+      request: request.request,
+      news: null,
+      message: readable(error, EDIT_FAILED),
+    })
+  }
+}
+
+async function editField(request: Extract<PdfRequest, { type: "edit-field" }>) {
+  const session = editing.get(request.id)
+  try {
+    if (!session) throw new Error(EDIT_FAILED)
+    const pages = applyFields(await engine, session, request.change)
     post({
       type: "edit-news",
       request: request.request,
@@ -683,6 +708,7 @@ async function editExport(
     const result = await exportEdited(await engine, session, {
       keepEditable: request.keepEditable,
       comments: request.comments,
+      fields: request.fields,
       lock: request.lock ?? undefined,
       checkpoint: async () => {
         if (job <= cancelled) throw new Cancelled()
@@ -970,6 +996,8 @@ self.onmessage = (event: MessageEvent<PdfRequest>) => {
     enqueue({ run: () => editApply(request) })
   else if (request.type === "edit-comment")
     enqueue({ run: () => editComment(request) })
+  else if (request.type === "edit-field")
+    enqueue({ run: () => editField(request) })
   else if (request.type === "edit-letters")
     enqueue({ run: async () => editLetters(request) })
   else if (request.type === "edit-step")

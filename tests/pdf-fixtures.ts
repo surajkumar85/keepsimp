@@ -481,3 +481,120 @@ export function damage(bytes: Uint8Array, how: "table" | "cut" | "junk") {
         : `${text}\n<html>not part of the file</html>\n`
   return new Uint8Array(Buffer.from(changed, "latin1"))
 }
+
+export interface FormOptions {
+  /** Quarter turns stored on the first page, in degrees. */
+  rotate?: number
+  /** Say that the form is also of the XFA kind, and that a script works a field out. */
+  scripted?: boolean
+}
+
+/** Where each field of the form below is, in points from the top left of its page as pdf-lib counts (from the bottom). */
+export const FORM_SIZE: [number, number] = [400, 600]
+
+/**
+ * A form of two pages with one field of every kind, written by pdf-lib.
+ *
+ * Page 1: "applicant.full_name" (must be filled in, with a hint, and shown
+ * again on page 2), "notes" (several lines), "code" (six boxes), "locked"
+ * (cannot be changed), "born" (a date as dd/mm/yyyy), "agree" (a tick box
+ * that must be ticked), "colour" (round buttons red and blue, and green on
+ * page 2), "country" (a drop-down), "city" (a drop-down that takes other
+ * words), "fruit" (a list that takes several) and "unseen" (hidden).
+ */
+export async function makeFormPdf(options: FormOptions = {}) {
+  const doc = await PDFDocument.create()
+  const font = await doc.embedFont(StandardFonts.Helvetica)
+  const first = doc.addPage(FORM_SIZE)
+  const second = doc.addPage(FORM_SIZE)
+  first.drawText("form-P1", { x: 20, y: 570, size: 12, font })
+  second.drawText("form-P2", { x: 20, y: 570, size: 12, font })
+  const form = doc.getForm()
+  const at = (x: number, y: number, width: number, height: number) => ({
+    x,
+    y,
+    width,
+    height,
+    font,
+  })
+
+  const name = form.createTextField("applicant.full_name")
+  name.enableRequired()
+  name.acroField.dict.set(
+    PDFName.of("TU"),
+    PDFHexString.fromText("Your full name")
+  )
+  name.addToPage(first, at(20, 520, 200, 20))
+  name.addToPage(second, at(20, 520, 200, 20))
+
+  const notes = form.createTextField("notes")
+  notes.enableMultiline()
+  notes.addToPage(first, at(20, 430, 240, 70))
+  notes.setFontSize(10)
+
+  const code = form.createTextField("code")
+  code.setMaxLength(6)
+  code.enableCombing()
+  code.addToPage(first, at(20, 395, 150, 20))
+
+  const locked = form.createTextField("locked")
+  locked.setText("fixed")
+  locked.enableReadOnly()
+  locked.addToPage(first, at(240, 520, 100, 20))
+
+  const born = form.createTextField("born")
+  born.acroField.dict.set(
+    PDFName.of("AA"),
+    doc.context.obj({
+      F: {
+        S: "JavaScript",
+        JS: PDFString.of('AFDate_FormatEx("dd/mm/yyyy");'),
+      },
+    })
+  )
+  born.addToPage(first, at(240, 395, 100, 20))
+
+  const agree = form.createCheckBox("agree")
+  agree.enableRequired()
+  agree.addToPage(first, at(20, 360, 16, 16))
+
+  const colour = form.createRadioGroup("colour")
+  colour.addOptionToPage("red", first, at(20, 325, 16, 16))
+  colour.addOptionToPage("blue", first, at(60, 325, 16, 16))
+  colour.addOptionToPage("green", second, at(20, 480, 16, 16))
+
+  const country = form.createDropdown("country")
+  country.addOptions(["India", "France", "Japan"])
+  country.addToPage(first, at(20, 285, 150, 20))
+
+  const city = form.createDropdown("city")
+  city.addOptions(["Pune", "Lyon"])
+  city.enableEditing()
+  city.addToPage(first, at(200, 285, 150, 20))
+
+  const fruit = form.createOptionList("fruit")
+  fruit.addOptions(["Apple", "Pear", "Plum"])
+  fruit.enableMultiselect()
+  fruit.addToPage(first, at(20, 200, 150, 60))
+
+  const unseen = form.createTextField("unseen")
+  unseen.addToPage(first, { ...at(300, 100, 50, 20), hidden: true })
+
+  if (options.rotate)
+    first.node.set(PDFName.of("Rotate"), doc.context.obj(options.rotate))
+  const bytes = await doc.save()
+  if (!options.scripted) return bytes
+  // pdf-lib takes the XFA part out of a form it writes the looks of, so it
+  // is put in afterwards and the file written as it then stands.
+  const again = await PDFDocument.load(bytes, { preserveXFA: true } as never)
+  const acro = again.catalog.lookup(PDFName.of("AcroForm")) as never as {
+    set(key: PDFName, value: unknown): void
+    get(key: PDFName): { get(index: number): unknown }
+  }
+  acro.set(PDFName.of("XFA"), again.context.obj([]))
+  acro.set(
+    PDFName.of("CO"),
+    again.context.obj([acro.get(PDFName.of("Fields")).get(0)] as never)
+  )
+  return again.save({ updateFieldAppearances: false })
+}

@@ -58,7 +58,7 @@ test("the search in the top bar finds tools and opens them", async ({
   await expect(box).toBeFocused()
   const options = dialog.getByRole("option")
   // With nothing typed, every tool is offered, working tools first.
-  await expect(options).toHaveCount(17)
+  await expect(options).toHaveCount(18)
   await expect(options.first()).toContainText("Image compressor")
   await expect(options.first()).toHaveAttribute("aria-selected", "true")
   // Both converters write WebP; only one of them makes boomerangs.
@@ -80,7 +80,7 @@ test("the search in the top bar finds tools and opens them", async ({
 
   // Arrow keys move between tools that can be opened, going round at the ends.
   await box.fill("pdf")
-  await expect(options).toHaveCount(6)
+  await expect(options).toHaveCount(7)
   await expect(options.nth(0)).toHaveAttribute("aria-selected", "true")
   await box.press("ArrowDown")
   await expect(options.nth(1)).toHaveAttribute("aria-selected", "true")
@@ -93,9 +93,11 @@ test("the search in the top bar finds tools and opens them", async ({
   await box.press("ArrowDown")
   await box.press("ArrowDown")
   await box.press("ArrowDown")
+  await box.press("ArrowDown")
   await expect(options.nth(0)).toHaveAttribute("aria-selected", "true")
   await box.press("ArrowUp")
-  await expect(options.nth(5)).toHaveAttribute("aria-selected", "true")
+  await expect(options.nth(6)).toHaveAttribute("aria-selected", "true")
+  await box.press("ArrowUp")
   await box.press("ArrowUp")
   await box.press("ArrowUp")
   await box.press("ArrowUp")
@@ -200,7 +202,7 @@ test("theme persists and both themes pass accessibility checks", async ({
     // The search, with its list open and a tool chosen.
     await page.getByTestId("search-button").click()
     const search = page.getByRole("dialog", { name: "Search tools" })
-    await expect(search.getByRole("option")).toHaveCount(17)
+    await expect(search.getByRole("option")).toHaveCount(18)
     const open = await new AxeBuilder({ page })
       .include("[role=dialog]")
       .withTags(["wcag2a", "wcag2aa", "wcag21aa"])
@@ -327,7 +329,7 @@ test("navigation remains usable at 320px", async ({ page }) => {
   // The search still fits, as a round button, and its list fits the screen.
   await page.getByTestId("search-button").click()
   const search = page.getByRole("dialog", { name: "Search tools" })
-  await expect(search.getByRole("option")).toHaveCount(17)
+  await expect(search.getByRole("option")).toHaveCount(18)
   const box = await search.boundingBox()
   expect(box!.x).toBeGreaterThanOrEqual(0)
   expect(box!.x + box!.width).toBeLessThanOrEqual(320)

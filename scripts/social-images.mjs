@@ -115,6 +115,12 @@ const cards = [
     "/images/pdf-sign-guide.svg",
   ],
   [
+    "fill-pdf-forms-without-uploading",
+    "Fill it in. Keep it yours.",
+    "Type, tick, choose and sign any PDF form.",
+    "/images/pdf-form-guide.svg",
+  ],
+  [
     "repair-compare-json-patch",
     "Preview every JSON change.",
     "Repair, compare and apply JSON Patch locally.",

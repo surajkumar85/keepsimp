@@ -28,6 +28,7 @@ import { cssColour } from "@/lib/pdf-editor/styles"
 import { shown, turnHandle, turns } from "@/lib/pdf-editor/tools"
 import { cn } from "cn"
 import { CommentMarks, CommentSpots } from "./comment-layer"
+import { FieldSpots } from "./field-layer"
 import type { Comments } from "./use-comments"
 import { laidOut, pagePoint, type Editor } from "./use-editor"
 
@@ -269,6 +270,11 @@ export function PageLayer({
         list={marks}
         page={page}
         scale={scale}
+        idle={!drawing && !gesture && !mine}
+      />
+      <FieldSpots
+        editor={editor}
+        page={page}
         idle={!drawing && !gesture && !mine}
       />
       {objects.map((object) => {

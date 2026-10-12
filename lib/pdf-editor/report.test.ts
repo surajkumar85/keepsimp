@@ -10,6 +10,7 @@ const report = (change: Partial<ExportReport> = {}): ExportReport => ({
   fontsCut: false,
   locked: false,
   comments: { had: 0, how: "keep", has: 0 },
+  fields: { had: 0, how: "keep", same: 0, left: 0 },
   ...change,
 })
 
@@ -180,5 +181,52 @@ describe("checkLines", () => {
       text: "2 comments could not be made part of the page and are still in the result as comments.",
       good: false,
     })
+  })
+})
+
+describe("what became of a form", () => {
+  const told = (fields: ExportReport["fields"], added = 0) =>
+    everyLine(report({ added, fields }))
+
+  it("does not say nothing was done when a form was filled in", () => {
+    expect(everyLine(report({ added: 0 })).map((line) => line.text)).toEqual([
+      "Nothing was added. The file was written again as it is.",
+    ])
+    expect(told({ had: 3, how: "keep", same: 3, left: 3 })).toEqual([
+      {
+        text: "The form's 3 fields were read back from the result with what they hold, and can still be filled in.",
+        good: true,
+      },
+    ])
+    expect(told({ had: 1, how: "keep", same: 1, left: 1 })[0].text).toBe(
+      "The form's 1 field was read back from the result with what it holds, and can still be filled in."
+    )
+  })
+
+  it("says when the fields were made part of the page", () => {
+    expect(told({ had: 1200, how: "flatten", same: 0, left: 0 })[0]).toEqual({
+      text: "The form's 1,200 fields are part of the page now and can no longer be changed.",
+      good: true,
+    })
+    expect(told({ had: 1, how: "flatten", same: 0, left: 0 })[0].text).toBe(
+      "The form's 1 field is part of the page now and can no longer be changed."
+    )
+  })
+
+  it("warns when the result does not hold what was filled in", () => {
+    expect(told({ had: 5, how: "keep", same: 3, left: 5 })[0]).toEqual({
+      text: "2 of the form's 5 fields do not hold in the result what they hold here. Read the result before you rely on it.",
+      good: false,
+    })
+    expect(told({ had: 5, how: "keep", same: 4, left: 5 })[0].text).toBe(
+      "1 of the form's 5 fields does not hold in the result what it holds here. Read the result before you rely on it."
+    )
+    expect(told({ had: 5, how: "flatten", same: 0, left: 2 })[0]).toEqual({
+      text: "2 fields could not be made part of the page and are still in the result as fields.",
+      good: false,
+    })
+    expect(told({ had: 5, how: "flatten", same: 0, left: 1 })[0].text).toBe(
+      "1 field could not be made part of the page and is still in the result as a field."
+    )
   })
 })

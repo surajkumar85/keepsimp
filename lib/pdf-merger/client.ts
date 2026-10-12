@@ -3,6 +3,7 @@
 import { poolSize } from "@/lib/image-batch/pool"
 import type { Size } from "@/lib/image-compressor/geometry"
 import type { CommentChange, LetterLine } from "@/lib/pdf-editor/comments"
+import type { FieldChange } from "@/lib/pdf-editor/forms"
 import type { ExportReport } from "@/lib/pdf-editor/mupdf-edit"
 import type { Change } from "@/lib/pdf-editor/tools"
 import type { Audit } from "@/lib/pdf-compressor/mupdf-audit"
@@ -466,6 +467,15 @@ export class PdfClient {
     })
   }
 
+  /** Fill fields of a form in, as one step; what the pages hold afterwards. */
+  editField(id: string, change: FieldChange) {
+    return new Promise<EditNews>((resolve, reject) => {
+      const request = ++this.requests
+      this.editNews.set(request, { resolve, reject })
+      this.send({ type: "edit-field", id, request, change })
+    })
+  }
+
   /** The letters of a page with their boxes; null when the page cannot be read. */
   lettersOf(id: string, page: number) {
     return new Promise<LetterLine[] | null>((resolve) => {
@@ -490,6 +500,7 @@ export class PdfClient {
     options: {
       keepEditable: boolean
       comments: "keep" | "flatten" | "remove"
+      fields: "keep" | "flatten"
       lock: Lock | null
     }
   ) {

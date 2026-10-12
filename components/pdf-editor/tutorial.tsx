@@ -49,6 +49,11 @@ const content: TutorialContent = {
         "A filled box that hides what is under it. It only covers: the words underneath are still in the file and can be copied out by anyone. Do not use it to hide private information. Redaction, which removes what is under it, comes in a later version.",
     },
     {
+      term: "Form fields",
+      detail:
+        "A form's own fields are tinted and can be typed in, ticked and chosen from; Tab goes from one to the next, and a line above the page says what must still be filled in. When you download, the form keeps its fields or they become part of the page. A form's scripts are never run, so totals it would work out are yours to fill in.",
+    },
+    {
       term: "Signing, dates and ticks",
       detail:
         "Sign opens a window where your signature is drawn, typed in a hand of your choice, or taken from a picture with the paper removed; it lands in the middle of the page to be dragged into place. One button adds today's date. The tick tool marks the boxes of a paper form with ticks, crosses or dots, one press each. A signature made here is like ink on paper, not a certificate.",
@@ -259,6 +264,92 @@ const signing: TutorialContent = {
     },
   ],
   guideHref: "/blog/sign-pdfs-without-uploading/",
+}
+
+const filling: TutorialContent = {
+  name: "How to fill in a PDF form with KeepSimp",
+  description:
+    "Fill in a PDF form in your browser: type into its fields, tick its boxes, choose from its lists, sign it and download. Nothing is uploaded.",
+  intro: "Follow the steps below. Every option is explained underneath.",
+  steps: [
+    {
+      title: "Open the form",
+      text: "Drop the PDF, choose it from your device or paste it. A locked file asks for its password. The fields of the form are tinted so that you can see where to type.",
+    },
+    {
+      title: "Fill in the fields",
+      text: "Click a field and type, or press Tab to go from one field to the next. Tick boxes and round buttons are pressed; lists and drop-downs are chosen from; a date field opens a calendar.",
+    },
+    {
+      title: "See what is missing",
+      text: "The line above the page says how many fields there are and how many that must be filled in are still empty. Go to the next one takes you there.",
+    },
+    {
+      title: "Sign it, if it asks",
+      text: "Press Sign to draw, type or use a picture of your signature, and drag it to its line. The calendar button adds today's date.",
+    },
+    {
+      title: "Download",
+      text: "Choose whether the form keeps its fields or everything becomes part of the page, then press Download. The file is read back and checked before your browser saves it.",
+    },
+  ],
+  options: [
+    {
+      term: "Text fields",
+      detail:
+        "A line or several lines of text. A field with a limit takes no more letters than its limit. What you type goes into the file when you leave the field or press Enter; Escape leaves it as it was.",
+    },
+    {
+      term: "Tick boxes and round buttons",
+      detail:
+        "Press to tick, press again to clear. Of a group of round buttons one is chosen, and choosing another turns the first off, also when they are on different pages.",
+    },
+    {
+      term: "Drop-downs and lists",
+      detail:
+        "A drop-down takes one of its choices, or nothing; some also take words of your own. A list shows its options, and takes several where the form allows it.",
+    },
+    {
+      term: "Dates",
+      detail:
+        "A field the form marks as a date opens your device's calendar, and the day is written the way the form asks for it, such as 02/10/2026.",
+    },
+    {
+      term: "Fields that must be filled in",
+      detail:
+        "They have a red frame until they are filled in. Nothing stops you from downloading a form with some still empty; the line above the page only tells you.",
+    },
+    {
+      term: "Keep as fields, or part of the page",
+      detail:
+        "Keep as fields leaves a form that can be filled in again and changed, here or in another program. Part of the page draws what the fields hold into the page, so that nothing can be changed afterwards.",
+    },
+    {
+      term: "Forms without fields",
+      detail:
+        "Many forms are only a picture of a form. Fill those in like paper: the text tool types anywhere, the tick tool places ticks, crosses and dots, and Sign places your signature.",
+    },
+    {
+      term: "What is not done",
+      detail:
+        "A form's scripts are never run, so a total the form would work out stays as it is: fill it in yourself. Forms of the XFA kind, which only Adobe's programs fill in, say so when they are opened. Fields that cannot be changed, push buttons and places for a certificate signature are left as they are.",
+    },
+    {
+      term: "Undo",
+      detail:
+        "Every field you fill in is a step that Ctrl or ⌘ Z takes back. The file lives in this tab only; closing it with changes that were not downloaded asks first.",
+    },
+    {
+      term: "All tools",
+      detail:
+        "This page is the PDF editor, opened for filling in forms. All tools shows the rest: pictures, shapes, stamps, highlights and notes.",
+    },
+  ],
+  guideHref: "/blog/fill-pdf-forms-without-uploading/",
+}
+
+export function PdfFormTutorial() {
+  return <ToolTutorial content={filling} />
 }
 
 export function PdfSignerTutorial() {
