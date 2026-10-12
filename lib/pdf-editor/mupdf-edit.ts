@@ -1277,16 +1277,27 @@ export async function exportEdited(
       for (const op of (step.done.change as TextChange).ops) {
         // The line as it was written the time before: it begins where it
         // began, and says what this change found there.
-        const at = rewritten.findIndex(
-          (one) =>
-            one.page === op.page &&
-            Math.abs(one.box.x - op.box.x) <= 3 &&
-            Math.abs(one.box.y - op.box.y) <= 3 &&
-            squeezed(one.text) === squeezed(op.was)
-        )
-        if (at >= 0) rewritten.splice(at, 1)
+        // Of the lines written before that say what this change found, the
+        // nearest: a line may have been moved or made larger since.
+        const far = (one: { box: Box }) =>
+          Math.hypot(one.box.x - op.box.x, one.box.y - op.box.y)
+        const [was] = rewritten
+          .filter(
+            (one) =>
+              one.page === op.page && squeezed(one.text) === squeezed(op.was)
+          )
+          .sort((a, b) => far(a) - far(b))
+        if (was) rewritten.splice(rewritten.indexOf(was), 1)
         if (op.text.trim())
-          rewritten.push({ page: op.page, box: op.box, text: op.text })
+          rewritten.push({
+            page: op.page,
+            box: {
+              ...op.box,
+              x: op.box.x + (op.move?.x ?? 0),
+              y: op.box.y + (op.move?.y ?? 0),
+            },
+            text: op.text,
+          })
       }
     }
     const textPages = [

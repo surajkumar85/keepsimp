@@ -41,7 +41,7 @@ import {
   type Signature,
   type SignatureSlot,
 } from "@/lib/pdf-editor/signature"
-import { standIns, type PageLine } from "@/lib/pdf-editor/retext"
+import { standIns, type LineLook, type PageLine } from "@/lib/pdf-editor/retext"
 import { breakLines, combLine } from "@/lib/pdf-editor/text-layout"
 import {
   applied,
@@ -481,9 +481,16 @@ export function useEditor(
    * ready first. It is seen when the file has answered.
    */
   const retext = useCallback(
-    async (page: number, line: PageLine, text: string) => {
+    async (
+      page: number,
+      line: PageLine,
+      text: string,
+      look?: LineLook,
+      move?: Point
+    ) => {
       try {
-        if (standIns(line, text).length)
+        if (look?.font) await ensureFont(look.font)
+        else if (standIns(line, text).length)
           for (const key of new Set(line.styles.map((style) => style.standIn)))
             await ensureFont(key)
       } catch {
@@ -493,8 +500,22 @@ export function useEditor(
       flush()
       return enqueue((worker) =>
         worker.editText(file, {
-          label: text ? "Change text" : "Take out text",
-          ops: [{ do: "retext", page, box: line.box, was: line.text, text }],
+          label: !text
+            ? "Take out text"
+            : move && text === line.text && !look
+              ? "Move text"
+              : "Change text",
+          ops: [
+            {
+              do: "retext",
+              page,
+              box: line.box,
+              was: line.text,
+              text,
+              ...(look ? { look } : null),
+              ...(move ? { move } : null),
+            },
+          ],
         })
       )
     },

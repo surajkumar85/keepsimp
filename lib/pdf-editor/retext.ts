@@ -11,7 +11,7 @@
  * where the letters go, and the text of what is written into the page.
  */
 import type { Box, Point } from "./geometry"
-import type { Colour } from "./objects"
+import { FONT_KEYS, LARGEST_TEXT, SMALLEST_TEXT, type Colour } from "./objects"
 
 /** The look some letters of a line have. */
 export interface LineStyle {
@@ -36,6 +36,8 @@ export interface PageLine {
   box: Box
   /** Where its first letter starts, on the line it is written on. */
   origin: Point
+  /** The way it runs, as the page is shown: one point along it. Across the page from the left is 1, 0. */
+  along: Point
   /** The looks its letters have. */
   styles: LineStyle[]
   /** Which of them each letter has, a number for every letter of `text`. */
@@ -44,7 +46,19 @@ export interface PageLine {
   fixed?: string
 }
 
-/** Change what a line says. With nothing to say, the line is taken out. */
+/** Another look for a whole line. What is left out stays as it is. */
+export interface LineLook {
+  /** The size of its letters, in points. Letters of another size on the line, a raised mark, change in proportion. */
+  size?: number
+  colour?: Colour
+  /** One of the editor's fonts, by its key: the whole line is set in it, and no longer in the file's. */
+  font?: string
+}
+
+/**
+ * Change a line: what it says, how it looks, where it is. With nothing to
+ * say, the line is taken out.
+ */
 export interface TextOp {
   do: "retext"
   page: number
@@ -53,6 +67,9 @@ export interface TextOp {
   /** What it says now, to be sure of changing the line that was meant. */
   was: string
   text: string
+  look?: LineLook
+  /** How far to move it, in points as the page is shown. */
+  move?: Point
 }
 
 export interface TextChange {
@@ -60,8 +77,39 @@ export interface TextChange {
   ops: TextOp[]
 }
 
-/** The longest a line is made. */
+/** The longest a line is made, and the furthest it is moved at once. */
 export const LONGEST_LINE = 2000
+export const FURTHEST_MOVE = 5000
+
+const isPart = (value: unknown) => isNumber(value) && value >= 0 && value <= 1
+
+/** Another look for a line as it arrives, with only what a look is; undefined when there is nothing of one in it. */
+function readLook(value: unknown): LineLook | undefined {
+  if (typeof value !== "object" || value === null) return undefined
+  const given = value as Record<string, unknown>
+  const look: LineLook = {}
+  if (isNumber(given.size))
+    look.size = Math.min(LARGEST_TEXT, Math.max(SMALLEST_TEXT, given.size))
+  if (
+    Array.isArray(given.colour) &&
+    given.colour.length === 3 &&
+    given.colour.every(isPart)
+  )
+    look.colour = [given.colour[0], given.colour[1], given.colour[2]]
+  if (typeof given.font === "string" && FONT_KEYS.includes(given.font))
+    look.font = given.font
+  return Object.keys(look).length ? look : undefined
+}
+
+/** How far to move a line as it arrives; undefined when it is nowhere or nothing. */
+function readMove(value: unknown): Point | undefined {
+  if (typeof value !== "object" || value === null) return undefined
+  const { x, y } = value as Record<string, unknown>
+  if (!isNumber(x) || !isNumber(y) || (!x && !y)) return undefined
+  const within = (by: number) =>
+    Math.min(FURTHEST_MOVE, Math.max(-FURTHEST_MOVE, by))
+  return { x: within(x), y: within(y) }
+}
 
 const isNumber = (value: unknown): value is number =>
   typeof value === "number" && Number.isFinite(value)
@@ -87,6 +135,8 @@ export function readTextOp(value: unknown): TextOp | null {
     !isNumber(box.height)
   )
     return null
+  const look = readLook(op.look)
+  const move = readMove(op.move)
   return {
     do: "retext",
     page: op.page as number,
@@ -94,7 +144,37 @@ export function readTextOp(value: unknown): TextOp | null {
     was: op.was,
     // A line is one line.
     text: op.text.replace(/[\r\n]+/g, " "),
+    ...(look ? { look } : null),
+    ...(move ? { move } : null),
   }
+}
+
+/** The look most letters of a line have: the one its size and colour are told by. */
+export function mainStyle(line: Pick<PageLine, "styles" | "looks">) {
+  const counts = new Map<number, number>()
+  for (const look of line.looks) counts.set(look, (counts.get(look) ?? 0) + 1)
+  const [most] = [...counts].sort((a, b) => b[1] - a[1])
+  return line.styles[most?.[0] ?? 0]
+}
+
+/**
+ * The looks of a line with another look laid over them: a new size scales
+ * every look by as much as it scales the main one, so that a raised mark
+ * stays as small and as high beside its letters; a colour is for all.
+ */
+export function restyled(
+  line: Pick<PageLine, "styles" | "looks">,
+  look: LineLook | undefined
+): LineStyle[] {
+  if (!look) return line.styles
+  const main = mainStyle(line)
+  const by = look.size && main ? look.size / main.size : 1
+  return line.styles.map((style) => ({
+    ...style,
+    size: Math.round(style.size * by * 100) / 100,
+    rise: Math.round(style.rise * by * 100) / 100,
+    colour: look.colour ?? style.colour,
+  }))
 }
 
 /** Text with every run of spaces as one, and none at its ends: how two readings of a line are compared. */
@@ -160,8 +240,9 @@ export function lacking(text: string, letters: string) {
   ]
 }
 
-/** The letters of a line's new words that will be set in a stand-in font, each once. */
-export function standIns(line: PageLine, text: string) {
+/** The letters of a line's new words that will be set in a stand-in font, each once. None when the whole line is set in one of the editor's. */
+export function standIns(line: PageLine, text: string, look?: LineLook) {
+  if (look?.font) return []
   const looks = spreadLooks(line.text, text, line.looks)
   const letters = Array.from(text)
   return [
@@ -173,6 +254,29 @@ export function standIns(line: PageLine, text: string) {
       )
     ),
   ]
+}
+
+const MONO = /mono|courier|consol|typewriter|sftt|menlo|fixed/i
+const SANS =
+  /sans|nimbussan|helvet|arial|frutiger|gothic|grotesk|verdana|tahoma|calibri|roboto|inter\b|segoe|univers|futura|avenir|gill|myriad|lato|din\b|akzidenz|optima/i
+const SERIF =
+  /serif|times|roman|nimbusrom|georgia|garamond|minion|palatino|baskerville|bodoni|caslon|century|cambria|book|didot/i
+
+/**
+ * Which of the editor's three kinds of font is closest to a font of the
+ * file: by its name when the name is one that is known, and by what the
+ * file says of it when it is not.
+ */
+export function familyOf(
+  name: string,
+  mono: boolean,
+  serif: boolean
+): "mono" | "sans" | "serif" {
+  if (MONO.test(name)) return "mono"
+  // "Sans" is looked for first: it is in "Sans Serif" too.
+  if (SANS.test(name)) return "sans"
+  if (SERIF.test(name)) return "serif"
+  return mono ? "mono" : serif ? "serif" : "sans"
 }
 
 /** How wide a space is where a font has none of its own, as a share of the size of its letters. */
@@ -214,6 +318,8 @@ export interface Run {
   colour: Colour
   /** Where the first letter starts, in the page's points as the page is shown. */
   at: Point
+  /** The way the letters run, as the page is shown. Left out, they run across from the left. */
+  along?: Point
   /** The letters, as the numbers the font knows them by, in hexadecimal. */
   codes: string
 }
@@ -233,8 +339,10 @@ export function contentFor(runs: readonly Run[], toPage: Matrix) {
   if (!runs.length) return ""
   const lines = ["q", "BT", "0 Tr 0 Tc 0 Tw 100 Tz 0 Ts"]
   for (const run of runs) {
-    // Letters stand upright on a page that is shown with y running down.
-    const place = concat([1, 0, 0, -1, run.at.x, run.at.y], toPage)
+    // Letters stand upright on the line they run along, on a page that is
+    // shown with y running down.
+    const { x, y } = run.along ?? { x: 1, y: 0 }
+    const place = concat([x, y, y, -x, run.at.x, run.at.y], toPage)
     lines.push(
       `${run.colour.map(number).join(" ")} rg`,
       `/${run.font} ${number(run.size)} Tf`,
@@ -264,10 +372,16 @@ export interface Glyph {
  * letters that follow each other in one font, size, colour and height are
  * written together. A space no font writes is only room.
  * @param origin Where the first letter starts.
+ * @param along The way the line runs, as the page is shown; across from the left when left out.
  */
-export function runsOf(glyphs: readonly Glyph[], origin: Point): Run[] {
+export function runsOf(
+  glyphs: readonly Glyph[],
+  origin: Point,
+  along: Point = { x: 1, y: 0 }
+): Run[] {
   const runs: Run[] = []
-  let x = origin.x
+  const turned = along.x !== 1 || along.y !== 0
+  let far = 0
   let last: Glyph | null = null
   for (const glyph of glyphs) {
     const same =
@@ -283,13 +397,19 @@ export function runsOf(glyphs: readonly Glyph[], origin: Point): Run[] {
           font: glyph.font,
           size: glyph.size,
           colour: glyph.colour,
-          at: { x, y: origin.y - glyph.rise },
+          // Along the line, and above it by as much as the letter is raised:
+          // "above" is to the left of the way the line runs.
+          at: {
+            x: origin.x + along.x * far + along.y * glyph.rise,
+            y: origin.y + along.y * far - along.x * glyph.rise,
+          },
+          ...(turned ? { along } : null),
           codes: glyph.code,
         })
     }
     // After room that no font wrote, the next letters begin anew.
     last = glyph.font ? glyph : null
-    x += glyph.advance
+    far += glyph.advance
   }
   return runs
 }

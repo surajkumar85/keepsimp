@@ -178,14 +178,6 @@ test("takes a line out, leaves a line as it was, and undoes with the keyboard al
   await expect(line(page, TEXT.tight[0])).toBeVisible()
   await expect(line(page, TEXT.tight[2])).toBeVisible()
 
-  // Text that is turned can be taken out but not retyped, and says so.
-  await line(page, TEXT.turned).click()
-  await expect(field(page)).toHaveAttribute("readonly", "")
-  await expect(
-    reader(page).getByRole("status").filter({ hasText: "turned" })
-  ).toContainText("can be taken out, but its words cannot be changed yet")
-  await page.keyboard.press("Escape")
-
   // Undo and redo.
   await page.keyboard.press("Control+z")
   await changes(page, 1)
@@ -237,10 +229,140 @@ test("puts the tool down when another is taken, and leaves added things and typi
     "true"
   )
   await expect(page.getByTestId("signature-dialog")).toHaveCount(0)
-  // Leaving the field for something else puts the words into the file.
+  // Something chosen in the bar does not end the typing; a press on the page does, and puts the words into the file.
   await pick(page, "Change text").focus()
+  await expect(field(page)).toBeVisible()
+  const layer = page.locator('[data-testid=editor-layer][data-page="1"]')
+  const paper = (await layer.boundingBox())!
+  await page.mouse.click(
+    paper.x + paper.width * 0.85,
+    paper.y + Math.min(paper.height * 0.5, 300)
+  )
   await changes(page, 1)
+  await expect(field(page)).toHaveCount(0)
   await expect(line(page, "Total due: be gentle")).toBeVisible()
+})
+
+test("gives a line another size, colour and font, and says what that does", async ({
+  page,
+}) => {
+  const upload = await text()
+  await open(page, upload)
+  await page.keyboard.press("e")
+  await line(page, TEXT.total).click()
+  await expect(field(page)).toBeFocused()
+  // The bar shows the look of the line: its own font, its size, its colour.
+  const font = reader(page).getByLabel("Font of the line")
+  const size = reader(page).getByLabel("Size of the line")
+  await expect(font).toHaveValue("")
+  await expect(size).toHaveValue("11")
+  await size.fill("16")
+  await page.keyboard.press("Enter")
+  // Enter in the size goes back to the words, which are still being typed.
+  await expect(field(page)).toBeFocused()
+  await reader(page).getByRole("button", { name: "Colour: Blue" }).click()
+  await expect(field(page)).toBeFocused()
+  await page.keyboard.press("Enter")
+  await changes(page, 1)
+  await expect(page.getByTestId("editor-undo")).toHaveAttribute(
+    "aria-label",
+    "Undo: Change text"
+  )
+
+  // The title is set, whole, in one of the editor's fonts: nothing stands in for single letters then.
+  await line(page, TEXT.title).click()
+  await page.keyboard.press("End")
+  await page.keyboard.type(" 2026")
+  await expect(
+    reader(page).getByRole("status").filter({ hasText: "font has no" })
+  ).toBeVisible()
+  await font.selectOption("mono")
+  await expect(
+    reader(page).getByRole("status").filter({ hasText: "font has no" })
+  ).toHaveCount(0)
+  await reader(page).getByRole("button", { name: "Bold", exact: true }).click()
+  await reader(page).getByRole("button", { name: "Done", exact: true }).click()
+  await changes(page, 2)
+
+  const bytes = await saved(page, page.getByTestId("editor-download"))
+  expect(await danglingRefs(bytes)).toEqual([])
+  const [placed] = await textPlaces(bytes)
+  const total = placed.find((run) => run.text === TEXT.total)!
+  expect(total.size).toBeCloseTo(16, 1)
+  const title = placed.find((run) => run.text.includes("Quarterly"))!
+  expect(title.text).toContain("2026")
+  const fonts = (await embeddedFonts(bytes)).map((one) => one.name)
+  expect(fonts.some((name) => name.includes("LiberationMono-Bold"))).toBe(true)
+})
+
+test("moves a line by dragging it and with the arrow keys, and retypes one that is turned", async ({
+  page,
+  isMobile,
+}) => {
+  const upload = await text()
+  await open(page, upload)
+  const before = (await textPlaces(new Uint8Array(upload.buffer)))[0]
+  await page.keyboard.press("e")
+  const warning = line(page, TEXT.warning)
+  await expect(warning).toBeVisible()
+  const from = (await warning.boundingBox())!
+  const layer = (await page
+    .locator('[data-testid=editor-layer][data-page="1"]')
+    .boundingBox())!
+  const scale = layer.width / 400
+  // Dragged 120 points to the right and 30 down.
+  await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(
+    from.x + from.width / 2 + 120 * scale,
+    from.y + from.height / 2 + 30 * scale,
+    { steps: 6 }
+  )
+  await page.mouse.up()
+  await changes(page, 1)
+  await expect(page.getByTestId("editor-undo")).toHaveAttribute(
+    "aria-label",
+    "Undo: Move text"
+  )
+  // A drag is not a press: no field opened.
+  await expect(field(page)).toHaveCount(0)
+
+  // With the keyboard: a point at a time, ten with Shift.
+  await line(page, TEXT.total).focus()
+  await page.keyboard.press("ArrowDown")
+  await changes(page, 2)
+  await line(page, TEXT.total).focus()
+  await page.keyboard.press("Shift+ArrowRight")
+  await changes(page, 3)
+
+  // A line that runs up the page is typed straight and written turned.
+  if (!isMobile) {
+    await line(page, TEXT.turned).click()
+    await expect(
+      reader(page).getByRole("status").filter({ hasText: "turned" })
+    ).toContainText("it is typed here straight and written turned")
+    await field(page).fill("Printed up the side")
+    await page.keyboard.press("Enter")
+    await changes(page, 4)
+  }
+
+  const bytes = await saved(page, page.getByTestId("editor-download"))
+  const [placed] = await textPlaces(bytes)
+  const find = (runs: typeof placed, words: string) =>
+    runs.find((run) => run.text === words)!
+  const moved = find(placed, TEXT.warning)
+  const was = find(before, TEXT.warning)
+  expect(moved.x - was.x).toBeGreaterThan(110)
+  expect(moved.x - was.x).toBeLessThan(130)
+  expect(moved.y - was.y).toBeGreaterThan(24)
+  expect(moved.y - was.y).toBeLessThan(36)
+  const total = find(placed, TEXT.total)
+  expect(total.x - find(before, TEXT.total).x).toBeCloseTo(10, 0)
+  expect(total.y - find(before, TEXT.total).y).toBeCloseTo(1, 0)
+  if (!isMobile) {
+    const turned = find(placed, "Printed up the side")
+    expect(turned.angle).toBe(find(before, TEXT.turned).angle)
+  }
 })
 
 test("stays accessible, local and responsive while text is changed", async ({

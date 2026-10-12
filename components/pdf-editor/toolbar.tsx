@@ -67,6 +67,7 @@ import {
 } from "@/lib/pdf-editor/measure"
 import {
   FONT_FAMILIES,
+  fontKey,
   isComb,
   LARGEST_TEXT,
   LONGEST_STAMP,
@@ -83,6 +84,7 @@ import {
 } from "@/lib/pdf-editor/styles"
 import type { Tool } from "@/lib/pdf-editor/tools"
 import type { Comments } from "./use-comments"
+import { mainStyle } from "@/lib/pdf-editor/retext"
 import { RETEXT_HINT, type Retext } from "./use-retext"
 import type { Editor } from "./use-editor"
 
@@ -380,6 +382,125 @@ function Toggle({
   )
 }
 
+/** Put the keyboard back in the line that is being typed, after something in the bar was chosen for it. */
+const backToLine = () =>
+  requestAnimationFrame(() =>
+    document
+      .querySelector<HTMLInputElement>("[data-testid=editor-retext]")
+      ?.focus()
+  )
+
+/** The families of the editor's own fonts a whole line can be set in. */
+const LINE_FAMILIES = ["sans", "serif", "mono"] as const
+
+/**
+ * The look of the line that is being typed: its size, its colour, and
+ * whether it stays in the file's own font or is set, whole, in one of the
+ * editor's.
+ */
+function LineLookRow({ retext }: { retext: Retext }) {
+  const typing = retext.typing!
+  const style = mainStyle(typing.line)
+  const { look } = typing
+  const family = LINE_FAMILIES.find((one) => look.font?.startsWith(one))
+  const bold = Boolean(look.font?.includes("bold"))
+  const italic = Boolean(look.font?.includes("italic"))
+  const set = (font: string, heavy = bold, slanted = italic) => {
+    retext.setLook({
+      font: font
+        ? fontKey({
+            font: font as (typeof LINE_FAMILIES)[number],
+            bold: heavy,
+            italic: slanted,
+          })
+        : "",
+    })
+    backToLine()
+  }
+  return (
+    <>
+      <label className="flex shrink-0 items-center gap-2 text-xs text-muted-foreground">
+        Font
+        <select
+          aria-label="Font of the line"
+          value={family ?? ""}
+          onChange={(event) => set(event.target.value)}
+          className="h-11 rounded-md border bg-background px-2 text-base text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring md:h-9 md:text-sm"
+        >
+          <option value="">Its own</option>
+          {LINE_FAMILIES.map((one) => (
+            <option key={one} value={one}>
+              {FAMILY_LABELS[one]}
+            </option>
+          ))}
+        </select>
+      </label>
+      {family && (
+        <div
+          role="group"
+          aria-label="Style"
+          className="flex shrink-0 items-center"
+        >
+          <Toggle
+            label="Bold"
+            pressed={bold}
+            onPress={() => set(family, !bold, italic)}
+          >
+            <IconBold aria-hidden="true" />
+          </Toggle>
+          <Toggle
+            label="Italic"
+            pressed={italic}
+            onPress={() => set(family, bold, !italic)}
+          >
+            <IconItalic aria-hidden="true" />
+          </Toggle>
+        </div>
+      )}
+      <label className="flex shrink-0 items-center gap-2 text-xs text-muted-foreground">
+        Size
+        <input
+          type="number"
+          inputMode="decimal"
+          min={SMALLEST_TEXT}
+          max={LARGEST_TEXT}
+          step="any"
+          aria-label="Size of the line"
+          value={look.size ?? style?.size ?? 12}
+          onChange={(event) => {
+            const size = Number(event.target.value)
+            if (size >= SMALLEST_TEXT && size <= LARGEST_TEXT)
+              retext.setLook({ size })
+          }}
+          onKeyDown={(event) => {
+            // Enter in the size goes back to the words; it does not end them.
+            if (event.key !== "Enter") return
+            event.preventDefault()
+            backToLine()
+          }}
+          className="h-11 w-20 rounded-md border bg-background px-2 text-base text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring md:h-9 md:text-sm"
+        />
+      </label>
+      <Swatches
+        label="Colour"
+        value={look.colour ?? style?.colour ?? null}
+        onPick={(colour) => {
+          if (colour) retext.setLook({ colour })
+          backToLine()
+        }}
+      />
+      <Button
+        type="button"
+        variant="outline"
+        onClick={() => retext.finish()}
+        className="shrink-0"
+      >
+        Done
+      </Button>
+    </>
+  )
+}
+
 /** A thin line between groups of a bar. */
 const Rule = () => (
   <span aria-hidden="true" className="mx-1 h-6 w-px shrink-0 bg-border" />
@@ -562,9 +683,12 @@ export function EditorToolbar({
     <div
       data-editor-bar
       className="border-b bg-background"
-      // A press on a button must not take the keyboard from a box being typed in.
+      // A press on a button must not take the keyboard from a box or a line being typed in.
       onMouseDown={(event) => {
-        if (typing && !(event.target as HTMLElement).closest("input"))
+        if (
+          (typing || retext.typing) &&
+          !(event.target as HTMLElement).closest("input, select")
+        )
           event.preventDefault()
       }}
     >
@@ -665,7 +789,9 @@ export function EditorToolbar({
         data-testid="editor-look"
         className="flex h-13 items-center gap-x-4 overflow-x-auto border-t px-2 whitespace-nowrap md:h-11"
       >
-        {comments.tool ? (
+        {retext.typing ? (
+          <LineLookRow retext={retext} />
+        ) : comments.tool ? (
           <>
             <Swatches
               label="Colour"

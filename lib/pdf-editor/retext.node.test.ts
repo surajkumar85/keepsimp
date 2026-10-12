@@ -124,10 +124,16 @@ describe("reading the lines of a page", () => {
     expect(session.reading).toBeUndefined()
   })
 
-  it("says which lines cannot be retyped, and why", async () => {
+  it("reads which way a line runs", async () => {
     const session = startEditing(mupdf, await makeTextPdf())
-    expect(line(session, TEXT.turned).fixed).toContain("turned")
-    expect(line(session, TEXT.total).fixed).toBeUndefined()
+    // Up the page: its first letter is at the foot of it.
+    const turned = line(session, TEXT.turned)
+    expect(turned.fixed).toBeUndefined()
+    expect(turned.along.x).toBeCloseTo(0)
+    expect(turned.along.y).toBeCloseTo(-1)
+    expect(turned.origin.x).toBeCloseTo(380, 0)
+    expect(turned.origin.y).toBeCloseTo(500, 0)
+    expect(line(session, TEXT.total).along).toEqual({ x: 1, y: 0 })
     // On a page the file shows turned, a line that reads upright there is like any other.
     const second = line(session, TEXT.second, 1)
     expect(second.fixed).toBeUndefined()
@@ -293,12 +299,10 @@ describe("changing a line", () => {
     stopEditing(session)
   })
 
-  it("takes a line out when nothing is typed, also one that cannot be retyped", async () => {
+  it("takes a line out when nothing is typed, whichever way it runs", async () => {
     const session = startEditing(mupdf, await makeTextPdf())
     retext(session, line(session, TEXT.linked), "")
-    const turned = line(session, TEXT.turned)
-    expect(() => retext(session, turned, "Printed upright")).toThrow("turned")
-    retext(session, turned, "")
+    retext(session, line(session, TEXT.turned), "")
     expect(said(session)).toEqual(
       ALL.filter((text) => text !== TEXT.linked && text !== TEXT.turned)
     )
@@ -347,6 +351,133 @@ describe("changing a line", () => {
     expect(now.x).toBeCloseTo(was.x, 0)
     expect(now.y).toBeCloseTo(was.y, 0)
     expect(now.angle).toBe(was.angle)
+    stopEditing(session)
+  })
+})
+
+describe("another look and another place", () => {
+  const change = (
+    session: EditSession,
+    was: PageLine,
+    more: { text?: string; look?: object; move?: { x: number; y: number } }
+  ) =>
+    applyText(mupdf, session, {
+      label: "Change text",
+      ops: [
+        {
+          do: "retext",
+          page: 0,
+          box: was.box,
+          was: was.text,
+          text: more.text ?? was.text,
+          ...(more.look ? { look: more.look } : null),
+          ...(more.move ? { move: more.move } : null),
+        } as never,
+      ],
+    })
+
+  it("makes a line larger and another colour in the file's own font", async () => {
+    const original = await makeTextPdf()
+    const session = startEditing(mupdf, original)
+    change(session, line(session, TEXT.total), {
+      look: { size: 16, colour: [0, 0.4, 0.8] },
+    })
+    const now = line(session, TEXT.total)
+    expect(now.styles[0]).toMatchObject({ font: "Helvetica", size: 16 })
+    expect(now.styles[0].colour[2]).toBeCloseTo(0.8)
+    // A raised mark grows with its line and stays as high beside it.
+    change(session, line(session, `${TEXT.area}2`), { look: { size: 22 } })
+    const area = line(session, `${TEXT.area}2`)
+    expect(area.styles.map((style) => [style.size, style.rise])).toEqual([
+      [22, 0],
+      [14, 8],
+    ])
+    const { bytes } = await exportEdited(mupdf, session)
+    const [placed] = await textPlaces(bytes)
+    const total = placed.find((run) => run.text === TEXT.total)!
+    expect(total.size).toBeCloseTo(16, 1)
+    expect(total.x).toBeCloseTo(40, 1)
+    expect(await embeddedFonts(bytes)).toEqual(await embeddedFonts(original))
+    stopEditing(session)
+  })
+
+  it("sets a whole line in one of the editor's fonts when asked", async () => {
+    const session = startEditing(mupdf, await makeTextPdf())
+    const title = line(session, TEXT.title)
+    expect(() =>
+      change(session, title, { look: { font: "mono-bold" } })
+    ).toThrow(FontMissing)
+    give(session, "mono-bold")
+    change(session, title, {
+      text: "Quarterly report 2026",
+      look: { font: "mono-bold" },
+    })
+    const now = line(session, "Quarterly report 2026")
+    expect(now.styles).toHaveLength(1)
+    expect(now.styles[0].font).toMatch(/LiberationMono-Bold/)
+    expect(now.styles[0].size).toBe(18)
+    const { bytes } = await exportEdited(mupdf, session)
+    expect(await danglingRefs(bytes)).toEqual([])
+    const fonts = (await embeddedFonts(bytes)).map((font) => font.name)
+    expect(fonts.some((name) => name.includes("LiberationMono-Bold"))).toBe(
+      true
+    )
+    stopEditing(session)
+  })
+
+  it("moves a line and leaves its words and its look alone", async () => {
+    const original = await makeTextPdf()
+    const session = startEditing(mupdf, original)
+    const was = line(session, TEXT.warning)
+    change(session, was, { move: { x: 150, y: 220 } })
+    const now = line(session, TEXT.warning)
+    expect(now.origin.x).toBeCloseTo(was.origin.x + 150, 1)
+    expect(now.origin.y).toBeCloseTo(was.origin.y + 220, 1)
+    expect(now.styles).toEqual(was.styles)
+    // And again from where it now is, with other words on the way.
+    change(session, now, { text: "Overdue no more", move: { x: -10, y: 0 } })
+    const { bytes, report } = await exportEdited(mupdf, session)
+    expect(report.retext).toEqual({ steps: 2, lines: 1, found: 1 })
+    const [placed] = await textPlaces(bytes)
+    const run = placed.find((one) => one.text === "Overdue no more")!
+    // 40 + 150 - 10 across, and 160 + 220 down the page.
+    expect(run.x).toBeCloseTo(180, 0)
+    expect(run.y).toBeCloseTo(380, 0)
+    expect(placed.some((one) => one.text === TEXT.warning)).toBe(false)
+    stopEditing(session)
+  })
+
+  it("changes the words of a line that runs up the page, and it still runs up the page", async () => {
+    const original = await makeTextPdf()
+    const session = startEditing(mupdf, original)
+    const was = (await textPlaces(original))[0].find(
+      (run) => run.text === TEXT.turned
+    )!
+    change(session, line(session, TEXT.turned), { text: "Printed up the side" })
+    const now = line(session, "Printed up the side")
+    expect(now.along.y).toBeCloseTo(-1)
+    expect(now.origin.x).toBeCloseTo(380, 0)
+    expect(now.origin.y).toBeCloseTo(500, 0)
+    const { bytes } = await exportEdited(mupdf, session)
+    const run = (await textPlaces(bytes))[0].find(
+      (one) => one.text === "Printed up the side"
+    )!
+    expect(run.angle).toBe(was.angle)
+    expect(run.x).toBeCloseTo(was.x, 0)
+    expect(run.y).toBeCloseTo(was.y, 0)
+    expect(run.size).toBeCloseTo(was.size, 1)
+    stopEditing(session)
+  })
+
+  it("is no step when nothing of a look or a move is in it", async () => {
+    const session = startEditing(mupdf, await makeTextPdf())
+    expect(
+      change(session, line(session, TEXT.total), {
+        look: {},
+        move: { x: 0, y: 0 },
+      })
+    ).toEqual([])
+    expect(historyOf(session).position).toBe(0)
     stopEditing(session)
   })
 })

@@ -17,7 +17,7 @@ const content: TutorialContent = {
     },
     {
       title: "Change the words that are there",
-      text: "Choose Change text (E). Every line of the page gets a thin frame. Click one, type, and press Enter: the old words are taken out of the file and the new ones are written in the same font, size and colour. Delete takes a selected line out.",
+      text: "Choose Change text (E). Every line of the page gets a thin frame. Click one, type, and press Enter: the old words are taken out of the file and the new ones are written in the same font, size and colour. The bar changes the line's size, colour and font while you type. Drag a frame to move its line; Delete takes a selected line out.",
     },
     {
       title: "Add what you need",
@@ -55,7 +55,7 @@ const content: TutorialContent = {
     {
       term: "Change text",
       detail:
-        "For the words a file already has. A line is changed at a time, and typed letters take the look of the letter before them, so a word typed after bold words is bold. The line's own font is used for every letter it has. Files often carry only the letters they use; a letter the font lacks is set in the closest font the editor has, and a note under the line names such letters while you type. A change stays within its line: a longer line runs on to the right. Text that is turned, or in a script whose letters join (Arabic, Hebrew, the scripts of India), can be taken out but not retyped. The old words are removed from the file, not covered.",
+        "For the words a file already has. A line is changed at a time, and typed letters take the look of the letter before them, so a word typed after bold words is bold. The line's own font is used for every letter it has. Files often carry only the letters they use; a letter the font lacks is set in the closest font the editor has, and a note under the line names such letters while you type. While a line is typed, the bar offers its size, its colour and its font: size and colour keep the line's own font; choosing Sans, Serif or Mono sets the whole line in that font of the editor's. Drag a line's frame to move it, or use the arrow keys on it. A line that is turned on the page is typed straight and written turned. A change stays within its line: a longer line runs on to the right. Text written downwards, or in a script whose letters join (Arabic, Hebrew, the scripts of India), can be taken out but not retyped. The old words are removed from the file, not covered.",
     },
     {
       term: "Boxes",

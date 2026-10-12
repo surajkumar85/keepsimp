@@ -216,6 +216,11 @@ export function PageLayer({
       onPointerDown={(event) => {
         if (event.button !== 0) return
         pressed.current = { touch: event.pointerType === "touch", ended: false }
+        // Pressing the page puts a line that is being changed into the file.
+        if (retext.typing) {
+          retext.finish()
+          return
+        }
         // Pressing the page ends the typing, also where a tap does not take the keyboard away.
         if (typing) {
           pressed.current.ended = true
@@ -288,6 +293,7 @@ export function PageLayer({
           retext={retext}
           page={page}
           version={editor.versions[page] ?? 0}
+          scale={scale}
         />
       )}
       <FieldSpots

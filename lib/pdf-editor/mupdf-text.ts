@@ -25,12 +25,14 @@ import {
   withPage,
   type EditSession,
 } from "./mupdf-edit"
-import { fontKey, type Colour, type FontFamily } from "./objects"
+import { fontKey, type Colour } from "./objects"
 import {
   contentFor,
+  familyOf,
   inverse,
   isLine,
   readTextOp,
+  restyled,
   runsOf,
   SPACE,
   spreadLooks,
@@ -53,8 +55,8 @@ interface Codes {
   letters: Map<string, { code: string; advance: number }>
 }
 
-const TURNED =
-  "Text that is turned or runs downwards can be taken out, but its words cannot be changed yet."
+const DOWNWARDS =
+  "Text that is written downwards, a letter under a letter, can be taken out, but its words cannot be changed here."
 const SHAPED =
   "Text in this script can be taken out, but its words cannot be changed here: its letters join and change shape."
 /** Hebrew, Arabic and the scripts of India and South-East Asia, whose letters are shaped as they are written. */
@@ -73,18 +75,15 @@ function rgbOf(colour: readonly number[]): Colour {
   return [grey, grey, grey]
 }
 
-/** The editor's font that is closest to one of the file's, by its key. */
+/**
+ * The editor's font that is closest to one of the file's, by its key. The
+ * name is asked first: what a file says of its fonts' kind is often wrong,
+ * and a well-known name is not.
+ */
 function standInFor(font: MuPDF.Font) {
   const name = font.getName()
-  const family: FontFamily =
-    font.isMono() || /mono|courier|consol|typewriter|sftt/i.test(name)
-      ? "mono"
-      : font.isSerif() ||
-          /times|serif|roman|georgia|garamond|minion/i.test(name)
-        ? "serif"
-        : "sans"
   return fontKey({
-    font: family,
+    font: familyOf(name, font.isMono(), font.isSerif()),
     bold: font.isBold() || /bold|black|heavy|medi|demi/i.test(name),
     italic: font.isItalic() || /ital|obli/i.test(name),
   })
@@ -275,12 +274,18 @@ function read(mupdf: Engine, session: EditSession, page: MuPDF.PDFPage) {
         style: Omit<LineStyle, "rise" | "letters"> & { number: number | null }
       }
       let letters: Letter[] = []
-      let turned = false
+      /** Written a letter under a letter, as some Asian text is. */
+      let downwards = false
+      /** The way the line runs, as the page is shown, as one point along it. */
+      let along = { x: 1, y: 0 }
       text.walk({
         beginLine(_box, wmode, direction) {
           letters = []
-          turned =
-            wmode !== 0 || Math.abs(direction[1]) > 0.01 || direction[0] <= 0
+          downwards = wmode !== 0
+          const long = Math.hypot(direction[0], direction[1]) || 1
+          along = { x: direction[0] / long, y: direction[1] / long }
+          // What runs across to within a hair runs across.
+          if (Math.abs(along.y) < 0.005 && along.x > 0) along = { x: 1, y: 0 }
         },
         onChar(letter, origin, font, size, quad, colour) {
           const name = font.getName()
@@ -316,7 +321,7 @@ function read(mupdf: Engine, session: EditSession, page: MuPDF.PDFPage) {
           const keys: string[] = []
           const looks = letters.map((one) => {
             // Only a line that runs across has a height its letters are raised from.
-            const rise = turned ? 0 : rounded(base - one.y, 10)
+            const rise = along.x === 1 ? rounded(base - one.y, 10) : 0
             const key = `${one.key}/${rise}`
             let at = keys.indexOf(key)
             if (at < 0) {
@@ -360,11 +365,16 @@ function read(mupdf: Engine, session: EditSession, page: MuPDF.PDFPage) {
                 width: Math.max(...xs) - Math.min(...xs),
                 height: Math.max(...ys) - Math.min(...ys),
               },
-              origin: { x: letters[0].x, y: base },
+              // A line that is turned starts where its first letter does.
+              origin: {
+                x: letters[0].x,
+                y: along.x === 1 ? base : letters[0].y,
+              },
+              along,
               styles,
               looks,
-              ...(turned
-                ? { fixed: TURNED }
+              ...(downwards
+                ? { fixed: DOWNWARDS }
                 : NEEDS_SHAPING.test(said)
                   ? { fixed: SHAPED }
                   : null),
@@ -435,17 +445,22 @@ function carryOut(
       )
     const { line, numbers, bands } = target
     const text = op.text.trim()
-    if (text.replace(/\s+/g, " ") === line.text.replace(/\s+/g, " "))
-      return null
+    const same = text.replace(/\s+/g, " ") === line.text.replace(/\s+/g, " ")
+    if (same && !op.look && !op.move) return null
     if (line.fixed && text) throw new Error(line.fixed)
     const looks = spreadLooks(line.text, text, line.looks)
+    // The looks the letters will have: the line's own, with another size or colour laid over them.
+    const styles = restyled(line, op.look)
+    /** One of the editor's fonts the whole line is to be set in, when that was asked for. */
+    const set = op.look?.font
+    if (set && !session.fonts.get(set)) throw new FontMissing(set)
     const glyphs: Glyph[] = []
     /** The fonts the letters need a name for on the page: the file's own by number, the editor's by key. */
     const own = new Set<number>()
     const ours = new Set<string>()
     const writes = (look: number, letter: string) => {
       const number = numbers[look]
-      return number === null
+      return number === null || set
         ? undefined
         : codesOf(mupdf, session, number).letters.get(letter)
     }
@@ -455,12 +470,11 @@ function carryOut(
       // the line can (a star that is always set in a font of its own),
       // takes that look whole: its font, its size and its height.
       if (letter.trim() && !writes(look, letter)) {
-        const other = line.styles.findIndex((_style, index) =>
-          writes(index, letter)
-        )
+        const other = styles.findIndex((_style, index) => writes(index, letter))
         if (other >= 0) look = other
       }
-      const style = line.styles[look]
+      const style = styles[look]
+      const lent = set ?? style.standIn
       const number = numbers[look]
       const size = { size: style.size, colour: style.colour, rise: style.rise }
       const has = writes(look, letter)
@@ -483,17 +497,17 @@ function carryOut(
         })
         return
       }
-      const font = session.fonts.get(style.standIn)
-      if (!font) throw new FontMissing(style.standIn)
+      const font = session.fonts.get(lent)
+      if (!font) throw new FontMissing(lent)
       const glyph = font.encodeCharacter(letter.codePointAt(0)!)
       if (!glyph)
         throw new Error(
           `No font here has the letter “${letter}”. Nothing was changed.`
         )
-      ours.add(style.standIn)
+      ours.add(lent)
       glyphs.push({
         ...size,
-        font: `KS${style.standIn.replace(/[^a-z]/g, "")}`,
+        font: `KS${lent.replace(/[^a-z]/g, "")}`,
         code: glyph.toString(16).padStart(4, "0"),
         advance: font.advanceGlyph(glyph) * style.size,
       })
@@ -502,6 +516,11 @@ function carryOut(
       line,
       bands,
       text,
+      // Where it is written: where it was, or as far from there as it is moved.
+      origin: {
+        x: line.origin.x + (op.move?.x ?? 0),
+        y: line.origin.y + (op.move?.y ?? 0),
+      },
       glyphs,
       own: [...own],
       ours: [...ours],
@@ -574,7 +593,7 @@ function carryOut(
         doc.addFont(session.fonts.get(key)!)
       )
     const written = contentFor(
-      runsOf(glyphs, line.origin),
+      runsOf(glyphs, plan.origin, line.along),
       inverse(page.getTransform() as Matrix)
     )
     // The page's own content is closed off, so that what is written starts
@@ -595,8 +614,12 @@ function carryOut(
       const wanted = text.replace(/\s+/g, "")
       const found = read(mupdf, session, page).some(
         (one) =>
-          Math.abs(one.line.origin.y - line.origin.y) < 2 &&
-          one.line.text.replace(/\s+/g, "").includes(wanted)
+          // On the line it was written on: beside or beyond where it starts,
+          // and no higher or lower than that.
+          Math.abs(
+            (one.line.origin.x - plan.origin.x) * line.along.y -
+              (one.line.origin.y - plan.origin.y) * line.along.x
+          ) < 2 && one.line.text.replace(/\s+/g, "").includes(wanted)
       )
       if (!found)
         throw new Error(
