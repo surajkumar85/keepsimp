@@ -976,15 +976,21 @@ async function playBack(page: Page, bytes: Buffer, type: string) {
           video.onseeked = resolve
           video.currentTime = time
         })
-        context.drawImage(video, 0, 0)
-        const row = context.getImageData(
-          0,
-          Math.floor(canvas.height / 2),
-          canvas.width,
-          1
-        ).data
-        for (let x = 0; x < canvas.width; x++)
-          if (row[x * 4] > 150 && row[x * 4 + 1] < 110) return x
+        // A seek is over before every browser has the picture to show:
+        // WebKit on Linux draws nothing for a few frames more. Look again
+        // for up to a second.
+        for (let tries = 0; tries < 60; tries++) {
+          context.drawImage(video, 0, 0)
+          const row = context.getImageData(
+            0,
+            Math.floor(canvas.height / 2),
+            canvas.width,
+            1
+          ).data
+          for (let x = 0; x < canvas.width; x++)
+            if (row[x * 4] > 150 && row[x * 4 + 1] < 110) return x
+          await new Promise((resolve) => requestAnimationFrame(resolve))
+        }
         return -1
       }
       return {
@@ -1047,6 +1053,9 @@ test("writes MP4 and WebM video, and turns a video back into an animation", asyn
     ).toBeVisible()
     // Playwright's Firefox build has no H.264 decoder for the video element.
     if (browserName === "firefox" && extension === "mp4") continue
+    // Its WebKit build on Linux draws no frame of any video onto a canvas:
+    // a clip loads with the right size and length, and comes out blank.
+    if (browserName === "webkit" && process.platform === "linux") continue
     const played = await playBack(page, file.buffer, type)
     expect(played, label).not.toBeNull()
     expect([played!.width, played!.height], label).toEqual(BIG)

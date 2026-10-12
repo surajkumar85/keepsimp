@@ -1265,6 +1265,26 @@ test("chooses what parts keep, and locks them with a password", async ({
   await expect(drawnPage(page, 1)).toBeVisible({ timeout: 30_000 })
 })
 
+/**
+ * Wait until the tool has taken in a change and its buttons have finished
+ * fading in or out. A button that has just been let go of being disabled is
+ * still half see-through for a moment, and a contrast check made in that
+ * moment measures the fade, not the button.
+ */
+async function calm(page: Page) {
+  await expect(tool(page)).toHaveAttribute("data-settled", "true")
+  await expect
+    .poll(() =>
+      page.evaluate(() =>
+        [...document.querySelectorAll("button")].every(
+          (button) =>
+            button.disabled || getComputedStyle(button).opacity === "1"
+        )
+      )
+    )
+    .toBe(true)
+}
+
 test("stays accessible, local and responsive", async ({ page }) => {
   const external: string[] = []
   const errors: string[] = []
@@ -1316,6 +1336,7 @@ test("stays accessible, local and responsive", async ({ page }) => {
       await mode(page, name).click()
       if (name === "Extract pages")
         await page.getByLabel("Pages to take out").fill("2")
+      await calm(page)
       const results = await new AxeBuilder({ page })
         .withTags(["wcag2a", "wcag2aa", "wcag21aa"])
         .analyze()
