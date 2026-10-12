@@ -5,6 +5,7 @@ import sharp from "sharp"
 import { makeFormPdf } from "../tests/pdf-fixtures"
 import { readPictures } from "../tests/pdf-pictures"
 import { danglingRefs, texts } from "../tests/pdf-reader"
+import { makeTextPdf, TEXT } from "../tests/pdf-text"
 import { bytesOf, reader, readerReady, type Upload } from "./pdf"
 
 const ROUTE = "/dashboard/pdf-editor/"
@@ -186,6 +187,50 @@ test("keeps a draft when asked, and takes it up after the page was closed", asyn
   await page.reload()
   await expect(card(page)).toHaveCount(0)
   await expect(keep(page)).toBeChecked()
+})
+
+test("takes up a draft in which the page's own words were changed, with the font that stood in", async ({
+  page,
+}) => {
+  await page.goto(ROUTE)
+  await keep(page).click()
+  await page.locator("#editor-file").setInputFiles({
+    name: "report.pdf",
+    mimeType: "application/pdf",
+    buffer: Buffer.from(await makeTextPdf()),
+  })
+  await readerReady(page)
+  await page.keyboard.press("e")
+  const title = page.getByRole("button", {
+    name: `Change the line: ${TEXT.title}`,
+    exact: true,
+  })
+  await title.click()
+  // The figures are not in the title's font: one of the editor's stands in, and the draft has to bring it.
+  await page.keyboard.press("End")
+  await page.keyboard.type(" 2026")
+  await page.keyboard.press("Enter")
+  await changes(page, 1)
+  await page.getByRole("button", { name: "Close the editor" }).click()
+  await expect(status(page)).toHaveAttribute("data-status", "kept")
+
+  await page.reload()
+  await expect(card(page)).toContainText("report.pdf · 1 change")
+  await card(page).getByRole("button", { name: "Take it up" }).click()
+  await readerReady(page)
+  await changes(page, 1)
+  await expect(tool(page)).not.toContainText("could not be taken up")
+  await expect(page.getByTestId("editor-undo")).toHaveAttribute(
+    "aria-label",
+    "Undo: Change text"
+  )
+  const pending = page.waitForEvent("download")
+  await page.getByTestId("editor-download").click()
+  const bytes = await bytesOf(await pending)
+  expect(await danglingRefs(bytes)).toEqual([])
+  expect((await texts(bytes))[0].replace(/\s+/g, "")).toContain(
+    "Quarterlyreport2026"
+  )
 })
 
 test("throws a draft away when asked, and when the switch is turned off", async ({

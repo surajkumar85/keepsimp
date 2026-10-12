@@ -426,7 +426,10 @@ function fontNames(doc: Doc, page: Obj) {
 const mark = ({ box, text }: PageLine) =>
   `${Math.round(box.x)},${Math.round(box.y)}:${text.replace(/\s+/g, "")}`
 
-/** Change one line. False when it already says what is asked. */
+/**
+ * Change one line.
+ * @returns The editor's fonts it was written with, by key; null when it already is what is asked.
+ */
 function carryOut(
   mupdf: Engine,
   session: EditSession,
@@ -530,7 +533,7 @@ function carryOut(
         .sort(),
     }
   })
-  if (!plan) return false
+  if (!plan) return null
   const { line, text, glyphs } = plan
 
   // Out with the old letters, and nothing else: no picture, no drawing, and
@@ -626,7 +629,7 @@ function carryOut(
           "The new words could not be read back from the page. Nothing was changed."
         )
     })
-  return true
+  return plan.ours
 }
 
 /**
@@ -645,16 +648,22 @@ export function applyText(
     if (!read) throw new Error("That is not a change to a line.")
     return read
   })
+  const fonts = new Set<string>()
+  const done: TextChange = { label: change.label, ops, fonts: [] }
   return inStep(
     session,
     change.label,
     (touch) => {
       for (const op of ops) {
         if (op.page >= session.doc.countPages()) continue
-        if (carryOut(mupdf, session, op.page, op)) touch(op.page)
+        const used = carryOut(mupdf, session, op.page, op)
+        if (!used) continue
+        touch(op.page)
+        for (const key of used) fonts.add(key)
       }
+      done.fonts = [...fonts]
     },
-    { kind: "text", change: { label: change.label, ops } }
+    { kind: "text", change: done }
   )
 }
 canDo("text", applyText)

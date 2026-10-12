@@ -75,6 +75,12 @@ export interface TextOp {
 export interface TextChange {
   label: string
   ops: TextOp[]
+  /**
+   * The editor's fonts the change was written with, by key: said by the
+   * engine once it has made the change, so that a draft knows which fonts
+   * to have ready before it makes the change again.
+   */
+  fonts?: string[]
 }
 
 /** The longest a line is made, and the furthest it is moved at once. */

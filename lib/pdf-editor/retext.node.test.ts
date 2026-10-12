@@ -15,7 +15,7 @@ import {
   textPlaces,
 } from "@/tests/pdf-reader"
 import { makeTextPdf, TEXT } from "@/tests/pdf-text"
-import { readDraft } from "./draft"
+import { fontsOf, readDraft } from "./draft"
 import { fontUrls } from "./fonts"
 import {
   addFont,
@@ -555,7 +555,53 @@ describe("undoing and keeping", () => {
       )
     )!
     expect(draft.steps.map((step) => step.done.kind)).toEqual(["text", "text"])
+    expect(fontsOf(draft.steps)).toEqual([])
     const again = startEditing(mupdf, bytes)
+    takeUp(again, draft.steps, draft.position)
+    expect(lines(again)).toEqual(lines(session))
+    stopEditing(session)
+    stopEditing(again)
+  })
+
+  it("says which of the editor's fonts a change was written with, for a draft to have them ready", async () => {
+    const bytes = await makeTextPdf()
+    const session = startEditing(mupdf, bytes)
+    const title = line(session, TEXT.title)
+    give(session, title.styles[0].standIn, "mono")
+    retext(session, title, "Quarterly report 2026")
+    applyText(mupdf, session, {
+      label: "Change text",
+      ops: [
+        {
+          do: "retext",
+          page: 0,
+          box: line(session, TEXT.total).box,
+          was: TEXT.total,
+          text: TEXT.total,
+          look: { font: "mono" },
+        },
+      ],
+    })
+    const draft = readDraft(
+      JSON.parse(
+        JSON.stringify({
+          name: "text.pdf",
+          size: bytes.length,
+          when: 1,
+          steps: session.steps,
+          position: session.position,
+        })
+      )
+    )!
+    expect(fontsOf(draft.steps).sort()).toEqual(
+      [title.styles[0].standIn, "mono"].sort()
+    )
+    // Without them the draft is not taken up; with them it is.
+    const again = startEditing(mupdf, bytes)
+    expect(() => takeUp(again, draft.steps, draft.position)).toThrow(
+      FontMissing
+    )
+    give(again, ...fontsOf(draft.steps))
     takeUp(again, draft.steps, draft.position)
     expect(lines(again)).toEqual(lines(session))
     stopEditing(session)

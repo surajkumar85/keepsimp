@@ -200,6 +200,42 @@ describe("a draft, read back", () => {
       ),
     ] as Step[]
     expect(fontsOf(steps)).toEqual(["serif-bold"])
+    // A change to the page's own text says which of the editor's fonts it was written with.
+    const retext = (fonts: unknown) =>
+      readStep({
+        done: {
+          kind: "text",
+          change: {
+            ops: [
+              {
+                do: "retext",
+                page: 0,
+                box: { x: 1, y: 2, width: 3, height: 4 },
+                was: "a",
+                text: "b",
+              },
+            ],
+            fonts,
+          },
+        },
+        label: "Change text",
+        touched: [0],
+      })!
+    expect(
+      fontsOf([...steps, retext(["mono", "serif-bold", "comic", 7])])
+    ).toEqual(["serif-bold", "mono"])
+    expect(fontsOf([retext(undefined)])).toEqual([])
+    expect(retext("mono").done.change).not.toHaveProperty("fonts")
+    // Fonts are only said of changes to text.
+    expect(
+      readStep({
+        ...things(added(box)),
+        done: {
+          kind: "things",
+          change: { ops: [added(box)], fonts: ["mono"] },
+        },
+      })!.done.change
+    ).not.toHaveProperty("fonts")
     expect(picturesOf(steps)).toEqual(["photo-1", "photo-2"])
     expect(fontsOf([])).toEqual([])
   })

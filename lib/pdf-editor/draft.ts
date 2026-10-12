@@ -11,7 +11,7 @@
 import { readCommentOp } from "./comments"
 import { readFieldOp } from "./forms"
 import type { Step } from "./mupdf-edit"
-import { fontsFor, readObject } from "./objects"
+import { FONT_KEYS, fontsFor, readObject } from "./objects"
 import { readTextOp } from "./retext"
 import type { Op } from "./tools"
 
@@ -80,10 +80,18 @@ export function readStep(value: unknown): Step | null {
   const ops = change.ops.map((op) => reader(op))
   if (ops.some((op) => op === null)) return null
   if (!Array.isArray(step.touched) || !step.touched.every(isPage)) return null
+  // The editor's fonts a change to the page's own text was written with.
+  const fonts =
+    done.kind === "text" && Array.isArray(change.fonts)
+      ? change.fonts.filter(
+          (key): key is string =>
+            typeof key === "string" && FONT_KEYS.includes(key)
+        )
+      : null
   return {
     done: {
       kind: done.kind as Step["done"]["kind"],
-      change: { label, ops },
+      change: { label, ops, ...(fonts ? { fonts } : null) },
     },
     label,
     touched: step.touched,
@@ -128,9 +136,16 @@ function* thingsIn(steps: readonly Step[]) {
   }
 }
 
-/** The fonts the steps of a draft are written in, by key, each once. */
+/** The fonts the steps of a draft are written in, by key, each once: those of things, and those that changed text was set in. */
 export const fontsOf = (steps: readonly Step[]) => [
-  ...new Set([...thingsIn(steps)].flatMap(fontsFor)),
+  ...new Set([
+    ...[...thingsIn(steps)].flatMap(fontsFor),
+    ...steps.flatMap((step) =>
+      step.done.kind === "text"
+        ? ((step.done.change as { fonts?: string[] }).fonts ?? [])
+        : []
+    ),
+  ]),
 ]
 
 /** The pictures the steps of a draft place, by name, each once. */
