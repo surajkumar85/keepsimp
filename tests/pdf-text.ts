@@ -331,7 +331,21 @@ export async function makeParagraphPdf() {
       },
     })
   )
-  page.node.set(PDFName.of("Annots"), doc.context.obj([link]))
+  // And one over the heading, which comes after it in the file.
+  const headingLink = doc.context.register(
+    doc.context.obj({
+      Type: "Annot",
+      Subtype: "Link",
+      Rect: [48, tall - 64, 170, tall - 46],
+      Border: [0, 0, 0],
+      A: {
+        Type: "Action",
+        S: "URI",
+        URI: PDFString.of("https://example.org/terms"),
+      },
+    })
+  )
+  page.node.set(PDFName.of("Annots"), doc.context.obj([link, headingLink]))
 
   // Set to both edges: every line but the last is spread to 300 points; the first is set in by 14.
   const top = tall - 90 - ragged.length * 13 - 26

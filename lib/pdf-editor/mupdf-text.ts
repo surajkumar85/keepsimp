@@ -597,8 +597,11 @@ function takeOut(
 ) {
   const notes = page.getObject().get("Annots")
   const links: Obj[] = []
+  /** The order the page's notes are in, by their numbers: the order a reader goes through them. */
+  const order: number[] = []
   if (notes.isArray())
     notes.forEach((note) => {
+      order.push(note.asIndirect())
       if (note.get("Subtype").asName() === "Link") links.push(note)
     })
   // Marks for taking out that the file came with are not ours to apply.
@@ -631,6 +634,21 @@ function takeOut(
   const there = new Set<number>()
   if (now.isArray()) now.forEach((note) => void there.add(note.asIndirect()))
   for (const note of back) if (!there.has(note.asIndirect())) now.push(note)
+  // And in the order they were in: what was put back went to the end, and
+  // the order of a page's links is the order the Tab key visits them in.
+  if (!now.isArray() || order.some((number) => !number)) return
+  const kept: Obj[] = []
+  now.forEach((note) => void kept.push(note))
+  if (kept.some((note) => !note.asIndirect())) return
+  const place = (note: Obj) => {
+    const at = order.indexOf(note.asIndirect())
+    return at < 0 ? order.length : at
+  }
+  const sorted = [...kept].sort((a, b) => place(a) - place(b))
+  if (sorted.every((note, at) => note === kept[at])) return
+  const fresh = doc.newArray()
+  for (const note of sorted) fresh.push(note)
+  object.put("Annots", fresh)
 }
 
 /** Write runs of letters into a page, after its own content, with the fonts they need named in it. */

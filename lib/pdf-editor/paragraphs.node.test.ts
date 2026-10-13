@@ -171,6 +171,10 @@ describe("changing a paragraph", () => {
     const [was] = (await linkBoxes(original))[0]
     const [link] = (await linkBoxes(bytes))[0]
     expect(link.to).toBe(was.to)
+    // The page's links are in the order they were in, which is the order the Tab key visits them in.
+    expect((await linkBoxes(bytes))[0].map((one) => one.to)).toEqual(
+      (await linkBoxes(original))[0].map((one) => one.to)
+    )
     expect(link.y).toBeCloseTo(was.y + 13, 0)
     expect(link.width).toBeCloseTo(was.width, 0)
     const last = now[now.length - 1]
