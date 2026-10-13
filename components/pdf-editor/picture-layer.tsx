@@ -64,11 +64,14 @@ function Edge({
   picture,
   cut,
   onCut,
+  onDone,
 }: {
   side: Side
   picture: PagePicture
   cut: Cut
   onCut: (cut: Cut) => void
+  /** Enter on an edge cuts the picture to what is framed. */
+  onDone: () => void
 }) {
   const across = side === "left" || side === "right"
   const { box } = picture
@@ -134,6 +137,12 @@ function Edge({
         const keys: Record<string, number> = across
           ? { ArrowRight: step, ArrowLeft: -step }
           : { ArrowDown: step, ArrowUp: -step }
+        if (event.key === "Enter") {
+          event.preventDefault()
+          event.stopPropagation()
+          onDone()
+          return
+        }
         if (!(event.key in keys)) return
         event.preventDefault()
         event.stopPropagation()
@@ -286,6 +295,7 @@ function PictureSpot({
               picture={picture}
               cut={cut}
               onCut={inpage.setCut}
+              onDone={inpage.finishCut}
             />
           ))}
         </>

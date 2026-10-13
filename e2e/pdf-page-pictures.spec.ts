@@ -255,7 +255,8 @@ test("cuts a picture to a part, says that the rest is only hidden, and shows it 
   await expect(left).toBeFocused()
   for (let press = 0; press < 6; press++)
     await page.keyboard.press("Shift+ArrowRight")
-  await pick(page, "Done").click()
+  // Enter on the frame cuts, as Done in the bar does.
+  await page.keyboard.press("Enter")
   await changes(page, 1)
   await expect(undo(page)).toHaveAttribute(
     "aria-label",
