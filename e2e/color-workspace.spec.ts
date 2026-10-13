@@ -13,6 +13,19 @@ async function bytes(download: Download) {
 async function tab(page: import("@playwright/test").Page, name: string) {
   await page.getByRole("tab", { name, exact: true }).click()
 }
+async function theme(
+  page: import("@playwright/test").Page,
+  name: "light" | "dark"
+) {
+  const toggle = page.getByRole("button", {
+    name: `Switch to ${name} theme`,
+    exact: true,
+  })
+  if (await toggle.count()) await toggle.click()
+  await expect(page.locator("html")).toHaveClass(
+    name === "dark" ? /dark/ : /light/
+  )
+}
 
 test("converts actual colors, preserves alpha and distinguishes wide-gamut fallbacks", async ({
   page,
@@ -89,6 +102,9 @@ test("brand references open, copy and load a palette without fetching assets", a
     "Vercel",
     "Microsoft",
   ]) {
+    await page
+      .getByRole("button", { name: `View ${name} palette`, exact: true })
+      .click()
     const card = page.getByRole("region", { name: `${name} palette` })
     await expect(card.getByRole("heading", { name, exact: true })).toBeVisible()
     await expect(
@@ -98,7 +114,19 @@ test("brand references open, copy and load a palette without fetching assets", a
     ).toHaveAttribute("href", /^https:/)
   }
   await page
+    .getByRole("button", { name: "View Anthropic palette", exact: true })
+    .click()
+  await page
     .getByRole("button", { name: "Use Orange #d97757", exact: true })
+    .click()
+  await expect(
+    page.getByRole("tab", { name: "Brand colors", exact: true })
+  ).toHaveAttribute("aria-selected", "true")
+  await expect(
+    page.getByRole("button", { name: "Use Orange #d97757", exact: true })
+  ).toHaveAttribute("aria-pressed", "true")
+  await page
+    .getByRole("button", { name: "Edit current color", exact: true })
     .click()
   await expect(page.getByLabel("Color value", { exact: true })).toHaveValue(
     "#d97757"
@@ -129,6 +157,166 @@ test("brand references open, copy and load a palette without fetching assets", a
     page.getByRole("button", { name: "Use Color 2 #141413", exact: true })
   ).toBeVisible()
   expect(external).toEqual([])
+})
+
+test("picks visually with pointer or touch and native keyboard channels without losing source alpha", async ({
+  page,
+  isMobile,
+}) => {
+  await page.goto(route)
+  const source = page.getByLabel("Color value", { exact: true })
+  await source.fill("red")
+  const area = page.getByTestId("Color-color-area")
+  await area.scrollIntoViewIfNeeded()
+  const box = (await area.boundingBox())!
+  expect(box.height).toBeGreaterThanOrEqual(220)
+  if (isMobile)
+    await page.touchscreen.tap(box.x + box.width / 2, box.y + box.height / 2)
+  else await area.click({ position: { x: box.width / 2, y: box.height / 2 } })
+  await expect(page.getByTestId("format-HEX")).not.toHaveText("#ff0000")
+  const picked = Buffer.from(
+    (await page.getByTestId("format-HEX").textContent())!.slice(1),
+    "hex"
+  )
+  // Pointer coordinates are rounded to screen pixels by each browser.
+  for (const [i, expected] of [127.5, 63.75, 63.75].entries())
+    expect(Math.abs(picked[i] - expected)).toBeLessThanOrEqual(2)
+  if (!isMobile) {
+    const stage = (await area.boundingBox())!
+    await page.mouse.move(stage.x + stage.width / 2, stage.y + stage.height / 2)
+    await page.mouse.down()
+    await page.mouse.move(stage.x + stage.width + 40, stage.y - 40, {
+      steps: 5,
+    })
+    await page.mouse.up()
+    await expect(page.getByTestId("format-HEX")).toHaveText("#ff0000")
+  }
+
+  await page.getByLabel("Color hue", { exact: true }).press("Home")
+  await page.getByLabel("Color saturation", { exact: true }).press("End")
+  await page.getByLabel("Color brightness", { exact: true }).press("End")
+  await expect(page.getByTestId("format-HEX")).toHaveText("#ff0000")
+  await source.fill("blue")
+  await source.fill("")
+  await source.fill("gray")
+  await expect(page.getByLabel("Color hue", { exact: true })).toHaveAttribute(
+    "aria-valuetext",
+    "240 degrees"
+  )
+  await page.getByLabel("Color saturation", { exact: true }).press("End")
+  await page.getByLabel("Color brightness", { exact: true }).press("End")
+  await expect(page.getByTestId("format-HEX")).toHaveText("#0000ff")
+  await source.fill("color(display-p3 0 1 0 / .5)")
+  await page.getByLabel("Opacity channel").press("End")
+  await page
+    .getByText("More color spaces: P3, Lab, LCH and XYZ", { exact: true })
+    .click()
+  await expect(page.getByTestId("format-Display P3")).toHaveText(
+    "color(display-p3 0 1 0)"
+  )
+  await page.getByText("Exact channels", { exact: true }).click()
+  await page.getByLabel("Color saturation (%)", { exact: true }).fill("0")
+  await expect(
+    page.getByLabel("Color saturation (%)", { exact: true })
+  ).toHaveValue("0")
+})
+
+test("edits one palette color explicitly, undoes it and explores every palette mode in context", async ({
+  page,
+}) => {
+  await page.goto(route)
+  await tab(page, "Palettes")
+  await page.getByRole("button", { name: "Edit color 1", exact: true }).click()
+  await page.getByLabel("Palette color 1", { exact: true }).fill("broken")
+  await expect(
+    page.getByRole("button", { name: "Apply palette color", exact: true })
+  ).toBeDisabled()
+  await page.getByLabel("Palette color 1", { exact: true }).fill("red")
+  await expect(
+    page.getByRole("button", { name: "Use Color 1 #00786f", exact: true })
+  ).toBeVisible()
+  await page
+    .getByRole("button", { name: "Apply palette color", exact: true })
+    .click()
+  await expect(
+    page.getByRole("button", { name: "Edit color 1", exact: true })
+  ).toBeFocused()
+  const red = page.getByRole("button", {
+    name: "Use Color 1 #ff0000",
+    exact: true,
+  })
+  await red.click()
+  await expect(
+    page.getByRole("tab", { name: "Palettes", exact: true })
+  ).toHaveAttribute("aria-selected", "true")
+  await expect(red).toHaveAttribute("aria-pressed", "true")
+  await page.getByRole("button", { name: "Undo palette change" }).click()
+  await expect(
+    page.getByRole("button", { name: "Use Color 1 #00786f", exact: true })
+  ).toBeVisible()
+  await page.getByRole("radio", { name: "Light to dark", exact: true }).click()
+  await page
+    .getByRole("button", { name: "Use tonal scale as palette", exact: true })
+    .click()
+  await expect(
+    page.getByRole("button", { name: /^Use Color 11 / })
+  ).toBeVisible()
+  await page.getByRole("radio", { name: "Mix two colors", exact: true }).click()
+  await page.getByLabel("Second color to mix", { exact: true }).fill("blue")
+  await page.getByRole("radio", { name: "sRGB", exact: true }).click()
+  await expect(
+    page.getByRole("button", { name: "Use Mixed color #800080", exact: true })
+  ).toBeVisible()
+  await page
+    .getByRole("radio", { name: "Color harmonies", exact: true })
+    .click()
+  await page.getByRole("radio", { name: "Complementary", exact: true }).click()
+  await page
+    .getByRole("button", { name: "Use harmony as palette", exact: true })
+    .click()
+  await expect(
+    page.getByRole("button", { name: /^Use Color 11 / })
+  ).toHaveCount(0)
+})
+
+test("opens the same large picker for contrast and gradients, and moves a selected stop", async ({
+  page,
+}) => {
+  await page.goto(route)
+  await tab(page, "Contrast")
+  await page
+    .getByRole("button", { name: "Pick text color", exact: true })
+    .click()
+  await page.getByLabel("Text color hue", { exact: true }).press("Home")
+  await page.getByLabel("Text color saturation", { exact: true }).press("Home")
+  await page.getByLabel("Text color brightness", { exact: true }).press("Home")
+  await page.getByLabel("Background color", { exact: true }).fill("white")
+  await expect(page.getByTestId("contrast-ratio")).toHaveText("21.00:1")
+  await page.getByRole("button", { name: "Done picking", exact: true }).click()
+  await expect(
+    page.getByRole("button", { name: "Pick text color", exact: true })
+  ).toBeFocused()
+  await tab(page, "Gradients")
+  await page
+    .getByRole("button", { name: "Pick stop 1 color", exact: true })
+    .click()
+  await page.getByLabel("Stop 1 color hue", { exact: true }).press("Home")
+  await page.getByLabel("Stop 1 color saturation", { exact: true }).press("End")
+  await page.getByLabel("Stop 1 color brightness", { exact: true }).press("End")
+  await expect(page.getByLabel("Stop 1 color", { exact: true })).toHaveValue(
+    "hsl(0 100% 50%)"
+  )
+  await page.getByRole("button", { name: "Select stop 2", exact: true }).click()
+  await page.getByLabel("Move stop 2", { exact: true }).press("Home")
+  await expect(
+    page.getByLabel("Stop 2 position (%)", { exact: true })
+  ).toHaveValue("0")
+  await page
+    .getByRole("button", { name: "Add color stop", exact: true })
+    .click()
+  await page.getByRole("button", { name: "Select stop 3", exact: true }).click()
+  await page.getByRole("button", { name: "Remove stop 1", exact: true }).click()
+  await expect(page.getByLabel("Move stop 2", { exact: true })).toBeVisible()
 })
 
 test("downloads real JSON, tokens, SVG and transparent PNG palettes", async ({
@@ -283,6 +471,10 @@ test("extracts actual local image pixels with a keyboard-equivalent sampling pat
   await expect(
     page.getByRole("button", { name: "Use Sampled pixel #0000ff", exact: true })
   ).toBeVisible()
+  await page.screenshot({
+    path: `/tmp/color-image-${test.info().project.name}.png`,
+    fullPage: true,
+  })
   await page
     .getByRole("button", { name: "Use image colors as palette" })
     .click()
@@ -359,10 +551,8 @@ test("keeps controls accessible in both themes at narrow and reflow widths", asy
       ).toBe(true)
     }
   }
-  for (const theme of ["light", "dark"]) {
-    await page.evaluate((theme) => {
-      document.documentElement.classList.toggle("dark", theme === "dark")
-    }, theme)
+  for (const mode of ["light", "dark"] as const) {
+    await theme(page, mode)
     for (const name of [
       "Convert",
       "Palettes",
@@ -373,24 +563,38 @@ test("keeps controls accessible in both themes at narrow and reflow widths", asy
       "Batch",
     ]) {
       await tab(page, name)
+      if (name === "Contrast" || name === "Gradients") {
+        const picker = page.getByRole("button", {
+          name: name === "Contrast" ? "Pick text color" : "Pick stop 1 color",
+          exact: true,
+        })
+        if ((await picker.getAttribute("aria-expanded")) === "false")
+          await picker.click()
+      }
       const results = await new AxeBuilder({ page })
         .exclude("[data-color-preview]")
         .withTags(["wcag2a", "wcag2aa", "wcag21aa"])
         .analyze()
-      expect(results.violations, `${theme}: ${name}`).toEqual([])
+      expect(results.violations, `${mode}: ${name}`).toEqual([])
     }
   }
   if (info.project.name === "chromium") {
-    await page.evaluate(() => document.documentElement.classList.remove("dark"))
+    await theme(page, "light")
     await page.setViewportSize({ width: 1440, height: 1000 })
-    for (const name of ["Convert", "Palettes", "Brand colors", "Gradients"]) {
+    for (const name of [
+      "Convert",
+      "Palettes",
+      "Contrast",
+      "Brand colors",
+      "Gradients",
+    ]) {
       await tab(page, name)
       await page.screenshot({
         path: `/tmp/color-light-${name.replaceAll(" ", "-")}.png`,
         fullPage: true,
       })
     }
-    await page.evaluate(() => document.documentElement.classList.add("dark"))
+    await theme(page, "dark")
   }
   await tab(page, "Convert")
   await page.setViewportSize({ width: 1440, height: 1000 })
@@ -434,6 +638,9 @@ test.describe("offline colors", () => {
         .fill("hsl(120 100% 50%)")
       await expect(page.getByTestId("format-HEX")).toHaveText("#00ff00")
       await tab(page, "Brand colors")
+      await page
+        .getByRole("button", { name: "View Google palette", exact: true })
+        .click()
       await page
         .getByRole("button", { name: "Use Google palette", exact: true })
         .click()

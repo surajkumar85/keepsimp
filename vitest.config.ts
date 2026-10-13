@@ -20,6 +20,7 @@ export default defineConfig({
       include: [
         "lib/catalogue.ts",
         "lib/color/core.ts",
+        "lib/color/picker.ts",
         "lib/color/palette.ts",
         "lib/color/vision.ts",
         "lib/json-tools.ts",

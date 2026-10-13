@@ -1,5 +1,5 @@
 "use client"
-import { useState } from "react"
+import { useRef, useState } from "react"
 import {
   IconLock,
   IconLockOpen,
@@ -9,6 +9,7 @@ import {
   IconRefresh,
 } from "@tabler/icons-react"
 import { Button } from "@/components/ui/button"
+import { ColorControl } from "./picker"
 import { ChoiceChips } from "@/components/ui/choice-chips"
 import {
   defaults,
@@ -30,7 +31,6 @@ import {
   copy,
   download,
   fieldClass,
-  Field,
   panel,
   SaveButton,
   Swatch,
@@ -58,7 +58,11 @@ export function PalettePanel({
   onUse: (color: string) => void
   tell: Tell
 }) {
+  const editTrigger = useRef<HTMLElement | null>(null)
   const [mode, setMode] = useState<Harmony>("analogous"),
+    [explore, setExplore] = useState("harmony"),
+    [editing, setEditing] = useState<number | null>(null),
+    [draft, setDraft] = useState<string>(defaults.color),
     [format, setFormat] = useState<ExportFormat>("css"),
     [second, setSecond] = useState<string>(defaults.white),
     [amount, setAmount] = useState(50),
@@ -153,6 +157,19 @@ export function PalettePanel({
                 onUse={onUse}
                 tell={tell}
               />
+              <Button
+                className="w-full"
+                variant="outline"
+                aria-label={`Edit color ${i + 1}`}
+                aria-pressed={editing === i}
+                onClick={(event) => {
+                  editTrigger.current = event.currentTarget
+                  setEditing(editing === i ? null : i)
+                  setDraft(item.color)
+                }}
+              >
+                Edit color {i + 1}
+              </Button>
               <div className="flex flex-wrap justify-center gap-1">
                 <Button
                   size="icon"
@@ -208,6 +225,45 @@ export function PalettePanel({
             </div>
           ))}
         </div>
+        {editing !== null && items[editing] && (
+          <div className="space-y-3 rounded-lg border bg-muted/30 p-3">
+            <div className="flex items-center justify-between gap-2">
+              <h3 className="text-sm font-medium">
+                Edit palette color {editing + 1}
+              </h3>
+              <Button
+                variant="ghost"
+                onClick={() => {
+                  setEditing(null)
+                  editTrigger.current?.focus()
+                }}
+              >
+                Done editing
+              </Button>
+            </div>
+            <ColorControl
+              label={`Palette color ${editing + 1}`}
+              value={draft}
+              onChange={setDraft}
+              hint="Preview a change, then apply it to this swatch."
+            />
+            <Button
+              disabled={!attempt(() => parseColor(draft)).ok}
+              onClick={() => {
+                onChange(
+                  items.map((item, i) =>
+                    i === editing ? { ...item, color: draft } : item
+                  )
+                )
+                setEditing(null)
+                editTrigger.current?.focus()
+                tell("Palette color updated. You can undo this change.")
+              }}
+            >
+              Apply palette color
+            </Button>
+          </div>
+        )}
         <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
           <label className="block min-w-0 space-y-2 text-sm font-medium">
             <span>Palette export format</span>
@@ -254,124 +310,146 @@ export function PalettePanel({
         </p>
       </section>
       <section className={panel}>
-        <h2 className="section-title">Colors that go together</h2>
+        <h2 className="section-title">Explore with your current color</h2>
         <ChoiceChips
-          label="Color harmony"
-          value={mode}
-          onValueChange={setMode}
-          options={[...harmonies]}
-        />
-        {!scheme.ok ? (
-          <p role="alert" className="text-sm text-destructive">
-            {scheme.error}
-          </p>
-        ) : (
-          <>
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
-              {scheme.value.map((value, i) => (
-                <Swatch
-                  key={i}
-                  value={value}
-                  label={`Harmony ${i + 1}`}
-                  tell={tell}
-                  onUse={onUse}
-                />
-              ))}
-            </div>
-            <Button
-              variant="outline"
-              onClick={() =>
-                onChange(
-                  scheme.value.map((color) => ({ color, locked: false }))
-                )
-              }
-            >
-              Use harmony as palette
-            </Button>
-          </>
-        )}
-        <p className="text-xs text-muted-foreground">
-          Hues rotate in OKLCH. Swatches and exports are mapped to sRGB; a
-          harmony is a starting point, not a contrast guarantee.
-        </p>
-      </section>
-      <section className={panel}>
-        <h2 className="section-title">Light to dark</h2>
-        {scale.value ? (
-          <>
-            <div className="grid grid-cols-3 gap-3 sm:grid-cols-6">
-              {scale.value.map((t) => (
-                <Swatch
-                  key={t.label}
-                  value={t.value}
-                  label={t.label}
-                  tell={tell}
-                  onUse={onUse}
-                />
-              ))}
-            </div>
-            <Button
-              variant="outline"
-              onClick={() =>
-                onChange(
-                  scale.value.map((t) => ({ color: t.value, locked: false }))
-                )
-              }
-            >
-              Use tonal scale as palette
-            </Button>
-          </>
-        ) : (
-          <p role="alert" className="text-sm text-destructive">
-            {scale.error}
-          </p>
-        )}
-      </section>
-      <section className={panel}>
-        <h2 className="section-title">Mix two colors</h2>
-        <div className="grid gap-4 sm:grid-cols-2">
-          <Field
-            label="Second color to mix"
-            value={second}
-            onChange={setSecond}
-          />
-          <label className="space-y-2 text-sm font-medium">
-            <span>Mix amount: {amount}% of second color</span>
-            <input
-              aria-label="Mix amount"
-              type="range"
-              min={0}
-              max={100}
-              value={amount}
-              onChange={(e) => setAmount(Number(e.target.value))}
-              className="h-11 w-full accent-primary md:h-9"
-            />
-          </label>
-        </div>
-        <ChoiceChips
-          label="Mix color space"
-          value={space}
-          onValueChange={setSpace}
+          label="Palette exploration"
+          value={explore}
+          onValueChange={setExplore}
           options={[
-            { value: "oklab", label: "OKLab" },
-            { value: "oklch", label: "OKLCH" },
-            { value: "srgb", label: "sRGB" },
-            { value: "srgb-linear", label: "Linear sRGB" },
+            { value: "harmony", label: "Color harmonies" },
+            { value: "tones", label: "Light to dark" },
+            { value: "mix", label: "Mix two colors" },
           ]}
         />
-        {blend.value ? (
-          <div className="max-w-sm">
-            <Swatch
-              value={blend.value}
-              label="Mixed color"
-              tell={tell}
-              onUse={onUse}
+        {explore === "harmony" && (
+          <div className="space-y-4">
+            <h3 className="text-sm font-medium">Colors that go together</h3>
+            <ChoiceChips
+              label="Color harmony"
+              value={mode}
+              onValueChange={setMode}
+              options={[...harmonies]}
             />
+            {!scheme.ok ? (
+              <p role="alert" className="text-sm text-destructive">
+                {scheme.error}
+              </p>
+            ) : (
+              <>
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
+                  {scheme.value.map((value, i) => (
+                    <Swatch
+                      key={i}
+                      value={value}
+                      label={`Harmony ${i + 1}`}
+                      tell={tell}
+                      onUse={onUse}
+                    />
+                  ))}
+                </div>
+                <Button
+                  variant="outline"
+                  onClick={() =>
+                    onChange(
+                      scheme.value.map((color) => ({ color, locked: false }))
+                    )
+                  }
+                >
+                  Use harmony as palette
+                </Button>
+              </>
+            )}
+            <p className="text-xs text-muted-foreground">
+              Hues rotate in OKLCH. Swatches and exports are mapped to sRGB; a
+              harmony is a starting point, not a contrast guarantee.
+            </p>
           </div>
-        ) : (
-          <p role="alert" className="text-sm text-destructive">
-            {blend.error}
-          </p>
+        )}
+        {explore === "tones" && (
+          <div className="space-y-4">
+            <h3 className="text-sm font-medium">Light to dark</h3>
+            {scale.value ? (
+              <>
+                <div className="grid grid-cols-3 gap-3 sm:grid-cols-6">
+                  {scale.value.map((t) => (
+                    <Swatch
+                      key={t.label}
+                      value={t.value}
+                      label={t.label}
+                      tell={tell}
+                      onUse={onUse}
+                    />
+                  ))}
+                </div>
+                <Button
+                  variant="outline"
+                  onClick={() =>
+                    onChange(
+                      scale.value.map((t) => ({
+                        color: t.value,
+                        locked: false,
+                      }))
+                    )
+                  }
+                >
+                  Use tonal scale as palette
+                </Button>
+              </>
+            ) : (
+              <p role="alert" className="text-sm text-destructive">
+                {scale.error}
+              </p>
+            )}
+          </div>
+        )}
+        {explore === "mix" && (
+          <div className="space-y-4">
+            <h3 className="text-sm font-medium">Mix two colors</h3>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <ColorControl
+                label="Second color to mix"
+                value={second}
+                onChange={setSecond}
+              />
+              <label className="space-y-2 text-sm font-medium">
+                <span>Mix amount: {amount}% of second color</span>
+                <input
+                  aria-label="Mix amount"
+                  type="range"
+                  min={0}
+                  max={100}
+                  value={amount}
+                  onChange={(e) => setAmount(Number(e.target.value))}
+                  className="h-11 w-full accent-primary md:h-9"
+                />
+              </label>
+            </div>
+            <ChoiceChips
+              label="Mix color space"
+              value={space}
+              onValueChange={setSpace}
+              options={[
+                { value: "oklab", label: "OKLab" },
+                { value: "oklch", label: "OKLCH" },
+                { value: "srgb", label: "sRGB" },
+                { value: "srgb-linear", label: "Linear sRGB" },
+              ]}
+            />
+            {blend.value ? (
+              <div className="max-w-sm">
+                <Swatch
+                  value={blend.value}
+                  label="Mixed color"
+                  tell={tell}
+                  onUse={onUse}
+                />
+              </div>
+            ) : (
+              <p role="alert" className="text-sm text-destructive">
+                {blend.error}
+              </p>
+            )}
+          </div>
         )}
       </section>
     </div>

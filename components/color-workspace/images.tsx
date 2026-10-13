@@ -18,6 +18,7 @@ export function ImagePanel({
     [busy, setBusy] = useState(false),
     [sampled, setSampled] = useState<string | null>(null),
     [point, setPoint] = useState({ x: 0, y: 0 }),
+    [samplePoint, setSamplePoint] = useState({ x: 0, y: 0 }),
     [size, setSize] = useState({ width: 0, height: 0 })
   const canvas = useRef<HTMLCanvasElement>(null),
     job = useRef(0),
@@ -89,6 +90,7 @@ export function ImagePanel({
     const rgba = context.getImageData(x, y, 1, 1).data
     const value = `rgb(${rgba[0]} ${rgba[1]} ${rgba[2]} / ${(rgba[3] / 255).toFixed(6)})`
     setPoint({ x, y })
+    setSamplePoint({ x, y })
     setSampled(value)
     tell(`Selected pixel ${x + 1}, ${y + 1} in the resized sRGB preview.`)
   }
@@ -138,25 +140,37 @@ export function ImagePanel({
         <p className="text-sm break-all">
           {name} · sample {size.width} × {size.height}
         </p>
-        <canvas
-          ref={canvas}
-          role="img"
-          aria-label="Resized image for color sampling"
-          className="checkerboard max-h-72 max-w-full rounded-lg border"
-          onClick={(e) => {
-            const box = e.currentTarget.getBoundingClientRect()
-            pick(
-              Math.min(
-                size.width - 1,
-                Math.floor(((e.clientX - box.left) / box.width) * size.width)
-              ),
-              Math.min(
-                size.height - 1,
-                Math.floor(((e.clientY - box.top) / box.height) * size.height)
+        <div className="relative max-w-xl">
+          <canvas
+            ref={canvas}
+            role="img"
+            aria-label="Resized image for color sampling"
+            className="checkerboard block w-full max-w-xl cursor-crosshair rounded-lg border"
+            onClick={(e) => {
+              const box = e.currentTarget.getBoundingClientRect()
+              pick(
+                Math.min(
+                  size.width - 1,
+                  Math.floor(((e.clientX - box.left) / box.width) * size.width)
+                ),
+                Math.min(
+                  size.height - 1,
+                  Math.floor(((e.clientY - box.top) / box.height) * size.height)
+                )
               )
-            )
-          }}
-        />
+            }}
+          />
+          {sampled && (
+            <span
+              aria-hidden="true"
+              className="pointer-events-none absolute size-5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-background ring-2 ring-foreground"
+              style={{
+                left: `${((samplePoint.x + 0.5) / size.width) * 100}%`,
+                top: `${((samplePoint.y + 0.5) / size.height) * 100}%`,
+              }}
+            />
+          )}
+        </div>
         <p className="text-xs text-muted-foreground">
           Click the preview, or choose exact preview coordinates below. The
           preview is resized to at most 256 pixels on a side and converted by

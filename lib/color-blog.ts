@@ -33,7 +33,7 @@ export const colorPosts: readonly BlogPost[] = [
         title: "Start with the value you have.",
         paragraphs: [
           "Open Color utility and paste one color into Convert. It reads short and long HEX values, including alpha; CSS color names; RGB, HSL, HWB, Lab, LCH, OKLab and OKLCH; and color() values such as Display P3, Rec. 2020 and XYZ. HSV or HSB and simple CMYK values can be entered too.",
-          "The native picker and red, green, blue and opacity sliders let you adjust an sRGB color. The screen eyedropper appears only in browsers that support it, and needs your click. In other browsers, open From image to sample a local picture.",
+          "The large inline picker lets you tap or drag through saturation and brightness, then tune hue and opacity. Keyboard channel sliders and exact values offer another path. Open Exact channels for red, green and blue. Visual color editing works on the sRGB fallback; changing opacity alone preserves the source color space. The screen eyedropper appears only in browsers that support it, and needs your click. In other browsers, open From image to sample a local picture.",
         ],
         example: {
           label: "One opaque teal",
@@ -172,7 +172,7 @@ export const colorPosts: readonly BlogPost[] = [
         title: "Start small, and keep the parts you like.",
         paragraphs: [
           "Add the current color to Palettes, or choose a complementary, analogous, split complement, triadic, tetradic or monochrome harmony. Hues rotate in OKLCH and the displayed swatches use an sRGB fallback. The light-to-dark scale changes OKLCH lightness and limits chroma; its labels are convenient names, not a promise to match another design system.",
-          "Your palette holds up to twelve colors. Lock the ones you want to keep, shuffle the others, reorder with the arrow buttons and undo a palette change. A harmony can help you start; use Contrast to check each pair you intend to put together.",
+          "Your palette holds up to twelve colors. Edit a single swatch, preview the change and apply it explicitly. Use the exploration choices for harmonies, light-to-dark tones or mixing. Lock the ones you want to keep, shuffle the others, reorder with the arrow buttons and undo a palette change. A harmony can help you start; use Contrast to check each pair you intend to put together.",
         ],
       },
       {
@@ -187,7 +187,7 @@ export const colorPosts: readonly BlogPost[] = [
         id: "gradient",
         title: "Make the transition, then take it with you.",
         paragraphs: [
-          "Gradients supports linear, radial and conic shapes, two to eight ordered stops and an angle where it applies. Choose sRGB, linear sRGB, OKLab or OKLCH interpolation. Stops at the same position create a hard edge. The CSS download has a sampled fallback followed by the modern interpolation syntax; the fallback approximates the transition between samples.",
+          "Gradients supports linear, radial and conic shapes, two to eight ordered stops and an angle where it applies. Pick a stop to move it with its position slider, enter an exact position or open its inline color picker. Choose sRGB, linear sRGB, OKLab or OKLCH interpolation. Stops at the same position create a hard edge. The CSS download has a sampled fallback followed by the modern interpolation syntax; the fallback approximates the transition between samples.",
           "Palettes exports CSS or SCSS variables, JSON, a Tailwind configuration fragment, Design Tokens JSON, GIMP palette text, SVG swatches or a PNG strip. Exports use the sRGB fallback. Opacity travels in the CSS, structured data, SVG and PNG; GIMP palette colors are opaque. Review imported tokens against the conventions of your destination.",
         ],
         links: [
@@ -260,7 +260,7 @@ export const colorPosts: readonly BlogPost[] = [
         id: "use",
         title: "Copy a code, then check its next job.",
         paragraphs: [
-          "Pick a swatch to open it in Convert, copy its HEX code, copy a whole card as CSS variables or load it into your own palette to reorder and export. Check the pair in Contrast before using it for text or a control.",
+          "Choose a company from the visual palette list. Pick a swatch to select it while staying in Brand colors, then use Edit current color to open Convert when needed. Copy its HEX code, copy the selected reference as CSS variables or load it into your own palette to reorder and export. Check the pair in Contrast before using it for text or a control.",
           "These references do not imply endorsement, affiliation or permission to use a company’s identity. Read the linked brand guidance for use of marks and assets. KeepSimp displays plain names and swatches rather than recreating company logos.",
         ],
         links: [

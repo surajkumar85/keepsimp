@@ -1,6 +1,6 @@
 "use client"
-import { useId } from "react"
-import { IconCopy, IconDownload } from "@tabler/icons-react"
+import { createContext, useContext, useEffect, useId, useState } from "react"
+import { IconCheck, IconCopy, IconDownload } from "@tabler/icons-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { hex, parseColor } from "@/lib/color/core"
@@ -20,14 +20,17 @@ export function attempt<T>(
   }
 }
 export type Tell = (message: string) => void
+export const CurrentColor = createContext("")
 export async function copy(text: string, tell: Tell) {
   try {
     await navigator.clipboard.writeText(text)
     tell("Copied to clipboard.")
+    return true
   } catch {
     tell(
       "Clipboard access is unavailable. Select the value and copy it with your keyboard."
     )
+    return false
   }
 }
 export function download(text: string, mime: string, name: string) {
@@ -47,15 +50,29 @@ export function Copy({
   label: string
   tell: Tell
 }) {
+  const [copied, setCopied] = useState<string | null>(null)
+  const done = copied === value
+  useEffect(() => {
+    if (copied === null) return
+    const timer = setTimeout(() => setCopied(null), 1800)
+    return () => clearTimeout(timer)
+  }, [copied])
   return (
     <Button
       size="icon"
       variant="ghost"
       title={`Copy ${label}`}
       aria-label={`Copy ${label}`}
-      onClick={() => void copy(value, tell)}
+      onClick={async () => {
+        if (await copy(value, tell)) setCopied(value)
+      }}
     >
-      <IconCopy aria-hidden="true" />
+      {done ? (
+        <IconCheck aria-hidden="true" />
+      ) : (
+        <IconCopy aria-hidden="true" />
+      )}
+      {done && <span className="sr-only">Copied</span>}
     </Button>
   )
 }
@@ -64,11 +81,13 @@ export function Field({
   value,
   onChange,
   hint,
+  trailing,
 }: {
   label: string
   value: string
   onChange: (value: string) => void
   hint?: string
+  trailing?: React.ReactNode
 }) {
   const id = useId()
   return (
@@ -76,13 +95,16 @@ export function Field({
       <label htmlFor={id} className="block text-sm font-medium">
         {label}
       </label>
-      <Input
-        id={id}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        maxLength={512}
-        aria-describedby={hint ? `${id}-hint` : undefined}
-      />
+      <div className="flex items-center gap-2">
+        <Input
+          id={id}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          maxLength={512}
+          aria-describedby={hint ? `${id}-hint` : undefined}
+        />
+        {trailing}
+      </div>
       {hint && (
         <p id={`${id}-hint`} className="text-xs text-muted-foreground">
           {hint}
@@ -103,18 +125,28 @@ export function Swatch({
   tell: Tell
 }) {
   const color = hex(parseColor(value))
+  const current = useContext(CurrentColor)
+  const selected = current === color
   return (
-    <div className="min-w-0 overflow-hidden rounded-lg border bg-background">
+    <div
+      className={`min-w-0 overflow-hidden rounded-lg border bg-background ${selected ? "border-primary ring-1 ring-primary" : ""}`}
+    >
       <button
         type="button"
-        className="checkerboard block h-20 w-full cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
+        className="checkerboard relative block h-24 w-full cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
         aria-label={`Use ${label} ${color}`}
+        aria-pressed={selected}
         onClick={() => onUse(value)}
       >
         <span
           className="block h-full w-full"
           style={{ backgroundColor: color }}
         />
+        {selected && (
+          <span className="absolute top-2 right-2 flex size-6 items-center justify-center rounded-full bg-background text-foreground shadow-sm">
+            <IconCheck className="size-4" aria-hidden="true" />
+          </span>
+        )}
       </button>
       <div className="flex items-center gap-1 p-2">
         <div className="min-w-0 flex-1">

@@ -11,28 +11,21 @@ import {
   IconColorPicker,
 } from "@tabler/icons-react"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
 import {
   WorkspaceTabs,
   WorkspaceTabList,
   WorkspaceTab,
   WorkspaceTabPanel,
 } from "@/components/ui/workspace-tabs"
-import {
-  defaults,
-  initialPalette,
-  hex,
-  inspect,
-  parseColor,
-  srgb,
-} from "@/lib/color/core"
-import { attempt, Copy, Field, panel, type Tell } from "./shared"
+import { defaults, initialPalette, inspect } from "@/lib/color/core"
+import { attempt, Copy, CurrentColor, Field, panel, type Tell } from "./shared"
 import { PalettePanel, type PaletteItem } from "./palettes"
 import { ContrastPanel } from "./contrast"
 import { GradientPanel } from "./gradients"
 import { ImagePanel } from "./images"
 import { BrandPanel } from "./brands"
 import { BatchPanel } from "./batch"
+import { ColorPicker } from "./picker"
 const subscribe = () => () => {}
 const tabs = [
   ["convert", "Convert", IconAdjustments],
@@ -105,8 +98,7 @@ export function ColorWorkspace() {
   const tell: Tell = setNotice
   function useColor(color: string) {
     setInput(color)
-    setTab("convert")
-    tell("Color opened in the converter.")
+    tell("Color selected. Keep exploring here, or open Convert to edit it.")
   }
   function palette(next: PaletteItem[]) {
     setHistory([...history.slice(-19), items])
@@ -134,246 +126,234 @@ export function ColorWorkspace() {
         )
     }
   }
-  function channel(index: number, value: number) {
-    const c = srgb(parseColor(input))
-    if (index === 3) c.alpha = value / 100
-    else c.coords[index] = value / 255
-    setInput(c.toString({ precision: 8, inGamut: false }))
-    setNotice("")
-  }
   return (
-    <div className="space-y-4">
-      <WorkspaceTabs
-        value={tab}
-        onValueChange={(value) => {
-          setTab(String(value))
-          setNotice("")
-        }}
-      >
-        <WorkspaceTabList label="Color workflows">
-          {tabs.map(([value, label, Icon]) => (
-            <WorkspaceTab key={String(value)} value={String(value)}>
-              <Icon aria-hidden="true" />
-              {String(label)}
-            </WorkspaceTab>
-          ))}
-        </WorkspaceTabList>
-        <div className="mt-4">
-          <WorkspaceTabPanel value="convert">
-            <div className="grid items-start gap-4 lg:grid-cols-3">
-              <section className={`${panel} lg:sticky lg:top-20`}>
-                <h2 className="section-title">
-                  One color, every useful format
-                </h2>
-                <Field
-                  label="Color value"
-                  value={input}
-                  onChange={(v) => {
-                    setInput(v)
-                    setNotice("")
+    <CurrentColor.Provider value={current.value?.hex ?? ""}>
+      <div className="space-y-4">
+        <WorkspaceTabs
+          value={tab}
+          onValueChange={(value) => {
+            setTab(String(value))
+            setNotice("")
+          }}
+        >
+          <WorkspaceTabList label="Color workflows">
+            {tabs.map(([value, label, Icon]) => (
+              <WorkspaceTab key={String(value)} value={String(value)}>
+                <Icon aria-hidden="true" />
+                {String(label)}
+              </WorkspaceTab>
+            ))}
+          </WorkspaceTabList>
+          {tab !== "convert" && (
+            <div className="mt-3 flex flex-wrap items-center gap-3 rounded-xl border bg-card px-3 py-2">
+              <span className="checkerboard size-11 overflow-hidden rounded-lg border">
+                <span
+                  className="block h-full w-full"
+                  style={{
+                    backgroundColor: current.value?.hex ?? "transparent",
                   }}
-                  hint="HEX, named CSS colors, RGB, HSL, HWB, Lab, LCH, OKLab, OKLCH, Display P3, HSV or CMYK."
                 />
-                {!current.ok ? (
-                  <p role="alert" className="text-sm text-destructive">
-                    {current.error}
-                  </p>
-                ) : (
-                  <>
-                    <div
-                      role="img"
-                      aria-label={`Current color ${current.value.hex}`}
-                      className="checkerboard h-40 overflow-hidden rounded-lg border"
-                    >
-                      <div
-                        className="h-full w-full"
-                        style={{ backgroundColor: current.value.hex }}
-                      />
-                    </div>
-                    <div className="flex flex-wrap items-center gap-3">
-                      <label className="text-sm font-medium">
-                        <span className="block">Color picker</span>
-                        <Input
-                          aria-label="Color picker"
-                          type="color"
-                          value={hex(current.value.color, false)}
-                          onChange={(e) => {
-                            const c = parseColor(e.target.value)
-                            c.alpha = current.value.alpha
-                            setInput(c.toString({ precision: 8 }))
-                            setNotice("")
-                          }}
-                          className="mt-2 block w-16 cursor-pointer p-1"
-                        />
-                      </label>
-                      <div>
-                        <p className="font-mono text-sm">{current.value.hex}</p>
-                        <p className="text-xs text-muted-foreground">
-                          Opacity {Math.round(current.value.alpha * 100)}%
-                        </p>
-                      </div>
-                    </div>
-                    <div className="space-y-2">
-                      {["Red", "Green", "Blue", "Opacity"].map((label, i) => (
-                        <label
-                          key={label}
-                          className="block text-xs text-muted-foreground"
-                        >
-                          <span>
-                            {label}:{" "}
-                            {i === 3
-                              ? Math.round(current.value.alpha * 100)
-                              : Math.round(
-                                  srgb(current.value.color).coords[i]! * 255
-                                )}
-                            {i === 3 ? "%" : ""}
-                          </span>
-                          <input
-                            aria-label={`${label} channel`}
-                            type="range"
-                            min={0}
-                            max={i === 3 ? 100 : 255}
-                            value={
-                              i === 3
-                                ? Math.round(current.value.alpha * 100)
-                                : Math.round(
-                                    srgb(current.value.color).coords[i]! * 255
-                                  )
-                            }
-                            onChange={(e) => channel(i, Number(e.target.value))}
-                            className="block h-11 w-full accent-primary md:h-9"
-                          />
-                        </label>
-                      ))}
-                    </div>
-                    <p className="text-xs leading-6 text-muted-foreground">
-                      {current.value.inSrgb
-                        ? "Within sRGB."
-                        : "Outside sRGB. HEX, RGB and the preview are gamut-mapped fallbacks; wide-gamut formats keep the original color."}{" "}
-                      {current.value.inP3
-                        ? "Within Display P3."
-                        : "Also outside Display P3."}{" "}
-                      Editing the picker or RGB channels works on the sRGB
-                      fallback.
-                    </p>
-                    <Button
-                      className="mr-2"
-                      disabled={items.length >= 12}
-                      onClick={() => {
-                        palette([...items, { color: input, locked: false }])
-                        setTab("palette")
-                        tell("Current color added to your palette.")
-                      }}
-                    >
-                      Add to palette
-                    </Button>
-                  </>
-                )}
-                <Button
-                  variant="outline"
-                  disabled={!hasDropper}
-                  onClick={() => void eyedropper()}
-                >
-                  <IconColorPicker aria-hidden="true" />
-                  Pick from screen
-                </Button>
-                <p className="text-xs text-muted-foreground">
-                  Screen picking needs a supported browser and your click. If
-                  unavailable, use the picker or From image.
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="text-xs text-muted-foreground">Current color</p>
+                <p className="font-mono text-sm break-all">
+                  {current.value?.hex ?? "Enter a color in Convert"}
                 </p>
-              </section>
-              <section className={`${panel} lg:col-span-2`}>
-                <h2 className="section-title">Copy a color format</h2>
-                {current.value ? (
-                  <>
-                    <FormatRows
-                      rows={current.value.rows.filter((row) =>
-                        commonFormats.has(row.label)
-                      )}
-                      tell={tell}
-                    />
-                    <details className="rounded-lg border p-3">
-                      <summary className="flex min-h-11 cursor-pointer items-center text-sm font-medium md:min-h-9">
-                        More color spaces: P3, Lab, LCH and XYZ
-                      </summary>
+              </div>
+              {current.value && (
+                <Copy
+                  value={current.value.hex}
+                  label="current HEX"
+                  tell={tell}
+                />
+              )}
+              <Button variant="outline" onClick={() => setTab("convert")}>
+                Edit current color
+              </Button>
+            </div>
+          )}
+          <p
+            role="status"
+            aria-live="polite"
+            className="mt-2 min-h-5 text-sm text-primary"
+          >
+            {notice}
+          </p>
+          <div className="mt-4">
+            <WorkspaceTabPanel value="convert">
+              <div className="grid items-start gap-4 lg:grid-cols-3">
+                <section className={`${panel} lg:sticky lg:top-20`}>
+                  <h2 className="section-title">Find your color</h2>
+                  <Field
+                    label="Color value"
+                    value={input}
+                    onChange={(v) => {
+                      setInput(v)
+                      setNotice("")
+                    }}
+                    hint="Paste HEX, a CSS name or a color function."
+                  />
+                  <ColorPicker
+                    value={input}
+                    onChange={(v) => {
+                      setInput(v)
+                      setNotice("")
+                    }}
+                  />
+                  {!current.ok ? (
+                    <p role="alert" className="text-sm text-destructive">
+                      {current.error}
+                    </p>
+                  ) : (
+                    <>
+                      <div className="flex items-center gap-3 rounded-lg border bg-background p-2">
+                        <span
+                          role="img"
+                          aria-label={`Current color ${current.value.hex}`}
+                          className="checkerboard size-11 overflow-hidden rounded-md border"
+                        >
+                          <span
+                            className="block h-full w-full"
+                            style={{ backgroundColor: current.value.hex }}
+                          />
+                        </span>
+                        <div className="min-w-0 flex-1">
+                          <p className="font-mono text-sm break-all">
+                            {current.value.hex}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            Opacity {Math.round(current.value.alpha * 100)}%
+                          </p>
+                        </div>
+                        <Copy
+                          value={current.value.hex}
+                          label="picker HEX"
+                          tell={tell}
+                        />
+                      </div>
+                      <p className="text-xs leading-6 text-muted-foreground">
+                        {current.value.inSrgb
+                          ? "Within sRGB."
+                          : "Outside sRGB. HEX, RGB and the preview are gamut-mapped fallbacks; wide-gamut formats keep the original color."}{" "}
+                        {current.value.inP3
+                          ? "Within Display P3."
+                          : "Also outside Display P3."}{" "}
+                        Hue, saturation, brightness and RGB edits use the sRGB
+                        fallback. Opacity keeps the source color space.
+                      </p>
+                      <Button
+                        className="mr-2"
+                        disabled={items.length >= 12}
+                        onClick={() => {
+                          palette([...items, { color: input, locked: false }])
+                          setTab("palette")
+                          tell("Current color added to your palette.")
+                        }}
+                      >
+                        Add to palette
+                      </Button>
+                    </>
+                  )}
+                  <Button
+                    variant="outline"
+                    disabled={!hasDropper}
+                    onClick={() => void eyedropper()}
+                  >
+                    <IconColorPicker aria-hidden="true" />
+                    Pick from screen
+                  </Button>
+                  <p className="text-xs text-muted-foreground">
+                    Screen picking needs a supported browser and your click. If
+                    unavailable, use the picker or From image.
+                  </p>
+                </section>
+                <section className={`${panel} lg:col-span-2`}>
+                  <h2 className="section-title">Copy a color format</h2>
+                  {current.value ? (
+                    <>
                       <FormatRows
-                        rows={current.value.rows.filter(
-                          (row) => !commonFormats.has(row.label)
+                        rows={current.value.rows.filter((row) =>
+                          commonFormats.has(row.label)
                         )}
                         tell={tell}
                       />
-                    </details>
-                  </>
-                ) : (
-                  <p className="text-sm text-muted-foreground">
-                    Enter a readable color to see the formats.
+                      <details className="rounded-lg border p-3">
+                        <summary className="flex min-h-11 cursor-pointer items-center text-sm font-medium md:min-h-9">
+                          More color spaces: P3, Lab, LCH and XYZ
+                        </summary>
+                        <FormatRows
+                          rows={current.value.rows.filter(
+                            (row) => !commonFormats.has(row.label)
+                          )}
+                          tell={tell}
+                        />
+                      </details>
+                    </>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">
+                      Enter a readable color to see the formats.
+                    </p>
+                  )}
+                  <p className="text-xs leading-6 text-muted-foreground">
+                    Conversions use Color.js with D50/D65 adaptation where
+                    needed. Displayed values are rounded to seven significant
+                    digits; HEX alpha uses 8-bit rounding. HSV and CMYK omit
+                    alpha, which is shown separately. CMYK is a mathematical
+                    approximation, not a printer profile, ink recipe or Pantone
+                    match.
                   </p>
-                )}
-                <p className="text-xs leading-6 text-muted-foreground">
-                  Conversions use Color.js with D50/D65 adaptation where needed.
-                  Displayed values are rounded to seven significant digits; HEX
-                  alpha uses 8-bit rounding. HSV and CMYK omit alpha, which is
-                  shown separately. CMYK is a mathematical approximation, not a
-                  printer profile, ink recipe or Pantone match.
+                </section>
+              </div>
+            </WorkspaceTabPanel>
+            <WorkspaceTabPanel value="palette">
+              <div className="mb-4 flex flex-wrap items-center gap-3">
+                <p className="min-w-0 flex-1 text-sm text-muted-foreground">
+                  Starting color:{" "}
+                  <span className="font-mono break-all">{input}</span>
                 </p>
-              </section>
-            </div>
-          </WorkspaceTabPanel>
-          <WorkspaceTabPanel value="palette">
-            <div className="mb-4 flex flex-wrap items-center gap-3">
-              <p className="min-w-0 flex-1 text-sm text-muted-foreground">
-                Starting color:{" "}
-                <span className="font-mono break-all">{input}</span>
-              </p>
-              <Button
-                variant="outline"
-                disabled={!history.length}
-                onClick={() => {
-                  setItems(history.at(-1)!)
-                  setHistory(history.slice(0, -1))
-                  tell("Last palette change undone.")
-                }}
-              >
-                Undo palette change
-              </Button>
-            </div>
-            <PalettePanel
-              input={input}
-              items={items}
-              onChange={palette}
-              onUse={useColor}
-              tell={tell}
-            />
-          </WorkspaceTabPanel>
-          <WorkspaceTabPanel value="contrast">
-            <ContrastPanel input={input} tell={tell} onUse={useColor} />
-          </WorkspaceTabPanel>
-          <WorkspaceTabPanel value="gradient">
-            <GradientPanel tell={tell} />
-          </WorkspaceTabPanel>
-          <WorkspaceTabPanel value="image">
-            <ImagePanel tell={tell} onUse={useColor} onPalette={usePalette} />
-          </WorkspaceTabPanel>
-          <WorkspaceTabPanel value="brands">
-            <BrandPanel tell={tell} onUse={useColor} onPalette={usePalette} />
-          </WorkspaceTabPanel>
-          <WorkspaceTabPanel value="batch">
-            <BatchPanel tell={tell} />
-          </WorkspaceTabPanel>
-        </div>
-      </WorkspaceTabs>
-      <p
-        role="status"
-        aria-live="polite"
-        className="min-h-5 text-sm text-primary"
-      >
-        {notice}
-      </p>
-      <p className="text-xs leading-6 text-muted-foreground">
-        Colors, images and palettes stay in this tab and clear on refresh. No
-        uploads, account or saved document history. Brand references are bundled
-        locally, so you can browse their swatches offline.
-      </p>
-    </div>
+                <Button
+                  variant="outline"
+                  disabled={!history.length}
+                  onClick={() => {
+                    setItems(history.at(-1)!)
+                    setHistory(history.slice(0, -1))
+                    tell("Last palette change undone.")
+                  }}
+                >
+                  Undo palette change
+                </Button>
+              </div>
+              <PalettePanel
+                input={input}
+                items={items}
+                onChange={palette}
+                onUse={useColor}
+                tell={tell}
+              />
+            </WorkspaceTabPanel>
+            <WorkspaceTabPanel value="contrast">
+              <ContrastPanel input={input} tell={tell} onUse={useColor} />
+            </WorkspaceTabPanel>
+            <WorkspaceTabPanel value="gradient">
+              <GradientPanel tell={tell} />
+            </WorkspaceTabPanel>
+            <WorkspaceTabPanel value="image">
+              <ImagePanel tell={tell} onUse={useColor} onPalette={usePalette} />
+            </WorkspaceTabPanel>
+            <WorkspaceTabPanel value="brands">
+              <BrandPanel tell={tell} onUse={useColor} onPalette={usePalette} />
+            </WorkspaceTabPanel>
+            <WorkspaceTabPanel value="batch">
+              <BatchPanel tell={tell} />
+            </WorkspaceTabPanel>
+          </div>
+        </WorkspaceTabs>
+        <p className="text-xs leading-6 text-muted-foreground">
+          Colors, images and palettes stay in this tab and clear on refresh. No
+          uploads, account or saved document history. Brand references are
+          bundled locally, so you can browse their swatches offline.
+        </p>
+      </div>
+    </CurrentColor.Provider>
   )
 }

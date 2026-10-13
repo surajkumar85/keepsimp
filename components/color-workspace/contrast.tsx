@@ -1,5 +1,5 @@
 "use client"
-import { useState } from "react"
+import { useId, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { ChoiceChips } from "@/components/ui/choice-chips"
 import {
@@ -10,7 +10,8 @@ import {
   difference,
 } from "@/lib/color/core"
 import { simulate, type Vision } from "@/lib/color/vision"
-import { attempt, Field, panel, Swatch, type Tell } from "./shared"
+import { attempt, panel, Swatch, type Tell } from "./shared"
+import { ColorControl, ColorPicker } from "./picker"
 export function ContrastPanel({
   tell,
   onUse,
@@ -20,12 +21,29 @@ export function ContrastPanel({
   tell: Tell
   onUse: (color: string) => void
 }) {
+  const pickerId = useId()
   const [foreground, setForeground] = useState<string>(defaults.foreground),
     [background, setBackground] = useState<string>(defaults.background),
     [canvas, setCanvas] = useState<string>(defaults.white),
     [target, setTarget] = useState("4.5"),
     [suggestion, setSuggestion] = useState<string | null>(null),
     [vision, setVision] = useState<Vision>("deutan")
+  const [picking, setPicking] = useState<
+    "text" | "background" | "canvas" | null
+  >(null)
+  const pickers = {
+    text: { label: "Text color", value: foreground, set: setForeground },
+    background: {
+      label: "Background color",
+      value: background,
+      set: setBackground,
+    },
+    canvas: {
+      label: "Canvas behind transparency",
+      value: canvas,
+      set: setCanvas,
+    },
+  }
   const result = attempt(() => contrast(foreground, background, canvas)),
     delta = attempt(() => difference(foreground, background)),
     preview = attempt(() => ({
@@ -40,96 +58,155 @@ export function ContrastPanel({
     <div className="space-y-4">
       <section className={panel}>
         <h2 className="section-title">Check two colors together</h2>
-        <div className="grid gap-4 md:grid-cols-3">
-          <Field
-            label="Text color"
-            value={foreground}
-            onChange={(v) => change(setForeground, v)}
-          />
-          <Field
-            label="Background color"
-            value={background}
-            onChange={(v) => change(setBackground, v)}
-          />
-          <Field
-            label="Canvas behind transparency"
-            value={canvas}
-            onChange={(v) => change(setCanvas, v)}
-            hint="Use an opaque color."
-          />
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <Button
-            variant="outline"
-            disabled={!attempt(() => parseColor(input)).ok}
-            onClick={() => change(setForeground, input)}
-          >
-            Use current color as text
-          </Button>
-          <Button
-            variant="outline"
-            disabled={!attempt(() => parseColor(input)).ok}
-            onClick={() => change(setBackground, input)}
-          >
-            Use current color as background
-          </Button>
-        </div>
-        <Button
-          variant="outline"
-          onClick={() => {
-            setForeground(background)
-            setBackground(foreground)
-            setSuggestion(null)
-          }}
-        >
-          Swap text and background
-        </Button>
-        {!result.ok ? (
-          <p role="alert" className="text-sm text-destructive">
-            {result.error}
-          </p>
-        ) : (
-          <>
-            <div
-              data-color-preview
-              className="space-y-2 rounded-lg border p-6"
-              style={{
-                backgroundColor: result.value.background,
-                color: result.value.foreground,
+        <div className="grid items-start gap-4 lg:grid-cols-3">
+          <div className="space-y-4 lg:col-span-2">
+            {!result.ok ? (
+              <p role="alert" className="text-sm text-destructive">
+                {result.error}
+              </p>
+            ) : (
+              <>
+                <div
+                  data-color-preview
+                  className="space-y-2 rounded-lg border p-6"
+                  style={{
+                    backgroundColor: result.value.background,
+                    color: result.value.foreground,
+                  }}
+                >
+                  <p className="text-3xl font-medium">
+                    Make room for clear words.
+                  </p>
+                  <p className="text-base">
+                    This sample uses your colors, including transparency over
+                    the canvas.
+                  </p>
+                </div>
+                <div className="flex flex-wrap items-baseline gap-3">
+                  <p
+                    className="font-mono text-3xl"
+                    data-testid="contrast-ratio"
+                  >
+                    {result.value.ratio.toFixed(2)}:1
+                  </p>
+                  <p className="text-sm text-muted-foreground">
+                    WCAG 2.2 contrast ratio
+                  </p>
+                </div>
+                <ul className="grid gap-2 text-sm sm:grid-cols-2">
+                  {[
+                    ["AA normal text (4.5:1)", result.value.aa],
+                    ["AA large text (3:1)", result.value.largeAA],
+                    ["AAA normal text (7:1)", result.value.aaa],
+                    ["AAA large text (4.5:1)", result.value.largeAAA],
+                    ["Non-text contrast (3:1)", result.value.graphics],
+                  ].map(([label, pass]) => (
+                    <li
+                      key={String(label)}
+                      className="flex justify-between gap-3 rounded-md border p-3"
+                    >
+                      <span>{label}</span>
+                      <strong>{pass ? "Pass" : "Fail"}</strong>
+                    </li>
+                  ))}
+                </ul>
+              </>
+            )}
+          </div>
+          <div className="space-y-3">
+            <div className="grid gap-4 sm:grid-cols-3 lg:grid-cols-1">
+              <ColorControl
+                label="Text color"
+                value={foreground}
+                onChange={(v) => change(setForeground, v)}
+                onPick={() => setPicking(picking === "text" ? null : "text")}
+                pickerOpen={picking === "text"}
+                pickerId={pickerId}
+              />
+              <ColorControl
+                label="Background color"
+                value={background}
+                onChange={(v) => change(setBackground, v)}
+                onPick={() =>
+                  setPicking(picking === "background" ? null : "background")
+                }
+                pickerOpen={picking === "background"}
+                pickerId={pickerId}
+              />
+              <ColorControl
+                label="Canvas behind transparency"
+                value={canvas}
+                onChange={(v) => change(setCanvas, v)}
+                hint="Use an opaque color."
+                onPick={() =>
+                  setPicking(picking === "canvas" ? null : "canvas")
+                }
+                pickerOpen={picking === "canvas"}
+                pickerId={pickerId}
+              />
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                variant="outline"
+                disabled={!attempt(() => parseColor(input)).ok}
+                onClick={() => change(setForeground, input)}
+              >
+                Use current color as text
+              </Button>
+              <Button
+                variant="outline"
+                disabled={!attempt(() => parseColor(input)).ok}
+                onClick={() => change(setBackground, input)}
+              >
+                Use current color as background
+              </Button>
+            </div>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setForeground(background)
+                setBackground(foreground)
+                setSuggestion(null)
               }}
             >
-              <p className="text-3xl font-medium">Make room for clear words.</p>
-              <p className="text-base">
-                This sample uses your colors, including transparency over the
-                canvas.
-              </p>
+              Swap text and background
+            </Button>
+          </div>
+        </div>
+        {picking && (
+          <div
+            id={pickerId}
+            className="space-y-3 rounded-lg border bg-muted/30 p-3"
+          >
+            <div className="flex items-center justify-between gap-2">
+              <h3 className="text-sm font-medium">
+                Adjust {pickers[picking].label.toLowerCase()}
+              </h3>
+              <Button
+                variant="ghost"
+                onClick={() => {
+                  const trigger = document.querySelector<HTMLButtonElement>(
+                    `button[aria-controls="${pickerId}"][aria-expanded="true"]`
+                  )
+                  setPicking(null)
+                  trigger?.focus()
+                }}
+              >
+                Done picking
+              </Button>
             </div>
-            <div className="flex flex-wrap items-baseline gap-3">
-              <p className="font-mono text-3xl" data-testid="contrast-ratio">
-                {result.value.ratio.toFixed(2)}:1
+            <ColorPicker
+              label={pickers[picking].label}
+              value={pickers[picking].value}
+              layout="wide"
+              onChange={(v) => change(pickers[picking].set, v)}
+            />
+            {!attempt(() => parseColor(pickers[picking].value)).ok && (
+              <p className="text-xs text-muted-foreground">
+                Enter a readable color to use the picker.
               </p>
-              <p className="text-sm text-muted-foreground">
-                WCAG 2.2 contrast ratio
-              </p>
-            </div>
-            <ul className="grid gap-2 text-sm sm:grid-cols-2">
-              {[
-                ["AA normal text (4.5:1)", result.value.aa],
-                ["AA large text (3:1)", result.value.largeAA],
-                ["AAA normal text (7:1)", result.value.aaa],
-                ["AAA large text (4.5:1)", result.value.largeAAA],
-                ["Non-text contrast (3:1)", result.value.graphics],
-              ].map(([label, pass]) => (
-                <li
-                  key={String(label)}
-                  className="flex justify-between gap-3 rounded-md border p-3"
-                >
-                  <span>{label}</span>
-                  <strong>{pass ? "Pass" : "Fail"}</strong>
-                </li>
-              ))}
-            </ul>
-          </>
+            )}
+          </div>
         )}
         <p className="text-xs leading-6 text-muted-foreground">
           Large text means at least 18 pt regular or 14 pt bold. Pass/fail uses
