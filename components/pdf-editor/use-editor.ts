@@ -48,10 +48,17 @@ import {
   readFont,
 } from "@/lib/pdf-editor/own-font"
 import type { OwnFile } from "@/lib/pdf-editor/draft-store"
+import type { Query } from "@/lib/pdf-editor/find"
 import type { LinkOp, PageLink } from "@/lib/pdf-editor/links"
+import type { FlowOp } from "@/lib/pdf-editor/paragraphs"
 import type { PagePicture, PictureOp } from "@/lib/pdf-editor/page-pictures"
 import type { Align } from "@/lib/pdf-editor/paragraphs"
-import { standIns, type LineLook, type PageLine } from "@/lib/pdf-editor/retext"
+import {
+  standIns,
+  type LineLook,
+  type PageLine,
+  type TextOp,
+} from "@/lib/pdf-editor/retext"
 import { breakLines, combLine } from "@/lib/pdf-editor/text-layout"
 import {
   applied,
@@ -625,6 +632,41 @@ export function useEditor(
           ],
         })
       )
+    },
+    [ensureFont, flush, enqueue, file]
+  )
+
+  /** Every place some words are in the file's own text; null when the file could not be looked through. */
+  const find = useCallback(
+    async (query: Query) =>
+      (await client.current?.editFind(file, query)) ?? null,
+    [client, file]
+  )
+
+  /**
+   * Put other words in the place of some, in many lines and paragraphs, as
+   * one step. The fonts that may have to stand in are made ready first.
+   * @returns Why each place that was left out could not be changed; null when nothing was tried.
+   */
+  const replace = useCallback(
+    async (ops: (TextOp | FlowOp)[], fonts: readonly string[]) => {
+      try {
+        for (const key of new Set(fonts)) await ensureFont(key)
+      } catch {
+        setProblem("The font could not be loaded. Check your connection.")
+        return null
+      }
+      flush()
+      let refused: string[] | null = null
+      await enqueue(async (worker) => {
+        const news = await worker.editReplace(file, {
+          label: "Replace text",
+          ops,
+        })
+        refused = news.refused ?? []
+        return news
+      })
+      return refused as string[] | null
     },
     [ensureFont, flush, enqueue, file]
   )
@@ -1326,6 +1368,8 @@ export function useEditor(
     lines,
     retext,
     reflow,
+    find,
+    replace,
     pageLinks,
     changeLink,
     middle,

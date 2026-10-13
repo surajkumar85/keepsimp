@@ -48,6 +48,11 @@ const content: TutorialContent = {
         "PNG, JPEG, WebP, AVIF, GIF and BMP. A PNG or JPEG goes into the file as it is, without being saved again; other kinds are kept without loss. See-through parts stay see-through.",
     },
     {
+      term: "Find and replace",
+      detail:
+        "For changing words everywhere (F). Type what to look for and press Enter: the words are found through the whole file, across the line breaks of a paragraph too, and each place is shown on its page, with what it says now and what it will say. Replace changes the place that is shown; Replace all changes every place as one step, which one undo takes back. Two buttons tell capitals from small letters and find whole words only. A place that cannot be changed, such as a paragraph that would grow over what is below it, is left as it was, and the bar says why.",
+    },
+    {
       term: "Links",
       detail:
         "For the places of a page that lead somewhere when pressed (J). Each link gets a frame. Choose one to see where it leads and to lead it somewhere else: type a web address, an e-mail address or a page number, and press Enter. Drag a link to move it and its corner to change its size; Delete takes it away. Drag a box on the page for a new link, or use “New link” in the bar. Only web, e-mail and telephone addresses are taken. Where a link leads is not checked, and nothing is sent to it.",

@@ -199,6 +199,17 @@ With "Change text" on, lines that belong together are one place to click: a para
 - **On the page** (`link-layer.tsx`, `use-links.ts`): frames stay in place while the page is read again, as pictures' do. Links, the page's pictures and the page's words are changed one at a time.
 - **Tests:** `links.test.ts` (100%), `links.node.test.ts` with the real engine, read back with pdf.js (where each link lies, where it leads), and `e2e/pdf-links.spec.ts` on five profiles.
 
+## Find and replace (phase 5, fourth part)
+
+"Find and replace" (F) looks for words through the whole file and puts others in their place, one place at a time or all at once.
+
+- **Where words are looked for** (`findText` in `mupdf-text.ts`): on every page, in each paragraph as one text and in each line that is no part of one. So words that a line break parts are found ("day on" / "which"), and so is a word the file broke with a hyphen: a soft hyphen is no letter (`findIn` in `lib/pdf-editor/find.ts`, pure). Any run of spaces and line ends is a space. Capitals can be told apart, and whole words asked for. Lines whose words cannot be changed are passed over. At most 5,000 places are listed.
+- **Every place is shown before it is changed:** the page it is on is shown with a frame around the line or paragraph, and the bar shows the words around it with what is there struck through and what will be (`preview`).
+- **A place is changed as it would be by hand** (`opFor`): a line as a line, a paragraph as a paragraph that flows again, with everything that goes with that: the file's own font, stand-ins for letters it lacks (the fonts that may be needed are made ready first), links that go with their words, and the reading-back.
+- **Replace all is one step,** undone by one undo. What cannot be changed is **left out and said** (`replaceText`): a paragraph that would grow over what is below it, a line that cannot be taken out without its neighbour. The step is tried; a change that fails is taken out of it, the file being as it was before the step, and the rest is tried again.
+- **After every replacement the file is looked through again,** so what is shown is what the file now holds.
+- **Tests:** `find.test.ts` (100%), `find.node.test.ts` with the real engine (lines and paragraphs, across line breaks, one place and all, what is left out and why, letters the font lacks, undo), `e2e/pdf-find.spec.ts` on five profiles.
+
 ## One editor, several doors
 
 There is one PDF editor. The annotator, Sign PDF and Fill PDF form are **doors**: each is a catalogue entry with `partOf: "pdf-editor"`. A door has an address, a title, a description, written help and an article of its own, is in the sitemap and the offline copy, and is found by the search in the header. It is not a card on the tools page, not counted in the sidebar and not an app shortcut (`listed` in `lib/catalogue.ts` is the tools without their doors), and the article that goes through every tool names it under the editor. Each page says what it is and links to the other.
@@ -257,6 +268,7 @@ The report (`ExportReport`) becomes the lines in the download card (`lib/pdf-edi
 | `lib/pdf-editor/draft.ts`, `draft-store.ts`, `mupdf-signed.ts` | What a draft is and how it is checked; where it is kept; writing changes after a signed file.                                               |
 | `lib/pdf-editor/own-font.ts`                                   | A font of one's own: what its file says of itself, one font taken out of a collection, the key it goes by.                                  |
 | `lib/pdf-editor/page-pictures.ts`, `mupdf-pictures.ts`         | The pictures a page already has: finding the instruction that draws each, what is written in its place; reading and changing in the engine. |
+| `lib/pdf-editor/find.ts`                                       | Find and replace: where words are in a text, what it says with others in their place, what is shown of a place.                             |
 | `lib/pdf-editor/links.ts`, `mupdf-links.ts`                    | Links: what one leads to and how that is typed; reading, adding and changing them in the engine.                                            |
 | `lib/pdf-editor/paragraphs.ts`                                 | Which lines are a paragraph, what it says as one text, and how its words are laid out in lines again.                                       |
 | `lib/pdf-editor/retext.ts`, `mupdf-text.ts`                    | Changing a page's own words: which look a letter takes, what is written; reading lines and fonts, taking out and writing in the engine.     |
@@ -316,7 +328,7 @@ The report (`ExportReport`) becomes the lines in the download card (`lib/pdf-edi
 2. **Mark up and comment.** Built: marks on words, the highlighter pen, notes and replies, the list of comments, comments a file comes with, the PDF annotator page, stamps, call-outs and measuring lines.
 3. **Fill and sign.** Built so far: drawn, typed and pictured signatures, initials, the date, ticks and crosses, and the Sign PDF page. Also built: filling in a form's own fields, with the Fill PDF form page. Also built: saving after a signed file so that its signature stays valid, drafts kept on the device when asked, and text in the rows of boxes of forms without fields. The phase is complete.
 4. **Change the text that is there,** in the file's own font where it has the letters, with the old words gone from the file. A line's words are changed or taken out, its size, colour and font changed, and the line moved, also when it is turned; text can be set in a font of one's own, from a file or from the device.
-5. **Paragraphs, pictures in the page, links, find and replace.** Built so far: lines that belong together are changed as one paragraph that flows again, and links go with their words; the pictures a page already has are moved, resized, turned, cut to a part, exchanged and taken out. Links are added, led somewhere else, moved and taken away. Still to come: find and replace.
+5. **Paragraphs, pictures in the page, links, find and replace.** Lines that belong together are changed as one paragraph that flows again, and links go with their words; the pictures a page already has are moved, resized, turned, cut to a part, exchanged and taken out; links are added, led somewhere else, moved and taken away; words are found through the whole file and replaced, one place or all.
 6. **Pages and the document:** reorder, crop, numbers, watermarks, bookmarks, details. Focused pages: Add page numbers, Watermark PDF, Crop PDF.
 7. **Redact and protect:** by area, text and pattern, removed and proved. Focused page: Redact PDF.
 8. **Make forms.** Focused page: Create a fillable PDF form.

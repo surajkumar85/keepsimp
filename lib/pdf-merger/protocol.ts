@@ -15,6 +15,7 @@ import type {
 import type { FieldChange, FormFacts, FormField } from "@/lib/pdf-editor/forms"
 import type { History } from "@/lib/pdf-editor/history"
 import type { ExportReport, Step } from "@/lib/pdf-editor/mupdf-edit"
+import type { Found } from "@/lib/pdf-editor/find"
 import type { LinkChange, PageLink } from "@/lib/pdf-editor/links"
 import type { PagePicture, PictureChange } from "@/lib/pdf-editor/page-pictures"
 import type { PageLine, TextChange } from "@/lib/pdf-editor/retext"
@@ -204,6 +205,10 @@ export type PdfRequest =
   | { type: "edit-text"; id: string; request: number; change: TextChange }
   /** The pictures a page already has, with where they are, for them to be changed. */
   | { type: "edit-page-pictures"; id: string; request: number; page: number }
+  /** Every place some words are in the file's own text. What is asked is checked before it is looked for. */
+  | { type: "edit-find"; id: string; request: number; query: unknown }
+  /** Change the words of many lines and paragraphs as one step, leaving out those that cannot be changed. */
+  | { type: "edit-replace"; id: string; request: number; change: TextChange }
   /** The links of a page, with where they lie and lead. */
   | { type: "edit-page-links"; id: string; request: number; page: number }
   /** Add, change or take away links of a page, as one step. */
@@ -261,6 +266,8 @@ export interface EditNews {
   history: History
   /** Letters a text box holds that its font has no shape for. */
   lacking: string[]
+  /** After words were replaced in many places: why each place that was left out could not be changed. */
+  refused?: string[]
 }
 
 export type PdfResponse =
@@ -381,6 +388,13 @@ export type PdfResponse =
       pictures: PagePicture[] | null
     }
   | { type: "edit-page-links"; request: number; links: PageLink[] | null }
+  /** `found` is null when the file could not be looked through; `more` when there are more places than are listed. */
+  | {
+      type: "edit-found"
+      request: number
+      found: Found[] | null
+      more: boolean
+    }
   /** `news` is null when the change could not be made; `message` then says why. */
   | {
       type: "edit-news"

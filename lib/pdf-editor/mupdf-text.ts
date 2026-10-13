@@ -25,9 +25,11 @@ import {
   withPage,
   type EditSession,
 } from "./mupdf-edit"
+import { findIn, MOST_FOUND, type Found, type Query } from "./find"
 import type { Box, Point } from "./geometry"
 import { fontKey, type Colour } from "./objects"
 import {
+  blocksOf,
   carry,
   firstChanged,
   flow,
@@ -1191,13 +1193,22 @@ export function applyText(
     change.label,
     (touch) => {
       const wrote: (Wrote | null)[] = []
-      for (const op of ops) {
+      for (const [at, op] of ops.entries()) {
         wrote.push(null)
         if (op.page >= session.doc.countPages()) continue
-        const made =
-          op.do === "reflow"
-            ? reflow(mupdf, session, op.page, op)
-            : carryOut(mupdf, session, op.page, op)
+        let made: { fonts: string[]; wrote: Wrote | null } | null
+        try {
+          made =
+            op.do === "reflow"
+              ? reflow(mupdf, session, op.page, op)
+              : carryOut(mupdf, session, op.page, op)
+        } catch (error) {
+          // Which of several changes it was that could not be made.
+          throw Object.assign(
+            error instanceof Error ? error : new Error(String(error)),
+            { failed: at }
+          )
+        }
         if (!made) continue
         touch(op.page)
         for (const key of made.fonts) fonts.add(key)
@@ -1210,3 +1221,87 @@ export function applyText(
   )
 }
 canDo("text", applyText)
+
+/**
+ * Every place some words are in the file's own text, page by page. They
+ * are looked for in each paragraph as one text and in each line that is no
+ * part of one. Lines whose words cannot be changed are passed over.
+ * @returns The lines and paragraphs with the words in them, and whether there are more places than are listed.
+ */
+export function findText(mupdf: Engine, session: EditSession, query: Query) {
+  const found: Found[] = []
+  let places = 0
+  const pages = session.doc.countPages()
+  for (let index = 0; index < pages; index++) {
+    const lines = withPage(session.doc, index, (page) =>
+      read(mupdf, session, page).map((one) => one.line)
+    )
+    const blocks = blocksOf(lines)
+    const inBlock = new Set(blocks.flatMap((block) => block.lines))
+    const known = wordsOf(lines)
+    const units: { kind: Found["kind"]; of: PageLine[]; text: string }[] = [
+      ...blocks.map((block) => {
+        const of = block.lines.map((at) => lines[at])
+        return { kind: "block" as const, of, text: joined(of, known).text }
+      }),
+      ...lines
+        .filter((line, at) => !inBlock.has(at) && !line.fixed)
+        .map((line) => ({
+          kind: "line" as const,
+          of: [line],
+          text: line.text,
+        })),
+    ].sort(
+      (a, b) => a.of[0].box.y - b.of[0].box.y || a.of[0].box.x - b.of[0].box.x
+    )
+    for (const unit of units) {
+      const spans = findIn(unit.text, query)
+      if (!spans.length) continue
+      found.push({
+        page: index,
+        kind: unit.kind,
+        lines: unit.of.map((line) => ({ box: line.box, was: line.text })),
+        text: unit.text,
+        spans,
+        fonts: [
+          ...new Set(
+            unit.of.flatMap((line) => line.styles.map((style) => style.standIn))
+          ),
+        ],
+      })
+      places += spans.length
+      if (places >= MOST_FOUND) return { found, more: true }
+    }
+  }
+  return { found, more: false }
+}
+
+/**
+ * Change the words of many lines and paragraphs as one step, and leave
+ * out those that cannot be changed: a paragraph that would grow over what
+ * is below it, a line that cannot be taken out without its neighbour.
+ * @returns The pages that changed, and why each change that was left out could not be made.
+ */
+export function replaceText(
+  mupdf: Engine,
+  session: EditSession,
+  change: TextChange
+): { pages: number[]; refused: string[] } {
+  const ops = [...change.ops]
+  const refused: string[] = []
+  while (ops.length) {
+    try {
+      return {
+        pages: applyText(mupdf, session, { label: change.label, ops }),
+        refused,
+      }
+    } catch (error) {
+      const failed = (error as { failed?: unknown }).failed
+      if (typeof failed !== "number") throw error
+      // The file is as it was before the step; the step is tried again without that change.
+      refused.push((error as Error).message)
+      ops.splice(failed, 1)
+    }
+  }
+  return { pages: [], refused }
+}

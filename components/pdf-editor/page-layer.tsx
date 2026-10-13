@@ -32,9 +32,11 @@ import { FieldSpots } from "./field-layer"
 import { LineSpots } from "./retext-layer"
 import type { Comments } from "./use-comments"
 import type { Retext } from "./use-retext"
+import { FindSpots } from "./find-layer"
 import { LinkSpots } from "./link-layer"
 import { PictureSpots } from "./picture-layer"
 import type { Inpage } from "./use-inpage"
+import type { Find } from "./use-find"
 import type { Links } from "./use-links"
 import { laidOut, pagePoint, type Editor } from "./use-editor"
 
@@ -133,12 +135,14 @@ export function PageLayer({
   retext,
   inpage,
   links,
+  find,
 }: {
   editor: Editor
   comments: Comments
   retext: Retext
   inpage: Inpage
   links: Links
+  find: Find
   /** Counted from 0. */
   page: number
   size: Size
@@ -321,6 +325,7 @@ export function PageLayer({
           scale={scale}
         />
       )}
+      {find.on && <FindSpots find={find} page={page} />}
       {links.on && (
         <LinkSpots
           editor={editor}

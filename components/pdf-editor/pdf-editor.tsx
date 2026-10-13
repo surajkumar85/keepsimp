@@ -70,6 +70,7 @@ import { EditorToolbar } from "./toolbar"
 import { useComments } from "./use-comments"
 import { useDraft, type DraftStatus } from "./use-draft"
 import { useEditor } from "./use-editor"
+import { useFind } from "./use-find"
 import { useInpage } from "./use-inpage"
 import { useLinks } from "./use-links"
 import { useRetext } from "./use-retext"
@@ -400,6 +401,12 @@ function Workspace({
     setListJump(comments.showPage)
     setJump(comments.showPage)
   }
+  /** Show a page of the file: where words were found. */
+  const goToPage = useCallback(
+    (page: number) => setJump({ page, turn: -performance.now() }),
+    []
+  )
+  const find = useFind(editor, comments, retext, inpage, links, goToPage)
   /** Go to a field and put the keyboard in it, once its page is on the screen. */
   const goToField = (page: number, id: string) => {
     setJump({ page, turn: -performance.now() })
@@ -705,6 +712,15 @@ function Workspace({
       inpage.finishCut()
       return used()
     }
+    // F finds and replaces words; Escape puts that down.
+    if (plain && letter === "f") {
+      find.setOn(!find.on)
+      return used()
+    }
+    if (event.key === "Escape" && find.on) {
+      find.setOn(false)
+      return used()
+    }
     // J adds and changes links; Escape lets go of one, then of the tool.
     if (plain && letter === "j") {
       links.setOn(!links.on)
@@ -772,6 +788,7 @@ function Workspace({
           retext={retext}
           inpage={inpage}
           links={links}
+          find={find}
           first={mode === "annotate" ? "comments" : "things"}
           focus={
             allTools
@@ -843,6 +860,7 @@ function Workspace({
           retext={retext}
           inpage={inpage}
           links={links}
+          find={find}
           page={entry.page}
           size={entry.size}
           scale={scale}

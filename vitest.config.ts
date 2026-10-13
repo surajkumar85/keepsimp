@@ -77,6 +77,7 @@ export default defineConfig({
         "lib/pdf-editor/ink.ts",
         "lib/pdf-editor/measure.ts",
         "lib/pdf-editor/objects.ts",
+        "lib/pdf-editor/find.ts",
         "lib/pdf-editor/links.ts",
         "lib/pdf-editor/own-font.ts",
         "lib/pdf-editor/page-pictures.ts",

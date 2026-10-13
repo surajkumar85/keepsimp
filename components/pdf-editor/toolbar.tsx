@@ -33,8 +33,13 @@ import {
   IconNote,
   IconPencil,
   IconCrop,
+  IconChevronDown,
+  IconChevronUp,
+  IconLetterCase,
   IconLink,
   IconLinkPlus,
+  IconSpacingHorizontal,
+  IconTextScan2,
   IconPhotoEdit,
   IconPhotoPlus,
   IconReplace,
@@ -98,8 +103,10 @@ import type { Comments } from "./use-comments"
 import { mainStyle } from "@/lib/pdf-editor/retext"
 import { isOwn, type OwnKey } from "@/lib/pdf-editor/own-font"
 import { canListFonts, LocalFontsDialog } from "./local-fonts-dialog"
+import { LONGEST_FIND } from "@/lib/pdf-editor/find"
 import { ALIGNS, shapeOf, type Align } from "@/lib/pdf-editor/paragraphs"
 import { cn } from "cn"
+import { FIND_HINT, type Find } from "./use-find"
 import { CUT_HINT, INPAGE_HINT, type Inpage } from "./use-inpage"
 import { LINKS_HINT, type Links } from "./use-links"
 import { PARAGRAPH_HINT, RETEXT_HINT, type Retext } from "./use-retext"
@@ -763,6 +770,152 @@ function PictureRow({ inpage }: { inpage: Inpage }) {
 }
 
 /**
+ * Find and replace: what to look for and what to put in its place, the
+ * place that is shown with what it will say, and replacing it or all.
+ */
+function FindRow({ find }: { find: Find }) {
+  const ids = useId()
+  const field =
+    "h-11 w-40 shrink-0 rounded-md border bg-background px-2 text-base text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring md:h-9 md:text-sm"
+  const { shown } = find
+  return (
+    <>
+      <label htmlFor={`${ids}-find`} className="sr-only">
+        Find
+      </label>
+      <input
+        id={`${ids}-find`}
+        autoFocus
+        type="text"
+        autoComplete="off"
+        autoCapitalize="off"
+        spellCheck={false}
+        placeholder="Find"
+        maxLength={LONGEST_FIND}
+        value={find.words}
+        onChange={(event) => find.setWords(event.target.value)}
+        onKeyDown={(event) => {
+          event.stopPropagation()
+          if (event.key === "Enter") {
+            event.preventDefault()
+            // The same words again go on to the next place.
+            find.step(event.shiftKey ? -1 : 1)
+          } else if (event.key === "Escape") {
+            event.preventDefault()
+            find.setOn(false)
+          }
+        }}
+        className={field}
+      />
+      <label htmlFor={`${ids}-with`} className="sr-only">
+        Replace with
+      </label>
+      <input
+        id={`${ids}-with`}
+        type="text"
+        autoComplete="off"
+        autoCapitalize="off"
+        spellCheck={false}
+        placeholder="Replace with"
+        maxLength={LONGEST_FIND}
+        value={find.replacement}
+        onChange={(event) => find.setReplacement(event.target.value)}
+        onKeyDown={(event) => {
+          event.stopPropagation()
+          if (event.key === "Enter") {
+            event.preventDefault()
+            if (find.current) void find.replaceOne()
+            else void find.search()
+          } else if (event.key === "Escape") {
+            event.preventDefault()
+            find.setOn(false)
+          }
+        }}
+        className={field}
+      />
+      <div
+        role="group"
+        aria-label="How to look"
+        className="flex shrink-0 items-center"
+      >
+        <Toggle
+          label="Tell capitals from small letters"
+          pressed={find.matchCase}
+          onPress={() => find.setMatchCase(!find.matchCase)}
+        >
+          <IconLetterCase aria-hidden="true" />
+        </Toggle>
+        <Toggle
+          label="Whole words only"
+          pressed={find.wholeWords}
+          onPress={() => find.setWholeWords(!find.wholeWords)}
+        >
+          <IconSpacingHorizontal aria-hidden="true" />
+        </Toggle>
+      </div>
+      <div
+        role="group"
+        aria-label="The places that were found"
+        className="flex shrink-0 items-center gap-1"
+      >
+        <RowAction label="The place before" onPress={() => find.step(-1)}>
+          <IconChevronUp aria-hidden="true" />
+        </RowAction>
+        <RowAction label="The next place" onPress={() => find.step(1)}>
+          <IconChevronDown aria-hidden="true" />
+        </RowAction>
+        <Button
+          type="button"
+          variant="outline"
+          disabled={!find.current}
+          title="Put the other words in the place that is shown"
+          onClick={() => void find.replaceOne()}
+          className="shrink-0"
+        >
+          Replace
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          disabled={!find.places}
+          title="Put the other words in every place, as one step that can be undone"
+          onClick={() => void find.replaceAll()}
+          className="shrink-0"
+        >
+          Replace all
+        </Button>
+      </div>
+      <p
+        role="status"
+        data-testid="editor-find-status"
+        className="line-clamp-2 min-w-48 flex-1 px-1 text-xs leading-4 whitespace-normal text-muted-foreground"
+      >
+        {find.note ? (
+          find.note
+        ) : find.looking ? (
+          "Looking through the file…"
+        ) : !find.fresh ? (
+          FIND_HINT
+        ) : !shown ? (
+          find.summary
+        ) : (
+          <>
+            {`${(find.at + 1).toLocaleString("en")} of ${find.summary}: `}
+            {shown.before}
+            <del className="text-destructive">{shown.was}</del>
+            <span className="sr-only"> becomes </span>
+            <ins className="font-medium text-foreground no-underline">
+              {shown.now}
+            </ins>
+            {shown.after}
+          </>
+        )}
+      </p>
+    </>
+  )
+}
+
+/**
  * Links: a new one, and for the one that is chosen or being made, where it
  * leads, typed as an address or as a page.
  */
@@ -913,6 +1066,7 @@ export function EditorToolbar({
   retext,
   inpage,
   links,
+  find,
 }: {
   editor: Editor
   comments: Comments
@@ -922,6 +1076,8 @@ export function EditorToolbar({
   inpage: Inpage
   /** Adding and changing links. */
   links: Links
+  /** Finding and replacing words through the file. */
+  find: Find
   /** Which tools come first in the row: those that add things, or those that comment. */
   first?: "things" | "comments"
   /**
@@ -1007,28 +1163,42 @@ export function EditorToolbar({
             pressed={
               !comments.tool &&
               state.tool === tool &&
-              !(tool === "select" && (retext.on || inpage.on || links.on))
+              !(
+                tool === "select" &&
+                (retext.on || inpage.on || links.on || find.on)
+              )
             }
             onPress={() => {
               comments.setTool(null)
               retext.setOn(false)
               inpage.setOn(false)
               links.setOn(false)
+              find.setOn(false)
               editor.setTool(tool)
             }}
           >
             {icon}
           </Toggle>
-          {/* Beside the tool that adds text: the one that changes the text that is there. */}
+          {/* Beside the tool that adds text: the one that changes the text that is there, and the one that changes it everywhere. */}
           {tool === "text" && (
-            <Toggle
-              label="Change text"
-              shortcut="E"
-              pressed={retext.on}
-              onPress={() => retext.setOn(!retext.on)}
-            >
-              <IconCursorText aria-hidden="true" />
-            </Toggle>
+            <>
+              <Toggle
+                label="Change text"
+                shortcut="E"
+                pressed={retext.on}
+                onPress={() => retext.setOn(!retext.on)}
+              >
+                <IconCursorText aria-hidden="true" />
+              </Toggle>
+              <Toggle
+                label="Find and replace"
+                shortcut="F"
+                pressed={find.on}
+                onPress={() => find.setOn(!find.on)}
+              >
+                <IconTextScan2 aria-hidden="true" />
+              </Toggle>
+            </>
           )}
         </Fragment>
       ))}
@@ -1084,6 +1254,7 @@ export function EditorToolbar({
           !retext.on &&
           !inpage.on &&
           !links.on &&
+          !find.on &&
           (state.tool === "select" || SIGNING.includes(state.tool))
         : false
   const marks = COMMENT_TOOLS.map(({ tool, label, key, icon }) => (
@@ -1213,6 +1384,8 @@ export function EditorToolbar({
           <PictureRow inpage={inpage} />
         ) : links.on ? (
           <LinkRow links={links} />
+        ) : find.on ? (
+          <FindRow find={find} />
         ) : comments.tool ? (
           <>
             <Swatches

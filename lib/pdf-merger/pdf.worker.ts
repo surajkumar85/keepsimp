@@ -52,7 +52,13 @@ import { canWriteAfter, exportAfter } from "@/lib/pdf-editor/mupdf-signed"
 import type { PageLink } from "@/lib/pdf-editor/links"
 import { applyLinks, linksOn } from "@/lib/pdf-editor/mupdf-links"
 import { applyPictures, picturesOn } from "@/lib/pdf-editor/mupdf-pictures"
-import { applyText, linesOn } from "@/lib/pdf-editor/mupdf-text"
+import { readQuery, type Found } from "@/lib/pdf-editor/find"
+import {
+  applyText,
+  findText,
+  linesOn,
+  replaceText,
+} from "@/lib/pdf-editor/mupdf-text"
 import type { PagePicture } from "@/lib/pdf-editor/page-pictures"
 import type { PageLine } from "@/lib/pdf-editor/retext"
 import {
@@ -698,6 +704,47 @@ async function editText(request: Extract<PdfRequest, { type: "edit-text" }>) {
   }
 }
 
+async function editFind(request: Extract<PdfRequest, { type: "edit-find" }>) {
+  const session = editing.get(request.id)
+  let found: Found[] | null = null
+  let more = false
+  try {
+    const query = readQuery(request.query)
+    if (session && query)
+      ({ found, more } = findText(await engine, session, query))
+    else if (session) found = []
+  } catch {
+    // The page says that the file could not be looked through.
+  }
+  post({ type: "edit-found", request: request.request, found, more })
+}
+
+async function editReplace(
+  request: Extract<PdfRequest, { type: "edit-replace" }>
+) {
+  const session = editing.get(request.id)
+  try {
+    if (!session) throw new Error(EDIT_FAILED)
+    const { pages, refused } = replaceText(
+      await engine,
+      session,
+      request.change
+    )
+    post({
+      type: "edit-news",
+      request: request.request,
+      news: { ...newsOf(session, pages), refused },
+    })
+  } catch (error) {
+    post({
+      type: "edit-news",
+      request: request.request,
+      news: null,
+      message: readable(error, EDIT_FAILED),
+    })
+  }
+}
+
 async function editPageLink(
   request: Extract<PdfRequest, { type: "edit-page-link" }>
 ) {
@@ -1156,6 +1203,10 @@ self.onmessage = (event: MessageEvent<PdfRequest>) => {
     enqueue({ run: () => editText(request) })
   else if (request.type === "edit-lines")
     enqueue({ run: () => editLines(request) })
+  else if (request.type === "edit-find")
+    enqueue({ run: () => editFind(request) })
+  else if (request.type === "edit-replace")
+    enqueue({ run: () => editReplace(request) })
   else if (request.type === "edit-page-links")
     enqueue({ run: async () => editPageLinks(request) })
   else if (request.type === "edit-page-link")

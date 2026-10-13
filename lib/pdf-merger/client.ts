@@ -4,6 +4,7 @@ import { poolSize } from "@/lib/image-batch/pool"
 import type { Size } from "@/lib/image-compressor/geometry"
 import type { CommentChange, LetterLine } from "@/lib/pdf-editor/comments"
 import type { FieldChange } from "@/lib/pdf-editor/forms"
+import type { Found, Query } from "@/lib/pdf-editor/find"
 import type { LinkChange, PageLink } from "@/lib/pdf-editor/links"
 import type { PagePicture, PictureChange } from "@/lib/pdf-editor/page-pictures"
 import type { PageLine, TextChange } from "@/lib/pdf-editor/retext"
@@ -165,6 +166,10 @@ export class PdfClient {
     number,
     (links: PageLink[] | null) => void
   >()
+  private readonly findsAsked = new Map<
+    number,
+    (result: { found: Found[]; more: boolean } | null) => void
+  >()
   private readonly editDrafts = new Map<
     number,
     (draft: { steps: Step[]; position: number } | null) => void
@@ -233,6 +238,11 @@ export class PdfClient {
     } else if (message.type === "edit-lines") {
       this.editLines.get(message.request)?.(message.lines)
       this.editLines.delete(message.request)
+    } else if (message.type === "edit-found") {
+      this.findsAsked.get(message.request)?.(
+        message.found && { found: message.found, more: message.more }
+      )
+      this.findsAsked.delete(message.request)
     } else if (message.type === "edit-page-links") {
       this.pageLinksAsked.get(message.request)?.(message.links)
       this.pageLinksAsked.delete(message.request)
@@ -411,6 +421,8 @@ export class PdfClient {
     this.pagePicturesAsked.clear()
     for (const done of this.pageLinksAsked.values()) done(null)
     this.pageLinksAsked.clear()
+    for (const done of this.findsAsked.values()) done(null)
+    this.findsAsked.clear()
     for (const done of this.editDrafts.values()) done(null)
     this.editDrafts.clear()
     for (const done of this.editLetters.values()) done(null)
@@ -530,6 +542,24 @@ export class PdfClient {
       const request = ++this.requests
       this.editLines.set(request, resolve)
       this.send({ type: "edit-lines", id, request, page })
+    })
+  }
+
+  /** Every place some words are in the file's own text; null when the file could not be looked through. */
+  editFind(id: string, query: Query) {
+    return new Promise<{ found: Found[]; more: boolean } | null>((resolve) => {
+      const request = ++this.requests
+      this.findsAsked.set(request, resolve)
+      this.send({ type: "edit-find", id, request, query })
+    })
+  }
+
+  /** Change the words of many lines and paragraphs as one step; what the pages hold afterwards, and what was left out. */
+  editReplace(id: string, change: TextChange) {
+    return new Promise<EditNews>((resolve, reject) => {
+      const request = ++this.requests
+      this.editNews.set(request, { resolve, reject })
+      this.send({ type: "edit-replace", id, request, change })
     })
   }
 
