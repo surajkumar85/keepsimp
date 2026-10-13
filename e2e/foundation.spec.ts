@@ -111,6 +111,78 @@ test("the search in the top bar finds tools and opens them", async ({
   await expect(page.getByRole("button", { name: /Search tools/ })).toBeFocused()
 })
 
+test("search results scroll inside a bounded dialog on short and narrow screens", async ({
+  page,
+  isMobile,
+}, info) => {
+  await page.emulateMedia({ reducedMotion: "reduce" })
+  await page.goto("/dashboard/")
+  for (const [width, height] of [
+    [1440, 900],
+    [1440, 480],
+    [320, 568],
+    [740, 360],
+  ]) {
+    await page.setViewportSize({ width, height })
+    await page.getByTestId("search-button").click()
+    const dialog = page.getByRole("dialog", { name: "Search tools" })
+    const input = dialog.getByRole("combobox"),
+      list = dialog.getByRole("listbox")
+    await expect(dialog.getByRole("option")).toHaveCount(22)
+    const bounds = (await dialog.boundingBox())!
+    expect(bounds.y).toBeGreaterThanOrEqual(0)
+    expect(bounds.y + bounds.height).toBeLessThanOrEqual(height - 8)
+    expect(bounds.height).toBeLessThanOrEqual(640)
+    expect(
+      await list.evaluate((node) => node.scrollHeight > node.clientHeight)
+    ).toBe(true)
+    const fieldAt = (await input.boundingBox())!.y
+    if (!isMobile) {
+      await list.hover()
+      await page.mouse.wheel(0, 600)
+      await expect
+        .poll(() => list.evaluate((node) => node.scrollTop))
+        .toBeGreaterThan(0)
+    }
+    // Native scrolling remains available on touch devices without a mouse.
+    await list.evaluate((node) => {
+      node.scrollTop = node.scrollHeight
+    })
+    const last = dialog.getByRole("option").last(),
+      lastAt = (await last.boundingBox())!,
+      listAt = (await list.boundingBox())!
+    expect(lastAt.y + lastAt.height).toBeLessThanOrEqual(
+      listAt.y + listAt.height
+    )
+    expect((await input.boundingBox())!.y).toBe(fieldAt)
+    await input.press("End")
+    const active = dialog.locator('[role="option"][aria-selected="true"]'),
+      activeAt = (await active.boundingBox())!
+    expect(activeAt.y).toBeGreaterThanOrEqual(listAt.y)
+    expect(activeAt.y + activeAt.height).toBeLessThanOrEqual(
+      listAt.y + listAt.height
+    )
+    await input.press("Home")
+    await expect
+      .poll(() => list.evaluate((node) => node.scrollTop))
+      .toBeLessThanOrEqual(8)
+    if ((width === 1440 && height === 900) || width === 320)
+      await page.screenshot({
+        path: `/tmp/search-scroll-${info.project.name}-${width}.png`,
+      })
+    await input.fill("nonexistent")
+    await expect(
+      dialog.getByText("No tools found", { exact: true })
+    ).toBeVisible()
+    await expect(
+      dialog.getByRole("button", { name: "Close search" })
+    ).toBeVisible()
+    await input.press("Escape")
+    await expect(dialog).toBeHidden()
+    await expect(page.getByTestId("search-button")).toBeFocused()
+  }
+})
+
 test("⌘K or Ctrl+K opens the search from anywhere, also while typing", async ({
   page,
   isMobile,

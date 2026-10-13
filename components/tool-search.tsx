@@ -133,14 +133,14 @@ export function ToolSearch() {
         <DialogContent
           showCloseButton={false}
           finalFocus={pill}
-          className="top-4 max-h-[calc(100dvh-2rem)] max-w-xl translate-y-0 gap-0 overflow-hidden p-0 sm:top-[12vh]"
+          className="top-4 max-h-[min(40rem,calc(100dvh-2rem))] max-w-xl translate-y-0 gap-0 overflow-hidden p-0 sm:top-[12dvh] sm:max-h-[min(40rem,calc(88dvh-1rem))]"
         >
           <DialogTitle className="sr-only">Search tools</DialogTitle>
           <DialogDescription className="sr-only">
             Type to narrow the list, move with the arrow keys, and press Enter
             to open a tool.
           </DialogDescription>
-          <div className="flex items-center gap-2 border-b pr-1 pl-4">
+          <div className="flex shrink-0 items-center gap-2 border-b pr-1 pl-4">
             <IconSearch
               className="size-4 shrink-0 text-muted-foreground"
               aria-hidden="true"
@@ -182,7 +182,7 @@ export function ToolSearch() {
               id={`${ids}-list`}
               role="listbox"
               aria-label="Tools"
-              className="min-h-0 flex-1 space-y-0.5 overflow-y-auto p-2"
+              className="max-h-[min(30rem,calc(100dvh-6rem))] min-h-0 flex-1 [scrollbar-gutter:stable] space-y-0.5 overflow-y-auto overscroll-contain p-2 sm:max-h-[min(30rem,calc(88dvh-7rem))]"
             >
               {results.map((tool, at) => {
                 const ready = tool.status === "available"
@@ -252,7 +252,7 @@ export function ToolSearch() {
               </p>
             </div>
           )}
-          <p className="hidden items-center gap-3 border-t px-4 py-2 text-xs text-muted-foreground sm:flex">
+          <p className="hidden shrink-0 items-center gap-3 border-t px-4 py-2 text-xs text-muted-foreground sm:flex">
             <span className="flex items-center gap-1">
               <kbd className={keyClass}>↑</kbd>
               <kbd className={keyClass}>↓</kbd> to move
