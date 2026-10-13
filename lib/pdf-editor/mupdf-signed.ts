@@ -123,6 +123,15 @@ export async function exportAfter(
     return {
       bytes,
       report: {
+        ...(session.steps
+          .slice(0, position)
+          .some((step) => step.done.kind === "make-fields")
+          ? {
+              formEdits: session.steps
+                .slice(0, position)
+                .filter((step) => step.done.kind === "make-fields").length,
+            }
+          : null),
         added: things,
         editable: true,
         text: { boxes: 0, found: 0 },

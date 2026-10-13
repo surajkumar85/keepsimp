@@ -10,6 +10,7 @@ import {
   IconDroplet,
   IconEraser,
   IconFilePencil,
+  IconFilePlus,
   IconFileZip,
   IconGif,
   IconHighlight,
@@ -50,6 +51,7 @@ const icons: Record<string, typeof IconBraces> = {
   "add-page-numbers": IconNumber123,
   "watermark-pdf": IconDroplet,
   "redact-pdf": IconEraser,
+  "create-pdf-form": IconFilePlus,
   "json-formatter": IconBraces,
   "color-utility": IconPalette,
 }

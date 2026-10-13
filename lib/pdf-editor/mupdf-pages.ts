@@ -229,7 +229,22 @@ export function dropWidget(doc: Doc, widget: Obj) {
     if (!list?.isArray()) break
     const number = numberOf(node)
     for (let at = list.length - 1; at >= 0; at--)
-      if (number && numberOf(list.get(at)) === number) list.delete(at)
+      if (number && numberOf(list.get(at)) === number) {
+        // Radio export labels follow Kids by index. A removed widget must
+        // take its label along, or the next choice exports the wrong value.
+        const options = parent.isDictionary() ? parent.get("Opt") : null
+        const flags = parent.isDictionary() ? parent.getInheritable("Ff") : null
+        if (
+          parent.isDictionary() &&
+          nameOf(parent.getInheritable("FT")) === "Btn" &&
+          flags?.isNumber() &&
+          (flags.asNumber() & (1 << 15)) !== 0 &&
+          options?.isArray() &&
+          options.length === list.length
+        )
+          options.delete(at)
+        list.delete(at)
+      }
     if (!node.get("T").isNull()) fields++
     if (!parent.isDictionary() || list.length > 0) break
     node = parent

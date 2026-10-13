@@ -25,6 +25,7 @@ import {
   PdfFormTutorial,
   PdfNumbersTutorial,
   PdfRedactTutorial,
+  PdfCreateFormTutorial,
   PdfWatermarkTutorial,
   PdfSignerTutorial,
 } from "@/components/pdf-editor/tutorial"
@@ -99,6 +100,12 @@ export async function generateMetadata({
     return pageMetadata(
       "Add a watermark to a PDF online for free",
       "Lay DRAFT, Confidential or a logo of your own over the pages of a PDF, as faint and as large as you like, in your browser. No account, no file uploads.",
+      `/dashboard/${id}/`
+    )
+  if (id === "create-pdf-form")
+    return pageMetadata(
+      "Create a fillable PDF form online for free",
+      "Add text fields, checkboxes, radio groups, dropdowns, lists, dates and signature places to a PDF. Move, resize and name fields locally in your browser. No uploads.",
       `/dashboard/${id}/`
     )
   if (id === "redact-pdf")
@@ -215,6 +222,8 @@ export default async function ToolPage({
         <PdfEditor mode="numbers" />
       ) : id === "watermark-pdf" ? (
         <PdfEditor mode="watermark" />
+      ) : id === "create-pdf-form" ? (
+        <PdfEditor mode="create-form" />
       ) : id === "redact-pdf" ? (
         <PdfEditor mode="redact" />
       ) : (
@@ -250,6 +259,8 @@ export default async function ToolPage({
         <PdfNumbersTutorial />
       ) : id === "watermark-pdf" ? (
         <PdfWatermarkTutorial />
+      ) : id === "create-pdf-form" ? (
+        <PdfCreateFormTutorial />
       ) : id === "redact-pdf" ? (
         <PdfRedactTutorial />
       ) : (

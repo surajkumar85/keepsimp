@@ -11,6 +11,7 @@
 import { readCommentOp } from "./comments"
 import { readDocumentOp } from "./document"
 import { readFieldOp } from "./forms"
+import { readMakeFieldOp } from "./form-fields"
 import type { Step } from "./mupdf-edit"
 import { FONT_KEYS, fontsFor, readObject } from "./objects"
 import { isOwn } from "./own-font"
@@ -68,6 +69,7 @@ const readers = {
   things: readOp,
   comments: readCommentOp,
   fields: readFieldOp,
+  "make-fields": readMakeFieldOp,
   text: readTextChange,
   pictures: readPictureOp,
   links: readLinkOp,

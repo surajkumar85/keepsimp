@@ -163,6 +163,12 @@ const cards = [
     "/images/pdf-watermark-guide.svg",
   ],
   [
+    "create-a-fillable-pdf-form",
+    "Make a form people can fill in.",
+    "Real PDF fields. Made on your device.",
+    "/images/pdf-create-form-guide.svg",
+  ],
+  [
     "redact-a-pdf-without-uploading",
     "A black box is not a redaction.",
     "Take text and pictures out of a PDF for good.",

@@ -75,6 +75,8 @@ import { DocumentPanel } from "./document-panel"
 import { RepeatPanel } from "./repeat-panel"
 import { useCrop } from "./use-crop"
 import { useDescribed } from "./use-described"
+import { FormDesignPanel } from "./form-design-panel"
+import { FORM_HINT, useMakeForm } from "./use-make-form"
 import { REDACT_HINT, useRedact } from "./use-redact"
 import { useRepeat } from "./use-repeat"
 import { usePages } from "./use-pages"
@@ -180,6 +182,7 @@ export type EditorMode =
   | "numbers"
   | "watermark"
   | "redact"
+  | "create-form"
 
 /** The doors that open the editor for a job on the pages themselves. */
 const PAGE_JOBS: readonly EditorMode[] = ["crop", "numbers", "watermark"]
@@ -402,6 +405,29 @@ const CLEAN_CHOICES: readonly {
   },
 ]
 
+const CREATE_FORM_ABILITIES = [
+  {
+    icon: IconEdit,
+    title: "Make fields others can fill in",
+    text: "Add text, multiline text, checkboxes, radio groups, dropdowns, lists, dates and empty signature places. Fields stay part of the PDF's own form.",
+  },
+  {
+    icon: IconCrop,
+    title: "Put each field where it belongs",
+    text: "Drag a field, pull a handle to resize, or use the arrow keys. Field settings change its name, tooltip, requirement and text length limit.",
+  },
+  {
+    icon: IconFileTypePdf,
+    title: "Fill it in again",
+    text: "Download with fields kept as fields, then open the result in Fill PDF form or another PDF reader. Dates use yyyy-mm-dd; a signature place proves nothing about who signed.",
+  },
+  {
+    icon: IconLock,
+    title: "Your file stays on your device",
+    text: "Nothing is uploaded. Undo and redo work for every change; a draft is kept only when you ask.",
+  },
+]
+
 const SIGN_ABILITIES = [
   {
     icon: IconEdit,
@@ -427,6 +453,10 @@ const SIGN_ABILITIES = [
 
 /** The words of the page before a file is opened, for each thing the editor is opened for. */
 const DOORS: Record<EditorMode, { heading: string; body: string }> = {
+  "create-form": {
+    heading: "Drop a PDF to make a fillable form",
+    body: "Add text fields, checkboxes, radio groups, dropdowns, lists, dates and empty signature places. Move, resize and name them, then download a form others can fill in. Everything stays on your device.",
+  },
   edit: {
     heading: "Drop a PDF to edit",
     body: "Change the words that are there, add text, pictures, shapes and drawings, mark words, place notes and sign, then download the result. You can also paste a file with ⌘V or Ctrl+V.",
@@ -463,6 +493,8 @@ const DOORS: Record<EditorMode, { heading: string; body: string }> = {
 
 /** What a page opened for one job says it is, with a way to the whole editor. */
 const FOCUSED: Partial<Record<EditorMode, string>> = {
+  "create-form":
+    ", opened for making fillable form fields. The other tools are behind “All tools”.",
   annotate:
     ", opened for marking up. Its other tools (text, pictures, shapes, stamps, signing) are behind “All tools”.",
   fill: ", opened for filling in forms. Its other tools (pictures, shapes, stamps, highlights and notes) are behind “All tools”.",
@@ -636,6 +668,20 @@ function Workspace({
     readingNow,
     // A page opened for taking things out begins with that tool.
     mode === "redact"
+  )
+  const makeForm = useMakeForm(
+    editor,
+    comments,
+    retext,
+    inpage,
+    links,
+    find,
+    crop,
+    redact,
+    pageList,
+    repeat,
+    described,
+    mode === "create-form"
   )
   /** The page shown on the card while the window is closed. */
   const [previewAt, setPreviewPage] = useState(0)
@@ -997,6 +1043,16 @@ function Workspace({
       crop.setOn(false)
       return used()
     }
+    if (plain && letter === "v" && makeForm.on) {
+      makeForm.setOn(false)
+      editor.setTool("select")
+      return used()
+    }
+    if (event.key === "Escape" && makeForm.on) {
+      if (makeForm.chosen) makeForm.setChosen(null)
+      else makeForm.setOn(false)
+      return used()
+    }
     if (event.key === "Escape" && redact.on) {
       redact.setOn(false)
       return used()
@@ -1044,28 +1100,31 @@ function Workspace({
     onPage,
     onKey,
     showPage: jump,
-    panel: comments.listed ? (
-      <CommentsPanel editor={editor} comments={comments} />
-    ) : pageList.on ? (
-      <PagesPanel
-        editor={editor}
-        pages={pageList}
-        source={reader.source}
-        file={doc.id}
-        name={name}
-        onGo={goToPage}
-        onSavePart={savePart}
-      />
-    ) : repeat.on ? (
-      <RepeatPanel repeat={repeat} />
-    ) : described.on ? (
-      <DocumentPanel
-        editor={editor}
-        described={described}
-        reading={readingNow}
-        onGo={goToPage}
-      />
-    ) : undefined,
+    panel:
+      makeForm.on && makeForm.panel ? (
+        <FormDesignPanel makeForm={makeForm} editor={editor} />
+      ) : comments.listed ? (
+        <CommentsPanel editor={editor} comments={comments} />
+      ) : pageList.on ? (
+        <PagesPanel
+          editor={editor}
+          pages={pageList}
+          source={reader.source}
+          file={doc.id}
+          name={name}
+          onGo={goToPage}
+          onSavePart={savePart}
+        />
+      ) : repeat.on ? (
+        <RepeatPanel repeat={repeat} />
+      ) : described.on ? (
+        <DocumentPanel
+          editor={editor}
+          described={described}
+          reading={readingNow}
+          onGo={goToPage}
+        />
+      ) : undefined,
     actions: (
       <>
         <Button
@@ -1093,6 +1152,7 @@ function Workspace({
           repeat={repeat}
           described={described}
           redact={redact}
+          makeForm={makeForm}
           first={mode === "annotate" ? "comments" : "things"}
           focus={
             allTools
@@ -1103,9 +1163,11 @@ function Workspace({
                   ? "signing"
                   : PAGE_JOBS.includes(mode)
                     ? "pages"
-                    : mode === "redact"
-                      ? "redact"
-                      : null
+                    : mode === "create-form"
+                      ? "forms"
+                      : mode === "redact"
+                        ? "redact"
+                        : null
           }
           onAllTools={() => setAllTools(true)}
           onSign={() => setSigning(true)}
@@ -1145,7 +1207,16 @@ function Workspace({
             {redact.note || REDACT_HINT}
           </p>
         )}
-        {formSays && (
+        {makeForm.on && (
+          <p
+            role="status"
+            data-testid="editor-hint"
+            className="border-b px-3 py-2 text-sm text-muted-foreground"
+          >
+            {makeForm.note || FORM_HINT}
+          </p>
+        )}
+        {formSays && !makeForm.on && (
           <div
             className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b px-3 py-2 text-sm text-muted-foreground"
             data-testid="editor-form"
@@ -1186,6 +1257,7 @@ function Workspace({
           find={find}
           crop={crop}
           redact={redact}
+          makeForm={makeForm}
           page={entry.page}
           size={entry.size}
           scale={scale}
@@ -1894,21 +1966,23 @@ export function PdfEditor({ mode = "edit" }: { mode?: EditorMode }) {
         <div className="space-y-4 rounded-xl border bg-card p-4 sm:p-5">
           <h2 className="section-title">What you can do</h2>
           <ul className="space-y-3 text-sm">
-            {(mode === "redact"
-              ? REDACT_ABILITIES
-              : mode === "crop"
-                ? CROP_ABILITIES
-                : mode === "numbers"
-                  ? NUMBER_ABILITIES
-                  : mode === "watermark"
-                    ? WATERMARK_ABILITIES
-                    : mode === "fill"
-                      ? FILL_ABILITIES
-                      : mode === "sign"
-                        ? SIGN_ABILITIES
-                        : mode === "annotate"
-                          ? ANNOTATE_ABILITIES
-                          : ABILITIES
+            {(mode === "create-form"
+              ? CREATE_FORM_ABILITIES
+              : mode === "redact"
+                ? REDACT_ABILITIES
+                : mode === "crop"
+                  ? CROP_ABILITIES
+                  : mode === "numbers"
+                    ? NUMBER_ABILITIES
+                    : mode === "watermark"
+                      ? WATERMARK_ABILITIES
+                      : mode === "fill"
+                        ? FILL_ABILITIES
+                        : mode === "sign"
+                          ? SIGN_ABILITIES
+                          : mode === "annotate"
+                            ? ANNOTATE_ABILITIES
+                            : ABILITIES
             ).map((item) => (
               <li key={item.title} className="flex gap-3">
                 <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">

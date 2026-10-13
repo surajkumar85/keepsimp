@@ -130,6 +130,9 @@ function read(widget: Widget): FormField | null {
     shown: offers ? ask(() => widget.getOptions(false), []) : [],
     required: Boolean(bits & REQUIRED),
     readOnly: ask(() => widget.isReadOnly(), false),
+    ...(kind === "signature" && !field.get("V").isNull()
+      ? { signed: true }
+      : null),
     multiline: text && ask(() => widget.isMultiline(), false),
     password: text && ask(() => widget.isPassword(), false),
     comb: text && ask(() => widget.isComb(), false),
@@ -207,7 +210,7 @@ function pagesOf(doc: Doc, widget: Widget, here: number): number[] {
  * tinted bar. The engine writes nothing for a list, and would leave it
  * blank.
  */
-function drawList(mupdf: Engine, page: MuPDF.PDFPage, widget: Widget) {
+export function drawList(mupdf: Engine, page: MuPDF.PDFPage, widget: Widget) {
   const field = read(widget)
   if (!field) return
   const { width, height } = field.box

@@ -1,5 +1,6 @@
 "use client"
 
+import type { MakeFieldChange } from "@/lib/pdf-editor/form-fields"
 import { poolSize } from "@/lib/image-batch/pool"
 import type { Size } from "@/lib/image-compressor/geometry"
 import type { CommentChange, LetterLine } from "@/lib/pdf-editor/comments"
@@ -644,6 +645,14 @@ export class PdfClient {
   }
 
   /** Mark places to be taken out for good, take marks away, or apply them all, as one step. */
+  editMakeFields(id: string, change: MakeFieldChange) {
+    return new Promise<EditNews>((resolve, reject) => {
+      const request = ++this.requests
+      this.editNews.set(request, { resolve, reject })
+      this.send({ type: "edit-make-fields", id, request, change })
+    })
+  }
+
   editRedact(id: string, change: RedactChange) {
     return new Promise<EditNews>((resolve, reject) => {
       const request = ++this.requests

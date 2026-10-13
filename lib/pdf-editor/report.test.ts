@@ -46,6 +46,20 @@ describe("editedName", () => {
   })
 })
 
+it("reports field creation and changes even when the last field was deleted", () => {
+  for (const n of [1, 2]) {
+    const lines = everyLine(report({ added: 0, formEdits: n }))
+    expect(lines).toHaveLength(1)
+    expect(lines[0].text).toContain(`${n} step${n === 1 ? "" : "s"}.`)
+    expect(lines[0].text).toContain("A signature place is only a place")
+  }
+  expect(
+    everyLine(report({ formEdits: 1, signature: { intact: true } })).some(
+      (line) => line.text.includes("Earlier fields and names remain")
+    )
+  ).toBe(true)
+})
+
 describe("partName", () => {
   it("names some pages of a file as a file of their own", () => {
     expect(partName("Plan 2026.pdf", [2])).toBe("Plan 2026-page-3.pdf")

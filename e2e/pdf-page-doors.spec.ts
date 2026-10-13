@@ -7,6 +7,16 @@ const pick = (page: Page, name: string) =>
 /** The pages that open the editor for one job on the pages themselves. */
 const DOORS = [
   {
+    route: "/dashboard/create-pdf-form/",
+    title: /Create a fillable PDF form online for free/,
+    drop: "Drop a PDF to make a fillable form",
+    ability: "Make fields others can fill in",
+    guide: "/blog/create-a-fillable-pdf-form/",
+    article: "Make a form people can fill in.",
+    focused: "opened for making fillable form fields",
+    name: "Create a fillable PDF form",
+  },
+  {
     route: "/dashboard/crop-pdf/",
     title: /Crop a PDF online for free/,
     drop: "Drop a PDF to crop",

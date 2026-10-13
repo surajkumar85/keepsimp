@@ -1,5 +1,7 @@
 "use client"
 
+import type { MakeFieldOp } from "@/lib/pdf-editor/form-fields"
+
 import {
   useCallback,
   useEffect,
@@ -177,6 +179,9 @@ export function useEditor(
   const [comments, setComments] = useState<Comment[][]>(opened.comments)
   /** The places of a form on each page, with what each holds in the file. */
   const [fields, setFields] = useState<FormField[][]>(opened.fields)
+  const [formNames, setFormNames] = useState(
+    opened.formNames ?? opened.fields.flat().map((field) => field.name)
+  )
   const [versions, setVersions] = useState<number[]>(() =>
     opened.sizes.map(() => 0)
   )
@@ -194,6 +199,15 @@ export function useEditor(
   const copied = useRef<EditorObject[]>([])
   /** Changes are made one after another, in the order they were asked for. */
   const queue = useRef<Promise<unknown>>(Promise.resolve())
+  /** Page layers finish their gathered moves before another change is queued. */
+  const finishers = useRef(new Set<() => void>()),
+    finishing = useRef(false)
+  const onFlush = useCallback((finish: () => void) => {
+    finishers.current.add(finish)
+    return () => {
+      finishers.current.delete(finish)
+    }
+  }, [])
   const fonts = useRef(new Map<string, Promise<void>>())
   /** The fonts of one's own that were added, in the order they were. */
   const [ownFonts, setOwnFonts] = useState<{ key: string; name: string }[]>(
@@ -406,6 +420,7 @@ export function useEditor(
         return sized(now)
       })
       setWaiting(news.waiting)
+      if (news.formNames) setFormNames(news.formNames)
       if (news.document) {
         setDescribed(news.document)
         setBookmarks(news.document.bookmarks)
@@ -505,10 +520,19 @@ export function useEditor(
   /** Moves by the arrow keys that are being gathered go to the file, as one change. */
   const flush = useCallback(() => {
     const waiting = held.current
-    if (!waiting) return
-    clearTimeout(waiting.timer)
-    held.current = null
-    void send(waiting.change)
+    if (waiting) {
+      clearTimeout(waiting.timer)
+      held.current = null
+      void send(waiting.change)
+    }
+    // A finisher sends through this same queue, so it may call flush again.
+    if (finishing.current) return
+    finishing.current = true
+    try {
+      for (const finish of finishers.current) finish()
+    } finally {
+      finishing.current = false
+    }
   }, [send])
 
   useEffect(
@@ -754,6 +778,21 @@ export function useEditor(
       return reading
     },
     [client, file]
+  )
+
+  /** Make or change the PDF's own form fields, after pending gestures finish. */
+  const makeFields = useCallback(
+    async (label: string, ...ops: MakeFieldOp[]) => {
+      flush()
+      let made: Awaited<ReturnType<PdfClient["editMakeFields"]>> | null = null
+      await enqueue(async (worker) => {
+        const news = await worker.editMakeFields(file, { label, ops })
+        made = news
+        return news
+      })
+      return made as Awaited<ReturnType<PdfClient["editMakeFields"]>> | null
+    },
+    [flush, enqueue, file]
   )
 
   /**
@@ -1563,6 +1602,8 @@ export function useEditor(
     redactMarks,
     changeRedact,
     findToRedact,
+    makeFields,
+    formNames,
     newId,
     changePages,
     insertPdf,
@@ -1626,6 +1667,7 @@ export function useEditor(
     onPage,
     saved,
     settled,
+    onFlush,
     changesNow,
   }
 }

@@ -1,6 +1,6 @@
 # PDF editor: what is left, and how to build it
 
-This is a working brief for whoever builds phases 8 to 10 of the PDF editor. Phases 1 to 7 are live. `AGENTS.md` holds the rules, `docs/pdf-editor.md` says what is built and how, and this file says what is left and the way of working that got the first seven phases shipped without regressions. Follow it step by step. Do not skip the proving steps: every one of them caught a real fault.
+This is a working brief for whoever builds phases 8 to 10 of the PDF editor. Phases 1 to 7 are live; phase 8, part 1 is built and proved in this change. `AGENTS.md` holds the rules, `docs/pdf-editor.md` says what is built and how, and this file says what is left and the way of working that got the first seven phases shipped without regressions. Follow it step by step. Do not skip the proving steps: every one of them caught a real fault.
 
 ## The way of working (do this for every part)
 
@@ -12,7 +12,7 @@ This is a working brief for whoever builds phases 8 to 10 of the PDF editor. Pha
 6. **Engine tests** in `<name>.node.test.ts`: do the change, export with `exportEdited`, check `danglingRefs(bytes)` is empty, read back with pdf-lib/pdf.js, undo and redo, keep a draft and take it up, and try a signed file.
 7. **Worker wiring**: request and answer types in `lib/pdf-merger/protocol.ts`, the handler in `pdf.worker.ts`, the call in `client.ts`, then `components/pdf-editor/use-editor.ts`.
 8. **UI**: a hook `use-<name>.ts` (other tools put it down, and it puts them down), a layer over the page if needed, a toggle and a row in `toolbar.tsx`. Everything must work from the keyboard and at 320 px. No letter keys are free for shortcuts.
-9. **The door**: a catalogue entry with `partOf: "pdf-editor"`, an icon in `tool-icon.tsx`, metadata and components in `app/(workspace)/dashboard/[tool]/page.tsx`, a mode in `pdf-editor.tsx` (`EditorMode`, `DOORS`, `FOCUSED`, abilities), help in `tutorial.tsx`, an article in `lib/tool-blog.ts` + `lib/blog.ts`, an SVG in `public/images/`, a card in `scripts/social-images.mjs` (run it), and `e2e/pdf-page-doors.spec.ts`. Update counts in `lib/catalogue.test.ts` and `e2e/foundation.spec.ts` (search options are 23 now, "pdf" gives 11; each door adds one to both, and the arrow-key loop counts in that test change with them).
+9. **The door**: a catalogue entry with `partOf: "pdf-editor"`, an icon in `tool-icon.tsx`, metadata and components in `app/(workspace)/dashboard/[tool]/page.tsx`, a mode in `pdf-editor.tsx` (`EditorMode`, `DOORS`, `FOCUSED`, abilities), help in `tutorial.tsx`, an article in `lib/tool-blog.ts` + `lib/blog.ts`, an SVG in `public/images/`, a card in `scripts/social-images.mjs` (run it), and `e2e/pdf-page-doors.spec.ts`. Update counts in `lib/catalogue.test.ts` and `e2e/foundation.spec.ts` (search options are 24 now, "pdf" gives 12; each door adds one to both, and the arrow-key loop counts in that test change with them).
 10. **Browser tests** in `e2e/pdf-<name>.spec.ts`: real journeys, the download read back with pdf.js, axe in both themes, 320 px, no outside requests. Model it on `e2e/pdf-redact.spec.ts`.
 11. **Verify, in this order.** `npm run check` (must end with 100% coverage). `rm -f .next/lock; npm run build`. `npx playwright test e2e/<your spec> --workers=2` on all five profiles. After any toolbar change also run `e2e/pdf-editor.spec.ts`, `pdf-retext`, `pdf-paragraphs`, `pdf-crop`, `pdf-annotator`, `pdf-signer`, `pdf-form-filler`. A test that times out under load is rerun alone before it is believed.
 12. **Look at it.** Screenshots at desktop, phone and dark. Then run it on real files (`node scripts/pdf-benchmark-files.mjs <folder>` fetches nine): `qpdf --check`, `pdftotext`, pages you did not touch pixel for pixel what they were.
@@ -23,7 +23,7 @@ Traps that cost time: `get()` on a missing engine object throws (ask with one pa
 
 Say only what a tool does. If something cannot be done well, leave it out and say so in the limits; never ship a control that pretends.
 
-## Phase 8: make forms (next)
+## Phase 8: make forms (part 1 built; part 2 next)
 
 Goal: a person turns any PDF into a form others can fill in, in this editor and in Acrobat, Preview, Chrome and Firefox. Door: **Create a fillable PDF form** at `/dashboard/create-pdf-form/`.
 
@@ -31,13 +31,47 @@ What the probe already showed (MuPDF 1.28.1): the engine has no call that makes 
 
 Build, as parts shipped one at a time:
 
-1. **Add, move, resize, rename, delete** text fields (one line, several lines), check boxes, round-button groups, drop-downs and lists, date fields and a place for a signature. Each has a name (unique; offer one), a tooltip (`TU`), required (`Ff` bit 2), a limit of letters (`MaxLen`), and for lists its choices. Fields are the file's own, read by the existing `lib/pdf-editor/forms.ts` and `mupdf-forms.ts`, so the Fill PDF form door must fill what this makes: test that journey end to end.
+1. **Built: add, move, resize, rename, delete** text fields (one line, several lines), check boxes, round-button groups, drop-downs and lists, date fields and a place for a signature. Each has a name (unique; offer one), a tooltip (`TU`), required (`Ff` bit 2), a limit of letters (`MaxLen`), and for lists its choices. Fields are the file's own, read by the existing `lib/pdf-editor/forms.ts` and `mupdf-forms.ts`, so the Fill PDF form door must fill what this makes: test that journey end to end.
 2. **Order and layout**: tab order (the order in `Annots`, and `Tabs /S` or `/R` on the page: prove which viewers follow which), align, distribute, same size, copy to other pages (a copy needs a new name).
 3. **Suggest fields**: from the lines and boxes a page draws (a long thin rule or a run of underscores is a text field, a small square is a check box). It is judged by look and will be wrong sometimes: show suggestions to accept or dismiss, never add them unasked.
 
 A date field in other programs is a text field with a format script (`AFDate_FormatEx`). This editor never runs scripts, and its own filling reads that script as text. Decide with a probe whether to write the script so that other programs format the date, and say in the docs what was decided and why. A place for a signature is only a place: nothing here proves who signed.
 
 Limits to state plainly: no calculated fields, no scripts of our own beyond what the decision above allows, no XFA, a list's look is ours.
+
+## Phase 8, part 1: proof and handoff
+
+Built: the Create a fillable PDF form door, eight kinds of ordinary AcroForm field, pointer and keyboard movement/resizing, unique names, tooltips, required flags, text length limits, creation-time choices and multiple-selection lists, logical-field deletion, undo/redo and opt-in drafts. The existing Fill PDF form page fills the downloaded fields. Part 2 (order/layout) and part 3 (suggestions) have not started.
+
+Files: `lib/pdf-editor/form-fields.ts`, `mupdf-form-fields.ts`, their pure and engine tests; `components/pdf-editor/use-make-form.ts`, `form-design-layer.tsx`, `form-design-panel.tsx`, integrated through the editor hook, page layer and toolbar; worker/client/protocol, draft, report and signed export; catalogue, route, icon, help, blog, SVG and social card. A removed radio widget takes its matching `Opt` entry with it in `mupdf-pages.ts`.
+
+The throwaway engine probes were run, independently read and removed before product code. Checkboxes without their own on/off appearances did not read as checked in pdf-lib; own states make both readers agree. A radio parent with `Kids`, matching `Opt` labels and per-choice appearances stays exclusive, including across pages. The fixed ISO date action is recognised as text by the existing date reader and is never executed. Text on a rotated page needs `MK/R` and a fresh appearance; pdf.js reads the flattened letters upright. A later browser check caught immediate Undo removing the field instead of undoing its pending move: gathered moves now register with `editor.onFlush` and finish before undo, another change or download.
+
+Local proof:
+
+- `npm run check`: 134 test files, 2,294 tests, 100% statements/branches/functions/lines for all 134 pure files. Design, format, lint, production build and TypeScript pass.
+- Engine form/page/redaction regression run: 47 passes (the new form engine file has eight tests), every exported result read with pdf-lib and pdf.js and `danglingRefs` empty.
+- A second production build, then `pdf-create-form.spec.ts --workers=2`: eight journeys, 40 passes across all five profiles, including all kinds through create → download → Fill PDF form → filled download, pending moves on tool switch/undo/download, drafts, axe in both themes, 320 px and no outside requests.
+- Older specs: `pdf-editor`, `pdf-retext`, `pdf-paragraphs`, `pdf-crop`, `pdf-annotator`, `pdf-signer`, `pdf-form-filler`, plus `pdf-pages`, `pdf-redact`, `pdf-page-doors` and `foundation`: 422 passes and eight pre-existing device-specific skips, two workers, all five profiles. Screenshots inspected at desktop, phone, 320 px, light and dark.
+- Nine real-file cases: eight processed, one XFA refusal, all pass. Each accepted file received all field kinds, a move/resize and a rename, then three different field values through the existing filler. Both readers agree, the 16 written outputs pass qpdf, and dangling references are empty. All untouched pages match in Poppler PNGs at 72 dpi and pdftotext. New appearance labels legitimately add text on the edited page; its original page content is retained.
+
+| File                  | Pages | Untouched pages compared pixel for pixel | Result                                                |
+| --------------------- | ----: | ---------------------------------------: | ----------------------------------------------------- |
+| `paper-arxiv.pdf`     |    15 |                                       14 | Created, changed, filled; both readers and qpdf agree |
+| `form-irs-1040.pdf`   |     2 |                                        0 | XFA refused; zero changes                             |
+| `guide-irs-p17.pdf`   |   142 |                                      141 | Created, changed, filled; both readers and qpdf agree |
+| `booklet-udhr.pdf`    |    72 |                                       71 | Created, changed, filled; both readers and qpdf agree |
+| `report-ipcc-spm.pdf` |    42 |                                       41 | Created, changed, filled; both readers and qpdf agree |
+| `scan-archive.pdf`    |   168 |                                      167 | Created, changed, filled; both readers and qpdf agree |
+| `album-photos.pdf`    |     6 |                                        5 | Created, changed, filled; both readers and qpdf agree |
+| `scan-phone.pdf`      |     4 |                                        3 | Created, changed, filled; both readers and qpdf agree |
+| `slides-chromium.pdf` |     4 |                                        3 | Created, changed, filled; both readers and qpdf agree |
+
+Total: 445 untouched pages. The corpus was made with `node scripts/pdf-benchmark-files.mjs /tmp/keepsimp-form-corpus`, using the cached public documents and photographs and freshly generated album, phone scan and slides. The temporary corpus check was removed afterwards; real PDFs, PNGs and reports stay out of Git.
+
+Shipping proof belongs in the completion report: the single commit on main, the matching successful deployment, live journeys in Chromium/Firefox/WebKit on the arXiv paper and UN booklet (plus the IRS XFA refusal), and the matching CI run. Do not claim an unfinished deployment or CI run is green.
+
+Limits: no tab order, alignment, distribution, field copying, suggestions, XFA, calculations, custom scripts, font/style controls or certificate signing. Choice lists and kinds are fixed at creation in this part. A signature field is an empty place, not proof of who signed. New appearances use Helvetica; a list's appearance is ours. Settings list the first 200 visible widgets. Scripts referring to a renamed field are not rewritten. Acrobat and macOS Preview have not been manually checked.
 
 ## Phase 9: scans (OCR) and polish
 

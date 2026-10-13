@@ -49,6 +49,7 @@ import { auditPdf, type Audit } from "@/lib/pdf-compressor/mupdf-audit"
 import type { Stage } from "@/lib/pdf-compressor/report"
 import type { LetterLine } from "@/lib/pdf-editor/comments"
 import { applyFields, fieldsOn, formFacts } from "@/lib/pdf-editor/mupdf-forms"
+import { applyMakeFields, fieldNames } from "@/lib/pdf-editor/mupdf-form-fields"
 import { readDraft } from "@/lib/pdf-editor/draft"
 import { applyDocument, documentOf } from "@/lib/pdf-editor/mupdf-document"
 import {
@@ -612,6 +613,7 @@ function editState(
         bookmarks: session.laidOut ? bookmarksOf(session.doc) : pdf.bookmarks,
         document: documentOf(session),
         waiting: waitingMarks(session.doc),
+        formNames: fieldNames(session.doc),
       }
       toldOf.set(session, session.laidOut ?? 0)
       describedOf.set(session, session.described ?? 0)
@@ -670,6 +672,29 @@ function newsOf(
     ...(layout ? { layout } : null),
     ...(document ? { document } : null),
     waiting: waitingMarks(session.doc),
+    formNames: fieldNames(session.doc),
+  }
+}
+
+async function editMakeFields(
+  request: Extract<PdfRequest, { type: "edit-make-fields" }>
+) {
+  const session = editing.get(request.id)
+  try {
+    if (!session) throw new Error(EDIT_FAILED)
+    const pages = applyMakeFields(await engine, session, request.change)
+    post({
+      type: "edit-news",
+      request: request.request,
+      news: newsOf(session, pages),
+    })
+  } catch (error) {
+    post({
+      type: "edit-news",
+      request: request.request,
+      news: null,
+      message: readable(error, EDIT_FAILED),
+    })
   }
 }
 
@@ -1408,6 +1433,7 @@ self.onmessage = (event: MessageEvent<PdfRequest>) => {
     enqueue({ run: async () => editPageLinks(request) })
   else if (request.type === "edit-pages") void editPages(request)
   else if (request.type === "edit-document") void editDocument(request)
+  else if (request.type === "edit-make-fields") void editMakeFields(request)
   else if (request.type === "edit-redact") void editRedact(request)
   else if (request.type === "edit-redact-marks") editRedactMarks(request)
   else if (request.type === "edit-redact-find") editRedactFind(request)

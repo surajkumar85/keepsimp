@@ -40,6 +40,7 @@ import {
   IconAsterisk,
   IconCrop,
   IconEraser,
+  IconEdit,
   IconPlus,
   IconChevronDown,
   IconChevronUp,
@@ -125,6 +126,12 @@ import { CUT_HINT, INPAGE_HINT, type Inpage } from "./use-inpage"
 import { LINKS_HINT, type Links } from "./use-links"
 import type { Described } from "./use-described"
 import type { Pages } from "./use-pages"
+import type { MakeForm } from "./use-make-form"
+import {
+  MAKE_KINDS,
+  KIND_NAMES,
+  type MakeKind,
+} from "@/lib/pdf-editor/form-fields"
 import type { Redact } from "./use-redact"
 import type { Repeat } from "./use-repeat"
 import { PARAGRAPH_HINT, RETEXT_HINT, type Retext } from "./use-retext"
@@ -1492,6 +1499,7 @@ export function EditorToolbar({
   repeat,
   described,
   redact,
+  makeForm,
 }: {
   editor: Editor
   comments: Comments
@@ -1513,6 +1521,7 @@ export function EditorToolbar({
   described: Described
   /** Taking things out of the file for good. */
   redact: Redact
+  makeForm: MakeForm
   /** Which tools come first in the row: those that add things, or those that comment. */
   first?: "things" | "comments"
   /**
@@ -1520,7 +1529,7 @@ export function EditorToolbar({
    * up, or signing and filling in), with a button for the rest. A tool that
    * is in hand is always shown.
    */
-  focus?: "comments" | "signing" | "pages" | "redact" | null
+  focus?: "comments" | "signing" | "pages" | "redact" | "forms" | null
   onAllTools?: () => void
   /** Open the window a signature is made in. */
   onSign: () => void
@@ -1582,6 +1591,15 @@ export function EditorToolbar({
       <IconCrop aria-hidden="true" />
     </Toggle>
   )
+  const creatingForm = (
+    <Toggle
+      label="Create form fields"
+      pressed={makeForm.on}
+      onPress={() => makeForm.setOn(!makeForm.on)}
+    >
+      <IconEdit aria-hidden="true" />
+    </Toggle>
+  )
   const redacting = (
     <Toggle
       label="Redact: take out for good"
@@ -1599,6 +1617,7 @@ export function EditorToolbar({
       pressed={!comments.tool && state.tool === tool}
       onPress={() => {
         comments.setTool(null)
+        makeForm.setOn(false)
         editor.setTool(tool)
       }}
     >
@@ -1635,6 +1654,7 @@ export function EditorToolbar({
               find.setOn(false)
               crop.setOn(false)
               redact.setOn(false)
+              makeForm.setOn(false)
               editor.setTool(tool)
             }}
           >
@@ -1706,38 +1726,41 @@ export function EditorToolbar({
       </Toggle>
       {cropping}
       {redacting}
+      {creatingForm}
     </>
   )
   // Focused on one job, the other tools are put away, unless one of them is in hand.
   const narrow =
-    focus === "comments"
-      ? comments.tool !== null || state.tool === "select"
-      : focus === "signing"
-        ? comments.tool === null &&
-          !retext.on &&
-          !inpage.on &&
-          !links.on &&
-          !find.on &&
-          !crop.on &&
-          !redact.on &&
-          (state.tool === "select" || SIGNING.includes(state.tool))
-        : focus === "pages"
+    focus === "forms"
+      ? makeForm.on || state.tool === "select"
+      : focus === "comments"
+        ? comments.tool !== null || state.tool === "select"
+        : focus === "signing"
           ? comments.tool === null &&
             !retext.on &&
             !inpage.on &&
             !links.on &&
             !find.on &&
+            !crop.on &&
             !redact.on &&
-            state.tool === "select"
-          : focus === "redact"
+            (state.tool === "select" || SIGNING.includes(state.tool))
+          : focus === "pages"
             ? comments.tool === null &&
               !retext.on &&
               !inpage.on &&
               !links.on &&
               !find.on &&
-              !crop.on &&
+              !redact.on &&
               state.tool === "select"
-            : false
+            : focus === "redact"
+              ? comments.tool === null &&
+                !retext.on &&
+                !inpage.on &&
+                !links.on &&
+                !find.on &&
+                !crop.on &&
+                state.tool === "select"
+              : false
   const marks = COMMENT_TOOLS.map(({ tool, label, key, icon }) => (
     <Toggle
       key={tool}
@@ -1805,6 +1828,8 @@ export function EditorToolbar({
               </>
             ) : focus === "pages" ? (
               cropping
+            ) : focus === "forms" ? (
+              creatingForm
             ) : focus === "redact" ? (
               redacting
             ) : (
@@ -1824,6 +1849,7 @@ export function EditorToolbar({
                 comments.setTool(null)
                 crop.setOn(false)
                 redact.setOn(false)
+                makeForm.setOn(false)
                 editor.setTool("select")
               }}
             >
@@ -1921,6 +1947,40 @@ export function EditorToolbar({
           <FindRow find={find} />
         ) : crop.on ? (
           <CropRow crop={crop} />
+        ) : makeForm.on ? (
+          <>
+            <label className="flex shrink-0 items-center gap-2 text-xs">
+              Field type
+              <select
+                aria-label="Field type"
+                value={makeForm.spec.kind}
+                onChange={(e) => makeForm.kind(e.target.value as MakeKind)}
+                className="h-11 rounded-md border border-input bg-background px-2 text-base md:h-9 md:text-sm"
+              >
+                {MAKE_KINDS.map((kind) => (
+                  <option key={kind} value={kind}>
+                    {KIND_NAMES[kind]}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <Button
+              disabled={editor.busy || editor.form.xfa}
+              onClick={() => void makeForm.add()}
+            >
+              Add field
+            </Button>
+            <Button
+              variant="outline"
+              aria-pressed={makeForm.panel}
+              onClick={() => makeForm.setPanel(!makeForm.panel)}
+            >
+              Field settings
+            </Button>
+            <Button variant="ghost" onClick={() => makeForm.setOn(false)}>
+              Fill fields
+            </Button>
+          </>
         ) : redact.on ? (
           <RedactRow redact={redact} />
         ) : comments.tool ? (

@@ -38,6 +38,8 @@ import { PictureSpots } from "./picture-layer"
 import type { Inpage } from "./use-inpage"
 import type { Find } from "./use-find"
 import { CropFrame } from "./crop-layer"
+import { FormDesignSpots } from "./form-design-layer"
+import type { MakeForm } from "./use-make-form"
 import { RedactSpots } from "./redact-layer"
 import type { Redact } from "./use-redact"
 import type { Crop } from "./use-crop"
@@ -142,6 +144,7 @@ export function PageLayer({
   find,
   crop,
   redact,
+  makeForm,
 }: {
   editor: Editor
   comments: Comments
@@ -151,6 +154,7 @@ export function PageLayer({
   find: Find
   crop: Crop
   redact: Redact
+  makeForm: MakeForm
   /** Counted from 0. */
   page: number
   size: Size
@@ -238,6 +242,10 @@ export function PageLayer({
         // While pages are cut, a press on another page puts the frame there.
         if (crop.on) {
           if (crop.page !== page) crop.frame(page)
+          return
+        }
+        if (makeForm.on) {
+          makeForm.setChosen(null)
           return
         }
         pressed.current = { touch: event.pointerType === "touch", ended: false }
@@ -359,13 +367,30 @@ export function PageLayer({
           scale={scale}
         />
       )}
-      <FieldSpots
-        editor={editor}
-        page={page}
-        idle={
-          !drawing && !gesture && !mine && !retext.on && !inpage.on && !links.on
-        }
-      />
+      {makeForm.on && (
+        <FormDesignSpots
+          editor={editor}
+          makeForm={makeForm}
+          page={page}
+          size={size}
+          scale={scale}
+        />
+      )}
+      {!makeForm.on && (
+        <FieldSpots
+          editor={editor}
+          page={page}
+          idle={
+            !drawing &&
+            !gesture &&
+            !mine &&
+            !retext.on &&
+            !inpage.on &&
+            !links.on &&
+            !makeForm.on
+          }
+        />
+      )}
       {objects.map((object) => {
         const corners = cornersOf(object.box, object.rotation)
         const left = Math.min(...corners.map((corner) => corner.x)) - reach / 2

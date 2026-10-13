@@ -355,6 +355,25 @@ export const tools: readonly Tool[] = [
     status: "available",
   },
   {
+    id: "create-pdf-form",
+    name: "Create a fillable PDF form",
+    description: "Add, move, resize, name and delete the fields of a PDF form.",
+    partOf: "pdf-editor",
+    category: "document",
+    keywords: [
+      "pdf",
+      "fillable",
+      "create form",
+      "form fields",
+      "checkbox",
+      "radio",
+      "dropdown",
+      "date",
+      "signature field",
+    ],
+    status: "available",
+  },
+  {
     id: "color-utility",
     name: "Color utility",
     description:

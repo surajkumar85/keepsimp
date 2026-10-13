@@ -94,6 +94,7 @@ export interface Done {
     | "pages"
     | "document"
     | "redact"
+    | "make-fields"
   change: unknown
 }
 
@@ -1275,6 +1276,8 @@ export interface ExportReport {
    * and how many are still fields (drawn in, none should be).
    */
   fields: { had: number; how: "keep" | "flatten"; same: number; left: number }
+  /** How many steps added, reshaped, renamed or removed AcroForm fields. */
+  formEdits?: number
 }
 
 /** What a place of a form holds, as the file has it. A list that takes several holds one to a line. */
@@ -1742,6 +1745,13 @@ export async function exportEdited(
     return {
       bytes,
       report: {
+        ...(inForce.some((step) => step.done.kind === "make-fields")
+          ? {
+              formEdits: inForce.filter(
+                (step) => step.done.kind === "make-fields"
+              ).length,
+            }
+          : null),
         added: things.length,
         editable: Boolean(options.keepEditable),
         text: { boxes: boxes.length, found },

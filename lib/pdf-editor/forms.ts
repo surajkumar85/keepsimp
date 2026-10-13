@@ -40,6 +40,8 @@ export interface FormField {
   shown: string[]
   required: boolean
   readOnly: boolean
+  /** A filled certificate-signature field; form design leaves it alone. */
+  signed?: boolean
   multiline: boolean
   password: boolean
   /** Its letters are spread over boxes, one each. */

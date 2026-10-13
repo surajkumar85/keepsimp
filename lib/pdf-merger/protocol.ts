@@ -1,3 +1,4 @@
+import type { MakeFieldChange } from "@/lib/pdf-editor/form-fields"
 import type { Rotation, Size } from "@/lib/image-compressor/geometry"
 import type { Audit } from "@/lib/pdf-compressor/mupdf-audit"
 import type { CompressReport, Stage } from "@/lib/pdf-compressor/mupdf-compress"
@@ -208,6 +209,12 @@ export type PdfRequest =
   | { type: "edit-comment"; id: string; request: number; change: CommentChange }
   /** Fill fields of a form in, as one step. */
   | { type: "edit-field"; id: string; request: number; change: FieldChange }
+  | {
+      type: "edit-make-fields"
+      id: string
+      request: number
+      change: MakeFieldChange
+    }
   /** The letters of a page with their boxes, for marks to be laid on words. */
   | { type: "edit-letters"; id: string; request: number; page: number }
   /** The lines of a page's own text, with the look of their letters, for their words to be changed. */
@@ -300,6 +307,7 @@ export type PdfRequest =
 
 /** What changed in a file being edited: the pages to draw again with what is now on them, and the list of changes. */
 export interface EditNews {
+  formNames?: string[]
   pages: {
     page: number
     objects: EditorObject[]
@@ -421,6 +429,7 @@ export type PdfResponse =
         /** The places of a form on each page, and what the form is as a whole. */
         fields: FormField[][]
         form: FormFacts
+        formNames?: string[]
         /** Changes to this file can be written after it, which keeps a signature in it valid. */
         after: boolean
         history: History

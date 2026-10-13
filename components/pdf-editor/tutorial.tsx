@@ -674,6 +674,70 @@ export function PdfRedactTutorial() {
   return <ToolTutorial content={redacting} />
 }
 
+export function PdfCreateFormTutorial() {
+  return (
+    <ToolTutorial
+      content={{
+        name: "How to create a fillable PDF form with KeepSimp",
+        description:
+          "Add and arrange the PDF's own fields locally. Other people can fill them in here or in a PDF reader.",
+        intro:
+          "This is the PDF editor opened for making form fields. Everything is done on your device.",
+        steps: [
+          {
+            title: "Open the PDF",
+            text: "Choose, drop or paste one PDF. Create form fields is in hand, with field settings open. XFA forms cannot be changed here.",
+          },
+          {
+            title: "Add a field",
+            text: "Choose text, multiline text, checkbox, radio group, dropdown, list, date or signature place. In Field settings give it a unique name, a tooltip, a requirement and a character limit. Choices go one per line. Press Add field.",
+          },
+          {
+            title: "Move and resize",
+            text: "Drag its frame to move it, or pull a handle to resize. The arrow keys move it by one point, ten with Shift; Alt and arrows change its size. New fields start in the part of the page you can see.",
+          },
+          {
+            title: "Name and check",
+            text: "Choose a field and open Field settings to rename it or change its tooltip, requirement and text limit. Save field properties applies them together. Delete removes the whole field, including every choice of a radio group. Undo brings it back.",
+          },
+          {
+            title: "Download and fill",
+            text: "Keep fields as fields when downloading. Open the result in Fill PDF form and try each field before sharing. The Fill fields button in the editor also puts down the creation tool so the fields can be used.",
+          },
+        ],
+        options: [
+          {
+            term: "Names and tooltips",
+            detail:
+              "A name is unique in the file. Dots separate levels of existing field names, so a new name here has no dots. A tooltip gives someone using a keyboard or screen reader a clear label. Renaming a nested field keeps its parent.",
+          },
+          {
+            term: "Radio groups and lists",
+            detail:
+              "A radio group has one name and at least two choices. Only one can be on. Moving or resizing one choice affects that choice; deleting removes the group. A list may allow several choices; a dropdown chooses one.",
+          },
+          {
+            term: "Dates",
+            detail:
+              "Dates are written as yyyy-mm-dd. The file carries only a fixed date-format action for other programs. KeepSimp reads it as text and never executes a script.",
+          },
+          {
+            term: "Signature places",
+            detail:
+              "An empty place for a signature is not a certificate and does not prove who signed. Filled certificate signature fields are left alone. Use Sign PDF to add a drawn or typed mark on the page.",
+          },
+          {
+            term: "Limits",
+            detail:
+              "No calculated fields, arbitrary scripts, XFA forms, automatic field detection, alignment tools or tab-order controls. Lists use the editor's own appearance in Helvetica; unsupported letters may be missing from that appearance while their values stay in the file.",
+          },
+        ],
+        guideHref: "/blog/create-a-fillable-pdf-form/",
+      }}
+    />
+  )
+}
+
 export function PdfCropTutorial() {
   return <ToolTutorial content={cropping} />
 }

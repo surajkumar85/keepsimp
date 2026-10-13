@@ -19,6 +19,7 @@ describe("doors", () => {
       "add-page-numbers",
       "watermark-pdf",
       "redact-pdf",
+      "create-pdf-form",
     ])
     expect(listed).toHaveLength(tools.length - doors.length)
     expect(listed.some((tool) => tool.partOf)).toBe(false)
@@ -37,9 +38,11 @@ describe("doors", () => {
     )
     expect(filterTools("signature", "all").map((tool) => tool.id)).toEqual([
       "sign-pdf",
+      "create-pdf-form",
     ])
     expect(filterTools("fillable", "all").map((tool) => tool.id)).toEqual([
       "fill-pdf-form",
+      "create-pdf-form",
     ])
     expect(filterTools("margins", "all").map((tool) => tool.id)).toEqual([
       "crop-pdf",

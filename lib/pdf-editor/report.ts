@@ -64,7 +64,8 @@ export function checkLines(report: ExportReport): CheckLine[] {
     !report.document.bookmarks &&
     !report.document.labels &&
     report.redaction.places === 0 &&
-    report.redaction.waiting === 0
+    report.redaction.waiting === 0 &&
+    !report.formEdits
   )
     lines.push({
       text: "Nothing was added. The file was written again as it is.",
@@ -274,6 +275,11 @@ export function checkLines(report: ExportReport): CheckLine[] {
       good: true,
     })
   const form = report.fields
+  if (report.formEdits)
+    lines.push({
+      text: `Form fields were added, moved, resized, renamed or deleted in ${report.formEdits.toLocaleString("en")} step${report.formEdits === 1 ? "" : "s"}.${report.signature ? " Earlier fields and names remain in the signed part of the file." : ""} A signature place is only a place; it proves nothing about who signed.`,
+      good: true,
+    })
   const fields = (count: number) =>
     `${count.toLocaleString("en")} field${count === 1 ? "" : "s"}`
   if (form.had > 0) {
