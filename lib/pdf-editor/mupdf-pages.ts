@@ -11,9 +11,15 @@
  */
 import type * as MuPDF from "mupdf"
 import { open } from "@/lib/pdf-compressor/mupdf-compress"
-import { closePdf, mergePages, openPdf } from "@/lib/pdf-merger/mupdf-engine"
+import {
+  closePdf,
+  fitPage,
+  mergePages,
+  openPdf,
+} from "@/lib/pdf-merger/mupdf-engine"
+import { fitToSheet } from "@/lib/pdf-merger/print"
 import { splitPart } from "@/lib/pdf-splitter/mupdf-split"
-import { onTurnedPage } from "./objects"
+import { moved, onResizedPage, onTurnedPage } from "./objects"
 import {
   canDo,
   exportEdited,
@@ -27,10 +33,13 @@ import {
 } from "./mupdf-edit"
 import {
   changedBy,
+  cutSize,
   isInsert,
   planOf,
   readPageOp,
   runsAfter,
+  shownEdges,
+  storedEdges,
   whyNot,
   type Lost,
   type PageOp,
@@ -639,6 +648,101 @@ export async function exportPart(
   }
 }
 
+type Four = [number, number, number, number]
+
+/** A box as a page stores it, with its lower left corner first; null when it is none. */
+function fourOf(box: Obj): Four | null {
+  if (!box.isArray() || box.length !== 4) return null
+  const [a, b, c, d] = [0, 1, 2, 3].map((at) =>
+    box.get(at).isNumber() ? box.get(at).asNumber() : 0
+  )
+  return [Math.min(a, c), Math.min(b, d), Math.max(a, c), Math.max(b, d)]
+}
+
+/** A page's whole sheet and the part of it that is shown, as the file stores them. */
+function boxesOf(page: Obj) {
+  const sheet = fourOf(page.get("MediaBox")) ?? ([0, 0, 612, 792] as Four)
+  const crop = fourOf(page.get("CropBox"))
+  if (!crop) return { sheet, shown: sheet }
+  // Only the part of the crop that is on the sheet counts.
+  const shown: Four = [
+    Math.max(crop[0], sheet[0]),
+    Math.max(crop[1], sheet[1]),
+    Math.min(crop[2], sheet[2]),
+    Math.min(crop[3], sheet[3]),
+  ]
+  return shown[2] - shown[0] >= 1 && shown[3] - shown[1] >= 1
+    ? { sheet, shown }
+    : { sheet, shown: sheet }
+}
+
+/**
+ * Show another part of pages, or make them another size. The pages stay
+ * where they are in the file; what the editor added to them is written
+ * again so that it stays where it is on what they show.
+ */
+function reshape(
+  mupdf: Engine,
+  session: EditSession,
+  op: Extract<PageOp, { do: "crop" | "whole" | "size" }>
+) {
+  const { doc } = session
+  for (const index of op.pages) {
+    const before = pageSize(session, index)
+    const page = doc.findPage(index)
+    standAlone(page)
+    const turn = turnOf(page)
+    const { sheet, shown } = boxesOf(page)
+    if (op.do === "crop") {
+      if (!cutSize(before, op.off))
+        throw new Error(
+          `Too little would be left of page ${index + 1}. Cut less off it.`
+        )
+      // The box is written by hand, in the file's own points: the engine's
+      // own way of setting it counts from the top of the page.
+      const cut = storedEdges(op.off, turn)
+      const box = doc.newArray()
+      for (const value of [
+        shown[0] + cut.left,
+        shown[1] + cut.bottom,
+        shown[2] - cut.right,
+        shown[3] - cut.top,
+      ])
+        box.push(doc.newReal(value))
+      page.put("CropBox", box)
+      rewriteThings(mupdf, session, index, (thing) =>
+        moved(thing, -op.off.left, -op.off.top)
+      )
+    } else if (op.do === "whole") {
+      const hidden = shownEdges(
+        {
+          left: shown[0] - sheet[0],
+          bottom: shown[1] - sheet[1],
+          right: sheet[2] - shown[2],
+          top: sheet[3] - shown[3],
+        },
+        turn
+      )
+      page.delete("CropBox")
+      rewriteThings(mupdf, session, index, (thing) =>
+        moved(thing, hidden.left, hidden.top)
+      )
+    } else {
+      const fit = fitToSheet(shown, turn, op.size, true)
+      if (!fit) continue
+      fitPage(doc, page, op.size, true)
+      const after = pageSize(session, index)
+      const shift = {
+        x: (after.width - before.width * fit.scale) / 2,
+        y: (after.height - before.height * fit.scale) / 2,
+      }
+      rewriteThings(mupdf, session, index, (thing) =>
+        onResizedPage(thing, fit.scale, shift)
+      )
+    }
+  }
+}
+
 /** Make one change to the list of pages. */
 function change(
   mupdf: Engine,
@@ -666,6 +770,10 @@ function change(
       op.at === doc.countPages() ? -1 : op.at,
       doc.addPage([0, 0, width, height], 0, doc.newDictionary(), "")
     )
+    return none
+  }
+  if (op.do === "crop" || op.do === "whole" || op.do === "size") {
+    reshape(mupdf, session, op)
     return none
   }
   if (op.do === "insert") {
@@ -745,9 +853,11 @@ export function applyPages(
         const plan = planOf(count, op)
         if (!plan)
           throw new Error(whyNot(count, op) || "The pages are already so.")
-        const runs = op.do === "turn" ? null : runsOf(session.doc)
+        // The list itself is as it was when pages are only turned or shown otherwise.
+        const listed = !["turn", "crop", "whole", "size"].includes(op.do)
+        const runs = listed ? runsOf(session.doc) : null
         lost.push(change(mupdf, session, op, plan))
-        if (op.do !== "turn")
+        if (listed)
           writeRuns(
             session.doc,
             runs,

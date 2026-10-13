@@ -23,8 +23,22 @@ export type PageOp =
   /** An empty page before the page that is now at `at`. */
   | { do: "blank"; at: number; size: Size }
   | { do: "turn"; pages: number[]; by: Turn }
+  /** So much is cut off each edge of what the pages show. What is cut off is hidden; it stays in the file. */
+  | { do: "crop"; pages: number[]; off: Edges }
+  /** The whole sheet of each page is shown again. */
+  | { do: "whole"; pages: number[] }
+  /** Each page is made the size of a sheet: what is on it is made smaller or larger to fit, and put in the middle. */
+  | { do: "size"; pages: number[]; size: Size }
   /** Every page of another file that was handed over, before the page that is now at `at`. `count` is how many pages it has. */
   | { do: "insert"; at: number; file: string; count: number }
+
+/** How much is cut off each edge of a page as it is shown, in points. */
+export interface Edges {
+  left: number
+  top: number
+  right: number
+  bottom: number
+}
 
 /** What links, bookmarks and fields went with pages that were taken out. */
 export interface Lost {
@@ -42,8 +56,8 @@ export interface PagesChange {
 
 /** Where a page of the list after a change comes from. */
 export type Source =
-  /** The page that was at `was`, turned or not. */
-  | { was: number; by?: Turn }
+  /** The page that was at `was`: turned, or shown otherwise (cut or made another size), or as it was. */
+  | { was: number; by?: Turn; other?: true }
   /** A copy of the page that was at `copy`. */
   | { copy: number }
   | { blank: Size }
@@ -58,6 +72,9 @@ export const MOST_PAGES = 20_000
 /** The shortest and the longest side a page can have, in points: what the PDF format allows. */
 export const SHORTEST_SIDE = 3
 export const LONGEST_SIDE = 14_400
+
+/** The least that is left of a page's width and of its height when it is cut, in points. */
+export const LEAST_SHOWN = 18
 
 /** Sizes offered for a blank page, in points. */
 export const SHEETS = {
@@ -106,6 +123,21 @@ export function readPageOp(value: unknown): PageOp | null {
   }
   const pages = readPages(op.pages)
   if (!pages) return null
+  if (op.do === "whole") return { do: "whole", pages }
+  if (op.do === "crop") {
+    const off = readEdges(op.off)
+    return off ? { do: "crop", pages, off } : null
+  }
+  if (op.do === "size") {
+    const size = op.size as Record<string, unknown> | null
+    if (typeof size !== "object" || size === null) return null
+    if (!isSide(size.width) || !isSide(size.height)) return null
+    return {
+      do: "size",
+      pages,
+      size: { width: size.width, height: size.height },
+    }
+  }
   if (op.do === "move")
     return isCount(op.to) ? { do: "move", pages, to: op.to } : null
   if (op.do === "delete" || op.do === "copy") return { do: op.do, pages }
@@ -114,6 +146,90 @@ export function readPageOp(value: unknown): PageOp | null {
       ? { do: "turn", pages, by: op.by }
       : null
   return null
+}
+
+/** What is cut off each edge as it arrives, or null: no edge is cut by less than nothing, and one at least by something. */
+function readEdges(value: unknown): Edges | null {
+  if (typeof value !== "object" || value === null) return null
+  const { left, top, right, bottom } = value as Record<string, unknown>
+  const edges = [left, top, right, bottom]
+  if (
+    !edges.every(
+      (edge) => typeof edge === "number" && edge >= 0 && edge <= LONGEST_SIDE
+    ) ||
+    !edges.some((edge) => (edge as number) > 0)
+  )
+    return null
+  return { left, top, right, bottom } as Edges
+}
+
+/**
+ * The size of a page after so much is cut off its edges; null when less
+ * would be left of it than a page may be.
+ */
+export function cutSize(size: Size, off: Edges): Size | null {
+  const width = size.width - off.left - off.right
+  const height = size.height - off.top - off.bottom
+  return width >= LEAST_SHOWN && height >= LEAST_SHOWN
+    ? { width, height }
+    : null
+}
+
+/**
+ * What is cut off each edge of a page when only a frame of it is to show.
+ * The frame is kept on the page, and no smaller than a page may be.
+ * @param frame In the page's own points, from its top left corner.
+ */
+export function edgesFor(
+  frame: { x: number; y: number; width: number; height: number },
+  size: Size
+): Edges {
+  const left = Math.min(Math.max(0, frame.x), size.width - LEAST_SHOWN)
+  const top = Math.min(Math.max(0, frame.y), size.height - LEAST_SHOWN)
+  const right = Math.min(
+    Math.max(0, size.width - frame.x - frame.width),
+    size.width - left - LEAST_SHOWN
+  )
+  const bottom = Math.min(
+    Math.max(0, size.height - frame.y - frame.height),
+    size.height - top - LEAST_SHOWN
+  )
+  return { left, top, right, bottom }
+}
+
+/**
+ * Which side of a page as the file stores it each edge of the page as it
+ * is shown is: a page that is shown turned has its left edge at the foot
+ * of what is stored.
+ * @param turn The page's turn in the file: 0, 90, 180 or 270.
+ * @returns What is cut off the stored page's left, bottom, right and top.
+ */
+export function storedEdges(off: Edges, turn: number) {
+  const { left, top, right, bottom } = off
+  const quarter = ((turn % 360) + 360) % 360
+  if (quarter === 90)
+    return { left: top, bottom: left, right: bottom, top: right }
+  if (quarter === 180)
+    return { left: right, bottom: top, right: left, top: bottom }
+  if (quarter === 270)
+    return { left: bottom, bottom: right, right: top, top: left }
+  return { left, bottom, right, top }
+}
+
+/** The other way: what is cut off each edge of the page as it is shown, from what is cut off the stored page. */
+export function shownEdges(
+  stored: { left: number; bottom: number; right: number; top: number },
+  turn: number
+): Edges {
+  const quarter = ((turn % 360) + 360) % 360
+  const { left, bottom, right, top } = stored
+  if (quarter === 90)
+    return { top: left, left: bottom, bottom: right, right: top }
+  if (quarter === 180)
+    return { right: left, top: bottom, left: right, bottom: top }
+  if (quarter === 270)
+    return { bottom: left, right: bottom, top: right, left: top }
+  return { left, top, right, bottom }
 }
 
 /** What went with pages as it comes out of a draft: a count of each for every change, or nothing. */
@@ -176,6 +292,10 @@ export function planOf(count: number, op: PageOp): Plan | null {
     return all.map((page, at) =>
       chosen.has(at) ? { was: at, by: op.by } : page
     )
+  if (op.do === "crop" || op.do === "whole" || op.do === "size")
+    return all.map((page, at) =>
+      chosen.has(at) ? { was: at, other: true } : page
+    )
   if (op.do === "delete") return all.filter((_, at) => !chosen.has(at))
   if (op.do === "copy") {
     const after = op.pages[op.pages.length - 1] + 1
@@ -203,7 +323,7 @@ export function changedBy(count: number, plan: Plan): number[] {
   const changed: number[] = []
   for (let at = 0; at < Math.max(count, plan.length); at++) {
     const page = plan[at]
-    if (!page || !("was" in page) || page.was !== at || page.by)
+    if (!page || !("was" in page) || page.was !== at || page.by || page.other)
       changed.push(at)
   }
   return changed
@@ -225,7 +345,7 @@ export function whereNow(plan: Plan) {
  */
 export function carried<T>(had: readonly T[], plan: Plan, fresh: T): T[] {
   return plan.map((page) =>
-    "was" in page && !page.by ? (had[page.was] as T) : fresh
+    "was" in page && !page.by && !page.other ? (had[page.was] as T) : fresh
   )
 }
 
@@ -296,6 +416,9 @@ export function labelOf(op: PageOp) {
     delete: `Delete ${named}`,
     copy: `Duplicate ${named}`,
     turn: `Turn ${named}`,
+    crop: `Crop ${named}`,
+    whole: `Show the whole of ${named}`,
+    size: `Resize ${named}`,
   }[op.do]
 }
 

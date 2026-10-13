@@ -15,7 +15,12 @@ import {
 import * as mupdf from "mupdf"
 import { describe, expect, it } from "vitest"
 import { makePdf } from "@/tests/pdf-fixtures"
-import { danglingRefs, readComments, readPdf } from "@/tests/pdf-reader"
+import {
+  danglingRefs,
+  linkBoxes,
+  readComments,
+  readPdf,
+} from "@/tests/pdf-reader"
 import {
   makeTaggedPages,
   readTags,
@@ -187,6 +192,7 @@ describe("pages put in another order", () => {
       steps: 2,
       taken: 0,
       added: 0,
+      cut: false,
       lost: { links: 0, bookmarks: 0, fields: 0 },
     })
     stopEditing(session)
@@ -269,6 +275,7 @@ describe("pages taken out", () => {
       steps: 1,
       taken: 1,
       added: 0,
+      cut: false,
       lost: { links: 2, bookmarks: 2, fields: 1 },
     })
     expect(report.untouched).toEqual({ checked: 5, differ: [] })
@@ -586,6 +593,198 @@ describe("the numbers a file gives its own pages", () => {
   })
 })
 
+describe("pages cut to a part, shown whole and made another size", () => {
+  const box: ShapeObject = {
+    id: "box",
+    kind: "box",
+    box: { x: 60, y: 150, width: 100, height: 50 },
+    rotation: 0,
+    opacity: 1,
+    stroke: BLACK,
+    fill: null,
+    weight: 2,
+  }
+  /** Where a thing's note lies in the file's own points, read with pdf.js. */
+  const rectOf = async (session: EditSession, page = 0) =>
+    (
+      await readComments(
+        (await exportEdited(mupdf, session, { keepEditable: true })).bytes
+      )
+    )[page].map((note) => note.rect.map(Math.round))
+  const lineAt = (session: EditSession, page = 0) =>
+    linesOn(mupdf, session, page)[0].box
+  const cropOf = async (bytes: Uint8Array, page: number) => {
+    const { x, y, width, height } = (await PDFDocument.load(bytes))
+      .getPage(page)
+      .getCropBox()
+    return [x, y, width, height].map(Math.round)
+  }
+
+  it("cuts a page to a part: the rest is hidden, and what was added stays where it is", async () => {
+    const bytes = await makePdf("cr", { pages: 2, links: [{ from: 1, to: 2 }] })
+    const session = editing(bytes)
+    applyChange(mupdf, session, {
+      label: "Add",
+      ops: [{ do: "add", page: 0, object: box }],
+    })
+    const where = await rectOf(session)
+    const line = lineAt(session)
+    const off = { left: 30, top: 100, right: 20, bottom: 40 }
+    expect(change(session, { do: "crop", pages: [0], off }).pages).toEqual([0])
+    expect(historyOf(session).steps).toEqual(["Add", "Crop page 1"])
+    expect(pageSizes(session)).toEqual([
+      { width: 248, height: 280 },
+      { width: 298, height: 420 },
+    ])
+    // Everything on the page is where it was, counted from the new corner.
+    expect(objectsOn(session, 0)[0].box).toEqual({
+      x: 30,
+      y: 50,
+      width: 100,
+      height: 50,
+    })
+    expect(lineAt(session).x).toBeCloseTo(line.x - 30, 1)
+    expect(lineAt(session).y).toBeCloseTo(line.y - 100, 1)
+    expect(await rectOf(session)).toEqual(where)
+    const { got, bytes: out, report } = await read(session)
+    expect([got.pages[0].width, got.pages[0].height]).toEqual([248, 280])
+    // Counted from the foot of the sheet, as the file stores it.
+    expect(await cropOf(out, 0)).toEqual([30, 40, 248, 280])
+    // What is cut off is hidden, not removed: the page's words are all still read.
+    expect(got.pages[0].text).toContain("cr-P1")
+    expect(got.pages[0].links).toEqual([2])
+    expect(report.pages.cut).toBe(true)
+    // The page that was cut is not what it was; the other is, and is compared.
+    expect(report.untouched).toEqual({ checked: 1, differ: [] })
+
+    // Cut again, it is cut further; shown whole, everything is where it was at first.
+    change(session, {
+      do: "crop",
+      pages: [0],
+      off: { left: 10, top: 0, right: 0, bottom: 0 },
+    })
+    expect(pageSizes(session)[0]).toEqual({ width: 238, height: 280 })
+    expect(objectsOn(session, 0)[0].box.x).toBe(20)
+    change(session, { do: "whole", pages: [0, 1] })
+    expect(pageSizes(session)[0]).toEqual({ width: 298, height: 420 })
+    expect(objectsOn(session, 0)[0].box).toEqual(box.box)
+    expect(lineAt(session).x).toBeCloseTo(line.x, 1)
+    expect(await rectOf(session)).toEqual(where)
+    expect((await read(session)).report.pages.cut).toBe(true)
+    // Undone to the start, the page is as it came.
+    stepBack(session)
+    stepBack(session)
+    stepBack(session)
+    expect((await read(session)).report.pages.cut).toBe(false)
+    expect(pageSizes(session)[0]).toEqual({ width: 298, height: 420 })
+    stopEditing(session)
+  })
+
+  it("cuts the edges of a page as it is shown, also when the file shows it turned", async () => {
+    for (const turn of [90, 180, 270]) {
+      const session = editing(
+        await makePdf("ct", { pages: 1, rotate: { 1: turn } })
+      )
+      const sideways = turn !== 180
+      const shown = sideways
+        ? { width: 420, height: 298 }
+        : { width: 298, height: 420 }
+      expect(pageSizes(session)[0]).toEqual(shown)
+      const line = lineAt(session)
+      change(session, {
+        do: "crop",
+        pages: [0],
+        off: { left: 50, top: 20, right: 0, bottom: 0 },
+      })
+      expect(pageSizes(session)[0]).toEqual({
+        width: shown.width - 50,
+        height: shown.height - 20,
+      })
+      // The engine says where the line is on what is shown: 50 and 20 nearer the corner.
+      expect(lineAt(session).x).toBeCloseTo(line.x - 50, 1)
+      expect(lineAt(session).y).toBeCloseTo(line.y - 20, 1)
+      const { bytes: out } = await read(session)
+      expect(await cropOf(out, 0)).toEqual(
+        {
+          // Shown a quarter on, the left of what is shown is the foot of the sheet, and its top the sheet's left.
+          90: [20, 50, 278, 370],
+          180: [0, 20, 248, 400],
+          270: [0, 0, 278, 370],
+        }[turn]
+      )
+      stopEditing(session)
+    }
+  })
+
+  it("refuses to cut a page to less than a page can be", async () => {
+    const session = editing(await makePdf("cs", { pages: 2 }))
+    expect(() =>
+      change(session, {
+        do: "crop",
+        pages: [0, 1],
+        off: { left: 150, top: 0, right: 140, bottom: 0 },
+      })
+    ).toThrow("Too little would be left of page 1. Cut less off it.")
+    expect(historyOf(session).steps).toEqual([])
+    expect(pageSizes(session)[0]).toEqual({ width: 298, height: 420 })
+    stopEditing(session)
+  })
+
+  it("makes a page another size, with all that is on it", async () => {
+    const bytes = await makePdf("sz", {
+      pages: 3,
+      links: [{ from: 1, to: 2 }],
+      rotate: { 2: 90 },
+    })
+    const session = editing(bytes)
+    applyChange(mupdf, session, {
+      label: "Add",
+      ops: [{ do: "add", page: 0, object: box }],
+    })
+    const line = lineAt(session)
+    const [link] = (await linkBoxes(bytes))[0]
+    change(session, { do: "size", pages: [0, 1], size: SHEETS.A4 })
+    expect(historyOf(session).steps).toEqual(["Add", "Resize pages 1 to 2"])
+    // As much larger as fits the sheet across: a little room is left above and below.
+    const scale = SHEETS.A4.width / 298
+    const shift = (SHEETS.A4.height - 420 * scale) / 2
+    const sizes = pageSizes(session)
+    expect(sizes[0].width).toBeCloseTo(SHEETS.A4.width, 1)
+    expect(sizes[0].height).toBeCloseTo(SHEETS.A4.height, 1)
+    // A page that is shown on its side gets a sheet on its side.
+    expect(sizes[1].width).toBeCloseTo(SHEETS.A4.height, 1)
+    expect(sizes[1].height).toBeCloseTo(SHEETS.A4.width, 1)
+    expect(sizes[2]).toEqual({ width: 298, height: 420 })
+    const [thing] = objectsOn(session, 0) as ShapeObject[]
+    expect(thing.box.x).toBeCloseTo(60 * scale, 1)
+    expect(thing.box.y).toBeCloseTo(150 * scale + shift, 1)
+    expect(thing.box.width).toBeCloseTo(100 * scale, 1)
+    expect(thing.weight).toBeCloseTo(2 * scale, 2)
+    expect(lineAt(session).x).toBeCloseTo(line.x * scale, 0)
+    expect(lineAt(session).y).toBeCloseTo(line.y * scale + shift, 0)
+    expect(lineAt(session).height).toBeCloseTo(line.height * scale, 0)
+    const { got, bytes: out, report } = await read(session)
+    expect(got.pages[0].width).toBeCloseTo(SHEETS.A4.width, 1)
+    expect(got.pages[0].text).toContain("sz-P1")
+    expect(got.pages[1].rotate).toBe(90)
+    expect(got.pages[0].links).toEqual([2])
+    // The link is as much larger, and where its words are.
+    const [larger] = (await linkBoxes(out))[0]
+    expect(larger.width).toBeCloseTo(link.width * scale, 0)
+    expect(larger.x).toBeCloseTo(link.x * scale, 0)
+    expect(report.pages.cut).toBe(false)
+    expect(report.untouched).toEqual({ checked: 1, differ: [] })
+    // A page that is that size already is left as it is.
+    const steps = historyOf(session).steps.length
+    change(session, { do: "size", pages: [0], size: SHEETS.A4 })
+    expect(historyOf(session).steps).toHaveLength(steps)
+    stepBack(session)
+    expect(pageSizes(session)[0]).toEqual({ width: 298, height: 420 })
+    expect(objectsOn(session, 0)[0].box).toEqual(box.box)
+    stopEditing(session)
+  })
+})
+
 describe("pages of another file", () => {
   /** Three pages with a link from the first to the third, a field on the second and a bookmark. */
   const other = (password?: string) =>
@@ -657,6 +856,7 @@ describe("pages of another file", () => {
       steps: 1,
       taken: 0,
       added: 3,
+      cut: false,
       lost: { links: 0, bookmarks: 0, fields: 0 },
     })
     expect(report.untouched).toEqual({ checked: 6, differ: [] })

@@ -32,6 +32,7 @@ import {
   IconLine,
   IconFiles,
   IconMessages,
+  IconResize,
   IconNote,
   IconPencil,
   IconCrop,
@@ -108,6 +109,7 @@ import { canListFonts, LocalFontsDialog } from "./local-fonts-dialog"
 import { LONGEST_FIND } from "@/lib/pdf-editor/find"
 import { ALIGNS, shapeOf, type Align } from "@/lib/pdf-editor/paragraphs"
 import { cn } from "cn"
+import { CROP_HINT, type Crop, type SheetName } from "./use-crop"
 import { FIND_HINT, type Find } from "./use-find"
 import { CUT_HINT, INPAGE_HINT, type Inpage } from "./use-inpage"
 import { LINKS_HINT, type Links } from "./use-links"
@@ -1056,6 +1058,119 @@ function FindRow({ find }: { find: Find }) {
   )
 }
 
+const SIDE_NAMES = {
+  left: "Left",
+  top: "Top",
+  right: "Right",
+  bottom: "Bottom",
+}
+const FOR_NAMES = {
+  page: "This page",
+  chosen: "Chosen pages",
+  all: "All pages",
+}
+
+/**
+ * Cutting pages to a part and making them another size: how much is cut
+ * off each edge, which pages it is for, and the size of a sheet.
+ */
+function CropRow({ crop }: { crop: Crop }) {
+  const ids = useId()
+  const fors = (["page", "chosen", "all"] as const).filter(
+    (one) => one !== "chosen" || crop.canChoose
+  )
+  return (
+    <>
+      <span className="shrink-0 text-xs text-muted-foreground">
+        Cut off, in points
+      </span>
+      {(["left", "top", "right", "bottom"] as const).map((side) => (
+        <label
+          key={side}
+          className="flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground"
+        >
+          {SIDE_NAMES[side]}
+          <NumberField
+            inputMode="decimal"
+            min={0}
+            max={14_400}
+            step="any"
+            value={Math.round(crop.off[side] * 10) / 10}
+            onSettle={(value) => crop.setEdge(side, value)}
+            className="w-16"
+          />
+        </label>
+      ))}
+      <div
+        role="group"
+        aria-label="Which pages"
+        className="flex shrink-0 items-center gap-1"
+      >
+        {fors.map((one) => (
+          <Button
+            key={one}
+            type="button"
+            size="sm"
+            variant={crop.whom === one ? "secondary" : "ghost"}
+            aria-pressed={crop.whom === one}
+            onClick={() => crop.setFor(one)}
+            className="h-11 md:h-9"
+          >
+            {FOR_NAMES[one]}
+          </Button>
+        ))}
+      </div>
+      <Button
+        type="button"
+        size="sm"
+        disabled={!crop.cuts || Boolean(crop.whyNot)}
+        title={crop.whyNot || "Cut the pages to the frame (Enter on an edge)"}
+        onClick={() => void crop.cut()}
+        className="h-11 shrink-0 md:h-9"
+      >
+        <IconCrop aria-hidden="true" /> Crop
+      </Button>
+      <RowAction
+        label="Show the whole page again"
+        words="Show whole"
+        onPress={() => void crop.whole()}
+      >
+        <IconArrowsMaximize aria-hidden="true" />
+      </RowAction>
+      <Rule />
+      <label
+        htmlFor={`${ids}-sheet`}
+        className="shrink-0 text-xs text-muted-foreground"
+      >
+        Page size
+      </label>
+      <select
+        id={`${ids}-sheet`}
+        value={crop.sheet}
+        onChange={(event) => crop.setSheet(event.target.value as SheetName)}
+        className="h-11 shrink-0 rounded-md border bg-background px-2 text-base text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring md:h-9 md:text-sm"
+      >
+        <option value="A4">A4</option>
+        <option value="Letter">Letter</option>
+      </select>
+      <RowAction
+        label="Make the pages this size: what is on them is made smaller or larger to fit"
+        words="Resize"
+        onPress={() => void crop.resize()}
+      >
+        <IconResize aria-hidden="true" />
+      </RowAction>
+      <p
+        className="line-clamp-2 min-w-40 flex-1 px-1 text-xs leading-4 whitespace-normal text-muted-foreground"
+        data-testid="editor-hint"
+        role={crop.whyNot ? "status" : undefined}
+      >
+        {crop.whyNot || CROP_HINT}
+      </p>
+    </>
+  )
+}
+
 /**
  * Links: a new one, and for the one that is chosen or being made, where it
  * leads, typed as an address or as a page.
@@ -1209,6 +1324,7 @@ export function EditorToolbar({
   links,
   find,
   pages,
+  crop,
 }: {
   editor: Editor
   comments: Comments
@@ -1222,6 +1338,8 @@ export function EditorToolbar({
   find: Find
   /** The list of pages, where they are moved, turned, copied and taken out. */
   pages: Pages
+  /** Cutting pages to a part and making them another size. */
+  crop: Crop
   /** Which tools come first in the row: those that add things, or those that comment. */
   first?: "things" | "comments"
   /**
@@ -1387,6 +1505,14 @@ export function EditorToolbar({
       >
         <IconLink aria-hidden="true" />
       </Toggle>
+      <Toggle
+        label="Crop and page size"
+        shortcut="Y"
+        pressed={crop.on}
+        onPress={() => crop.setOn(!crop.on)}
+      >
+        <IconCrop aria-hidden="true" />
+      </Toggle>
     </>
   )
   // Focused on one job, the other tools are put away, unless one of them is in hand.
@@ -1399,6 +1525,7 @@ export function EditorToolbar({
           !inpage.on &&
           !links.on &&
           !find.on &&
+          !crop.on &&
           (state.tool === "select" || SIGNING.includes(state.tool))
         : false
   const marks = COMMENT_TOOLS.map(({ tool, label, key, icon }) => (
@@ -1545,6 +1672,8 @@ export function EditorToolbar({
           <LinkRow links={links} />
         ) : find.on ? (
           <FindRow find={find} />
+        ) : crop.on ? (
+          <CropRow crop={crop} />
         ) : comments.tool ? (
           <>
             <Swatches

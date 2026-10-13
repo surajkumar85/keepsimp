@@ -169,6 +169,8 @@ export const LINE_HEIGHT = 1.2
 export const SMALLEST_TEXT = 4
 export const LARGEST_TEXT = 288
 export const THICKEST = 24
+/** The thinnest a line is drawn, in points. */
+export const THINNEST = 0.25
 /** The longest a stamp's words may be. */
 export const LONGEST_STAMP = 40
 /** How far a call-out's frame stands off its words, how thick it and its line are, and the room its arrow's head takes. */
@@ -405,6 +407,66 @@ export function onTurnedPage<T extends EditorObject>(
     : next
 }
 
+/**
+ * A thing on a page that is made smaller or larger with all that is on
+ * it: it stays where it is on what the page shows, and is as much smaller
+ * or larger as the page's content is. Letters and lines are too, as far as
+ * a size or a weight may go.
+ * @param scale How much larger everything is; less than 1 for smaller.
+ * @param shift How far the scaled content is then moved, in points.
+ */
+export function onResizedPage<T extends EditorObject>(
+  object: T,
+  scale: number,
+  shift: Point
+): T {
+  const place = (point: Point): Point => ({
+    x: point.x * scale + shift.x,
+    y: point.y * scale + shift.y,
+  })
+  if (made(object)) {
+    const sized = mapPoints(object, place)
+    return {
+      ...sized,
+      weight: clamp(object.weight * scale, THINNEST, THICKEST),
+      // A measuring line still says the length it said.
+      ...(sized.kind === "measure"
+        ? {
+            scale: clamp(
+              (object as MeasureObject).scale / scale,
+              SMALLEST_SCALE,
+              LARGEST_SCALE
+            ),
+          }
+        : null),
+    } as T
+  }
+  const corner = place(object.box)
+  const box = {
+    x: corner.x,
+    y: corner.y,
+    width: object.box.width * scale,
+    height: object.box.height * scale,
+  }
+  if (object.kind === "text") {
+    const size = clamp(object.size * scale, SMALLEST_TEXT, LARGEST_TEXT)
+    return {
+      ...object,
+      size,
+      // Its height is that of its lines, whatever the size came to.
+      box: { ...box, height: textHeight(object.lines.length, size) },
+      ...(object.tip ? { tip: place(object.tip) } : null),
+    }
+  }
+  if (object.kind === "box" || object.kind === "ellipse")
+    return {
+      ...object,
+      box,
+      weight: clamp(object.weight * scale, THINNEST, THICKEST),
+    }
+  return { ...object, box }
+}
+
 /** A text box with other words, lines or size: its height follows. */
 export function retyped(
   object: TextObject,
@@ -487,7 +549,9 @@ export function readObject(value: unknown): EditorObject | null {
     rotation: isNumber(data.rotation) ? wholeTurn(data.rotation) : 0,
     opacity: isNumber(data.opacity) ? clamp(data.opacity, 0, 1) : 1,
   }
-  const weight = isNumber(data.weight) ? clamp(data.weight, 0.25, THICKEST) : 1
+  const weight = isNumber(data.weight)
+    ? clamp(data.weight, THINNEST, THICKEST)
+    : 1
   switch (data.kind) {
     case "text": {
       if (typeof data.text !== "string" || data.text.length > MOST_LETTERS)

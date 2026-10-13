@@ -37,6 +37,8 @@ import { LinkSpots } from "./link-layer"
 import { PictureSpots } from "./picture-layer"
 import type { Inpage } from "./use-inpage"
 import type { Find } from "./use-find"
+import { CropFrame } from "./crop-layer"
+import type { Crop } from "./use-crop"
 import type { Links } from "./use-links"
 import { laidOut, pagePoint, type Editor } from "./use-editor"
 
@@ -136,6 +138,7 @@ export function PageLayer({
   inpage,
   links,
   find,
+  crop,
 }: {
   editor: Editor
   comments: Comments
@@ -143,6 +146,7 @@ export function PageLayer({
   inpage: Inpage
   links: Links
   find: Find
+  crop: Crop
   /** Counted from 0. */
   page: number
   size: Size
@@ -227,6 +231,11 @@ export function PageLayer({
       }}
       onPointerDown={(event) => {
         if (event.button !== 0) return
+        // While pages are cut, a press on another page puts the frame there.
+        if (crop.on) {
+          if (crop.page !== page) crop.frame(page)
+          return
+        }
         pressed.current = { touch: event.pointerType === "touch", ended: false }
         // Pressing the page puts a line that is being changed into the file.
         if (retext.typing) {
@@ -326,6 +335,7 @@ export function PageLayer({
         />
       )}
       {find.on && <FindSpots find={find} page={page} />}
+      {crop.on && crop.page === page && <CropFrame crop={crop} />}
       {links.on && (
         <LinkSpots
           editor={editor}

@@ -178,6 +178,11 @@ export function checkLines(report: ExportReport): CheckLine[] {
         good: true,
       })
     }
+    if (report.pages.cut)
+      lines.push({
+        text: "Cropping hides what is outside the frame. It is still in the file, and a program can show it again.",
+        good: true,
+      })
     if (taken > 0) {
       // What led to a page that is gone, and what was on it, went with it.
       const went = [

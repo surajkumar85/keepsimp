@@ -5,7 +5,10 @@ import {
   chosenAfter,
   chosenWith,
   blankSize,
+  cutSize,
+  edgesFor,
   labelOf,
+  LEAST_SHOWN,
   lostIn,
   MOST_PAGES,
   moveTo,
@@ -16,6 +19,8 @@ import {
   runsAfter,
   readPageOp,
   SHEETS,
+  shownEdges,
+  storedEdges,
   whereNow,
   whyNot,
   type PageOp,
@@ -27,7 +32,7 @@ const said = (plan: Plan | null) =>
   plan
     ?.map((page) =>
       "was" in page
-        ? `${page.was}${page.by ? ">" : ""}`
+        ? `${page.was}${page.by ? ">" : ""}${page.other ? "*" : ""}`
         : "copy" in page
           ? `c${page.copy}`
           : "from" in page
@@ -62,6 +67,21 @@ describe("readPageOp", () => {
     expect(
       readPageOp({ do: "insert", at: 1, file: "pdf-k1a", count: 3, more: 1 })
     ).toEqual({ do: "insert", at: 1, file: "pdf-k1a", count: 3 })
+    const off = { left: 10, top: 0, right: 0.5, bottom: 20 }
+    expect(
+      readPageOp({ do: "crop", pages: [1, 0], off: { ...off, more: 1 } })
+    ).toEqual({ do: "crop", pages: [0, 1], off })
+    expect(readPageOp({ do: "whole", pages: [2], off })).toEqual({
+      do: "whole",
+      pages: [2],
+    })
+    expect(
+      readPageOp({
+        do: "size",
+        pages: [0],
+        size: { ...SHEETS.Letter, more: 1 },
+      })
+    ).toEqual({ do: "size", pages: [0], size: SHEETS.Letter })
   })
 
   it("refuses what is not a change to pages", () => {
@@ -90,6 +110,30 @@ describe("readPageOp", () => {
       { do: "blank", at: 0, size: { width: 2, height: 100 } },
       { do: "blank", at: 0, size: { width: 100, height: 20_000 } },
       { do: "blank", at: 0, size: { width: "100", height: 100 } },
+      { do: "crop", pages: [0] },
+      { do: "crop", pages: [0], off: null },
+      { do: "crop", pages: [0], off: { left: 0, top: 0, right: 0, bottom: 0 } },
+      {
+        do: "crop",
+        pages: [0],
+        off: { left: -1, top: 0, right: 0, bottom: 0 },
+      },
+      { do: "crop", pages: [0], off: { left: 1, top: 0, right: 0 } },
+      {
+        do: "crop",
+        pages: [0],
+        off: { left: "1", top: 0, right: 0, bottom: 0 },
+      },
+      {
+        do: "crop",
+        pages: [0],
+        off: { left: 1e9, top: 0, right: 0, bottom: 0 },
+      },
+      { do: "crop", pages: [], off: { left: 1, top: 0, right: 0, bottom: 0 } },
+      { do: "size", pages: [0] },
+      { do: "size", pages: [0], size: null },
+      { do: "size", pages: [0], size: { width: 1, height: 100 } },
+      { do: "size", pages: [0], size: { width: 100, height: "100" } },
       { do: "insert", at: 0, file: "pdf-k1", count: 0 },
       { do: "insert", at: 0, file: "pdf-k1", count: MOST_PAGES + 1 },
       { do: "insert", at: 0, file: "k1", count: 2 },
@@ -178,6 +222,21 @@ describe("planOf", () => {
     expect(
       said(planOf(2, { do: "insert", at: 2, file: "pdf-a", count: 1 }))
     ).toBe("0 1 f0")
+  })
+
+  it("leaves pages where they are when they are cut, shown whole or made another size", () => {
+    const off = { left: 10, top: 10, right: 10, bottom: 10 }
+    expect(said(planOf(3, { do: "crop", pages: [0, 2], off }))).toBe("0* 1 2*")
+    expect(said(planOf(3, { do: "whole", pages: [1] }))).toBe("0 1* 2")
+    expect(said(planOf(3, { do: "size", pages: [2], size: SHEETS.A4 }))).toBe(
+      "0 1 2*"
+    )
+    expect(planOf(3, { do: "crop", pages: [3], off })).toBeNull()
+    // Such a page is not what it was: nothing known of it is carried along.
+    const plan = planOf(3, { do: "crop", pages: [1], off })!
+    expect(changedBy(3, plan)).toEqual([1])
+    expect(carried(["a", "b", "c"], plan, "new")).toEqual(["a", "new", "c"])
+    expect(chosenAfter(plan, [1])).toEqual([1])
   })
 
   it("refuses what the file cannot take, and says why", () => {
@@ -359,6 +418,84 @@ describe("runsAfter", () => {
   })
 })
 
+describe("cutting a page", () => {
+  const size = { width: 400, height: 600 }
+
+  it("says what is left of a page, or that too little would be", () => {
+    expect(cutSize(size, { left: 10, top: 20, right: 30, bottom: 40 })).toEqual(
+      { width: 360, height: 540 }
+    )
+    expect(
+      cutSize(size, { left: 200, top: 0, right: 200 - LEAST_SHOWN, bottom: 0 })
+    ).toEqual({ width: LEAST_SHOWN, height: 600 })
+    expect(
+      cutSize(size, { left: 200, top: 0, right: 190, bottom: 0 })
+    ).toBeNull()
+    expect(
+      cutSize(size, { left: 0, top: 300, right: 0, bottom: 290 })
+    ).toBeNull()
+  })
+
+  it("works out what a frame cuts off, keeping it on the page and large enough", () => {
+    expect(edgesFor({ x: 50, y: 100, width: 300, height: 400 }, size)).toEqual({
+      left: 50,
+      top: 100,
+      right: 50,
+      bottom: 100,
+    })
+    // A frame that hangs over the page cuts nothing there.
+    expect(edgesFor({ x: -20, y: -20, width: 500, height: 700 }, size)).toEqual(
+      { left: 0, top: 0, right: 0, bottom: 0 }
+    )
+    // A frame that is too small, or off the page, is made the least a page may be.
+    expect(edgesFor({ x: 100, y: 100, width: 2, height: 2 }, size)).toEqual({
+      left: 100,
+      top: 100,
+      right: 400 - 100 - LEAST_SHOWN,
+      bottom: 600 - 100 - LEAST_SHOWN,
+    })
+    const off = edgesFor({ x: 900, y: 900, width: 10, height: 10 }, size)
+    expect(cutSize(size, off)).toEqual({
+      width: LEAST_SHOWN,
+      height: LEAST_SHOWN,
+    })
+  })
+
+  it("knows which side of the stored page each edge of the shown page is", () => {
+    const off = { left: 1, top: 2, right: 3, bottom: 4 }
+    expect(storedEdges(off, 0)).toEqual({
+      left: 1,
+      top: 2,
+      right: 3,
+      bottom: 4,
+    })
+    // Turned a quarter to the right, the stored page's left edge is at the top.
+    expect(storedEdges(off, 90)).toEqual({
+      left: 2,
+      top: 3,
+      right: 4,
+      bottom: 1,
+    })
+    expect(storedEdges(off, 180)).toEqual({
+      left: 3,
+      top: 4,
+      right: 1,
+      bottom: 2,
+    })
+    expect(storedEdges(off, 270)).toEqual({
+      left: 4,
+      top: 1,
+      right: 2,
+      bottom: 3,
+    })
+    expect(storedEdges(off, -90)).toEqual(storedEdges(off, 270))
+    expect(storedEdges(off, 450)).toEqual(storedEdges(off, 90))
+    // And back.
+    for (const turn of [0, 90, 180, 270, -90, 720])
+      expect(shownEdges(storedEdges(off, turn), turn)).toEqual(off)
+  })
+})
+
 describe("what a change is called", () => {
   it("names pages as people count them", () => {
     expect(pagesNamed([0])).toBe("page 1")
@@ -370,6 +507,16 @@ describe("what a change is called", () => {
     expect(labelOf({ do: "turn", pages: [4], by: 90 })).toBe("Turn page 5")
     expect(labelOf({ do: "blank", at: 0, size: SHEETS.A4 })).toBe(
       "Add a blank page"
+    )
+    const off = { left: 1, top: 0, right: 0, bottom: 0 }
+    expect(labelOf({ do: "crop", pages: [0, 1], off })).toBe(
+      "Crop pages 1 to 2"
+    )
+    expect(labelOf({ do: "whole", pages: [2] })).toBe(
+      "Show the whole of page 3"
+    )
+    expect(labelOf({ do: "size", pages: [0, 2], size: SHEETS.A4 })).toBe(
+      "Resize 2 pages"
     )
     expect(labelOf({ do: "insert", at: 0, file: "pdf-a", count: 1 })).toBe(
       "Add a page from a file"

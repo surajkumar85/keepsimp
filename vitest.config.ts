@@ -1,4 +1,4 @@
-import { defineConfig } from "vitest/config"
+import { configDefaults, defineConfig } from "vitest/config"
 import react from "@vitejs/plugin-react"
 
 export default defineConfig({
@@ -8,6 +8,9 @@ export default defineConfig({
     environment: "jsdom",
     setupFiles: ["./tests/setup.ts"],
     include: ["**/*.test.{ts,tsx}"],
+    // Other sessions keep working copies of this repository under .claude:
+    // their tests are theirs to run.
+    exclude: [...configDefaults.exclude, ".claude/**"],
     // The real-engine tests of the PDF tools run side by side and slow one
     // another down; five seconds is too tight for the longer ones on a
     // machine with few cores.

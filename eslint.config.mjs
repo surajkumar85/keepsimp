@@ -16,6 +16,8 @@ const eslintConfig = defineConfig([
     "playwright-report/**",
     "test-results/**",
     "**/* [2-9].*",
+    // Other sessions' working copies of this repository.
+    ".claude/**",
   ]),
 ])
 

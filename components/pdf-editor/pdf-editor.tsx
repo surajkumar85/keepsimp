@@ -66,6 +66,7 @@ import { looksLikePdf, megabytes } from "@/lib/pdf-merger/settings"
 import { cn } from "cn"
 import { CommentsPanel } from "./comments-panel"
 import { PagesPanel } from "./pages-panel"
+import { useCrop } from "./use-crop"
 import { usePages } from "./use-pages"
 import { PageLayer } from "./page-layer"
 import { SignatureDialog } from "./signature-dialog"
@@ -435,6 +436,18 @@ function Workspace({
   /** The page the window opens at; null while it is closed. */
   const [window_, setWindow] = useState<number | null>(0)
   const lastPage = useRef(0)
+  /** The page that is being read; the page the frame for cutting is laid on. */
+  const readingNow = useCallback(() => lastPage.current, [])
+  const crop = useCrop(
+    editor,
+    comments,
+    retext,
+    inpage,
+    links,
+    find,
+    pageList,
+    readingNow
+  )
   /** The page shown on the card while the window is closed. */
   const [previewAt, setPreviewPage] = useState(0)
   const preview = useRef<HTMLCanvasElement>(null)
@@ -776,6 +789,15 @@ function Workspace({
       pageList.setOn(!pageList.on)
       return used()
     }
+    // Y cuts pages to a part and makes them another size; Escape puts that down.
+    if (plain && letter === "y") {
+      crop.setOn(!crop.on)
+      return used()
+    }
+    if (event.key === "Escape" && crop.on) {
+      crop.setOn(false)
+      return used()
+    }
     // J adds and changes links; Escape lets go of one, then of the tool.
     if (plain && letter === "j") {
       links.setOn(!links.on)
@@ -855,6 +877,7 @@ function Workspace({
           links={links}
           find={find}
           pages={pageList}
+          crop={crop}
           first={mode === "annotate" ? "comments" : "things"}
           focus={
             allTools
@@ -927,6 +950,7 @@ function Workspace({
           inpage={inpage}
           links={links}
           find={find}
+          crop={crop}
           page={entry.page}
           size={entry.size}
           scale={scale}

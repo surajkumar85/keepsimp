@@ -14,6 +14,7 @@ import {
   MOST_LETTERS,
   MOST_POINTS,
   moved,
+  onResizedPage,
   onTurnedPage,
   pulled,
   reach,
@@ -258,6 +259,62 @@ describe("onTurnedPage", () => {
       x: ink.strokes[0][0].y,
       y: 200 - ink.strokes[0][0].x,
     })
+  })
+})
+
+describe("onResizedPage", () => {
+  it("makes a thing as much smaller as its page, where it was on what the page shows", () => {
+    const half = onResizedPage(shape, 0.5, { x: 10, y: 20 })
+    expect(half.box).toEqual({ x: 35, y: 45, width: 20, height: 10 })
+    expect(half.weight).toBe(1)
+    expect(half.rotation).toBe(shape.rotation)
+    const seen = onResizedPage(picture, 2, { x: 0, y: 5 })
+    expect(seen.box).toEqual({ x: 0, y: 5, width: 400, height: 200 })
+    expect(onResizedPage(cover, 0.5, { x: 0, y: 0 }).box).toEqual({
+      x: 2.5,
+      y: 2.5,
+      width: 25,
+      height: 5,
+    })
+  })
+
+  it("makes letters smaller and larger with it, as far as a size goes", () => {
+    const small = onResizedPage(text, 0.5, { x: 0, y: 0 })
+    expect(small.size).toBe(6)
+    expect(small.box.width).toBe(50)
+    expect(small.box.height).toBeCloseTo(textHeight(1, 6))
+    expect(small).not.toHaveProperty("tip")
+    // A size has an end: the box is then as tall as the letters are.
+    const large = onResizedPage(text, 100, { x: 0, y: 0 })
+    expect(large.size).toBe(288)
+    expect(large.box.height).toBeCloseTo(textHeight(1, 288))
+    const callout = onResizedPage({ ...text, tip: { x: 100, y: 200 } }, 0.5, {
+      x: 10,
+      y: 10,
+    })
+    expect(callout.tip).toEqual({ x: 60, y: 110 })
+  })
+
+  it("moves every point of a thing made of points, and keeps what a measuring line says", () => {
+    const thin = onResizedPage(line, 0.5, { x: 10, y: 0 })
+    expect(thin.from).toEqual({ x: 15, y: 5 })
+    expect(thin.to).toEqual({ x: 30, y: 25 })
+    expect(thin.weight).toBe(1)
+    expect(thin.box).toEqual({ x: 15, y: 5, width: 15, height: 20 })
+    // A line is never thinner than a line can be drawn.
+    expect(onResizedPage(line, 0.01, { x: 0, y: 0 }).weight).toBe(0.25)
+    expect(onResizedPage(ink, 2, { x: 0, y: 0 }).strokes[0][1]).toEqual({
+      x: 40,
+      y: 20,
+    })
+    const measure = {
+      ...line,
+      kind: "measure" as const,
+      unit: "mm" as const,
+      scale: 10,
+    }
+    // Half as long on the page, and one on the page is twice as many in the world.
+    expect(onResizedPage(measure, 0.5, { x: 0, y: 0 }).scale).toBe(20)
   })
 })
 

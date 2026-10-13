@@ -18,6 +18,7 @@ const report = (change: Partial<ExportReport> = {}): ExportReport => ({
     steps: 0,
     taken: 0,
     added: 0,
+    cut: false,
     lost: { links: 0, bookmarks: 0, fields: 0 },
   },
   ...change,
@@ -350,12 +351,13 @@ describe("what became of the page's own text", () => {
 describe("what became of the pages", () => {
   const none = { links: 0, bookmarks: 0, fields: 0 }
   const told = (
-    pages: Omit<ExportReport["pages"], "added"> & { added?: number },
+    pages: Pick<ExportReport["pages"], "steps" | "taken" | "lost"> &
+      Partial<ExportReport["pages"]>,
     signed = false
   ) =>
     checkLines(
       report({
-        pages: { added: 0, ...pages },
+        pages: { added: 0, cut: false, ...pages },
         ...(signed ? { signature: { intact: true } } : null),
       })
     )
@@ -376,7 +378,7 @@ describe("what became of the pages", () => {
       everyLine(
         report({
           added: 0,
-          pages: { steps: 1, taken: 0, added: 0, lost: none },
+          pages: { steps: 1, taken: 0, added: 0, cut: false, lost: none },
         })
       ).some((line) => line.text.startsWith("Nothing was added"))
     ).toBe(false)
@@ -427,6 +429,19 @@ describe("what became of the pages", () => {
     expect(everyLine(report({ part: 30 }))[0].text).toBe(
       "Only 30 pages were written, as a file of their own. The file in the editor is as it was, with everything that is not yet downloaded."
     )
+  })
+
+  it("says that cropping hides and does not remove", () => {
+    const cut = (is: boolean) =>
+      checkLines(
+        report({
+          pages: { steps: 1, taken: 0, added: 0, cut: is, lost: none },
+        })
+      ).map((line) => line.text)
+    expect(cut(true)).toContain(
+      "Cropping hides what is outside the frame. It is still in the file, and a program can show it again."
+    )
+    expect(cut(false).some((text) => text.startsWith("Cropping"))).toBe(false)
   })
 
   it("does not say that anything is gone from a file that was only added to", () => {

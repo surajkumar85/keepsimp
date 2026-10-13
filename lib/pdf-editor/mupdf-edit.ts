@@ -1214,7 +1214,13 @@ export interface ExportReport {
   /** In how many steps links were added, changed or taken away. */
   links: number
   /** How often the list of pages was changed, how many pages were taken out, and what went with them. */
-  pages: { steps: number; taken: number; added: number; lost: Lost }
+  pages: {
+    steps: number
+    taken: number
+    added: number
+    cut: boolean
+    lost: Lost
+  }
   /** Only for some pages written as a file of their own: how many. */
   part?: number
   /**
@@ -1322,6 +1328,8 @@ export function pagesChanged(steps: readonly Step[]) {
       (sum, op) => sum + (op.do === "insert" ? op.count : 0),
       0
     ),
+    /** A page was cut to a part: the rest of it is hidden, and still in the file. */
+    cut: ops.some((op) => op.do === "crop"),
     lost: lostIn(changes),
   }
 }

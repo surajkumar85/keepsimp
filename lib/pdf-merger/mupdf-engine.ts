@@ -1229,7 +1229,7 @@ function movePoints(out: Doc, list: Obj, matrix: Matrix) {
 }
 
 /** Make a page the size of the sheet: its content, links, notes and fields move and scale with it. */
-function fitPage(out: Doc, page: Obj, sheet: Size, enlarge: boolean) {
+export function fitPage(out: Doc, page: Obj, sheet: Size, enlarge: boolean) {
   const fit = fitToSheet(boxOf(page), turnOf(page), sheet, enlarge)
   if (!fit) return
   wrapContent(out, page, `q ${fit.matrix.join(" ")} cm`, "Q")
