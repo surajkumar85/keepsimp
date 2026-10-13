@@ -592,6 +592,7 @@ export const posts: readonly BlogPost[] = [
   cropPost,
   numbersPost,
   watermarkPost,
+  redactPost,
   {
     slug: "format-json-without-losing-precision",
     searchTitle:
@@ -690,6 +691,7 @@ import {
   formPost,
   numbersPost,
   watermarkPost,
+  redactPost,
   overviewPost,
   resizePost,
   targetSizePost,

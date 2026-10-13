@@ -14,7 +14,7 @@
 import type * as MuPDF from "mupdf"
 import type { Size } from "@/lib/image-compressor/geometry"
 import { pagesToCheck } from "@/lib/pdf-compressor/check"
-import { open, samePage } from "@/lib/pdf-compressor/mupdf-compress"
+import { open, samePage, takeOut } from "@/lib/pdf-compressor/mupdf-compress"
 import type { Lock } from "@/lib/pdf-compressor/options"
 import { drawPage, shareDuplicates } from "@/lib/pdf-merger/mupdf-engine"
 import { fontName } from "./fonts"
@@ -57,6 +57,7 @@ import {
   type PagesChange,
   type Plan,
 } from "./pages"
+import { appliedIn, cleans, type Clean, type RedactChange } from "./redact"
 import { isOurs, type TextChange } from "./retext"
 import { BASELINE, combStarts, lineStart } from "./text-layout"
 import type { Change, Op } from "./tools"
@@ -92,6 +93,7 @@ export interface Done {
     | "links"
     | "pages"
     | "document"
+    | "redact"
   change: unknown
 }
 
@@ -1197,6 +1199,8 @@ export interface ExportOptions {
   fields?: "keep" | "flatten"
   /** A password for the result, in place of any the file has. */
   lock?: Lock
+  /** Things the file carries besides its pages that the result is to be without. */
+  clean?: Clean
   /** Called between pages; it may pause, or throw to stop. */
   checkpoint?: () => Promise<void>
 }
@@ -1240,6 +1244,25 @@ export interface ExportReport {
   part?: number
   /** What of the file as a whole was changed. */
   document: { details: boolean; bookmarks: boolean; labels: boolean }
+  /**
+   * What was taken out for good: how many places on how many pages were
+   * emptied, under how many something is still drawn, how many notes and
+   * fields went with them, and how many marks are still waiting to be
+   * applied (what is under those is still in the file).
+   */
+  redaction: {
+    places: number
+    pages: number
+    residue: number
+    notes: number
+    fields: number
+    waiting: number
+  }
+  /**
+   * Only when something was left out on request: the file's details, how
+   * many attached files, and its scripts (whether it had any is not told).
+   */
+  cleaned?: { details: boolean; attachments: number | null; scripts: boolean }
   /**
    * Only for a signed file whose changes were written after it: whether
    * the file as it came is still there, byte for byte, at the start of the
@@ -1351,6 +1374,23 @@ export function pagesChanged(steps: readonly Step[]) {
   }
 }
 
+/** The key under which a mark for taking something out carries its name. */
+export const REDACT_KEY = "KeepSimpRedact"
+
+/** How many marks of ours a file still has that were not applied. */
+export function waitingMarks(doc: Doc) {
+  let waiting = 0
+  for (let index = 0; index < doc.countPages(); index++) {
+    const notes = doc.findPage(index).get("Annots")
+    if (!notes.isArray()) continue
+    for (let at = 0; at < notes.length; at++) {
+      const note = notes.get(at)
+      if (note.isDictionary() && note.get(REDACT_KEY).isString()) waiting++
+    }
+  }
+  return waiting
+}
+
 /** What of the file as a whole was changed: its bookmarks, its details, its own page numbers. */
 export function documentChanged(steps: readonly Step[]) {
   const ops = steps
@@ -1385,6 +1425,26 @@ export const picturesChanged = (steps: readonly Step[]) => {
  * done to that second copy. Tidying the working copy itself would renumber
  * its objects, and the journal could no longer undo.
  */
+/** How many files a document carries: attached to it as a whole, or pinned to a page. */
+function attachedTo(doc: Doc) {
+  let count = Object.keys(doc.getEmbeddedFiles()).length
+  const pages = doc.countPages()
+  for (let index = 0; index < pages; index++) {
+    const notes = doc.findPage(index).get("Annots")
+    if (!notes.isArray()) continue
+    for (let at = 0; at < notes.length; at++) {
+      const note = notes.get(at)
+      if (
+        note.isDictionary() &&
+        note.get("Subtype").isName() &&
+        note.get("Subtype").asName() === "FileAttachment"
+      )
+        count++
+    }
+  }
+  return count
+}
+
 export async function exportEdited(
   mupdf: Engine,
   session: EditSession,
@@ -1631,6 +1691,18 @@ export async function exportEdited(
       }
     }
 
+    // What the file carries besides its pages goes last, when everything
+    // that reads the file has read it.
+    const clean = options.clean && cleans(options.clean) ? options.clean : null
+    const attached = clean?.attachments ? attachedTo(doc) : null
+    if (clean)
+      takeOut(doc, {
+        ...clean,
+        bookmarks: false,
+        comments: false,
+        tags: false,
+        flatten: false,
+      })
     shareDuplicates(doc)
     const { lock } = options
     const bytes = bufferBytes(
@@ -1682,7 +1754,24 @@ export async function exportEdited(
         links: linksChanged(inForce),
         pages: pagesChanged(inForce),
         document: documentChanged(inForce),
+        redaction: {
+          ...appliedIn(
+            inForce
+              .filter((step) => step.done.kind === "redact")
+              .map((step) => step.done.change as RedactChange)
+          ),
+          waiting: waitingMarks(doc),
+        },
         fields: { had: form.values.size, how: fieldsHow, ...fieldsRead },
+        ...(clean
+          ? {
+              cleaned: {
+                details: clean.details,
+                attachments: attached,
+                scripts: clean.scripts,
+              },
+            }
+          : null),
       },
     }
   } finally {

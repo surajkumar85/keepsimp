@@ -18,6 +18,7 @@ describe("doors", () => {
       "crop-pdf",
       "add-page-numbers",
       "watermark-pdf",
+      "redact-pdf",
     ])
     expect(listed).toHaveLength(tools.length - doors.length)
     expect(listed.some((tool) => tool.partOf)).toBe(false)
@@ -48,6 +49,9 @@ describe("doors", () => {
     ])
     expect(filterTools("confidential", "all").map((tool) => tool.id)).toEqual([
       "watermark-pdf",
+    ])
+    expect(filterTools("blackout", "all").map((tool) => tool.id)).toEqual([
+      "redact-pdf",
     ])
   })
 })

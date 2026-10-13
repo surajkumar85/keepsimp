@@ -1429,6 +1429,23 @@ describe("what is taken out on request", () => {
     expect(after.catalog.get(PDFName.of("AA"))).toBeUndefined()
     expect(await texts(bytes!)).toEqual(await texts(input))
   }, 60_000)
+
+  it("is asked to take out scripts from a file that has none, and writes it all the same", async () => {
+    // Nothing happens when this file is opened: it names no action at all.
+    const input = await everything()
+    const { bytes } = await taking(input, { scripts: true })
+    expect(await texts(bytes ?? input)).toEqual(await texts(input))
+  }, 60_000)
+
+  it("takes out the details also when attached files go with them", async () => {
+    const input = await everything()
+    expect((await readPdf(input)).info.Title).toBeDefined()
+    const { bytes } = await taking(input, { attachments: true, details: true })
+    const after = await readPdf(bytes!)
+    expect(after.attachments).toEqual([])
+    expect(after.info.Title).toBeUndefined()
+    expect(after.info.Author).toBeUndefined()
+  }, 60_000)
 })
 
 describe("a password on the result", () => {

@@ -36,6 +36,16 @@ const DOORS = [
     focused: "opened for watermarks",
     name: "Watermark PDF",
   },
+  {
+    route: "/dashboard/redact-pdf/",
+    title: /Redact a PDF online for free/,
+    drop: "Drop a PDF to redact",
+    ability: "Taken out, not covered",
+    guide: "/blog/redact-a-pdf-without-uploading/",
+    article: "A black box is not a redaction.",
+    focused: "opened for taking things out for good",
+    name: "Redact PDF",
+  },
 ] as const
 
 async function open(page: Page, route: string) {

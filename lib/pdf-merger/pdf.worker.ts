@@ -33,6 +33,7 @@ import {
   lettersLacking,
   objectsOn,
   pageSizes as editSizes,
+  waitingMarks,
   stepBack,
   stepForward,
   takeUp,
@@ -50,6 +51,17 @@ import type { LetterLine } from "@/lib/pdf-editor/comments"
 import { applyFields, fieldsOn, formFacts } from "@/lib/pdf-editor/mupdf-forms"
 import { readDraft } from "@/lib/pdf-editor/draft"
 import { applyDocument, documentOf } from "@/lib/pdf-editor/mupdf-document"
+import {
+  applyRedact,
+  redactFind,
+  redactMarksOn,
+} from "@/lib/pdf-editor/mupdf-redact"
+import {
+  readClean,
+  readSought,
+  type RedactChange,
+  type RedactMark,
+} from "@/lib/pdf-editor/redact"
 import { canWriteAfter, exportAfter } from "@/lib/pdf-editor/mupdf-signed"
 import type { PageLink } from "@/lib/pdf-editor/links"
 import { applyLinks, linksOn } from "@/lib/pdf-editor/mupdf-links"
@@ -599,6 +611,7 @@ function editState(
         // A draft may have put the pages in another order: the bookmarks are read as they lead now.
         bookmarks: session.laidOut ? bookmarksOf(session.doc) : pdf.bookmarks,
         document: documentOf(session),
+        waiting: waitingMarks(session.doc),
       }
       toldOf.set(session, session.laidOut ?? 0)
       describedOf.set(session, session.described ?? 0)
@@ -656,6 +669,69 @@ function newsOf(
     lacking: [...lacking],
     ...(layout ? { layout } : null),
     ...(document ? { document } : null),
+    waiting: waitingMarks(session.doc),
+  }
+}
+
+async function editRedact(
+  request: Extract<PdfRequest, { type: "edit-redact" }>
+) {
+  const session = editing.get(request.id)
+  try {
+    if (!session) throw new Error(EDIT_FAILED)
+    const pages = applyRedact(await engine, session, request.change)
+    // What applying did, as the step that was just made keeps it.
+    const made = session.steps[session.position - 1]?.done.change as
+      RedactChange | undefined
+    const applied = made?.done?.flat() ?? []
+    post({
+      type: "edit-news",
+      request: request.request,
+      news: {
+        ...newsOf(session, pages),
+        ...(applied.length ? { applied } : null),
+      },
+    })
+  } catch (error) {
+    post({
+      type: "edit-news",
+      request: request.request,
+      news: null,
+      message: readable(error, EDIT_FAILED),
+    })
+  }
+}
+
+function editRedactMarks(
+  request: Extract<PdfRequest, { type: "edit-redact-marks" }>
+) {
+  const session = editing.get(request.id)
+  let marks: RedactMark[] | null = null
+  try {
+    if (session) marks = redactMarksOn(session, request.page)
+  } catch {
+    // The page says that the marks could not be read.
+  }
+  post({ type: "edit-redact-marks", request: request.request, marks })
+}
+
+function editRedactFind(
+  request: Extract<PdfRequest, { type: "edit-redact-find" }>
+) {
+  const session = editing.get(request.id)
+  try {
+    if (!session) throw new Error(EDIT_FAILED)
+    const sought = readSought(request.sought)
+    if (!sought) throw new Error(EDIT_FAILED)
+    const { found, more } = redactFind(session, sought)
+    post({ type: "edit-redact-found", request: request.request, found, more })
+  } catch {
+    post({
+      type: "edit-redact-found",
+      request: request.request,
+      found: null,
+      more: false,
+    })
   }
 }
 
@@ -1024,6 +1100,7 @@ async function editExport(
           comments: request.comments,
           fields: request.fields,
           lock: request.lock ?? undefined,
+          clean: readClean(request.clean),
           checkpoint,
         })
       : request.after
@@ -1033,6 +1110,7 @@ async function editExport(
             comments: request.comments,
             fields: request.fields,
             lock: request.lock ?? undefined,
+            clean: readClean(request.clean),
             checkpoint,
           })
     const out = result.bytes.buffer as ArrayBuffer
@@ -1330,6 +1408,9 @@ self.onmessage = (event: MessageEvent<PdfRequest>) => {
     enqueue({ run: async () => editPageLinks(request) })
   else if (request.type === "edit-pages") void editPages(request)
   else if (request.type === "edit-document") void editDocument(request)
+  else if (request.type === "edit-redact") void editRedact(request)
+  else if (request.type === "edit-redact-marks") editRedactMarks(request)
+  else if (request.type === "edit-redact-find") editRedactFind(request)
   else if (request.type === "edit-insert") void editInsert(request)
   else if (request.type === "edit-page-link")
     enqueue({ run: () => editPageLink(request) })

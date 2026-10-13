@@ -22,6 +22,14 @@ const report = (change: Partial<ExportReport> = {}): ExportReport => ({
     lost: { links: 0, bookmarks: 0, fields: 0 },
   },
   document: { details: false, bookmarks: false, labels: false },
+  redaction: {
+    places: 0,
+    pages: 0,
+    residue: 0,
+    notes: 0,
+    fields: 0,
+    waiting: 0,
+  },
   ...change,
 })
 
@@ -504,5 +512,79 @@ describe("what became of the file as a whole", () => {
         line.text.startsWith("Nothing was added")
       )
     ).toBe(true)
+  })
+})
+
+describe("what was taken out for good", () => {
+  const none = {
+    places: 0,
+    pages: 0,
+    residue: 0,
+    notes: 0,
+    fields: 0,
+    waiting: 0,
+  }
+  const told = (redaction: Partial<ExportReport["redaction"]>) =>
+    checkLines(report({ redaction: { ...none, ...redaction } }))
+
+  it("says how many places were emptied, and what went with them", () => {
+    expect(told({ places: 1, pages: 1 })).toContainEqual({
+      text: "1 place on 1 page was emptied for good: the letters, the pixels of pictures and the drawings under your marks are no longer in the file, and each place was looked at afterwards.",
+      good: true,
+    })
+    expect(
+      told({ places: 1200, pages: 3, notes: 1, fields: 2 }).map(
+        (line) => line.text
+      )
+    ).toContain(
+      "1,200 places on 3 pages were emptied for good: the letters, the pixels of pictures and the drawings under your marks are no longer in the file, and each place was looked at afterwards. What lay under a mark went too: 1 note, 2 form fields."
+    )
+    expect(
+      told({ places: 2, pages: 1, fields: 1 }).map((line) => line.text)[0]
+    ).toContain("went too: 1 form field.")
+  })
+
+  it("warns when something is still drawn under a mark, or a mark was not applied", () => {
+    expect(told({ places: 2, pages: 1, residue: 1 })).toContainEqual({
+      text: "Under 1 mark something is still drawn: a drawing that reaches beyond its mark, such as the rule of a table, is covered by the box, not taken out. If it must go too, undo, and apply again with whole drawings taken out, or mark all of it.",
+      good: false,
+    })
+    expect(told({ waiting: 1 })).toContainEqual({
+      text: "1 mark was not applied. What is under it is still in the file: apply the marks, then download again.",
+      good: false,
+    })
+    expect(told({ waiting: 3 })).toContainEqual({
+      text: "3 marks were not applied. What is under them is still in the file: apply the marks, then download again.",
+      good: false,
+    })
+    expect(told({}).some((line) => /emptied|mark/.test(line.text))).toBe(false)
+  })
+
+  it("says what was left out on request", () => {
+    const left = (cleaned: ExportReport["cleaned"]) =>
+      checkLines(report({ cleaned })).map((line) => line.text)
+    expect(left({ details: true, attachments: 2, scripts: true })).toContain(
+      "Left out of the result, as you asked: its title, author and other details; 2 attached files; any scripts it carried."
+    )
+    expect(left({ details: false, attachments: 0, scripts: false })).toContain(
+      "Left out of the result, as you asked: attached files, of which it had none."
+    )
+    expect(
+      left({ details: true, attachments: null, scripts: false })
+    ).toContain(
+      "Left out of the result, as you asked: its title, author and other details."
+    )
+    expect(
+      checkLines(report({})).some((line) => line.text.startsWith("Left out"))
+    ).toBe(false)
+  })
+
+  it("is not silent about a file in which only that was done", () => {
+    for (const what of [{ places: 1, pages: 1 }, { waiting: 1 }])
+      expect(
+        everyLine(report({ added: 0, redaction: { ...none, ...what } })).some(
+          (line) => line.text.startsWith("Nothing was added")
+        )
+      ).toBe(false)
   })
 })

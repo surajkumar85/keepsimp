@@ -51,6 +51,12 @@ import type { OwnFile } from "@/lib/pdf-editor/draft-store"
 import type { Query } from "@/lib/pdf-editor/find"
 import type { LinkOp, PageLink } from "@/lib/pdf-editor/links"
 import type { DocumentOp } from "@/lib/pdf-editor/document"
+import type {
+  Applied,
+  RedactMark,
+  RedactOp,
+  Sought,
+} from "@/lib/pdf-editor/redact"
 import { labelOf, type PageOp } from "@/lib/pdf-editor/pages"
 import {
   repeatedChange,
@@ -243,6 +249,9 @@ export function useEditor(
   const [layout, setLayout] = useState(0)
   /** What the file says of itself, its bookmarks and its own page numbers, as the file has them. */
   const [described, setDescribed] = useState(opened.document)
+  /** How many marks for taking something out are waiting to be applied, on all pages together. */
+  const [waiting, setWaiting] = useState(opened.waiting)
+  const marksRead = useRef(new Map<string, Promise<RedactMark[]>>())
 
   const view = useCallback(
     (page: number, from = latest.current.objects): PageView => ({
@@ -396,6 +405,7 @@ export function useEditor(
         for (const { page, fields: here } of news.pages) now[page] = here
         return sized(now)
       })
+      setWaiting(news.waiting)
       if (news.document) {
         setDescribed(news.document)
         setBookmarks(news.document.bookmarks)
@@ -729,6 +739,50 @@ export function useEditor(
       )
     },
     [flush, enqueue, file]
+  )
+
+  /** The marks of a page that are waiting to be applied, read once for each state of the page. */
+  const redactMarks = useCallback(
+    (page: number, version: number) => {
+      const key = `${page}/${version}`
+      let reading = marksRead.current.get(key)
+      if (!reading) {
+        reading = (async () =>
+          (await client.current?.redactMarks(file, page)) ?? [])()
+        marksRead.current.set(key, reading)
+      }
+      return reading
+    },
+    [client, file]
+  )
+
+  /**
+   * Mark places to be taken out for good, take marks away, or apply them
+   * all, as one step.
+   * @returns What applying did on each page; an empty list for marks alone; null when the step could not be made.
+   */
+  const changeRedact = useCallback(
+    async (label: string, ...ops: RedactOp[]) => {
+      flush()
+      let applied: Applied[] | null = null
+      await enqueue(async (worker) => {
+        const news = await worker.editRedact(file, { label, ops })
+        applied = news.applied ?? []
+        return news
+      })
+      return applied as Applied[] | null
+    },
+    [flush, enqueue, file]
+  )
+
+  /** Where some words, or things of a kind, are on the pages; null when the file could not be looked through. */
+  const findToRedact = useCallback(
+    async (sought: Sought) => {
+      flush()
+      await queue.current
+      return (await client.current?.redactFind(file, sought)) ?? null
+    },
+    [client, file, flush]
   )
 
   /** Change the file's bookmarks, its details or its own page numbers, as one step. */
@@ -1505,6 +1559,11 @@ export function useEditor(
     layout,
     described,
     changeDocument,
+    waiting,
+    redactMarks,
+    changeRedact,
+    findToRedact,
+    newId,
     changePages,
     insertPdf,
     repeat,

@@ -604,7 +604,8 @@ function takeOut(
       order.push(note.asIndirect())
       if (note.get("Subtype").asName() === "Link") links.push(note)
     })
-  // Marks for taking out that the file came with are not ours to apply.
+  // Marks for taking out, the file's own and those made here that are not
+  // applied yet, are not for this to apply.
   const waiting = page
     .getAnnotations()
     .filter((annot) => annot.getType() === "Redact")
@@ -615,6 +616,10 @@ function takeOut(
         waiting.some((one) => one.asIndirect() === notes.get(at).asIndirect())
       )
         notes.delete(at)
+  // Taking them off the page's list is not enough: the engine applies the
+  // marks of the page as it has it open. While the letters are taken out,
+  // a mark that waits goes by another kind's name, and is no mark to it.
+  for (const note of waiting) note.put("Subtype", doc.newName("KeepSimpWaits"))
   const cut = page.createAnnotation("Redact")
   cut.setQuadPoints(bands)
   page.applyRedactions(
@@ -623,6 +628,7 @@ function takeOut(
     mupdf.PDFPage.REDACT_LINE_ART_NONE,
     mupdf.PDFPage.REDACT_TEXT_REMOVE
   )
+  for (const note of waiting) note.put("Subtype", doc.newName("Redact"))
   // Links that lay over the letters stay links, and marks that were waiting wait on.
   const object = page.getObject()
   let now = object.get("Annots")

@@ -28,10 +28,12 @@ import {
   type ExportReport,
   documentChanged,
   linksChanged,
+  waitingMarks,
   pagesChanged,
   picturesChanged,
 } from "./mupdf-edit"
 import { fieldsOn } from "./mupdf-forms"
+import type { RedactChange } from "./redact"
 
 type Engine = typeof MuPDF
 
@@ -68,6 +70,19 @@ export async function exportAfter(
   session: EditSession,
   options: { checkpoint?: () => Promise<void> } = {}
 ): Promise<{ bytes: Uint8Array; report: ExportReport }> {
+  // What was taken out for good would still be in the part that is signed.
+  if (
+    session.steps
+      .slice(0, session.position)
+      .some(
+        (step) =>
+          step.done.kind === "redact" &&
+          (step.done.change as RedactChange).ops.some((op) => op.do === "apply")
+      )
+  )
+    throw new Error(
+      "What you took out for good would still be in the signed part of the file. Choose to write the file anew: its signature will no longer hold."
+    )
   if (!canWriteAfter(session))
     throw new Error(
       "This file cannot be added to as it is. Download it written anew instead."
@@ -126,6 +141,14 @@ export async function exportAfter(
         links: linksChanged(session.steps.slice(0, position)),
         pages: pagesChanged(session.steps.slice(0, position)),
         document: documentChanged(session.steps.slice(0, position)),
+        redaction: {
+          places: 0,
+          pages: 0,
+          residue: 0,
+          notes: 0,
+          fields: 0,
+          waiting: waitingMarks(fresh.doc),
+        },
         fields: { had: form.values.size, how: "keep", same, left },
         signature: { intact: beginsWith(bytes, session.original) },
       },

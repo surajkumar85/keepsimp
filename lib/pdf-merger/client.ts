@@ -9,6 +9,13 @@ import type { LinkChange, PageLink } from "@/lib/pdf-editor/links"
 import type { PagePicture, PictureChange } from "@/lib/pdf-editor/page-pictures"
 import type { DocumentChange } from "@/lib/pdf-editor/document"
 import type { PagesChange } from "@/lib/pdf-editor/pages"
+import type {
+  Clean,
+  FoundPlace,
+  RedactChange,
+  RedactMark,
+  Sought,
+} from "@/lib/pdf-editor/redact"
 import type { PageLine, TextChange } from "@/lib/pdf-editor/retext"
 import type { ExportReport, Step } from "@/lib/pdf-editor/mupdf-edit"
 import type { Change } from "@/lib/pdf-editor/tools"
@@ -167,6 +174,16 @@ export class PdfClient {
   >()
   private readonly editPictures = new Map<number, (size: Size | null) => void>()
   private readonly editInserts = new Map<number, (taken: Inserted) => void>()
+  private readonly redactMarksAsked = new Map<
+    number,
+    (marks: RedactMark[] | null) => void
+  >()
+  private readonly redactFound = new Map<
+    number,
+    (
+      found: { found: (FoundPlace & { page: number })[]; more: boolean } | null
+    ) => void
+  >()
   private readonly editLines = new Map<
     number,
     (lines: PageLine[] | null) => void
@@ -265,6 +282,14 @@ export class PdfClient {
     } else if (message.type === "edit-draft") {
       this.editDrafts.get(message.request)?.(message.draft)
       this.editDrafts.delete(message.request)
+    } else if (message.type === "edit-redact-marks") {
+      this.redactMarksAsked.get(message.request)?.(message.marks)
+      this.redactMarksAsked.delete(message.request)
+    } else if (message.type === "edit-redact-found") {
+      this.redactFound.get(message.request)?.(
+        message.found && { found: message.found, more: message.more }
+      )
+      this.redactFound.delete(message.request)
     } else if (message.type === "edit-insert") {
       this.editInserts.get(message.request)?.(
         message.pages !== null
@@ -440,6 +465,10 @@ export class PdfClient {
     for (const done of this.editInserts.values())
       done({ failed: "That file could not be read." })
     this.editInserts.clear()
+    for (const done of this.redactMarksAsked.values()) done(null)
+    this.redactMarksAsked.clear()
+    for (const done of this.redactFound.values()) done(null)
+    this.redactFound.clear()
     for (const done of this.editLines.values()) done(null)
     this.editLines.clear()
     for (const done of this.pagePicturesAsked.values()) done(null)
@@ -614,6 +643,36 @@ export class PdfClient {
     })
   }
 
+  /** Mark places to be taken out for good, take marks away, or apply them all, as one step. */
+  editRedact(id: string, change: RedactChange) {
+    return new Promise<EditNews>((resolve, reject) => {
+      const request = ++this.requests
+      this.editNews.set(request, { resolve, reject })
+      this.send({ type: "edit-redact", id, request, change })
+    })
+  }
+
+  /** The marks of a page that are waiting to be applied; null when the page could not be read. */
+  redactMarks(id: string, page: number) {
+    return new Promise<RedactMark[] | null>((resolve) => {
+      const request = ++this.requests
+      this.redactMarksAsked.set(request, resolve)
+      this.send({ type: "edit-redact-marks", id, request, page })
+    })
+  }
+
+  /** Where some words, or things of a kind, are on the pages; null when the file could not be looked through. */
+  redactFind(id: string, sought: Sought) {
+    return new Promise<{
+      found: (FoundPlace & { page: number })[]
+      more: boolean
+    } | null>((resolve) => {
+      const request = ++this.requests
+      this.redactFound.set(request, resolve)
+      this.send({ type: "edit-redact-find", id, request, sought })
+    })
+  }
+
   /** Change the file's bookmarks, its details or its own page numbers, as one step; what the file then says of itself. */
   editDocument(id: string, change: DocumentChange) {
     return new Promise<EditNews>((resolve, reject) => {
@@ -710,6 +769,8 @@ export class PdfClient {
       fields: "keep" | "flatten"
       after: boolean
       lock: Lock | null
+      /** Things the file carries besides its pages that the result is to be without. */
+      clean?: Clean
       /** Only these pages, counted from 0, as a file of their own. */
       only?: number[]
     }

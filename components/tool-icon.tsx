@@ -8,6 +8,7 @@ import {
   IconDimensions,
   IconCrop,
   IconDroplet,
+  IconEraser,
   IconFilePencil,
   IconFileZip,
   IconGif,
@@ -48,6 +49,7 @@ const icons: Record<string, typeof IconBraces> = {
   "crop-pdf": IconCrop,
   "add-page-numbers": IconNumber123,
   "watermark-pdf": IconDroplet,
+  "redact-pdf": IconEraser,
   "json-formatter": IconBraces,
   "color-utility": IconPalette,
 }

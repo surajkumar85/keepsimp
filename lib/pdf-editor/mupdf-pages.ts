@@ -215,7 +215,7 @@ function leadsTo(doc: Doc, holder: Obj, names: () => Names) {
 }
 
 /** Take a field's place off the form; a field that is left without any place goes too. */
-function dropWidget(doc: Doc, widget: Obj) {
+export function dropWidget(doc: Doc, widget: Obj) {
   let fields = 0
   let node = widget
   const form = doc.getTrailer().get("Root", "AcroForm")
@@ -472,7 +472,7 @@ interface Run {
 
 /** The runs of a file's own page numbers, in order; null when it simply counts its pages. */
 export function runsOf(doc: Doc): Run[] | null {
-  const tree = doc.getTrailer().get("Root").get("PageLabels")
+  const tree = doc.getTrailer().get("Root", "PageLabels")
   if (!tree.isDictionary()) return null
   const runs: Run[] = []
   const read = (node: Obj, depth: number) => {

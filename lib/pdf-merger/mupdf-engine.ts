@@ -666,7 +666,7 @@ function trimResources(out: Doc, pages: readonly Obj[]) {
       const annotations = page.get("Annots")
       if (annotations.isArray())
         for (let index = 0; index < annotations.length; index++) {
-          const looks = annotations.get(index).get("AP")
+          const looks = annotations.get(index, "AP")
           if (!looks.isDictionary()) continue
           looks.forEach((look) => {
             const drawn: Obj[] = []

@@ -20,6 +20,7 @@ import {
   IconFileTypePdf,
   IconCrop,
   IconDroplet,
+  IconEraser,
   IconLock,
   IconNumber123,
   IconPlayerStop,
@@ -62,6 +63,7 @@ import { changeCount, unsaved } from "@/lib/pdf-editor/history"
 import type { ExportReport } from "@/lib/pdf-editor/mupdf-edit"
 import { formLine, unfilled } from "@/lib/pdf-editor/forms"
 import { isInsert } from "@/lib/pdf-editor/pages"
+import { CLEAN_NOTHING, type Clean } from "@/lib/pdf-editor/redact"
 import { checkLines, editedName, partName } from "@/lib/pdf-editor/report"
 import { PdfClient, type EditState } from "@/lib/pdf-merger/client"
 import type { FileFacts } from "@/lib/pdf-merger/files"
@@ -73,6 +75,7 @@ import { DocumentPanel } from "./document-panel"
 import { RepeatPanel } from "./repeat-panel"
 import { useCrop } from "./use-crop"
 import { useDescribed } from "./use-described"
+import { REDACT_HINT, useRedact } from "./use-redact"
 import { useRepeat } from "./use-repeat"
 import { usePages } from "./use-pages"
 import { PageLayer } from "./page-layer"
@@ -169,7 +172,14 @@ const plural = (count: number, word: string) =>
 
 /** What the tool is opened for: every kind of change, or marking up and commenting first. */
 export type EditorMode =
-  "edit" | "annotate" | "sign" | "fill" | "crop" | "numbers" | "watermark"
+  | "edit"
+  | "annotate"
+  | "sign"
+  | "fill"
+  | "crop"
+  | "numbers"
+  | "watermark"
+  | "redact"
 
 /** The doors that open the editor for a job on the pages themselves. */
 const PAGE_JOBS: readonly EditorMode[] = ["crop", "numbers", "watermark"]
@@ -346,6 +356,52 @@ const WATERMARK_ABILITIES = [
   },
 ]
 
+const REDACT_ABILITIES = [
+  {
+    icon: IconEraser,
+    title: "Taken out, not covered",
+    text: "What is under a mark leaves the file: the letters, the pixels of pictures and the drawings. A black box stands where it was, and nothing is under it to copy or to find.",
+  },
+  {
+    icon: IconEdit,
+    title: "Mark by hand or by search",
+    text: "Drag over an area or over words, or mark every place a name is written, every e-mail address, phone number or card number, or a shape of your own such as ###-##-####.",
+  },
+  {
+    icon: IconShieldCheck,
+    title: "Looked at again afterwards",
+    text: "After applying, each place is read back and looked at. A mark that is not applied yet takes nothing out, and the download says so before you send the file.",
+  },
+  {
+    icon: IconLock,
+    title: "Nothing is uploaded",
+    text: "The file is opened and changed on your device. What you take out is never sent anywhere, and neither is the rest.",
+  },
+]
+
+/** What a download can leave out besides: things that tell more than the pages do. */
+const CLEAN_CHOICES: readonly {
+  key: keyof Clean
+  label: string
+  hint: string
+}[] = [
+  {
+    key: "details",
+    label: "Title, author and other details",
+    hint: "Also which app made the file, and when. They are not on any page, and anyone who has the file can read them.",
+  },
+  {
+    key: "attachments",
+    label: "Attached files",
+    hint: "Files carried inside the PDF or pinned to a page.",
+  },
+  {
+    key: "scripts",
+    label: "Scripts",
+    hint: "Code that runs when the file is opened or a field is used. A form that works out totals stops doing so.",
+  },
+]
+
 const SIGN_ABILITIES = [
   {
     icon: IconEdit,
@@ -395,6 +451,10 @@ const DOORS: Record<EditorMode, { heading: string; body: string }> = {
     heading: "Drop a PDF to number its pages",
     body: "Add page numbers, a header or footer, or Bates numbers to all its pages or to some, then download the result. You can also paste a file with ⌘V or Ctrl+V.",
   },
+  redact: {
+    heading: "Drop a PDF to redact",
+    body: "Mark names, numbers, pictures or whole areas, look the marks over, and apply them: what is under a mark is taken out of the file, not covered. Then download the result. You can also paste a file with ⌘V or Ctrl+V.",
+  },
   watermark: {
     heading: "Drop a PDF to watermark",
     body: "Lay words or a picture over its pages, as faint and as large as you like, then download the result. You can also paste a file with ⌘V or Ctrl+V.",
@@ -412,6 +472,8 @@ const FOCUSED: Partial<Record<EditorMode, string>> = {
     ", opened for numbering pages. Its other tools (text, pictures, shapes, highlights, signing) are behind “All tools”.",
   watermark:
     ", opened for watermarks. Its other tools (text, pictures, shapes, highlights, signing) are behind “All tools”.",
+  redact:
+    ", opened for taking things out for good. Its other tools (text, pictures, shapes, highlights, signing) are behind “All tools”.",
 }
 
 const ABILITIES = [
@@ -563,11 +625,25 @@ function Workspace({
     // A page opened for cropping begins with the frame.
     mode === "crop"
   )
+  const redact = useRedact(
+    editor,
+    comments,
+    retext,
+    inpage,
+    links,
+    find,
+    crop,
+    readingNow,
+    // A page opened for taking things out begins with that tool.
+    mode === "redact"
+  )
   /** The page shown on the card while the window is closed. */
   const [previewAt, setPreviewPage] = useState(0)
   const preview = useRef<HTMLCanvasElement>(null)
   const keepEditing = useRef<HTMLButtonElement>(null)
   const [keepEditable, setKeepEditable] = useState(false)
+  /** What the file carries besides its pages that the result is to be without. */
+  const [clean, setClean] = useState<Clean>(CLEAN_NOTHING)
   const [extras, setExtras] = useState<Extras>(defaultExtras)
   const [making, setMaking] = useState(false)
   const [failure, setFailure] = useState("")
@@ -697,6 +773,7 @@ function Workspace({
       commentCount ? commentsHow : "keep",
       fieldCount ? fieldsHow : "keep",
       after,
+      after ? null : clean,
       extras.protect
         ? [
             extras.password,
@@ -735,6 +812,7 @@ function Workspace({
         fields: fieldsHow,
         after,
         lock,
+        clean: after ? CLEAN_NOTHING : clean,
       })
       cancel.current = job.cancel
       const made = await job.promise
@@ -785,6 +863,7 @@ function Workspace({
       fields: fieldsHow,
       after: false,
       lock: after ? null : lockOf(extras, () => crypto.randomUUID()),
+      clean: after ? CLEAN_NOTHING : clean,
       only,
     })
     const made = await job.promise
@@ -918,6 +997,10 @@ function Workspace({
       crop.setOn(false)
       return used()
     }
+    if (event.key === "Escape" && redact.on) {
+      redact.setOn(false)
+      return used()
+    }
     // J adds and changes links; Escape lets go of one, then of the tool.
     if (plain && letter === "j") {
       links.setOn(!links.on)
@@ -1009,6 +1092,7 @@ function Workspace({
           crop={crop}
           repeat={repeat}
           described={described}
+          redact={redact}
           first={mode === "annotate" ? "comments" : "things"}
           focus={
             allTools
@@ -1019,7 +1103,9 @@ function Workspace({
                   ? "signing"
                   : PAGE_JOBS.includes(mode)
                     ? "pages"
-                    : null
+                    : mode === "redact"
+                      ? "redact"
+                      : null
           }
           onAllTools={() => setAllTools(true)}
           onSign={() => setSigning(true)}
@@ -1042,6 +1128,21 @@ function Workspace({
             className="border-b px-3 py-2 text-sm text-muted-foreground"
           >
             {editor.notice}
+          </p>
+        )}
+        {/* Always there while things are marked, so that the pages do not jump when it has something to say. */}
+        {redact.on && (
+          <p
+            role="status"
+            data-testid="editor-hint"
+            className={cn(
+              "border-b px-3 py-2 text-sm",
+              redact.warned
+                ? "bg-destructive/5 text-destructive"
+                : "text-muted-foreground"
+            )}
+          >
+            {redact.note || REDACT_HINT}
           </p>
         )}
         {formSays && (
@@ -1084,6 +1185,7 @@ function Workspace({
           links={links}
           find={find}
           crop={crop}
+          redact={redact}
           page={entry.page}
           size={entry.size}
           scale={scale}
@@ -1308,6 +1410,24 @@ function Workspace({
                 FIELD_CHOICES.find((choice) => choice.value === fieldsHow)!.hint
               }
             />
+          )}
+          {!after && (
+            <fieldset className="space-y-2">
+              <legend className="text-sm font-medium">
+                Leave out of the result
+              </legend>
+              {CLEAN_CHOICES.map(({ key, label, hint }) => (
+                <ToggleRow
+                  key={key}
+                  label={label}
+                  hint={hint}
+                  checked={clean[key]}
+                  onCheckedChange={(on) =>
+                    setClean((was) => ({ ...was, [key]: on }))
+                  }
+                />
+              ))}
+            </fieldset>
           )}
           {!after && (
             <LockFields
@@ -1774,19 +1894,21 @@ export function PdfEditor({ mode = "edit" }: { mode?: EditorMode }) {
         <div className="space-y-4 rounded-xl border bg-card p-4 sm:p-5">
           <h2 className="section-title">What you can do</h2>
           <ul className="space-y-3 text-sm">
-            {(mode === "crop"
-              ? CROP_ABILITIES
-              : mode === "numbers"
-                ? NUMBER_ABILITIES
-                : mode === "watermark"
-                  ? WATERMARK_ABILITIES
-                  : mode === "fill"
-                    ? FILL_ABILITIES
-                    : mode === "sign"
-                      ? SIGN_ABILITIES
-                      : mode === "annotate"
-                        ? ANNOTATE_ABILITIES
-                        : ABILITIES
+            {(mode === "redact"
+              ? REDACT_ABILITIES
+              : mode === "crop"
+                ? CROP_ABILITIES
+                : mode === "numbers"
+                  ? NUMBER_ABILITIES
+                  : mode === "watermark"
+                    ? WATERMARK_ABILITIES
+                    : mode === "fill"
+                      ? FILL_ABILITIES
+                      : mode === "sign"
+                        ? SIGN_ABILITIES
+                        : mode === "annotate"
+                          ? ANNOTATE_ABILITIES
+                          : ABILITIES
             ).map((item) => (
               <li key={item.title} className="flex gap-3">
                 <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
@@ -1847,13 +1969,20 @@ export function PdfEditor({ mode = "edit" }: { mode?: EditorMode }) {
                   className="underline underline-offset-4 hover:text-foreground"
                 >
                   Add page numbers
-                </Link>{" "}
-                and{" "}
+                </Link>
+                ,{" "}
                 <Link
                   href="/dashboard/watermark-pdf/"
                   className="underline underline-offset-4 hover:text-foreground"
                 >
                   Watermark PDF
+                </Link>{" "}
+                and, for taking things out for good,{" "}
+                <Link
+                  href="/dashboard/redact-pdf/"
+                  className="underline underline-offset-4 hover:text-foreground"
+                >
+                  Redact PDF
                 </Link>
                 .
               </>

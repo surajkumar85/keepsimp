@@ -214,7 +214,7 @@ export async function halvePdf(
           const notes = page.get("Annots")
           if (!notes.isArray()) return
           for (let at = notes.length - 1; at >= 0; at--) {
-            const place = notes.get(at).get("Rect")
+            const place = notes.get(at, "Rect")
             if (!place.isArray() || place.length < 4) continue
             const [left, bottom, right, top] = [0, 1, 2, 3].map((side) =>
               place.get(side).asNumber()

@@ -21,6 +21,14 @@ import type { PagePicture, PictureChange } from "@/lib/pdf-editor/page-pictures"
 import type { DocumentChange } from "@/lib/pdf-editor/document"
 import type { DocumentFacts } from "@/lib/pdf-editor/mupdf-document"
 import type { PagesChange } from "@/lib/pdf-editor/pages"
+import type {
+  Applied,
+  Clean,
+  FoundPlace,
+  RedactChange,
+  RedactMark,
+  Sought,
+} from "@/lib/pdf-editor/redact"
 import type { PageLine, TextChange } from "@/lib/pdf-editor/retext"
 import type { EditorObject } from "@/lib/pdf-editor/objects"
 import type { Change } from "@/lib/pdf-editor/tools"
@@ -230,6 +238,12 @@ export type PdfRequest =
       password?: string
       ready?: boolean
     }
+  /** Mark places to be taken out for good, take marks away, or apply them all, as one step. */
+  | { type: "edit-redact"; id: string; request: number; change: RedactChange }
+  /** The marks of a page that are waiting to be applied. */
+  | { type: "edit-redact-marks"; id: string; request: number; page: number }
+  /** Where some words, or things of a kind, are on the pages, to be marked. */
+  | { type: "edit-redact-find"; id: string; request: number; sought: Sought }
   /** Change the file's bookmarks, its details or its own page numbers, as one step. */
   | {
       type: "edit-document"
@@ -274,6 +288,8 @@ export type PdfRequest =
        */
       after: boolean
       lock: Lock | null
+      /** Things the file carries besides its pages that the result is to be without. */
+      clean?: Clean
       /** Only these pages, counted from 0, as a file of their own. */
       only?: number[]
     }
@@ -304,6 +320,10 @@ export interface EditNews {
   layout?: { sizes: Size[]; bookmarks: Bookmark[] }
   /** When the file as a whole is another than before: its details, its bookmarks and its own page numbers. */
   document?: DocumentFacts
+  /** How many marks for taking something out are waiting to be applied, on all pages together. */
+  waiting: number
+  /** After marks were applied: what that did on each page. */
+  applied?: Applied[]
 }
 
 export type PdfResponse =
@@ -407,6 +427,8 @@ export type PdfResponse =
         bookmarks: Bookmark[]
         /** The file's details, its bookmarks and its own page numbers. */
         document: DocumentFacts
+        /** How many marks for taking something out are waiting to be applied. */
+        waiting: number
       } | null
     }
   /** Null when the file is not open for editing. */
@@ -447,6 +469,15 @@ export type PdfResponse =
       locked?: boolean
       wrong?: boolean
       message?: string
+    }
+  /** `marks` is null when the page could not be read. */
+  | { type: "edit-redact-marks"; request: number; marks: RedactMark[] | null }
+  /** `found` is null when the file could not be looked through; `more` when there are more places than are given. */
+  | {
+      type: "edit-redact-found"
+      request: number
+      found: (FoundPlace & { page: number })[] | null
+      more: boolean
     }
   /** `news` is null when the change could not be made; `message` then says why. */
   | {

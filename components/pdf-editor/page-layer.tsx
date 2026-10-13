@@ -38,6 +38,8 @@ import { PictureSpots } from "./picture-layer"
 import type { Inpage } from "./use-inpage"
 import type { Find } from "./use-find"
 import { CropFrame } from "./crop-layer"
+import { RedactSpots } from "./redact-layer"
+import type { Redact } from "./use-redact"
 import type { Crop } from "./use-crop"
 import type { Links } from "./use-links"
 import { laidOut, pagePoint, type Editor } from "./use-editor"
@@ -139,6 +141,7 @@ export function PageLayer({
   links,
   find,
   crop,
+  redact,
 }: {
   editor: Editor
   comments: Comments
@@ -147,6 +150,7 @@ export function PageLayer({
   links: Links
   find: Find
   crop: Crop
+  redact: Redact
   /** Counted from 0. */
   page: number
   size: Size
@@ -336,6 +340,16 @@ export function PageLayer({
       )}
       {find.on && <FindSpots find={find} page={page} />}
       {crop.on && crop.page === page && <CropFrame crop={crop} />}
+      {redact.on && (
+        <RedactSpots
+          editor={editor}
+          redact={redact}
+          page={page}
+          version={editor.versions[page] ?? 0}
+          size={size}
+          scale={scale}
+        />
+      )}
       {links.on && (
         <LinkSpots
           editor={editor}

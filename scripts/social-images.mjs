@@ -163,6 +163,12 @@ const cards = [
     "/images/pdf-watermark-guide.svg",
   ],
   [
+    "redact-a-pdf-without-uploading",
+    "A black box is not a redaction.",
+    "Take text and pictures out of a PDF for good.",
+    "/images/pdf-redact-guide.svg",
+  ],
+  [
     "repair-compare-json-patch",
     "Preview every JSON change.",
     "Repair, compare and apply JSON Patch locally.",

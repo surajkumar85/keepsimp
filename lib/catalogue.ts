@@ -334,6 +334,27 @@ export const tools: readonly Tool[] = [
     status: "available",
   },
   {
+    id: "redact-pdf",
+    name: "Redact PDF",
+    description:
+      "Take names, numbers and pictures out of a PDF for good, not just cover them.",
+    partOf: "pdf-editor",
+    category: "document",
+    keywords: [
+      "pdf",
+      "redact",
+      "redaction",
+      "black out",
+      "blackout",
+      "censor",
+      "sensitive",
+      "remove text",
+      "sanitize",
+      "privacy",
+    ],
+    status: "available",
+  },
+  {
     id: "color-utility",
     name: "Color utility",
     description:

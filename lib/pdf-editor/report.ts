@@ -62,7 +62,9 @@ export function checkLines(report: ExportReport): CheckLine[] {
     report.pages.steps === 0 &&
     !report.document.details &&
     !report.document.bookmarks &&
-    !report.document.labels
+    !report.document.labels &&
+    report.redaction.places === 0 &&
+    report.redaction.waiting === 0
   )
     lines.push({
       text: "Nothing was added. The file was written again as it is.",
@@ -217,6 +219,45 @@ export function checkLines(report: ExportReport): CheckLine[] {
       text: `Links were added, changed or taken away in ${report.links.toLocaleString("en")} place${report.links === 1 ? "" : "s"}. Where a link leads is not checked: try each one in the result.`,
       good: true,
     })
+  const cut = report.redaction
+  const many = (number: number, one: string, more = `${one}s`) =>
+    `${number.toLocaleString("en")} ${number === 1 ? one : more}`
+  if (cut.places > 0) {
+    const went = [
+      cut.notes ? many(cut.notes, "note") : "",
+      cut.fields ? many(cut.fields, "form field") : "",
+    ].filter(Boolean)
+    lines.push({
+      text: `${many(cut.places, "place")} on ${many(cut.pages, "page")} ${cut.places === 1 ? "was" : "were"} emptied for good: the letters, the pixels of pictures and the drawings under your marks are no longer in the file, and each place was looked at afterwards.${went.length ? ` What lay under a mark went too: ${went.join(", ")}.` : ""}`,
+      good: true,
+    })
+  }
+  if (cut.residue > 0)
+    lines.push({
+      text: `Under ${many(cut.residue, "mark")} something is still drawn: a drawing that reaches beyond its mark, such as the rule of a table, is covered by the box, not taken out. If it must go too, undo, and apply again with whole drawings taken out, or mark all of it.`,
+      good: false,
+    })
+  if (cut.waiting > 0)
+    lines.push({
+      text: `${many(cut.waiting, "mark")} ${cut.waiting === 1 ? "was" : "were"} not applied. What is under ${cut.waiting === 1 ? "it" : "them"} is still in the file: apply the marks, then download again.`,
+      good: false,
+    })
+  const cleaned = report.cleaned
+  if (cleaned) {
+    const left = [
+      cleaned.details ? "its title, author and other details" : "",
+      cleaned.attachments === null
+        ? ""
+        : cleaned.attachments > 0
+          ? many(cleaned.attachments, "attached file")
+          : "attached files, of which it had none",
+      cleaned.scripts ? "any scripts it carried" : "",
+    ].filter(Boolean)
+    lines.push({
+      text: `Left out of the result, as you asked: ${left.join("; ")}.`,
+      good: true,
+    })
+  }
   if (report.document.details)
     lines.push({
       text: "The file's title and other details are as you set them. A second description a file may carry (XMP) was taken out, so that the two cannot disagree.",

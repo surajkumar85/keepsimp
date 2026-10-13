@@ -53,6 +53,11 @@ const content: TutorialContent = {
         "For the pages themselves (M). A list of small pages opens beside them. Press a page to choose it; with Shift, all from the page pressed before; with Ctrl or ⌘, one more. The buttons above the list turn the chosen pages to the left or the right, move them a place earlier or later, copy them, take them out, and add an empty page after them. Drag pages to put them elsewhere, or type the place they are to have. From the keyboard: the arrow keys choose, Alt and an arrow move the chosen pages, Delete takes them out. Links and bookmarks follow their pages. With a page that is taken out go the links and bookmarks that led to it and the form fields that were on it, and the download says how many. A copy of a page has no form fields of its own. “Pages from a PDF” adds every page of another PDF after the chosen pages; a locked one asks for its password, which stays on this device. Its pages come as they look: a form's fields on them become part of the page, and its bookmarks are not brought along. “Save as a file” writes the chosen pages as a PDF of their own and leaves the file in the editor as it is. Every change is one step, and undo takes it back.",
     },
     {
+      term: "Redact",
+      detail:
+        "For what must not be in the file at all. Drag over an area, or choose Words and drag across words; type a name and press Mark all to mark it on every page; or mark every e-mail address, phone number or card number. A mark is a red frame and takes nothing out: press it to take it away again. Apply removes what is under every mark, the letters, the pixels of pictures and the drawings, and puts a black box there. Each place is looked at afterwards, and the download warns when a mark was never applied. The download can also leave out the file's details, attached files and scripts.",
+    },
+    {
       term: "Details and bookmarks",
       detail:
         "For the file as a whole. Details are its title, author, subject and keywords: type them and save; an emptied field takes that detail out. Bookmarks: click a name to choose one and to rename it; the buttons above the list add a bookmark for the page you are reading, move the chosen one up and down, put it beneath the one above, lead it to the page you are reading, or delete it. Page numbers are the numbers the file gives its own pages, which a program shows in its page box: runs such as i, ii, iii and then 1, 2, 3. They are not written on the pages; Numbers and watermarks does that.",
@@ -85,7 +90,7 @@ const content: TutorialContent = {
     {
       term: "Cover",
       detail:
-        "A filled box that hides what is under it. It only covers: the words underneath are still in the file and can be copied out by anyone. Do not use it to hide private information. Redaction, which removes what is under it, comes in a later version.",
+        "A filled box that hides what is under it. It only covers: the words underneath are still in the file and can be copied out by anyone. Do not use it to hide private information: Redact is the tool that removes.",
     },
     {
       term: "Change text",
@@ -581,6 +586,92 @@ const watermarking: TutorialContent = {
     },
   ],
   guideHref: "/blog/watermark-a-pdf-without-uploading/",
+}
+
+const redacting: TutorialContent = {
+  name: "How to redact a PDF with KeepSimp",
+  description:
+    "Take names, numbers, pictures and whole areas out of a PDF for good, in your browser. What is under a mark is removed from the file, not covered. Nothing is uploaded.",
+  intro: "Follow the steps below. Every option is explained underneath.",
+  steps: [
+    {
+      title: "Open the PDF",
+      text: "Drop the PDF, choose it from your device or paste it. A locked file asks for its password. The tool for taking things out is in hand from the start.",
+    },
+    {
+      title: "Mark what has to go",
+      text: "Drag over an area, or choose Words and drag across the words. To mark a name everywhere, type it and press Mark all. E-mail addresses, phone numbers and card numbers each have a button.",
+    },
+    {
+      title: "Look the marks over",
+      text: "Every mark is a red frame on its page. Nothing is taken out yet. Press a mark to take it away again; Undo takes back a whole search.",
+    },
+    {
+      title: "Apply the marks",
+      text: "Press Apply. What is under each mark is taken out of the file and a black box stands where it was. Each place is looked at afterwards. Until you download, Undo brings it back.",
+    },
+    {
+      title: "Download",
+      text: "Press Download. The check says how many places were emptied, and warns if a mark was left unapplied. You can also leave out the file's details, attached files and scripts.",
+    },
+  ],
+  options: [
+    {
+      term: "What taking out means",
+      detail:
+        "A black box drawn over words leaves the words in the file, where they can be selected and copied. Here the letters are removed from the page, the pixels of a picture under a mark are blanked, and drawings under it are deleted. The box is only there to show where something was.",
+    },
+    {
+      term: "Area and Words",
+      detail:
+        "Area marks the box you drag: use it for pictures, drawings, signatures and scanned pages. Words marks the words between the two ends of the drag, line by line, as text is selected.",
+    },
+    {
+      term: "Mark all, and Shape",
+      detail:
+        "Mark all finds what you typed on every page, in capitals or not. With Shape on, the words are a shape: # is a figure, @ a letter, ? any one character and * a run of letters and figures, so ###-##-#### marks every number written that way.",
+    },
+    {
+      term: "E-mail addresses, phone numbers, card numbers",
+      detail:
+        "Each button marks every one it finds in the words of the file. A card number is only marked when its check figure is right; a date is not taken for a phone number. They are found within a line, so look the pages over for anything a line break parted.",
+    },
+    {
+      term: "Whole drawings",
+      detail:
+        "A drawing that only partly lies under a mark stays, such as the rule of a table, because taking it out would take out what is beside the mark too. The page then says that something is still drawn there. A plain tint behind the words is not counted: it shows nothing of them. Turn on Whole drawings to take such drawings out whole, or mark all of the drawing.",
+    },
+    {
+      term: "What goes with a mark",
+      detail:
+        "A link, a note or a form field that lies under a mark is taken out with it: what they say would otherwise still be in the file.",
+    },
+    {
+      term: "Scanned pages",
+      detail:
+        "A scan is a picture, so its words cannot be found by searching. Mark them as areas: the pixels under each mark are blanked in the picture itself. A picture that was a JPEG is saved as a JPEG again, about as large as it was, so the file does not grow.",
+    },
+    {
+      term: "What is not on a page",
+      detail:
+        "A file also carries a title, an author, sometimes attached files and scripts. The download options leave them out when you ask. Bookmarks are in the Details panel, where one that names what you took out can be renamed or removed. A description a file gives a picture for screen readers is not changed.",
+    },
+    {
+      term: "Signed files",
+      detail:
+        "A signature covers the file as it was signed, so what you take out cannot be written after it: it would still be there. The file is written anew and its signature no longer holds; the page says so before you download.",
+    },
+    {
+      term: "All tools",
+      detail:
+        "This page is the PDF editor, opened for taking things out. All tools shows the rest: text, pictures, shapes, highlights and signing.",
+    },
+  ],
+  guideHref: "/blog/redact-a-pdf-without-uploading/",
+}
+
+export function PdfRedactTutorial() {
+  return <ToolTutorial content={redacting} />
 }
 
 export function PdfCropTutorial() {

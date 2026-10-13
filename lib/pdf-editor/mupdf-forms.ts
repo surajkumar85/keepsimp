@@ -194,7 +194,7 @@ function pagesOf(doc: Doc, widget: Widget, here: number): number[] {
   }
   const pages = new Set([here])
   for (let at = 0; at < kids.length; at++) {
-    const on = kids.get(at).get("P")
+    const on = kids.get(at, "P")
     const index = on.isIndirect() ? numbers.get(on.asIndirect()) : undefined
     if (index === undefined) return Array.from({ length: count }, (_, i) => i)
     pages.add(index)

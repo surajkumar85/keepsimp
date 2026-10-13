@@ -37,7 +37,10 @@ import {
   IconResize,
   IconNote,
   IconPencil,
+  IconAsterisk,
   IconCrop,
+  IconEraser,
+  IconPlus,
   IconChevronDown,
   IconChevronUp,
   IconLetterCase,
@@ -109,6 +112,11 @@ import { mainStyle } from "@/lib/pdf-editor/retext"
 import { isOwn, type OwnKey } from "@/lib/pdf-editor/own-font"
 import { canListFonts, LocalFontsDialog } from "./local-fonts-dialog"
 import { LONGEST_FIND } from "@/lib/pdf-editor/find"
+import {
+  LONGEST_SOUGHT,
+  PATTERNS,
+  type PatternName,
+} from "@/lib/pdf-editor/redact"
 import { ALIGNS, shapeOf, type Align } from "@/lib/pdf-editor/paragraphs"
 import { cn } from "cn"
 import { CROP_HINT, type Crop, type SheetName } from "./use-crop"
@@ -117,6 +125,7 @@ import { CUT_HINT, INPAGE_HINT, type Inpage } from "./use-inpage"
 import { LINKS_HINT, type Links } from "./use-links"
 import type { Described } from "./use-described"
 import type { Pages } from "./use-pages"
+import type { Redact } from "./use-redact"
 import type { Repeat } from "./use-repeat"
 import { PARAGRAPH_HINT, RETEXT_HINT, type Retext } from "./use-retext"
 import type { Editor } from "./use-editor"
@@ -1175,6 +1184,156 @@ function CropRow({ crop }: { crop: Crop }) {
   )
 }
 
+const PATTERN_NAMES: readonly PatternName[] = ["email", "phone", "card"]
+/** What each button says; its whole name begins with it. */
+const PATTERN_WORDS: Record<PatternName, string> = {
+  email: "E-mail",
+  phone: "Phone",
+  card: "Card",
+}
+
+/**
+ * Taking things out for good: what a drag marks, words and kinds of thing
+ * that are marked wherever they are written, and the button that applies
+ * the marks.
+ */
+function RedactRow({ redact }: { redact: Redact }) {
+  const ids = useId()
+  const { waiting } = redact
+  return (
+    <>
+      <div
+        role="group"
+        aria-label="A drag marks"
+        className="flex shrink-0 items-center gap-1"
+      >
+        {(["area", "words"] as const).map((one) => (
+          <Button
+            key={one}
+            type="button"
+            size="sm"
+            variant={redact.how === one ? "secondary" : "ghost"}
+            aria-pressed={redact.how === one}
+            title={
+              one === "area"
+                ? "A drag marks the area it draws: for pictures, drawings and scans"
+                : "A drag marks the words between its ends, as words are selected"
+            }
+            onClick={() => redact.setHow(one)}
+            className="h-11 md:h-9"
+          >
+            {one === "area" ? "Area" : "Words"}
+          </Button>
+        ))}
+      </div>
+      <RowAction
+        label="Put a mark on the page, to move with the arrow keys"
+        onPress={() => void redact.addMark()}
+      >
+        <IconPlus aria-hidden="true" />
+      </RowAction>
+      <Rule />
+      <label htmlFor={`${ids}-words`} className="sr-only">
+        Words to mark everywhere
+      </label>
+      <input
+        id={`${ids}-words`}
+        type="text"
+        autoComplete="off"
+        autoCapitalize="off"
+        spellCheck={false}
+        placeholder={redact.shaped ? "###-##-####" : "Words to mark"}
+        maxLength={LONGEST_SOUGHT}
+        value={redact.words}
+        onChange={(event) => redact.setWords(event.target.value)}
+        onKeyDown={(event) => {
+          event.stopPropagation()
+          if (event.key === "Enter") {
+            event.preventDefault()
+            void redact.markWords()
+          } else if (event.key === "Escape") {
+            event.preventDefault()
+            redact.setOn(false)
+          }
+        }}
+        className="h-11 w-36 shrink-0 rounded-md border bg-background px-2 text-base text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring md:h-9 md:text-sm"
+      />
+      <Button
+        type="button"
+        size="icon"
+        variant={redact.shaped ? "secondary" : "ghost"}
+        aria-pressed={redact.shaped}
+        aria-label="The words are a shape"
+        title="Read the words as a shape: # is a figure, @ a letter, ? any one character, * a run of letters and figures"
+        onClick={() => redact.setShaped(!redact.shaped)}
+        className="shrink-0"
+      >
+        <IconAsterisk aria-hidden="true" />
+      </Button>
+      <Button
+        type="button"
+        size="sm"
+        variant="outline"
+        disabled={!redact.words.trim() || redact.looking}
+        title="Mark every place these words are written, on all pages"
+        onClick={() => void redact.markWords()}
+        className="h-11 shrink-0 md:h-9"
+      >
+        Mark all
+      </Button>
+      <Rule />
+      <div
+        role="group"
+        aria-label="Mark every"
+        className="flex shrink-0 items-center gap-1"
+      >
+        <span className="pr-1 text-xs text-muted-foreground">Every</span>
+        {PATTERN_NAMES.map((pattern) => (
+          <Button
+            key={pattern}
+            type="button"
+            size="sm"
+            variant="ghost"
+            disabled={redact.looking}
+            aria-label={PATTERNS[pattern].name}
+            title={`Mark all ${PATTERNS[pattern].name.toLowerCase()} in the words of the file`}
+            onClick={() => void redact.markPattern(pattern)}
+            className="h-11 md:h-9"
+          >
+            {PATTERN_WORDS[pattern]}
+          </Button>
+        ))}
+      </div>
+      <Rule />
+      <Button
+        type="button"
+        size="sm"
+        variant={redact.whole ? "secondary" : "ghost"}
+        aria-pressed={redact.whole}
+        title="A drawing that a mark only touches is taken out whole. Without this, a drawing that reaches beyond its mark stays, and the page says so."
+        onClick={() => redact.setWhole(!redact.whole)}
+        className="h-11 shrink-0 md:h-9"
+      >
+        Whole drawings
+      </Button>
+      <Button
+        type="button"
+        size="sm"
+        disabled={!waiting}
+        title="Take what is under every mark out of the file. It can be undone until the file is downloaded."
+        onClick={() => void redact.apply()}
+        className="h-11 shrink-0 md:h-9"
+        data-testid="redact-apply"
+      >
+        <IconEraser aria-hidden="true" />
+        {waiting
+          ? `Apply ${waiting.toLocaleString("en")} ${waiting === 1 ? "mark" : "marks"}`
+          : "Apply the marks"}
+      </Button>
+    </>
+  )
+}
+
 /**
  * Links: a new one, and for the one that is chosen or being made, where it
  * leads, typed as an address or as a page.
@@ -1331,6 +1490,7 @@ export function EditorToolbar({
   crop,
   repeat,
   described,
+  redact,
 }: {
   editor: Editor
   comments: Comments
@@ -1350,6 +1510,8 @@ export function EditorToolbar({
   repeat: Repeat
   /** The file as a whole: its details, its bookmarks, its own page numbers. */
   described: Described
+  /** Taking things out of the file for good. */
+  redact: Redact
   /** Which tools come first in the row: those that add things, or those that comment. */
   first?: "things" | "comments"
   /**
@@ -1357,7 +1519,7 @@ export function EditorToolbar({
    * up, or signing and filling in), with a button for the rest. A tool that
    * is in hand is always shown.
    */
-  focus?: "comments" | "signing" | "pages" | null
+  focus?: "comments" | "signing" | "pages" | "redact" | null
   onAllTools?: () => void
   /** Open the window a signature is made in. */
   onSign: () => void
@@ -1419,6 +1581,15 @@ export function EditorToolbar({
       <IconCrop aria-hidden="true" />
     </Toggle>
   )
+  const redacting = (
+    <Toggle
+      label="Redact: take out for good"
+      pressed={redact.on}
+      onPress={() => redact.setOn(!redact.on)}
+    >
+      <IconEraser aria-hidden="true" />
+    </Toggle>
+  )
   const toolButton = ({ tool, label, key, icon }: (typeof TOOLS)[number]) => (
     <Toggle
       key={tool}
@@ -1447,7 +1618,12 @@ export function EditorToolbar({
               state.tool === tool &&
               !(
                 tool === "select" &&
-                (retext.on || inpage.on || links.on || find.on)
+                (retext.on ||
+                  inpage.on ||
+                  links.on ||
+                  find.on ||
+                  crop.on ||
+                  redact.on)
               )
             }
             onPress={() => {
@@ -1456,6 +1632,8 @@ export function EditorToolbar({
               inpage.setOn(false)
               links.setOn(false)
               find.setOn(false)
+              crop.setOn(false)
+              redact.setOn(false)
               editor.setTool(tool)
             }}
           >
@@ -1526,6 +1704,7 @@ export function EditorToolbar({
         <IconLink aria-hidden="true" />
       </Toggle>
       {cropping}
+      {redacting}
     </>
   )
   // Focused on one job, the other tools are put away, unless one of them is in hand.
@@ -1539,6 +1718,7 @@ export function EditorToolbar({
           !links.on &&
           !find.on &&
           !crop.on &&
+          !redact.on &&
           (state.tool === "select" || SIGNING.includes(state.tool))
         : focus === "pages"
           ? comments.tool === null &&
@@ -1546,8 +1726,17 @@ export function EditorToolbar({
             !inpage.on &&
             !links.on &&
             !find.on &&
+            !redact.on &&
             state.tool === "select"
-          : false
+          : focus === "redact"
+            ? comments.tool === null &&
+              !retext.on &&
+              !inpage.on &&
+              !links.on &&
+              !find.on &&
+              !crop.on &&
+              state.tool === "select"
+            : false
   const marks = COMMENT_TOOLS.map(({ tool, label, key, icon }) => (
     <Toggle
       key={tool}
@@ -1615,6 +1804,8 @@ export function EditorToolbar({
               </>
             ) : focus === "pages" ? (
               cropping
+            ) : focus === "redact" ? (
+              redacting
             ) : (
               marks
             )}
@@ -1622,9 +1813,16 @@ export function EditorToolbar({
             <Toggle
               label="Select"
               shortcut="V"
-              pressed={!comments.tool && state.tool === "select"}
+              pressed={
+                !comments.tool &&
+                state.tool === "select" &&
+                !crop.on &&
+                !redact.on
+              }
               onPress={() => {
                 comments.setTool(null)
+                crop.setOn(false)
+                redact.setOn(false)
                 editor.setTool("select")
               }}
             >
@@ -1722,6 +1920,8 @@ export function EditorToolbar({
           <FindRow find={find} />
         ) : crop.on ? (
           <CropRow crop={crop} />
+        ) : redact.on ? (
+          <RedactRow redact={redact} />
         ) : comments.tool ? (
           <>
             <Swatches

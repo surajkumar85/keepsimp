@@ -288,7 +288,7 @@ function spaceOf(space: Obj): { space: Space; base: Obj } {
   if (kind === "CalGray") return { space: "grey", base: space }
   if (kind === "CalRGB") return { space: "rgb", base: space }
   if (kind === "ICCBased") {
-    const channels = numberOf(space.get(1).get("N"))
+    const channels = numberOf(space.get(1, "N"))
     if (channels === 1) return { space: "grey", base: space }
     if (channels === 3) return { space: "rgb", base: space }
     if (channels === 4) return { space: "cmyk", base: space }
@@ -1433,7 +1433,7 @@ async function repackStreams(
 }
 
 /** Take out of a document what its owner asked to have taken out. */
-function takeOut(doc: Doc, remove: Removal) {
+export function takeOut(doc: Doc, remove: Removal) {
   const trailer = doc.getTrailer()
   const root = trailer.get("Root")
   // What is filled in becomes part of the page, and the fields go.
@@ -1444,7 +1444,7 @@ function takeOut(doc: Doc, remove: Removal) {
       const notes = doc.findPage(index).get("Annots")
       if (!notes.isArray()) continue
       for (let at = notes.length - 1; at >= 0; at--) {
-        const kind = nameOf(notes.get(at).get("Subtype"))
+        const kind = nameOf(notes.get(at, "Subtype"))
         const attached = kind === "FileAttachment"
         const keep = kind === "Link" || kind === "Widget"
         if (attached ? remove.attachments : remove.comments && !keep)
@@ -1463,13 +1463,17 @@ function takeOut(doc: Doc, remove: Removal) {
     root.delete("MarkInfo")
   }
   if (remove.details) {
-    trailer.delete("Info")
+    // Asked for anew: taking an attached file out gives the document a
+    // trailer of its own for the change, and the one held from before is
+    // then no longer the one that is written.
+    doc.getTrailer().delete("Info")
     root.delete("Metadata")
   }
   if (remove.scripts) {
     const names = root.get("Names")
     if (names.isDictionary()) names.delete("JavaScript")
-    if (nameOf(root.get("OpenAction").get("S")) === "JavaScript")
+    // Asked for as one path: an entry that is not there cannot be asked anything.
+    if (nameOf(root.get("OpenAction", "S")) === "JavaScript")
       root.delete("OpenAction")
   }
   if (remove.scripts || remove.tags || remove.details)

@@ -17,6 +17,7 @@ import { isOwn } from "./own-font"
 import { readLinkOp } from "./links"
 import { readPictureOp, type PictureOp } from "./page-pictures"
 import { readLost, readPageOp, type PagesChange } from "./pages"
+import { readApplied, readRedactOp } from "./redact"
 import { readTextChange, readWrote } from "./paragraphs"
 import type { Op } from "./tools"
 
@@ -72,6 +73,7 @@ const readers = {
   links: readLinkOp,
   pages: readPageOp,
   document: readDocumentOp,
+  redact: readRedactOp,
 } as const
 
 /** A step as it comes out of storage, with every change in it checked, or null when it is not one. */
@@ -103,6 +105,9 @@ export function readStep(value: unknown): Step | null {
   // What went with pages that were taken out, which a download says.
   const lost =
     done.kind === "pages" ? readLost(change.lost, ops.length) : undefined
+  // What applying marks did, which a download says.
+  const applied =
+    done.kind === "redact" ? readApplied(change.done, ops.length) : undefined
   return {
     done: {
       kind: done.kind as Step["done"]["kind"],
@@ -112,6 +117,7 @@ export function readStep(value: unknown): Step | null {
         ...(fonts ? { fonts } : null),
         ...(wrote ? { wrote } : null),
         ...(lost ? { lost } : null),
+        ...(applied ? { done: applied } : null),
       },
     },
     label,

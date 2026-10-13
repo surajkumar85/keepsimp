@@ -24,6 +24,7 @@ import {
   PdfCropTutorial,
   PdfFormTutorial,
   PdfNumbersTutorial,
+  PdfRedactTutorial,
   PdfWatermarkTutorial,
   PdfSignerTutorial,
 } from "@/components/pdf-editor/tutorial"
@@ -98,6 +99,12 @@ export async function generateMetadata({
     return pageMetadata(
       "Add a watermark to a PDF online for free",
       "Lay DRAFT, Confidential or a logo of your own over the pages of a PDF, as faint and as large as you like, in your browser. No account, no file uploads.",
+      `/dashboard/${id}/`
+    )
+  if (id === "redact-pdf")
+    return pageMetadata(
+      "Redact a PDF online for free",
+      "Take names, numbers and pictures out of a PDF for good: the text, the pixels and the drawings under your marks are removed, not covered. In your browser, no account, no file uploads.",
       `/dashboard/${id}/`
     )
   if (id === "sign-pdf")
@@ -208,6 +215,8 @@ export default async function ToolPage({
         <PdfEditor mode="numbers" />
       ) : id === "watermark-pdf" ? (
         <PdfEditor mode="watermark" />
+      ) : id === "redact-pdf" ? (
+        <PdfEditor mode="redact" />
       ) : (
         <JsonTool />
       )}
@@ -241,6 +250,8 @@ export default async function ToolPage({
         <PdfNumbersTutorial />
       ) : id === "watermark-pdf" ? (
         <PdfWatermarkTutorial />
+      ) : id === "redact-pdf" ? (
+        <PdfRedactTutorial />
       ) : (
         <JsonTutorial />
       )}

@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 600" role="img" aria-labelledby="title desc">
+  <title id="title">Redact a PDF in your browser</title><desc id="desc">A page of a PDF with three of its lines replaced by black boxes and a fourth framed in red, waiting to be applied, beside a panel that says three places were emptied and one mark is not applied yet.</desc>
+  <rect width="900" height="600" rx="24" fill="#f5f5f0"/>
+  <rect x="80" y="50" width="400" height="520" fill="#fff" stroke="#d4d4d4"/>
+  <rect x="120" y="96" width="170" height="16" rx="4" fill="#0a0a0a"/>
+  <g fill="#b9b9b9"><rect x="120" y="140" width="320" height="9" rx="4"/><rect x="120" y="162" width="96" height="9" rx="4"/><rect x="120" y="184" width="320" height="9" rx="4"/><rect x="120" y="206" width="240" height="9" rx="4"/><rect x="120" y="252" width="150" height="9" rx="4"/><rect x="120" y="274" width="290" height="9" rx="4"/><rect x="120" y="296" width="320" height="9" rx="4"/><rect x="120" y="318" width="310" height="9" rx="4"/><rect x="120" y="340" width="180" height="9" rx="4"/><rect x="120" y="386" width="320" height="9" rx="4"/><rect x="120" y="408" width="300" height="9" rx="4"/><rect x="120" y="430" width="110" height="9" rx="4"/><rect x="120" y="498" width="320" height="9" rx="4"/><rect x="120" y="520" width="200" height="9" rx="4"/></g>
+  <g fill="#0a0a0a"><rect x="224" y="157" width="196" height="19"/><rect x="278" y="247" width="162" height="19"/><rect x="238" y="425" width="150" height="19"/></g>
+  <rect x="118" y="447" width="264" height="19" fill="#cc1a1a" fill-opacity=".2" stroke="#cc1a1a" stroke-width="2"/>
+  <rect x="120" y="452" width="260" height="9" rx="4" fill="#b9b9b9"/>
+  <rect x="540" y="110" width="300" height="380" rx="16" fill="#fff" stroke="#d4d4d4"/>
+  <text x="562" y="150" font-family="sans-serif" font-size="18" font-weight="600" fill="#0a0a0a">Redact</text>
+  <text x="562" y="184" font-family="sans-serif" font-size="13" fill="#737373">Words to mark</text>
+  <rect x="562" y="194" width="170" height="34" rx="8" fill="#fff" stroke="#d4d4d4"/>
+  <text x="576" y="216" font-family="sans-serif" font-size="14" fill="#0a0a0a">Ada Lovelace</text>
+  <rect x="742" y="194" width="76" height="34" rx="8" fill="#fff" stroke="#00786f" stroke-width="2"/>
+  <text x="780" y="216" font-family="sans-serif" font-size="13" font-weight="600" fill="#00786f" text-anchor="middle">Mark all</text>
+  <g font-family="sans-serif" font-size="12" fill="#404040"><rect x="562" y="246" width="78" height="28" rx="14" fill="#f0f0ec"/><text x="601" y="264" text-anchor="middle">E-mail</text><rect x="648" y="246" width="78" height="28" rx="14" fill="#f0f0ec"/><text x="687" y="264" text-anchor="middle">Phone</text><rect x="734" y="246" width="84" height="28" rx="14" fill="#f0f0ec"/><text x="776" y="264" text-anchor="middle">Card</text></g>
+  <circle cx="574" cy="318" r="10" fill="#00786f"/><path d="M569 318l4 4 7-8" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="594" y="323" font-family="sans-serif" font-size="14" fill="#0a0a0a">3 places emptied for good</text>
+  <circle cx="574" cy="358" r="10" fill="#cc1a1a"/><rect x="573" y="352" width="2" height="8" fill="#fff"/><rect x="573" y="362" width="2" height="2" fill="#fff"/>
+  <text x="594" y="363" font-family="sans-serif" font-size="14" fill="#0a0a0a">1 mark is not applied yet</text>
+  <rect x="562" y="430" width="256" height="38" rx="10" fill="#00786f"/>
+  <text x="690" y="454" font-family="sans-serif" font-size="14" font-weight="600" fill="#fff" text-anchor="middle">Apply 1 mark</text>
+</svg>
