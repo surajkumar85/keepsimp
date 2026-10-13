@@ -1319,7 +1319,8 @@ function RedactRow({ redact }: { redact: Redact }) {
       <Button
         type="button"
         size="sm"
-        disabled={!waiting}
+        // Not while a search is still marking: its places would come after.
+        disabled={!waiting || redact.looking}
         title="Take what is under every mark out of the file. It can be undone until the file is downloaded."
         onClick={() => void redact.apply()}
         className="h-11 shrink-0 md:h-9"
