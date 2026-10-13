@@ -338,14 +338,20 @@ test("moves, resizes, turns, restyles and removes a thing with the mouse and the
   await expect.poll(async () => isRed(await colourAt(page, 250, 80))).toBe(true)
 
   // Reached without a mouse: a thing that takes focus is selected, and Escape lets go of it.
-  await page.keyboard.press("Escape")
+  // (Nothing is selected after the steps were made again. An Escape here
+  // would close the window, as it does whenever nothing holds it.)
   await expect(box).not.toHaveAttribute("data-selected")
   await box.focus()
   await expect(box).toHaveAttribute("data-selected", "true")
   await expect(box).toHaveAccessibleName("Box")
-  // The window is still open: Escape was used for the selection.
   await page.keyboard.press("Escape")
+  await expect(box).not.toHaveAttribute("data-selected")
+  // The window is still open, for good: Escape was used for the selection.
+  await page.waitForTimeout(600)
   await expect(reader(page)).toBeVisible()
+  // With nothing selected, Escape closes the window.
+  await page.keyboard.press("Escape")
+  await expect(reader(page)).toBeHidden()
 })
 
 test("types text in a font, size and colour of its own, and changes the words later", async ({
