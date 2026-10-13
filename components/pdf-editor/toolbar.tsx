@@ -32,6 +32,7 @@ import {
   IconLine,
   IconFiles,
   IconMessages,
+  IconNumber123,
   IconResize,
   IconNote,
   IconPencil,
@@ -114,6 +115,7 @@ import { FIND_HINT, type Find } from "./use-find"
 import { CUT_HINT, INPAGE_HINT, type Inpage } from "./use-inpage"
 import { LINKS_HINT, type Links } from "./use-links"
 import type { Pages } from "./use-pages"
+import type { Repeat } from "./use-repeat"
 import { PARAGRAPH_HINT, RETEXT_HINT, type Retext } from "./use-retext"
 import type { Editor } from "./use-editor"
 
@@ -1325,6 +1327,7 @@ export function EditorToolbar({
   find,
   pages,
   crop,
+  repeat,
 }: {
   editor: Editor
   comments: Comments
@@ -1340,6 +1343,8 @@ export function EditorToolbar({
   pages: Pages
   /** Cutting pages to a part and making them another size. */
   crop: Crop
+  /** Page numbers, headers and watermarks, put on many pages at once. */
+  repeat: Repeat
   /** Which tools come first in the row: those that add things, or those that comment. */
   first?: "things" | "comments"
   /**
@@ -1347,7 +1352,7 @@ export function EditorToolbar({
    * up, or signing and filling in), with a button for the rest. A tool that
    * is in hand is always shown.
    */
-  focus?: "comments" | "signing" | null
+  focus?: "comments" | "signing" | "pages" | null
   onAllTools?: () => void
   /** Open the window a signature is made in. */
   onSign: () => void
@@ -1398,6 +1403,16 @@ export function EditorToolbar({
         <IconCalendar aria-hidden="true" />
       </Button>
     </>
+  )
+  const cropping = (
+    <Toggle
+      label="Crop and page size"
+      shortcut="Y"
+      pressed={crop.on}
+      onPress={() => crop.setOn(!crop.on)}
+    >
+      <IconCrop aria-hidden="true" />
+    </Toggle>
   )
   const toolButton = ({ tool, label, key, icon }: (typeof TOOLS)[number]) => (
     <Toggle
@@ -1505,14 +1520,7 @@ export function EditorToolbar({
       >
         <IconLink aria-hidden="true" />
       </Toggle>
-      <Toggle
-        label="Crop and page size"
-        shortcut="Y"
-        pressed={crop.on}
-        onPress={() => crop.setOn(!crop.on)}
-      >
-        <IconCrop aria-hidden="true" />
-      </Toggle>
+      {cropping}
     </>
   )
   // Focused on one job, the other tools are put away, unless one of them is in hand.
@@ -1527,7 +1535,14 @@ export function EditorToolbar({
           !find.on &&
           !crop.on &&
           (state.tool === "select" || SIGNING.includes(state.tool))
-        : false
+        : focus === "pages"
+          ? comments.tool === null &&
+            !retext.on &&
+            !inpage.on &&
+            !links.on &&
+            !find.on &&
+            state.tool === "select"
+          : false
   const marks = COMMENT_TOOLS.map(({ tool, label, key, icon }) => (
     <Toggle
       key={tool}
@@ -1593,6 +1608,8 @@ export function EditorToolbar({
                   toolButton
                 )}
               </>
+            ) : focus === "pages" ? (
+              cropping
             ) : (
               marks
             )}
@@ -1643,6 +1660,19 @@ export function EditorToolbar({
           <span className="font-mono text-xs">
             {pages.count.toLocaleString("en")}
           </span>
+        </Button>
+        <Button
+          type="button"
+          variant={repeat.on ? "secondary" : "ghost"}
+          size="icon"
+          aria-pressed={repeat.on}
+          aria-label="Numbers and watermarks"
+          title="Page numbers, headers and watermarks (Z)"
+          onClick={() => repeat.setOn(!repeat.on)}
+          className="shrink-0"
+          data-testid="repeat-toggle"
+        >
+          <IconNumber123 aria-hidden="true" />
         </Button>
         <Button
           type="button"

@@ -5,6 +5,8 @@ import {
   IconBraces,
   IconCut,
   IconDimensions,
+  IconCrop,
+  IconDroplet,
   IconFilePencil,
   IconFileZip,
   IconGif,
@@ -13,6 +15,7 @@ import {
   IconLayersUnion,
   IconMovie,
   IconMusicDown,
+  IconNumber123,
   IconPlayerTrackNext,
   IconForms,
   IconSignature,
@@ -41,6 +44,9 @@ const icons: Record<string, typeof IconBraces> = {
   "pdf-annotator": IconHighlight,
   "sign-pdf": IconSignature,
   "fill-pdf-form": IconForms,
+  "crop-pdf": IconCrop,
+  "add-page-numbers": IconNumber123,
+  "watermark-pdf": IconDroplet,
   "json-formatter": IconBraces,
 }
 

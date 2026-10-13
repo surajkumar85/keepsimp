@@ -15,6 +15,9 @@ describe("doors", () => {
       "pdf-annotator",
       "sign-pdf",
       "fill-pdf-form",
+      "crop-pdf",
+      "add-page-numbers",
+      "watermark-pdf",
     ])
     expect(listed).toHaveLength(tools.length - doors.length)
     expect(listed.some((tool) => tool.partOf)).toBe(false)
@@ -36,6 +39,15 @@ describe("doors", () => {
     ])
     expect(filterTools("fillable", "all").map((tool) => tool.id)).toEqual([
       "fill-pdf-form",
+    ])
+    expect(filterTools("margins", "all").map((tool) => tool.id)).toEqual([
+      "crop-pdf",
+    ])
+    expect(filterTools("bates", "all").map((tool) => tool.id)).toEqual([
+      "add-page-numbers",
+    ])
+    expect(filterTools("confidential", "all").map((tool) => tool.id)).toEqual([
+      "watermark-pdf",
     ])
   })
 })

@@ -586,6 +586,9 @@ export const posts: readonly BlogPost[] = [
   annotatePost,
   signPost,
   formPost,
+  cropPost,
+  numbersPost,
+  watermarkPost,
   {
     slug: "format-json-without-losing-precision",
     searchTitle:
@@ -678,9 +681,12 @@ export function findPost(slug: string) {
 import { jsonPosts } from "./json-blog"
 import {
   annotatePost,
+  cropPost,
   editPost,
   signPost,
   formPost,
+  numbersPost,
+  watermarkPost,
   overviewPost,
   resizePost,
   targetSizePost,

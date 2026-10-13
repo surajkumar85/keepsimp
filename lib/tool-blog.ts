@@ -99,6 +99,7 @@ export const overviewPost: BlogPost = {
         "Type on a form that has no fields to fill, add a date or a name, place a picture, or mark a page with boxes, arrows and a pen. Every change is made in the real file and can be undone, and the page you see is the page you will download.",
         "The text you add is real text in a font that travels inside the file, so it looks the same everywhere and can be searched. Before the download, the result is read back and checked. It also changes the words that are already there, a line at a time, in the line's own font, and the old words are really taken out of the file.",
         "It signs and fills in forms, too: draw your signature, type it or use a photo of it; type into a form's fields, tick its boxes and choose from its lists; and fill in a form that has no fields like paper.",
+        "And it works on the pages themselves: move them, turn them, copy them, take them out, add the pages of another PDF, crop them, number them and lay a watermark over them.",
         "The same editor marks up and comments: highlight, underline or strike out words by dragging across them, place notes, and reply to the comments a file already has. These are real PDF comments, so the next person sees them as comments in their own program; for a final copy they can be drawn into the page or left out.",
       ],
       links: [
@@ -130,6 +131,30 @@ export const overviewPost: BlogPost = {
         {
           label: "Guide: fill in a PDF form without sending it anywhere",
           href: "/blog/fill-pdf-forms-without-uploading/",
+        },
+        {
+          label: "Margins to trim? Open it as Crop PDF",
+          href: "/dashboard/crop-pdf/",
+        },
+        {
+          label: "Guide: crop a PDF, and what cropping means",
+          href: "/blog/crop-pdfs-without-uploading/",
+        },
+        {
+          label: "Pages to number? Open it as Add page numbers",
+          href: "/dashboard/add-page-numbers/",
+        },
+        {
+          label: "Guide: number the pages of a PDF",
+          href: "/blog/add-page-numbers-to-a-pdf/",
+        },
+        {
+          label: "A draft to mark? Open it as Watermark PDF",
+          href: "/dashboard/watermark-pdf/",
+        },
+        {
+          label: "Guide: add a watermark to a PDF",
+          href: "/blog/watermark-a-pdf-without-uploading/",
         },
       ],
     },
@@ -498,7 +523,7 @@ export const editPost: BlogPost = {
         "The editor adds things to pages: text, pictures, boxes, ellipses, lines, arrows and freehand drawing. Everything you add can be moved, resized, turned, restyled, copied and deleted, and every step can be undone, all the way back to the file as you opened it.",
         "It also marks and comments, signs, and fills in a form's fields, each of which has a guide of its own.",
         "And it changes the words that are already in a file. Choose Change text, click a paragraph or a line and type. The old letters are taken out of the page, not covered, and the new ones are written in the very font they were written in, at the same size, colour and place. A paragraph flows again within its width: a longer sentence pushes the words after it onto the next lines, set as the paragraph was, to one edge or to both, and links move with the words they lie over. A file often carries only the letters it uses; a letter its font does not have is set in the closest font the editor has, and you are told which before you press Enter. To change a word everywhere, use Find and replace: every place is shown on its page with what it will say, and Replace all changes them in one step that one undo takes back. A line can also be made larger or smaller, given another colour, set in another font (one of the editor's, or a font file of your own), and dragged somewhere else. What it does not do yet: a paragraph that grows needs empty room under it, since nothing below it is moved, and the editor says so when there is none; which lines form a paragraph is judged by how they look, so a list is sometimes taken for one, and a switch in the bar goes back to single lines; and text in scripts whose letters join can be taken out but not retyped. We would rather say so here than let you find out halfway through a job.",
-        "The pages themselves can be changed too. Pages opens a list of small pages beside the file: choose one or several, then drag them to another place, turn them, copy them, take them out, or add an empty page between two. Links and bookmarks follow their pages. When a page is taken out, the links and bookmarks that led to it and the form fields that were on it go with it, the download says how many, and the page's content is no longer anywhere in the file. The pages of another PDF can be added between them, also from a locked file once you have typed its password, and any pages you choose can be saved as a file of their own. Crop and page size lays a frame over a page: drag its edges or type the numbers, and the page, the chosen pages or all pages show only what is inside; the same tool makes pages the size of an A4 or a Letter sheet. Cropping hides what is outside the frame and leaves it in the file, so it is no way to remove something for good.",
+        "The pages themselves can be changed too. Pages opens a list of small pages beside the file: choose one or several, then drag them to another place, turn them, copy them, take them out, or add an empty page between two. Links and bookmarks follow their pages. When a page is taken out, the links and bookmarks that led to it and the form fields that were on it go with it, the download says how many, and the page's content is no longer anywhere in the file. The pages of another PDF can be added between them, also from a locked file once you have typed its password, and any pages you choose can be saved as a file of their own. Crop and page size lays a frame over a page: drag its edges or type the numbers, and the page, the chosen pages or all pages show only what is inside; the same tool makes pages the size of an A4 or a Letter sheet. Cropping hides what is outside the frame and leaves it in the file, so it is no way to remove something for good. Numbers and watermarks puts page numbers, a header or footer, Bates numbers or a watermark on all pages or on the ones you name, each as a thing you can still move or delete.",
       ],
       links: [
         { label: "Open the PDF editor", href: "/dashboard/pdf-editor/" },
@@ -916,6 +941,300 @@ export const formPost: BlogPost = {
     {
       title: "Fill out and sign PDF forms in Preview on Mac, Apple Support",
       url: "https://support.apple.com/guide/preview/fill-out-and-sign-pdf-forms-prvw35725/mac",
+    },
+  ],
+}
+
+export const cropPost: BlogPost = {
+  slug: "crop-pdfs-without-uploading",
+  title: "Trim the page, and know what trimming means.",
+  searchTitle: "How to crop a PDF online for free without uploading it",
+  description:
+    "How to crop a PDF in your browser: drag a frame or type the numbers, for one page or all, or make pages A4 or Letter size. And why a cropped page still holds what was cut off. Free, no upload.",
+  keywords: [
+    "crop PDF",
+    "crop PDF online free",
+    "trim PDF margins",
+    "cut PDF page",
+    "resize PDF pages",
+    "PDF to A4",
+    "PDF to Letter size",
+    "crop box",
+    "no upload",
+  ],
+  category: "A little know-how",
+  readingTime: "4 min read",
+  image: "/images/pdf-crop-guide.svg",
+  imageAlt:
+    "A page of a PDF with wide margins and a frame drawn round its text; outside the frame the page is shaded, and four numbers say how much is cut off each edge",
+  tool: "crop-pdf",
+  intro:
+    "A scan with a black border. A paper with margins so wide that the text is small on a phone. A slide that was exported with half a page of nothing under it. Cropping fixes all three, and most tools that offer it want your file on their server first. Here is how to do it with KeepSimp, on your own device, and one thing about cropping that is worth knowing before you rely on it.",
+  sections: [
+    {
+      id: "frame",
+      title: "Drag a frame, or type the numbers.",
+      paragraphs: [
+        "Open the PDF and a frame lies over the first page. Drag an edge inwards and the part that will be hidden is shaded. If you would rather be exact, type how many points to cut off the left, the top, the right and the bottom; a point is a 72nd of an inch, so 72 is an inch and about 28 is a centimetre.",
+        "The edges are also buttons. Tab goes from one to the next, the arrow keys move an edge a point at a time, or ten with Shift, and Enter crops. A whole file can be cropped without a mouse.",
+      ],
+      links: [{ label: "Open Crop PDF", href: "/dashboard/crop-pdf/" }],
+    },
+    {
+      id: "pages",
+      title: "One page, some pages, or all of them.",
+      paragraphs: [
+        "The same cut can go on this page, on all pages, or on the pages you choose in the list of pages. What is cut off is counted from each page's own edges as you see it, so one cut fits pages of different sizes, and pages that the file shows turned.",
+        "Press another page and the frame moves there. Undo takes a crop back, and Show whole shows a page's whole sheet again, also one that came cropped from somewhere else.",
+      ],
+    },
+    {
+      id: "hides",
+      title: "Cropping hides. It does not remove.",
+      paragraphs: [
+        "A page of a PDF has a sheet and, on it, the part that is shown. Cropping makes that part smaller, and that is all it does, here and in every other program. The words and pictures outside the frame are still in the file. Anyone can show the whole sheet again, and a search still finds the words.",
+        "That is what you want when you are tidying margins. It is not what you want when the thing outside the frame is a name, an account number or a signature. For that, the content has to be taken out of the file, not hidden. The editor says this while you crop, and again when you download.",
+      ],
+    },
+    {
+      id: "size",
+      title: "Make every page one size.",
+      paragraphs: [
+        "A file put together from several places often has pages of several sizes, and a printer does something different with each. Resize makes pages the size of an A4 or a Letter sheet. What is on a page is made smaller or larger to fit and put in the middle; nothing is stretched, and a page that lies on its side gets a sheet on its side.",
+        "Links, notes and the fields of a form move and scale with their page, so a resized form can still be filled in.",
+      ],
+    },
+    {
+      id: "private",
+      title: "Your file stays with you.",
+      paragraphs: [
+        "The file is opened and cropped on your own device and is never uploaded. There is no account, no watermark and no limit on pages, and once the page has loaded it works without a connection. Before the download, the result is read back and checked.",
+      ],
+      links: [
+        {
+          label: "Move, turn and take out pages too: the PDF editor",
+          href: "/dashboard/pdf-editor/",
+        },
+        {
+          label: "Every KeepSimp tool in one place",
+          href: "/blog/free-online-tools-no-upload/",
+        },
+      ],
+    },
+  ],
+  sources: [
+    {
+      title: "Paper size: A4 and Letter, Wikipedia",
+      url: "https://en.wikipedia.org/wiki/Paper_size",
+    },
+    {
+      title: "Crop PDF pages, Adobe Acrobat help",
+      url: "https://helpx.adobe.com/acrobat/using/crop-pdf-pages.html",
+    },
+    {
+      title: "PDF: the page and its boxes, Wikipedia",
+      url: "https://en.wikipedia.org/wiki/PDF",
+    },
+  ],
+}
+
+export const numbersPost: BlogPost = {
+  slug: "add-page-numbers-to-a-pdf",
+  title: "Number the pages, where you want the numbers.",
+  searchTitle: "How to add page numbers to a PDF online for free",
+  description:
+    "How to add page numbers to a PDF in your browser: choose how they are written and where, skip the cover, add a header, a footer or Bates numbers. Free, with no account and nothing uploaded.",
+  keywords: [
+    "add page numbers to PDF",
+    "number PDF pages",
+    "PDF page numbers online free",
+    "PDF header and footer",
+    "Bates numbering",
+    "Bates stamp PDF",
+    "page x of y",
+    "paginate PDF",
+    "no upload",
+  ],
+  category: "A little know-how",
+  readingTime: "4 min read",
+  image: "/images/pdf-numbers-guide.svg",
+  imageAlt:
+    "Three pages of a PDF in a row, each with its number at the foot, Page 1 of 3 to Page 3 of 3, beside a panel where the way a number is written and its place are chosen",
+  tool: "add-page-numbers",
+  intro:
+    "A report goes to print and someone asks which page the table is on. A bundle of documents goes to a lawyer and every page needs a number nobody can argue about. A thesis must be numbered from the third page on. Each is a small job, and each can be done on your own device, without sending the file anywhere. Here is how.",
+  sections: [
+    {
+      id: "numbers",
+      title: "Page numbers, four ways.",
+      paragraphs: [
+        "Open the PDF and the panel for numbers is beside the pages. Choose how a number is written: 1, Page 1, 1 of 12, or Page 1 of 12. Choose where: at the top or the foot of the page, to the left, in the middle or to the right. Set the size and how far from the edge it stands, and press Add.",
+        "The numbers are on the pages at once, drawn from the file itself, so what you see is what you will download.",
+      ],
+      links: [
+        {
+          label: "Open Add page numbers",
+          href: "/dashboard/add-page-numbers/",
+        },
+      ],
+    },
+    {
+      id: "skip",
+      title: "Skip the cover, start where you like.",
+      paragraphs: [
+        "Leave Pages empty and every page is numbered. Type 2- and the first page is left out; the second page is then number 1, or whatever you set as the first number. Type 1-3, 7 to name pages, or odd or even to take every other one, as for a book whose numbers stand on the outer edge.",
+        "To number front matter with one run and the rest with another, add twice: once for the first pages, once for the others.",
+      ],
+    },
+    {
+      id: "header",
+      title: "A header or a footer of your own.",
+      paragraphs: [
+        "Header or footer writes a line of your own on every page: a title, a case name, the word Confidential. Four things in braces stand for something else. {page} is the page's number, {pages} is how many there are, {date} is today's date and {name} is the file's name. So “{name}, page {page} of {pages}” writes itself differently on each page.",
+      ],
+    },
+    {
+      id: "bates",
+      title: "Bates numbers.",
+      paragraphs: [
+        "Lawyers number every page of every document in a case with one run of numbers, so that a page can be named without doubt: ACME-000120, ACME-000121. The numbers have a fixed count of figures and usually a few letters in front.",
+        "Bates numbers does this. Type what stands before and after the number, how many figures it has, and the number to start at. To carry on from one file to the next, start the second file where the first one stopped.",
+      ],
+    },
+    {
+      id: "things",
+      title: "Each number can still be changed.",
+      paragraphs: [
+        "Every number is a piece of text on its page. With the select tool you can move one that sits on top of something, restyle it, retype it or delete it. One undo takes the whole lot away.",
+        "The text is real text in a font that travels inside the file, so it looks the same everywhere, can be searched, and is read back from the result before your browser saves it.",
+        "One thing to do in the right order: numbers are written as the pages lie when you press Add. If pages are to be moved, added or taken out, do that first.",
+      ],
+    },
+    {
+      id: "private",
+      title: "Your file stays with you.",
+      paragraphs: [
+        "The file is opened and numbered on your own device and is never uploaded. There is no account, no watermark and no limit on pages, and once the page has loaded it works without a connection.",
+      ],
+      links: [
+        {
+          label: "Put the pages in order first: the PDF editor",
+          href: "/dashboard/pdf-editor/",
+        },
+        {
+          label: "Every KeepSimp tool in one place",
+          href: "/blog/free-online-tools-no-upload/",
+        },
+      ],
+    },
+  ],
+  sources: [
+    {
+      title: "Bates numbering, Wikipedia",
+      url: "https://en.wikipedia.org/wiki/Bates_numbering",
+    },
+    {
+      title: "Page numbering, Wikipedia",
+      url: "https://en.wikipedia.org/wiki/Page_numbering",
+    },
+    {
+      title:
+        "Add headers, footers and Bates numbering to PDFs, Adobe Acrobat help",
+      url: "https://helpx.adobe.com/acrobat/using/add-headers-footers-pdfs.html",
+    },
+  ],
+}
+
+export const watermarkPost: BlogPost = {
+  slug: "watermark-a-pdf-without-uploading",
+  title: "Mark it as a draft, without sending it anywhere.",
+  searchTitle: "How to add a watermark to a PDF online for free",
+  description:
+    "How to add a watermark to a PDF in your browser: DRAFT, Confidential or a logo, as faint and as large as you like, on all pages or some. And what a watermark does not do. Free, no upload.",
+  keywords: [
+    "watermark PDF",
+    "add watermark to PDF",
+    "PDF watermark online free",
+    "draft watermark",
+    "confidential stamp PDF",
+    "logo on PDF",
+    "text watermark",
+    "image watermark",
+    "no upload",
+  ],
+  category: "A little know-how",
+  readingTime: "3 min read",
+  image: "/images/pdf-watermark-guide.svg",
+  imageAlt:
+    "A page of a PDF with the word DRAFT written faintly across it from corner to corner, beside a panel with the words of the watermark and two sliders, for how solid and how large it is",
+  tool: "watermark-pdf",
+  intro:
+    "A contract goes out for comments and must not be taken for the final one. A price list goes to one customer and should say whose copy it is. A photographer's proofs need a name across them. A watermark does all of that, and the files that need one are exactly the files you would rather not upload to a website to get it. Here is how to add one on your own device.",
+  sections: [
+    {
+      id: "words",
+      title: "Words across the page.",
+      paragraphs: [
+        "Open the PDF and the panel for watermarks is beside the pages. Type the words: DRAFT, Confidential, Copy for Ada Lovelace. They are laid over the middle of each page, from the lower left corner to the upper right, as large as the share of the page you set.",
+        "Two sliders do most of the work. How solid makes it faint enough to read through, or strong enough that it cannot be missed. How large takes it from a small mark to the whole width of the page. It can be grey, red, blue or black, and level instead of slanted.",
+      ],
+      links: [
+        { label: "Open Watermark PDF", href: "/dashboard/watermark-pdf/" },
+      ],
+    },
+    {
+      id: "picture",
+      title: "Or a picture.",
+      paragraphs: [
+        "Use a picture instead and choose a logo: PNG, JPEG, WebP or AVIF. See-through parts of a PNG stay see-through. The picture is put into the file once, however many pages show it, so a logo on three hundred pages does not make the file three hundred logos larger.",
+      ],
+    },
+    {
+      id: "pages",
+      title: "All pages, or the ones you name.",
+      paragraphs: [
+        "Leave Pages empty for every page, or type the pages: 2- leaves a cover alone, 1-3, 7 names them, odd and even take every other page. Press Add, and the watermark is on the pages at once. One undo takes it off all of them.",
+        "On each page the watermark is a thing of its own. If it covers a signature on page four, select it there and move it, make it smaller or delete it; the other pages are not touched.",
+      ],
+    },
+    {
+      id: "honest",
+      title: "What a watermark does not do.",
+      paragraphs: [
+        "A watermark tells whoever reads the page something. It does not lock anything. The text under it can still be selected and copied, and a program that edits PDFs can take a watermark off again. The page under it is not changed.",
+        "If the point is that a file must not be opened, lock it with a password: the download options do that. If the point is that something must not be read at all, a watermark over it is the wrong tool, and so is a box drawn over it.",
+      ],
+    },
+    {
+      id: "private",
+      title: "Your file stays with you.",
+      paragraphs: [
+        "The file is opened and marked on your own device and is never uploaded. There is no account, no limit on pages, and no watermark of ours on the result: only yours. Once the page has loaded it works without a connection, and the result is read back and checked before your browser saves it.",
+      ],
+      links: [
+        {
+          label: "Number the pages as well: Add page numbers",
+          href: "/dashboard/add-page-numbers/",
+        },
+        {
+          label: "Every KeepSimp tool in one place",
+          href: "/blog/free-online-tools-no-upload/",
+        },
+      ],
+    },
+  ],
+  sources: [
+    {
+      title: "Watermark, Wikipedia",
+      url: "https://en.wikipedia.org/wiki/Watermark",
+    },
+    {
+      title: "Add watermarks to PDFs, Adobe Acrobat help",
+      url: "https://helpx.adobe.com/acrobat/using/add-watermarks-pdfs.html",
+    },
+    {
+      title: "PDF: security and what a password protects, Wikipedia",
+      url: "https://en.wikipedia.org/wiki/PDF",
     },
   ],
 }

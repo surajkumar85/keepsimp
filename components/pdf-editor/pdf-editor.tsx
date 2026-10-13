@@ -18,7 +18,10 @@ import {
   IconEdit,
   IconPencil,
   IconFileTypePdf,
+  IconCrop,
+  IconDroplet,
   IconLock,
+  IconNumber123,
   IconPlayerStop,
   IconShieldCheck,
   IconTypography,
@@ -66,7 +69,9 @@ import { looksLikePdf, megabytes } from "@/lib/pdf-merger/settings"
 import { cn } from "cn"
 import { CommentsPanel } from "./comments-panel"
 import { PagesPanel } from "./pages-panel"
+import { RepeatPanel } from "./repeat-panel"
 import { useCrop } from "./use-crop"
+import { useRepeat } from "./use-repeat"
 import { usePages } from "./use-pages"
 import { PageLayer } from "./page-layer"
 import { SignatureDialog } from "./signature-dialog"
@@ -161,7 +166,11 @@ const plural = (count: number, word: string) =>
   `${count.toLocaleString("en")} ${word}${count === 1 ? "" : "s"}`
 
 /** What the tool is opened for: every kind of change, or marking up and commenting first. */
-export type EditorMode = "edit" | "annotate" | "sign" | "fill"
+export type EditorMode =
+  "edit" | "annotate" | "sign" | "fill" | "crop" | "numbers" | "watermark"
+
+/** The doors that open the editor for a job on the pages themselves. */
+const PAGE_JOBS: readonly EditorMode[] = ["crop", "numbers", "watermark"]
 
 /** The keys that take a comment tool in hand. */
 const COMMENT_KEYS: Record<string, CommentTool> = {
@@ -266,6 +275,75 @@ const ANNOTATE_ABILITIES = [
   },
 ]
 
+const CROP_ABILITIES = [
+  {
+    icon: IconCrop,
+    title: "Cut pages to a frame",
+    text: "Drag the edges of a frame over the page, move them with the arrow keys, or type how many points to cut off each edge. One page, the pages you choose, or all of them.",
+  },
+  {
+    icon: IconEdit,
+    title: "Make pages one size",
+    text: "A4 or Letter: what is on a page is made smaller or larger to fit and put in the middle, with its links and notes.",
+  },
+  {
+    icon: IconShieldCheck,
+    title: "It says what cropping is",
+    text: "Cropping hides what is outside the frame and leaves it in the file, where it can be shown again. The page says so, and so does the download.",
+  },
+  {
+    icon: IconLock,
+    title: "Nothing is uploaded",
+    text: "The file is opened and cropped on your device, with no account and no limit on pages.",
+  },
+]
+
+const NUMBER_ABILITIES = [
+  {
+    icon: IconNumber123,
+    title: "Number the pages",
+    text: "1, Page 1, 1 of 12 or Page 1 of 12, at the top or the foot, left, middle or right, starting at any number, on all pages or on the ones you name.",
+  },
+  {
+    icon: IconTypography,
+    title: "Headers, footers and Bates numbers",
+    text: "A line of your own with the date, the file's name or the page number in it, or a number that runs on from page to page with a fixed count of figures.",
+  },
+  {
+    icon: IconEdit,
+    title: "Each one can still be changed",
+    text: "Every number is a piece of text on its page: select one to move it, restyle it or delete it. One undo takes them all away.",
+  },
+  {
+    icon: IconLock,
+    title: "Nothing is uploaded",
+    text: "The file is opened and numbered on your device, with no account and no limit on pages.",
+  },
+]
+
+const WATERMARK_ABILITIES = [
+  {
+    icon: IconDroplet,
+    title: "Words or a picture",
+    text: "DRAFT, Confidential, a name, or a logo of your own, laid over the middle of each page, from corner to corner or level.",
+  },
+  {
+    icon: IconEdit,
+    title: "As faint and as large as you like",
+    text: "Set how solid it is and how much of the page it takes, in grey, red, blue or black, on all pages or on the ones you name.",
+  },
+  {
+    icon: IconShieldCheck,
+    title: "Honest about what it is",
+    text: "A watermark is laid over the page; the page under it is not changed. On download it becomes part of the page, unless you keep it editable.",
+  },
+  {
+    icon: IconLock,
+    title: "Nothing is uploaded",
+    text: "The file is opened and marked on your device, with no account and no limit on pages.",
+  },
+]
+
 const SIGN_ABILITIES = [
   {
     icon: IconEdit,
@@ -307,6 +385,18 @@ const DOORS: Record<EditorMode, { heading: string; body: string }> = {
     heading: "Drop a PDF to sign",
     body: "Draw your signature, type it or use a picture of it, place it where it belongs, fill in what else the page asks for, and download the result. You can also paste a file with ⌘V or Ctrl+V.",
   },
+  crop: {
+    heading: "Drop a PDF to crop",
+    body: "Cut its pages to a frame, one page or all of them, or make them A4 or Letter size, then download the result. You can also paste a file with ⌘V or Ctrl+V.",
+  },
+  numbers: {
+    heading: "Drop a PDF to number its pages",
+    body: "Add page numbers, a header or footer, or Bates numbers to all its pages or to some, then download the result. You can also paste a file with ⌘V or Ctrl+V.",
+  },
+  watermark: {
+    heading: "Drop a PDF to watermark",
+    body: "Lay words or a picture over its pages, as faint and as large as you like, then download the result. You can also paste a file with ⌘V or Ctrl+V.",
+  },
 }
 
 /** What a page opened for one job says it is, with a way to the whole editor. */
@@ -315,6 +405,11 @@ const FOCUSED: Partial<Record<EditorMode, string>> = {
     ", opened for marking up. Its other tools (text, pictures, shapes, stamps, signing) are behind “All tools”.",
   fill: ", opened for filling in forms. Its other tools (pictures, shapes, stamps, highlights and notes) are behind “All tools”.",
   sign: ", opened for signing and filling in. Its other tools (pictures, shapes, stamps, highlights and notes) are behind “All tools”.",
+  crop: ", opened for cropping. Its other tools (text, pictures, shapes, highlights, signing) are behind “All tools”.",
+  numbers:
+    ", opened for numbering pages. Its other tools (text, pictures, shapes, highlights, signing) are behind “All tools”.",
+  watermark:
+    ", opened for watermarks. Its other tools (text, pictures, shapes, highlights, signing) are behind “All tools”.",
 }
 
 const ABILITIES = [
@@ -382,7 +477,14 @@ function Workspace({
     fonts: doc.draft?.fonts,
     onFont: (key: string, font: OwnFile) => void ownFiles.set(key, font),
   }))
-  const editor = useEditor(client, doc.id, opened, onPicture, own)
+  const editor = useEditor(
+    client,
+    doc.id,
+    opened,
+    onPicture,
+    own,
+    doc.file.name
+  )
   const comments = useComments(editor, mode === "annotate" ? "highlight" : null)
   const retext = useRetext(editor, comments)
   const inpage = useInpage(editor, comments, retext)
@@ -419,6 +521,14 @@ function Workspace({
   )
   const find = useFind(editor, comments, retext, inpage, links, goToPage)
   const pageList = usePages(editor, comments)
+  // A page opened for numbers or for watermarks begins with their panel.
+  const repeat = useRepeat(
+    editor,
+    comments,
+    pageList,
+    mode === "watermark" ? "mark" : "numbers",
+    mode === "numbers" || mode === "watermark"
+  )
   /** Go to a field and put the keyboard in it, once its page is on the screen. */
   const goToField = (page: number, id: string) => {
     setJump({ page, turn: -performance.now() })
@@ -446,7 +556,9 @@ function Workspace({
     links,
     find,
     pageList,
-    readingNow
+    readingNow,
+    // A page opened for cropping begins with the frame.
+    mode === "crop"
   )
   /** The page shown on the card while the window is closed. */
   const [previewAt, setPreviewPage] = useState(0)
@@ -789,6 +901,11 @@ function Workspace({
       pageList.setOn(!pageList.on)
       return used()
     }
+    // Z opens what is put on many pages: numbers, headers and watermarks.
+    if (plain && letter === "z") {
+      repeat.setOn(!repeat.on)
+      return used()
+    }
     // Y cuts pages to a part and makes them another size; Escape puts that down.
     if (plain && letter === "y") {
       crop.setOn(!crop.on)
@@ -853,6 +970,8 @@ function Workspace({
         onGo={goToPage}
         onSavePart={savePart}
       />
+    ) : repeat.on ? (
+      <RepeatPanel repeat={repeat} />
     ) : undefined,
     actions: (
       <>
@@ -878,6 +997,7 @@ function Workspace({
           find={find}
           pages={pageList}
           crop={crop}
+          repeat={repeat}
           first={mode === "annotate" ? "comments" : "things"}
           focus={
             allTools
@@ -886,7 +1006,9 @@ function Workspace({
                 ? "comments"
                 : mode === "sign" || mode === "fill"
                   ? "signing"
-                  : null
+                  : PAGE_JOBS.includes(mode)
+                    ? "pages"
+                    : null
           }
           onAllTools={() => setAllTools(true)}
           onSign={() => setSigning(true)}
@@ -1641,13 +1763,19 @@ export function PdfEditor({ mode = "edit" }: { mode?: EditorMode }) {
         <div className="space-y-4 rounded-xl border bg-card p-4 sm:p-5">
           <h2 className="section-title">What you can do</h2>
           <ul className="space-y-3 text-sm">
-            {(mode === "fill"
-              ? FILL_ABILITIES
-              : mode === "sign"
-                ? SIGN_ABILITIES
-                : mode === "annotate"
-                  ? ANNOTATE_ABILITIES
-                  : ABILITIES
+            {(mode === "crop"
+              ? CROP_ABILITIES
+              : mode === "numbers"
+                ? NUMBER_ABILITIES
+                : mode === "watermark"
+                  ? WATERMARK_ABILITIES
+                  : mode === "fill"
+                    ? FILL_ABILITIES
+                    : mode === "sign"
+                      ? SIGN_ABILITIES
+                      : mode === "annotate"
+                        ? ANNOTATE_ABILITIES
+                        : ABILITIES
             ).map((item) => (
               <li key={item.title} className="flex gap-3">
                 <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
@@ -1695,7 +1823,28 @@ export function PdfEditor({ mode = "edit" }: { mode?: EditorMode }) {
                 >
                   Fill PDF form
                 </Link>{" "}
-                for forms.
+                for forms. For the pages themselves there are{" "}
+                <Link
+                  href="/dashboard/crop-pdf/"
+                  className="underline underline-offset-4 hover:text-foreground"
+                >
+                  Crop PDF
+                </Link>
+                ,{" "}
+                <Link
+                  href="/dashboard/add-page-numbers/"
+                  className="underline underline-offset-4 hover:text-foreground"
+                >
+                  Add page numbers
+                </Link>{" "}
+                and{" "}
+                <Link
+                  href="/dashboard/watermark-pdf/"
+                  className="underline underline-offset-4 hover:text-foreground"
+                >
+                  Watermark PDF
+                </Link>
+                .
               </>
             )}
           </p>

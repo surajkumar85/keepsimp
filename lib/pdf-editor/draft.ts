@@ -23,7 +23,7 @@ import type { Op } from "./tools"
 export const DRAFT_LIMIT = 50 * 1024 * 1024
 /** The most steps a draft holds, and the most changes in one step. */
 export const MOST_STEPS = 5000
-export const MOST_OPS = 2000
+export const MOST_OPS = 20_000
 
 /** What is kept of a draft besides the file and its pictures. */
 export interface Draft {

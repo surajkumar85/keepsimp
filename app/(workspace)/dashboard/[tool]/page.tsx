@@ -19,7 +19,10 @@ import { PdfEditor } from "@/components/pdf-editor/pdf-editor"
 import {
   PdfAnnotatorTutorial,
   PdfEditorTutorial,
+  PdfCropTutorial,
   PdfFormTutorial,
+  PdfNumbersTutorial,
+  PdfWatermarkTutorial,
   PdfSignerTutorial,
 } from "@/components/pdf-editor/tutorial"
 import { PdfMerger } from "@/components/pdf-merger/pdf-merger"
@@ -57,6 +60,24 @@ export async function generateMetadata({
     return pageMetadata(
       "Fill in a PDF form online for free",
       "Fill in the fields of any PDF form in your browser: type, tick, choose and sign, then download it as a form or with everything made final. No account, no file uploads.",
+      `/dashboard/${id}/`
+    )
+  if (id === "crop-pdf")
+    return pageMetadata(
+      "Crop a PDF online for free",
+      "Cut the pages of a PDF to a frame you drag or type, one page or all of them, or make them A4 or Letter size, in your browser. No account, no file uploads.",
+      `/dashboard/${id}/`
+    )
+  if (id === "add-page-numbers")
+    return pageMetadata(
+      "Add page numbers to a PDF online for free",
+      "Number the pages of a PDF where you want them, and add headers, footers or Bates numbers, in your browser. No account, no file uploads.",
+      `/dashboard/${id}/`
+    )
+  if (id === "watermark-pdf")
+    return pageMetadata(
+      "Add a watermark to a PDF online for free",
+      "Lay DRAFT, Confidential or a logo of your own over the pages of a PDF, as faint and as large as you like, in your browser. No account, no file uploads.",
       `/dashboard/${id}/`
     )
   if (id === "sign-pdf")
@@ -147,6 +168,12 @@ export default async function ToolPage({
         <PdfEditor mode="sign" />
       ) : id === "fill-pdf-form" ? (
         <PdfEditor mode="fill" />
+      ) : id === "crop-pdf" ? (
+        <PdfEditor mode="crop" />
+      ) : id === "add-page-numbers" ? (
+        <PdfEditor mode="numbers" />
+      ) : id === "watermark-pdf" ? (
+        <PdfEditor mode="watermark" />
       ) : (
         <JsonTool />
       )}
@@ -172,6 +199,12 @@ export default async function ToolPage({
         <PdfSignerTutorial />
       ) : id === "fill-pdf-form" ? (
         <PdfFormTutorial />
+      ) : id === "crop-pdf" ? (
+        <PdfCropTutorial />
+      ) : id === "add-page-numbers" ? (
+        <PdfNumbersTutorial />
+      ) : id === "watermark-pdf" ? (
+        <PdfWatermarkTutorial />
       ) : (
         <JsonTutorial />
       )}

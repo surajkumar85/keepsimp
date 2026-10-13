@@ -121,6 +121,24 @@ const cards = [
     "/images/pdf-form-guide.svg",
   ],
   [
+    "crop-pdfs-without-uploading",
+    "Trim the page. Know what it means.",
+    "Crop a PDF by a frame, one page or all.",
+    "/images/pdf-crop-guide.svg",
+  ],
+  [
+    "add-page-numbers-to-a-pdf",
+    "Number the pages. Your way.",
+    "Page numbers, headers and Bates numbers.",
+    "/images/pdf-numbers-guide.svg",
+  ],
+  [
+    "watermark-a-pdf-without-uploading",
+    "Mark it as a draft. Keep it yours.",
+    "Words or a logo over any PDF.",
+    "/images/pdf-watermark-guide.svg",
+  ],
+  [
     "repair-compare-json-patch",
     "Preview every JSON change.",
     "Repair, compare and apply JSON Patch locally.",

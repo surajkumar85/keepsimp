@@ -53,6 +53,11 @@ const content: TutorialContent = {
         "For the pages themselves (M). A list of small pages opens beside them. Press a page to choose it; with Shift, all from the page pressed before; with Ctrl or ⌘, one more. The buttons above the list turn the chosen pages to the left or the right, move them a place earlier or later, copy them, take them out, and add an empty page after them. Drag pages to put them elsewhere, or type the place they are to have. From the keyboard: the arrow keys choose, Alt and an arrow move the chosen pages, Delete takes them out. Links and bookmarks follow their pages. With a page that is taken out go the links and bookmarks that led to it and the form fields that were on it, and the download says how many. A copy of a page has no form fields of its own. “Pages from a PDF” adds every page of another PDF after the chosen pages; a locked one asks for its password, which stays on this device. Its pages come as they look: a form's fields on them become part of the page, and its bookmarks are not brought along. “Save as a file” writes the chosen pages as a PDF of their own and leaves the file in the editor as it is. Every change is one step, and undo takes it back.",
     },
     {
+      term: "Numbers and watermarks",
+      detail:
+        "For what goes on many pages at once (Z). A panel opens beside the pages: page numbers, a header or footer of your own, Bates numbers, or a watermark of words or of a picture. Choose how it is written, where it lies and which pages it is for (leave Pages empty for all, or type 2-, 1-3, 7, odd or even), and press Add. Each is then a thing of its own on its page, which can be moved, changed or deleted; one undo takes them all away. Numbers are written as the pages lie then, so put the pages in order first. A watermark is laid over the page and does not protect the file.",
+    },
+    {
       term: "Crop and page size",
       detail:
         "For showing only a part of a page, or making pages another size (Y). A frame lies over the page: drag its edges inwards, move them with the arrow keys, or type how many points to cut off each edge, then press Crop or Enter. The cut can be for this page, for the pages chosen in the list of pages, or for all pages. Cropping hides what is outside the frame and leaves it in the file, where a program can show it again; “Show whole” brings it back here. “Resize” makes pages the size of an A4 or a Letter sheet: what is on them is made smaller or larger to fit, and a page that lies on its side gets a sheet on its side.",
@@ -390,6 +395,199 @@ const filling: TutorialContent = {
     },
   ],
   guideHref: "/blog/fill-pdf-forms-without-uploading/",
+}
+
+const cropping: TutorialContent = {
+  name: "How to crop a PDF with KeepSimp",
+  description:
+    "Crop the pages of a PDF in your browser: drag a frame or type the numbers, for one page or for all, or make pages A4 or Letter size. Nothing is uploaded.",
+  intro: "Follow the steps below. Every option is explained underneath.",
+  steps: [
+    {
+      title: "Open the PDF",
+      text: "Drop the PDF, choose it from your device or paste it. A locked file asks for its password. A frame lies over the first page.",
+    },
+    {
+      title: "Set the frame",
+      text: "Drag an edge of the frame inwards, or type how many points to cut off the left, the top, the right and the bottom. What will be hidden is shaded. Press another page to put the frame there.",
+    },
+    {
+      title: "Choose the pages",
+      text: "This page, All pages, or the pages you chose in the list of pages (the Pages button). The same is cut off each of them.",
+    },
+    {
+      title: "Crop",
+      text: "Press Crop, or Enter on an edge. The page is drawn again as it will be. Undo takes it back, and Show whole shows the whole sheet again.",
+    },
+    {
+      title: "Download",
+      text: "Press Download. The file is read back and checked before your browser saves it.",
+    },
+  ],
+  options: [
+    {
+      term: "What cropping does",
+      detail:
+        "A PDF page has a sheet and, on it, the part that is shown. Cropping makes that part smaller. What is outside is hidden, and it is still in the file: another program can show it again. To take something out for good, do not rely on cropping.",
+    },
+    {
+      term: "The keyboard",
+      detail:
+        "The edges of the frame are buttons. Tab goes from one to the next; the arrow keys move an edge by one point, or by ten with Shift; Enter crops. Y takes the tool in hand and Escape puts it down.",
+    },
+    {
+      term: "Turned pages",
+      detail:
+        "What is cut off is counted from the page as you see it, also when the file shows the page turned.",
+    },
+    {
+      term: "Page size",
+      detail:
+        "Resize makes pages the size of an A4 or a Letter sheet. What is on a page is made smaller or larger to fit and put in the middle, with its links, notes and form fields. A page that lies on its side gets a sheet on its side.",
+    },
+    {
+      term: "What you added",
+      detail:
+        "Text, pictures and drawings you added to a page stay where they are on what the page shows, through cropping and resizing.",
+    },
+    {
+      term: "All tools",
+      detail:
+        "This page is the PDF editor, opened for cropping. All tools shows the rest: text, pictures, shapes, highlights and signing.",
+    },
+  ],
+  guideHref: "/blog/crop-pdfs-without-uploading/",
+}
+
+const numbering: TutorialContent = {
+  name: "How to add page numbers to a PDF with KeepSimp",
+  description:
+    "Add page numbers, headers, footers or Bates numbers to a PDF in your browser, on all pages or on some. Nothing is uploaded.",
+  intro: "Follow the steps below. Every option is explained underneath.",
+  steps: [
+    {
+      title: "Open the PDF",
+      text: "Drop the PDF, choose it from your device or paste it. A locked file asks for its password. The panel for numbers opens beside the pages.",
+    },
+    {
+      title: "Choose how the number is written",
+      text: "1, Page 1, 1 of 12 or Page 1 of 12, and the number the first page gets.",
+    },
+    {
+      title: "Choose where",
+      text: "At the top or the foot of the page, to the left, in the middle or to the right, with its size and its distance from the edge.",
+    },
+    {
+      title: "Choose the pages",
+      text: "Leave Pages empty for every page, or type the pages: 2- leaves the first page out, 1-3, 7 names them, odd and even take every other page.",
+    },
+    {
+      title: "Add and download",
+      text: "Press Add. The numbers are on the pages at once, and one undo takes them away. Then press Download.",
+    },
+  ],
+  options: [
+    {
+      term: "Header or footer",
+      detail:
+        "A line of your own on every page. In it, {page} is the page's number, {pages} how many pages there are, {date} today's date and {name} the file's name.",
+    },
+    {
+      term: "Bates numbers",
+      detail:
+        "A number that runs on from page to page, written with a fixed count of figures, with words before and after it: ACME-000120, ACME-000121. Set the first number to go on where another file stopped.",
+    },
+    {
+      term: "Pages",
+      detail:
+        "The pages are numbered in the order you type them. A header on pages 2- counts page 2 as its first.",
+    },
+    {
+      term: "Each number is a thing of its own",
+      detail:
+        "A number is a piece of text on its page. With the select tool it can be moved, restyled, retyped or deleted like any text you add.",
+    },
+    {
+      term: "Order first",
+      detail:
+        "Numbers are written as the pages lie when you press Add. Move, add or take out pages first (the Pages button), then number them.",
+    },
+    {
+      term: "All tools",
+      detail:
+        "This page is the PDF editor, opened for numbering. All tools shows the rest: text, pictures, shapes, highlights and signing.",
+    },
+  ],
+  guideHref: "/blog/add-page-numbers-to-a-pdf/",
+}
+
+const watermarking: TutorialContent = {
+  name: "How to add a watermark to a PDF with KeepSimp",
+  description:
+    "Lay a watermark of words or of a picture over the pages of a PDF in your browser, on all pages or on some. Nothing is uploaded.",
+  intro: "Follow the steps below. Every option is explained underneath.",
+  steps: [
+    {
+      title: "Open the PDF",
+      text: "Drop the PDF, choose it from your device or paste it. A locked file asks for its password. The panel for watermarks opens beside the pages.",
+    },
+    {
+      title: "Type the words, or choose a picture",
+      text: "DRAFT, Confidential, a name; or a logo as a PNG, JPEG, WebP or AVIF. See-through parts of a picture stay see-through.",
+    },
+    {
+      title: "Set how it looks",
+      text: "From corner to corner or level, how solid it is, how much of the page it takes, and its colour.",
+    },
+    {
+      title: "Choose the pages",
+      text: "Leave Pages empty for every page, or type the pages: 2-, 1-3, 7, odd or even.",
+    },
+    {
+      title: "Add and download",
+      text: "Press Add. The watermark is on the pages at once, and one undo takes it away. Then press Download.",
+    },
+  ],
+  options: [
+    {
+      term: "What a watermark is here",
+      detail:
+        "Words or a picture laid over the page. The page under it is not changed. On download it becomes part of the page, so that other programs show it as you see it.",
+    },
+    {
+      term: "It does not protect a file",
+      detail:
+        "A watermark says something to whoever reads the page. It does not stop anyone from copying the text under it, and a program that edits PDFs can take it off again.",
+    },
+    {
+      term: "Each watermark is a thing of its own",
+      detail:
+        "On each page it can be selected, moved, resized, turned or deleted. Keep what you added editable, in the download options, leaves it that way in the file too.",
+    },
+    {
+      term: "Pictures",
+      detail:
+        "The picture goes into the file once, however many pages show it.",
+    },
+    {
+      term: "All tools",
+      detail:
+        "This page is the PDF editor, opened for watermarks. All tools shows the rest: text, pictures, shapes, highlights and signing.",
+    },
+  ],
+  guideHref: "/blog/watermark-a-pdf-without-uploading/",
+}
+
+export function PdfCropTutorial() {
+  return <ToolTutorial content={cropping} />
+}
+
+export function PdfNumbersTutorial() {
+  return <ToolTutorial content={numbering} />
+}
+
+export function PdfWatermarkTutorial() {
+  return <ToolTutorial content={watermarking} />
 }
 
 export function PdfFormTutorial() {

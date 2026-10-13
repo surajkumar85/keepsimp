@@ -58,7 +58,7 @@ test("the search in the top bar finds tools and opens them", async ({
   await expect(box).toBeFocused()
   const options = dialog.getByRole("option")
   // With nothing typed, every tool is offered, working tools first.
-  await expect(options).toHaveCount(18)
+  await expect(options).toHaveCount(21)
   await expect(options.first()).toContainText("Image compressor")
   await expect(options.first()).toHaveAttribute("aria-selected", "true")
   // Both converters write WebP; only one of them makes boomerangs.
@@ -80,7 +80,8 @@ test("the search in the top bar finds tools and opens them", async ({
 
   // Arrow keys move between tools that can be opened, going round at the ends.
   await box.fill("pdf")
-  await expect(options).toHaveCount(7)
+  // The four PDF tools, and the six pages that open the editor for one job.
+  await expect(options).toHaveCount(10)
   await expect(options.nth(0)).toHaveAttribute("aria-selected", "true")
   await box.press("ArrowDown")
   await expect(options.nth(1)).toHaveAttribute("aria-selected", "true")
@@ -88,20 +89,11 @@ test("the search in the top bar finds tools and opens them", async ({
     "aria-activedescendant",
     (await options.nth(1).getAttribute("id"))!
   )
-  await box.press("ArrowDown")
-  await box.press("ArrowDown")
-  await box.press("ArrowDown")
-  await box.press("ArrowDown")
-  await box.press("ArrowDown")
-  await box.press("ArrowDown")
+  for (let press = 0; press < 9; press++) await box.press("ArrowDown")
   await expect(options.nth(0)).toHaveAttribute("aria-selected", "true")
   await box.press("ArrowUp")
-  await expect(options.nth(6)).toHaveAttribute("aria-selected", "true")
-  await box.press("ArrowUp")
-  await box.press("ArrowUp")
-  await box.press("ArrowUp")
-  await box.press("ArrowUp")
-  await box.press("ArrowUp")
+  await expect(options.nth(9)).toHaveAttribute("aria-selected", "true")
+  for (let press = 0; press < 8; press++) await box.press("ArrowUp")
   await expect(options.nth(1)).toHaveAttribute("aria-selected", "true")
   await box.press("Enter")
   await expect(page).toHaveURL(/\/dashboard\/pdf-splitter\/$/)
@@ -202,7 +194,7 @@ test("theme persists and both themes pass accessibility checks", async ({
     // The search, with its list open and a tool chosen.
     await page.getByTestId("search-button").click()
     const search = page.getByRole("dialog", { name: "Search tools" })
-    await expect(search.getByRole("option")).toHaveCount(18)
+    await expect(search.getByRole("option")).toHaveCount(21)
     const open = await new AxeBuilder({ page })
       .include("[role=dialog]")
       .withTags(["wcag2a", "wcag2aa", "wcag21aa"])
@@ -329,7 +321,7 @@ test("navigation remains usable at 320px", async ({ page }) => {
   // The search still fits, as a round button, and its list fits the screen.
   await page.getByTestId("search-button").click()
   const search = page.getByRole("dialog", { name: "Search tools" })
-  await expect(search.getByRole("option")).toHaveCount(18)
+  await expect(search.getByRole("option")).toHaveCount(21)
   const box = await search.boundingBox()
   expect(box!.x).toBeGreaterThanOrEqual(0)
   expect(box!.x + box!.width).toBeLessThanOrEqual(320)

@@ -51,6 +51,11 @@ import type { OwnFile } from "@/lib/pdf-editor/draft-store"
 import type { Query } from "@/lib/pdf-editor/find"
 import type { LinkOp, PageLink } from "@/lib/pdf-editor/links"
 import { labelOf, type PageOp } from "@/lib/pdf-editor/pages"
+import {
+  repeatedChange,
+  type RepeatedLine,
+  type Watermark,
+} from "@/lib/pdf-editor/repeated"
 import type { FlowOp } from "@/lib/pdf-editor/paragraphs"
 import type { PagePicture, PictureOp } from "@/lib/pdf-editor/page-pictures"
 import type { Align } from "@/lib/pdf-editor/paragraphs"
@@ -156,7 +161,9 @@ export function useEditor(
   own?: {
     fonts?: ReadonlyMap<string, OwnFile>
     onFont?: (key: string, font: OwnFile) => void
-  }
+  },
+  /** The file's name, for what is written on its pages. */
+  fileName = ""
 ) {
   const [objects, setObjects] = useState<EditorObject[][]>(opened.objects)
   /** The comments on each page, as the file has them. */
@@ -726,6 +733,62 @@ export function useEditor(
       )
     },
     [flush, enqueue, file]
+  )
+
+  /**
+   * Write a line on some pages, or lay a watermark over them: one thing
+   * added to each, all in one step.
+   * @param pages The pages, counted from 0, in the order they are numbered in.
+   */
+  const repeat = useCallback(
+    (
+      what: { line: RepeatedLine } | { mark: Watermark },
+      pages: readonly number[]
+    ) => {
+      setState((was) => ({ ...was, selection: null, gesture: null }))
+      return apply(
+        repeatedChange(
+          what,
+          pages,
+          sizes,
+          {
+            date: new Intl.DateTimeFormat("en-GB", {
+              dateStyle: "long",
+            }).format(new Date()),
+            name: fileName,
+          },
+          newId
+        )
+      )
+    },
+    [apply, setState, sizes, fileName]
+  )
+
+  /**
+   * Hand the worker a picture that is not placed yet, as for a watermark.
+   * @returns The name it goes by and its size in pixels; null when it cannot be read, and the bar says so.
+   */
+  const handPicture = useCallback(
+    async (picture: Blob) => {
+      const worker = client.current
+      if (!worker) return null
+      const name = newId()
+      setBusy((count) => count + 1)
+      try {
+        const size = await worker.editPicture(file, name, picture)
+        if (!size) {
+          setProblem(
+            "This picture could not be read. PNG, JPEG, WebP and AVIF can be used."
+          )
+          return null
+        }
+        onPicture?.(name, picture)
+        return { name, size }
+      } finally {
+        setBusy((count) => count - 1)
+      }
+    },
+    [client, file, onPicture]
   )
 
   /**
@@ -1426,6 +1489,8 @@ export function useEditor(
     layout,
     changePages,
     insertPdf,
+    repeat,
+    handPicture,
     objects,
     comments,
     fields,

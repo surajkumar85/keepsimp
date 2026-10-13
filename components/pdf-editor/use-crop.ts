@@ -40,9 +40,11 @@ export function useCrop(
   find: Find,
   pages: Pages,
   /** The page that is being read, counted from 0. */
-  reading: () => number
+  reading: () => number,
+  /** The tool is in hand from the start. */
+  begun = false
 ) {
-  const [wanted, setWanted] = useState(false)
+  const [wanted, setWanted] = useState(begun)
   const [framed, setFramed] = useState(0)
   const [off, setOff] = useState<Edges>(NOTHING)
   const [chosenFor, setFor] = useState<CropFor>("page")
