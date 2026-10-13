@@ -144,7 +144,7 @@ test("search results scroll inside a bounded dialog on short and narrow screens"
         .poll(() => list.evaluate((node) => node.scrollTop))
         .toBeGreaterThan(0)
     }
-    // Native scrolling remains available on touch devices without a mouse.
+    // Check content reachability; search-touch.spec.ts exercises finger swipes.
     await list.evaluate((node) => {
       node.scrollTop = node.scrollHeight
     })

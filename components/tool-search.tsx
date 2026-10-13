@@ -7,6 +7,7 @@ import {
   useRef,
   useState,
   useSyncExternalStore,
+  type CSSProperties,
   type KeyboardEvent,
 } from "react"
 import Link from "next/link"
@@ -37,6 +38,23 @@ const never = () => () => {}
 /** Which keyboard this is, known once the page runs; until then, the commoner one. */
 const readApple = () => isApple(navigator.platform || navigator.userAgent)
 
+// The phone keyboard can shrink/pan the visible area without changing dvh.
+// A primitive snapshot stays stable between events and needs no server viewport.
+const noViewport = () => ""
+const readViewport = () => {
+  const viewport = window.visualViewport
+  return viewport ? `${viewport.height},${viewport.offsetTop}` : ""
+}
+const subscribeViewport = (changed: () => void) => {
+  const viewport = window.visualViewport
+  viewport?.addEventListener("resize", changed)
+  viewport?.addEventListener("scroll", changed)
+  return () => {
+    viewport?.removeEventListener("resize", changed)
+    viewport?.removeEventListener("scroll", changed)
+  }
+}
+
 const labelOf = (id: string) =>
   categories.find((category) => category.id === id)?.label ?? ""
 
@@ -60,6 +78,18 @@ export function ToolSearch() {
   /** The tool the arrow keys last moved to; null for the first that can be opened. */
   const [chosen, setChosen] = useState<string | null>(null)
   const apple = useSyncExternalStore(never, readApple, () => false)
+  const viewport = useSyncExternalStore(
+    open ? subscribeViewport : never,
+    open ? readViewport : noViewport,
+    noViewport
+  )
+  const [visibleHeight, visibleTop] = viewport.split(",")
+  const viewportStyle = viewport
+    ? ({
+        "--search-view-height": `${visibleHeight}px`,
+        "--search-view-top": `${visibleTop}px`,
+      } as CSSProperties)
+    : undefined
 
   const results = useMemo(() => searchTools(query), [query])
   const chosenAt = chosen
@@ -88,14 +118,19 @@ export function ToolSearch() {
     return () => document.removeEventListener("keydown", onKey)
   }, [apple])
 
-  // The tool the keys moved to is kept in sight.
+  // Opening/filtering brings the first result into sight. Hovering and swiping
+  // must never move the list underneath the pointer.
   useEffect(() => {
     list.current
       ?.querySelector("[data-active]")
       ?.scrollIntoView({ block: "nearest" })
-  }, [active, open])
+  }, [open, query])
 
-  const move = (to: number) => setChosen(results[to]?.id ?? null)
+  const move = (to: number) => {
+    setChosen(results[to]?.id ?? null)
+    // Do this even if the choice is unchanged (Home after a finger scroll).
+    list.current?.children[to]?.scrollIntoView({ block: "nearest" })
+  }
   const onKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
     if (event.key === "ArrowDown" || event.key === "ArrowUp") {
       event.preventDefault()
@@ -133,7 +168,8 @@ export function ToolSearch() {
         <DialogContent
           showCloseButton={false}
           finalFocus={pill}
-          className="top-4 max-h-[min(40rem,calc(100dvh-2rem))] max-w-xl translate-y-0 gap-0 overflow-hidden p-0 sm:top-[12dvh] sm:max-h-[min(40rem,calc(88dvh-1rem))]"
+          style={viewportStyle}
+          className="top-[calc(var(--search-view-top,0px)+1rem)] max-h-[min(40rem,calc(var(--search-view-height,100dvh)-2rem))] max-w-xl translate-y-0 gap-0 overflow-hidden p-0 sm:top-[calc(var(--search-view-top,0px)+var(--search-view-height,100dvh)*0.12)] sm:max-h-[min(40rem,calc(var(--search-view-height,100dvh)*0.88-1rem))]"
         >
           <DialogTitle className="sr-only">Search tools</DialogTitle>
           <DialogDescription className="sr-only">
@@ -182,7 +218,7 @@ export function ToolSearch() {
               id={`${ids}-list`}
               role="listbox"
               aria-label="Tools"
-              className="max-h-[min(30rem,calc(100dvh-6rem))] min-h-0 flex-1 [scrollbar-gutter:stable] space-y-0.5 overflow-y-auto overscroll-contain p-2 sm:max-h-[min(30rem,calc(88dvh-7rem))]"
+              className="max-h-[min(30rem,calc(var(--search-view-height,100dvh)-6rem))] min-h-0 flex-1 touch-pan-y touch-pinch-zoom [scrollbar-gutter:stable] space-y-0.5 overflow-y-auto overscroll-contain p-2 sm:max-h-[min(30rem,calc(var(--search-view-height,100dvh)*0.88-7rem))]"
             >
               {results.map((tool, at) => {
                 const ready = tool.status === "available"
@@ -222,7 +258,9 @@ export function ToolSearch() {
                         data-active={at === active || undefined}
                         tabIndex={-1}
                         onClick={() => show(false)}
-                        onPointerMove={() => setChosen(tool.id)}
+                        onPointerMove={(event) => {
+                          if (event.pointerType === "mouse") setChosen(tool.id)
+                        }}
                         className={cn(shape, at === active && "bg-accent")}
                       >
                         {row}
