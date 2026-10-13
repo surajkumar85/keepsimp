@@ -48,6 +48,7 @@ import {
   readFont,
 } from "@/lib/pdf-editor/own-font"
 import type { OwnFile } from "@/lib/pdf-editor/draft-store"
+import type { Align } from "@/lib/pdf-editor/paragraphs"
 import { standIns, type LineLook, type PageLine } from "@/lib/pdf-editor/retext"
 import { breakLines, combLine } from "@/lib/pdf-editor/text-layout"
 import {
@@ -624,6 +625,56 @@ export function useEditor(
     [ensureFont, flush, enqueue, file]
   )
 
+  /**
+   * Change what a paragraph says, how it looks, how it is set or where it
+   * is; with nothing, its lines are taken out. Its words are laid out again
+   * by the file, within the width the paragraph has.
+   * @param whole The paragraph as one line (`asLine`), for the fonts its new words need.
+   * @param lines Its lines, from the top down.
+   */
+  const reflow = useCallback(
+    async (
+      page: number,
+      whole: PageLine,
+      lines: readonly PageLine[],
+      text: string,
+      more: { look?: LineLook; align?: Align; move?: Point } = {}
+    ) => {
+      const { look, align, move } = more
+      try {
+        if (look?.font) await ensureFont(look.font)
+        else if (standIns(whole, text).length)
+          for (const key of new Set(whole.styles.map((style) => style.standIn)))
+            await ensureFont(key)
+      } catch {
+        setProblem("The font could not be loaded. Check your connection.")
+        return
+      }
+      flush()
+      return enqueue((worker) =>
+        worker.editText(file, {
+          label: !text.trim()
+            ? "Take out text"
+            : move && text === whole.text && !look && !align
+              ? "Move text"
+              : "Change text",
+          ops: [
+            {
+              do: "reflow",
+              page,
+              lines: lines.map((line) => ({ box: line.box, was: line.text })),
+              text,
+              ...(look ? { look } : null),
+              ...(align ? { align } : null),
+              ...(move ? { move } : null),
+            },
+          ],
+        })
+      )
+    },
+    [ensureFont, flush, enqueue, file]
+  )
+
   const undo = useCallback(() => {
     flush()
     return enqueue((worker) => worker.editStep(file, true))
@@ -1167,6 +1218,7 @@ export function useEditor(
     letters,
     lines,
     retext,
+    reflow,
     versions,
     history,
     state,

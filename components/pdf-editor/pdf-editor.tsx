@@ -307,7 +307,7 @@ const ABILITIES = [
   {
     icon: IconTypography,
     title: "Change the words that are there",
-    text: "Click a line and type. The old words are taken out of the file and the new ones are written in the line's own font, size and colour.",
+    text: "Click a paragraph or a line and type. The old words are taken out of the file and the new ones are written in their own font, size and colour; a paragraph flows again within its width.",
   },
   {
     icon: IconPencil,

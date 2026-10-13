@@ -228,6 +228,35 @@ describe("a draft, read back", () => {
       ])
     ).toEqual(["serif-bold", "mono", "own-0123456789ab"])
     expect(fontsOf([retext(undefined)])).toEqual([])
+    // A change to a paragraph is kept with what it wrote, which a download reads the result against.
+    const place = { x: 1, y: 2, width: 3, height: 4 }
+    const flowed = (wrote: unknown) =>
+      readStep({
+        done: {
+          kind: "text",
+          change: {
+            ops: [
+              {
+                do: "reflow",
+                page: 0,
+                lines: [{ box: place, was: "a b" }],
+                text: "a c",
+              },
+            ],
+            wrote,
+          },
+        },
+        label: "Change text",
+        touched: [0],
+      })!
+    const wrote = [{ from: 0, lines: [{ box: place, text: "a c" }] }]
+    expect(flowed(wrote).done.change).toMatchObject({
+      ops: [{ do: "reflow", text: "a c" }],
+      wrote,
+    })
+    // What is not that is left out, and the change is still a change.
+    expect(flowed([null, null]).done.change).not.toHaveProperty("wrote")
+    expect(flowed("all").done.change).not.toHaveProperty("wrote")
     expect(retext("mono").done.change).not.toHaveProperty("fonts")
     // Fonts are only said of changes to text.
     expect(

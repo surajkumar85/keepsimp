@@ -65,7 +65,7 @@ test("changes the words of a line, in the line's own font, and takes the old one
     "true"
   )
   await expect(pick(page, "Select")).toHaveAttribute("aria-pressed", "false")
-  await expect(hint(page)).toContainText("Click a line to change its words")
+  await expect(hint(page)).toContainText("Click a paragraph or a line and type")
   await expect(line(page, TEXT.total)).toBeVisible()
 
   await line(page, TEXT.total).click()

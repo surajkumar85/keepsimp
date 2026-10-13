@@ -13,7 +13,7 @@ import { readFieldOp } from "./forms"
 import type { Step } from "./mupdf-edit"
 import { FONT_KEYS, fontsFor, readObject } from "./objects"
 import { isOwn } from "./own-font"
-import { readTextOp } from "./retext"
+import { readTextChange, readWrote } from "./paragraphs"
 import type { Op } from "./tools"
 
 /** The largest file a draft is kept of. Larger ones are edited as before, without a draft. */
@@ -63,7 +63,7 @@ const readers = {
   things: readOp,
   comments: readCommentOp,
   fields: readFieldOp,
-  text: readTextOp,
+  text: readTextChange,
 } as const
 
 /** A step as it comes out of storage, with every change in it checked, or null when it is not one. */
@@ -89,10 +89,18 @@ export function readStep(value: unknown): Step | null {
             typeof key === "string" && (FONT_KEYS.includes(key) || isOwn(key))
         )
       : null
+  // What changes to paragraphs wrote, which a download reads the result against.
+  const wrote =
+    done.kind === "text" ? readWrote(change.wrote, ops.length) : undefined
   return {
     done: {
       kind: done.kind as Step["done"]["kind"],
-      change: { label, ops, ...(fonts ? { fonts } : null) },
+      change: {
+        label,
+        ops,
+        ...(fonts ? { fonts } : null),
+        ...(wrote ? { wrote } : null),
+      },
     },
     label,
     touched: step.touched,

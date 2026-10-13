@@ -1281,20 +1281,35 @@ export async function exportEdited(
     for (const step of session.steps.slice(0, position)) {
       if (step.done.kind !== "text") continue
       retexts++
-      for (const op of (step.done.change as TextChange).ops) {
-        // The line as it was written the time before: it begins where it
-        // began, and says what this change found there.
-        // Of the lines written before that say what this change found, the
-        // nearest: a line may have been moved or made larger since.
+      const change = step.done.change as TextChange
+      /**
+       * A line this change found and took out is no longer one that has to
+       * be read back, when it was written by a change before: of the lines
+       * written before that say what was found, the nearest (a line may
+       * have been moved or made larger since).
+       */
+      const forget = (page: number, box: Box, said: string) => {
         const far = (one: { box: Box }) =>
-          Math.hypot(one.box.x - op.box.x, one.box.y - op.box.y)
+          Math.hypot(one.box.x - box.x, one.box.y - box.y)
         const [was] = rewritten
           .filter(
-            (one) =>
-              one.page === op.page && squeezed(one.text) === squeezed(op.was)
+            (one) => one.page === page && squeezed(one.text) === squeezed(said)
           )
           .sort((a, b) => far(a) - far(b))
         if (was) rewritten.splice(rewritten.indexOf(was), 1)
+      }
+      for (const [at, op] of change.ops.entries()) {
+        if (op.do === "reflow") {
+          // A paragraph: the lines it took out, and those the engine said it wrote.
+          const wrote = change.wrote?.[at]
+          if (!wrote) continue
+          for (const line of op.lines.slice(wrote.from))
+            forget(op.page, line.box, line.was)
+          for (const line of wrote.lines)
+            rewritten.push({ page: op.page, box: line.box, text: line.text })
+          continue
+        }
+        forget(op.page, op.box, op.was)
         if (op.text.trim())
           rewritten.push({
             page: op.page,

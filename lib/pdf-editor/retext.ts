@@ -12,6 +12,7 @@
  */
 import type { Box, Point } from "./geometry"
 import { isOwn } from "./own-font"
+import type { FlowOp } from "./paragraphs"
 import { FONT_KEYS, LARGEST_TEXT, SMALLEST_TEXT, type Colour } from "./objects"
 
 /** The look some letters of a line have. */
@@ -43,6 +44,8 @@ export interface PageLine {
   styles: LineStyle[]
   /** Which of them each letter has, a number for every letter of `text`. */
   looks: number[]
+  /** How wide its first word is, in points: what tells whether it would have fitted behind the line above. */
+  first?: number
   /** Why its words cannot be changed, when they cannot. It can still be taken out. */
   fixed?: string
 }
@@ -73,16 +76,38 @@ export interface TextOp {
   move?: Point
 }
 
+/** What a change to a paragraph wrote: from which of its lines on, and the lines that are there now. */
+export interface Wrote {
+  /** The first of the paragraph's lines that was taken out; those before it were left as they are. */
+  from: number
+  lines: { box: Box; text: string }[]
+}
+
 export interface TextChange {
   label: string
-  ops: TextOp[]
+  ops: (TextOp | FlowOp)[]
   /**
    * The editor's fonts the change was written with, by key: said by the
    * engine once it has made the change, so that a draft knows which fonts
    * to have ready before it makes the change again.
    */
   fonts?: string[]
+  /**
+   * What each change to a paragraph wrote, said by the engine like the
+   * fonts: one for every change, null for a change to a line. It is what a
+   * download reads the result against.
+   */
+  wrote?: (Wrote | null)[]
 }
+
+/**
+ * A place where a word may be broken at the end of a line, and nowhere
+ * else: the soft hyphen. A word a file broke over two lines is joined with
+ * one when its paragraph is changed (`paragraphs.ts`), so that it is whole
+ * in the middle of a line and broken again, with its hyphen, where a line
+ * ends there. It is no letter, and no font needs to have it.
+ */
+export const SOFT = "\u00AD"
 
 /** The longest a line is made, and the furthest it is moved at once. */
 export const LONGEST_LINE = 2000
@@ -91,7 +116,7 @@ export const FURTHEST_MOVE = 5000
 const isPart = (value: unknown) => isNumber(value) && value >= 0 && value <= 1
 
 /** Another look for a line as it arrives, with only what a look is; undefined when there is nothing of one in it. */
-function readLook(value: unknown): LineLook | undefined {
+export function readLook(value: unknown): LineLook | undefined {
   if (typeof value !== "object" || value === null) return undefined
   const given = value as Record<string, unknown>
   const look: LineLook = {}
@@ -112,7 +137,7 @@ function readLook(value: unknown): LineLook | undefined {
 }
 
 /** How far to move a line as it arrives; undefined when it is nowhere or nothing. */
-function readMove(value: unknown): Point | undefined {
+export function readMove(value: unknown): Point | undefined {
   if (typeof value !== "object" || value === null) return undefined
   const { x, y } = value as Record<string, unknown>
   if (!isNumber(x) || !isNumber(y) || (!x && !y)) return undefined
@@ -191,7 +216,10 @@ export function restyled(
 export const squeezed = (text: string) => text.replace(/\s+/g, " ").trim()
 
 /** Whether a line is the one a change was meant for: at the same place, saying the same. */
-export function isLine(line: Pick<PageLine, "box" | "text">, op: TextOp) {
+export function isLine(
+  line: Pick<PageLine, "box" | "text">,
+  op: Pick<TextOp, "box" | "was">
+) {
   const near = (a: number, b: number) => Math.abs(a - b) <= 1
   return (
     near(line.box.x, op.box.x) &&
@@ -260,6 +288,7 @@ export function standIns(line: PageLine, text: string, look?: LineLook) {
       letters.filter(
         (letter, at) =>
           letter.trim() &&
+          letter !== SOFT &&
           !Array.from(line.styles[looks[at]]?.letters ?? "").includes(letter)
       )
     ),

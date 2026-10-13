@@ -25,14 +25,28 @@ import {
   withPage,
   type EditSession,
 } from "./mupdf-edit"
+import type { Box, Point } from "./geometry"
 import { fontKey, type Colour } from "./objects"
+import {
+  carry,
+  firstChanged,
+  flow,
+  glyphOf,
+  joined,
+  readTextChange,
+  shapeOf,
+  SOFT,
+  wordsOf,
+  type FlowOp,
+  type Piece,
+} from "./paragraphs"
 import {
   contentFor,
   familyOf,
   inverse,
   isLine,
+  mainStyle,
   oursAs,
-  readTextOp,
   restyled,
   runsOf,
   SPACE,
@@ -41,8 +55,10 @@ import {
   type LineStyle,
   type Matrix,
   type PageLine,
+  type Run,
   type TextChange,
   type TextOp,
+  type Wrote,
 } from "./retext"
 
 type Engine = typeof MuPDF
@@ -374,6 +390,10 @@ function read(mupdf: Engine, session: EditSession, page: MuPDF.PDFPage) {
             bands: letters.map(({ quad }) => bandOf(quad)),
             line: {
               text: said,
+              first: rounded(
+                (letters.find((one) => !one.letter.trim())?.x ??
+                  Math.max(...xs)) - letters[0].x
+              ),
               box: {
                 x: Math.min(...xs),
                 y: Math.min(...ys),
@@ -441,6 +461,321 @@ function fontNames(doc: Doc, page: Obj) {
 const mark = ({ box, text }: PageLine) =>
   `${Math.round(box.x)},${Math.round(box.y)}:${text.replace(/\s+/g, "")}`
 
+/** The letters of some new words as they will be written, and the fonts they need a name for on the page. */
+interface Resolved {
+  pieces: Piece[]
+  /** The file's own fonts, by number. */
+  own: number[]
+  /** The editor's, by key. */
+  ours: string[]
+}
+
+/**
+ * How each letter of some new words is written: in the font of the look it
+ * was given where that font has it, and in one of the editor's where not.
+ * @param looks A look for each letter, as a number into `styles`.
+ * @param numbers The number the file knows the font of each look by.
+ * @param set One of the editor's fonts everything is to be set in, when that was asked for.
+ */
+function resolve(
+  mupdf: Engine,
+  session: EditSession,
+  text: string,
+  looks: readonly number[],
+  styles: readonly LineStyle[],
+  numbers: readonly (number | null)[],
+  set: string | undefined
+): Resolved {
+  if (set && !session.fonts.get(set)) throw new FontMissing(set)
+  const pieces: Piece[] = []
+  const own = new Set<number>()
+  const ours = new Set<string>()
+  const writes = (look: number, letter: string) => {
+    const number = numbers[look]
+    return number === null || number === undefined || set
+      ? undefined
+      : codesOf(mupdf, session, number).letters.get(letter)
+  }
+  /** One letter in one look. */
+  const one = (letter: string, given: number): Piece => {
+    let look = given
+    // A mark that the look it was given cannot write, and another look of
+    // the line can (a star that is always set in a font of its own),
+    // takes that look whole: its font, its size and its height.
+    if (letter.trim() && !writes(look, letter)) {
+      const other = styles.findIndex((_style, index) => writes(index, letter))
+      if (other >= 0) look = other
+    }
+    const style = styles[look]
+    const lent = set ?? style.standIn
+    const number = numbers[look]
+    const size = { size: style.size, colour: style.colour, rise: style.rise }
+    const has = writes(look, letter)
+    if (has && number !== null) {
+      own.add(number)
+      return {
+        ...size,
+        letter,
+        font: `KS${number}`,
+        code: has.code,
+        advance: has.advance * style.size,
+      }
+    }
+    // A gap between words. A font everything is set in writes its own
+    // space, so the words are apart by as much as that font means and are
+    // read as words; where a file's font has no space, the gap is only room.
+    const spaced =
+      !letter.trim() && set
+        ? session.fonts.get(set)?.encodeCharacter(letter.codePointAt(0)!)
+        : 0
+    if (!letter.trim() && !spaced)
+      return {
+        ...size,
+        letter,
+        font: "",
+        code: "",
+        advance: letter === "\n" ? 0 : SPACE * style.size,
+      }
+    const font = session.fonts.get(lent)
+    if (!font) throw new FontMissing(lent)
+    const glyph = font.encodeCharacter(letter.codePointAt(0)!)
+    if (!glyph)
+      throw new Error(
+        `No font here has the letter “${letter}”. Nothing was changed.`
+      )
+    ours.add(lent)
+    return {
+      ...size,
+      letter,
+      font: oursAs(lent),
+      code: glyph.toString(16).padStart(4, "0"),
+      advance: font.advanceGlyph(glyph) * style.size,
+    }
+  }
+  Array.from(text).forEach((letter, at) => {
+    const look = looks[at] ?? 0
+    if (letter !== SOFT) {
+      pieces.push(one(letter, look))
+      return
+    }
+    // A place where a word may be broken: nothing, unless a line ends
+    // there, and then the hyphen of the letters around it.
+    const soft = glyphOf(one("-", look))
+    pieces.push({
+      ...soft,
+      letter,
+      font: "",
+      code: "",
+      advance: 0,
+      soft,
+    })
+  })
+  return { pieces, own: [...own], ours: [...ours] }
+}
+
+/**
+ * Take letters out of a page, and nothing else: no picture, no drawing,
+ * and nothing put in their place.
+ * @param bands A band through each letter that is to go.
+ */
+function takeOut(
+  mupdf: Engine,
+  doc: Doc,
+  page: MuPDF.PDFPage,
+  bands: MuPDF.Quad[]
+) {
+  const notes = page.getObject().get("Annots")
+  const links: Obj[] = []
+  if (notes.isArray())
+    notes.forEach((note) => {
+      if (note.get("Subtype").asName() === "Link") links.push(note)
+    })
+  // Marks for taking out that the file came with are not ours to apply.
+  const waiting = page
+    .getAnnotations()
+    .filter((annot) => annot.getType() === "Redact")
+    .map((annot) => annot.getObject())
+  if (waiting.length && notes.isArray())
+    for (let at = notes.length - 1; at >= 0; at--)
+      if (
+        waiting.some((one) => one.asIndirect() === notes.get(at).asIndirect())
+      )
+        notes.delete(at)
+  const cut = page.createAnnotation("Redact")
+  cut.setQuadPoints(bands)
+  page.applyRedactions(
+    false,
+    mupdf.PDFPage.REDACT_IMAGE_NONE,
+    mupdf.PDFPage.REDACT_LINE_ART_NONE,
+    mupdf.PDFPage.REDACT_TEXT_REMOVE
+  )
+  // Links that lay over the letters stay links, and marks that were waiting wait on.
+  const object = page.getObject()
+  let now = object.get("Annots")
+  const back = [...links, ...waiting]
+  if (back.length && !now.isArray()) {
+    now = doc.newArray()
+    object.put("Annots", now)
+  }
+  const there = new Set<number>()
+  if (now.isArray()) now.forEach((note) => void there.add(note.asIndirect()))
+  for (const note of back) if (!there.has(note.asIndirect())) now.push(note)
+}
+
+/** Write runs of letters into a page, after its own content, with the fonts they need named in it. */
+function writeRuns(
+  session: EditSession,
+  page: MuPDF.PDFPage,
+  runs: Run[],
+  fonts: Pick<Resolved, "own" | "ours">
+) {
+  const { doc } = session
+  const object = page.getObject()
+  const names = fontNames(doc, object)
+  for (const number of fonts.own)
+    names.put(`KS${number}`, doc.newIndirect(number))
+  for (const key of fonts.ours)
+    names.put(oursAs(key), doc.addFont(session.fonts.get(key)!))
+  const written = contentFor(runs, inverse(page.getTransform() as Matrix))
+  // The page's own content is closed off, so that what is written starts
+  // from nothing, whatever that content left behind.
+  const all = doc.newArray()
+  all.push(doc.addStream("q\n", {}))
+  const content = object.get("Contents")
+  if (content.isArray()) content.forEach((part) => void all.push(part))
+  else if (!content.isNull()) all.push(content)
+  all.push(doc.addStream("Q\n", {}))
+  all.push(doc.addStream(written, {}))
+  object.put("Contents", all)
+}
+
+/**
+ * Whether some words are read from a page on the line that starts at a
+ * place and runs a way. What stands on that line is read together, from
+ * its start on: words set far apart are read as pieces.
+ */
+const readsAt = (
+  lines: readonly Read[],
+  origin: Point,
+  along: Point,
+  words: string
+) => {
+  const far = (one: Read) =>
+    (one.line.origin.x - origin.x) * along.x +
+    (one.line.origin.y - origin.y) * along.y
+  return lines
+    .filter(
+      (one) =>
+        // On the line it was written on: beside or beyond where it starts,
+        // and no higher or lower than that.
+        Math.abs(
+          (one.line.origin.x - origin.x) * along.y -
+            (one.line.origin.y - origin.y) * along.x
+        ) < 2
+    )
+    .sort((a, b) => far(a) - far(b))
+    .map((one) => one.line.text.replace(/\s+/g, ""))
+    .join("")
+    .includes(words)
+}
+
+/** A letter that was on the page: where its middle was, and where it is now; null when it is gone. */
+interface Moved {
+  was: Point
+  now: Box | null
+}
+
+/** The middle of the band that was laid through a letter, which is the middle of the letter. */
+const middleOf = (band: MuPDF.Quad): Point => ({
+  x: (band[0] + band[2] + band[4] + band[6]) / 4,
+  y: (band[1] + band[3] + band[5] + band[7]) / 4,
+})
+
+/**
+ * Take the links of a page along with the words they lie over. A link
+ * that lay over letters that were written anew is put over those letters
+ * where they now stand: on the line most of them are on, when they are on
+ * more than one. A link whose letters are all gone stays where it was,
+ * and so does one that also lies over letters that were not touched.
+ * @param stay The middles of the letters that were left as they are.
+ */
+function followLinks(
+  doc: Doc,
+  page: MuPDF.PDFPage,
+  moved: readonly Moved[],
+  stay: readonly Point[]
+) {
+  const notes = page.getObject().get("Annots")
+  if (!moved.length || !notes.isArray()) return
+  // A link says where it lies in the page's own measure; letters are read
+  // as the page is shown. (The engine's own way of moving a link writes
+  // the one for the other.)
+  const shown = page.getTransform() as Matrix
+  const back = inverse(shown)
+  const through = (matrix: Matrix, x: number, y: number) => ({
+    x: matrix[0] * x + matrix[2] * y + matrix[4],
+    y: matrix[1] * x + matrix[3] * y + matrix[5],
+  })
+  notes.forEach((note) => {
+    const rect = note.get("Rect")
+    if (
+      note.get("Subtype").asName() !== "Link" ||
+      !rect.isArray() ||
+      rect.length !== 4
+    )
+      return
+    const one = through(shown, rect.get(0).asNumber(), rect.get(1).asNumber())
+    const two = through(shown, rect.get(2).asNumber(), rect.get(3).asNumber())
+    const left = Math.min(one.x, two.x)
+    const right = Math.max(one.x, two.x)
+    const top = Math.min(one.y, two.y)
+    const bottom = Math.max(one.y, two.y)
+    const under = (point: Point) =>
+      point.x >= left && point.x <= right && point.y >= top && point.y <= bottom
+    if (stay.some(under)) return
+    const letters = moved.filter((letter) => under(letter.was))
+    if (!letters.length) return
+    const rows = new Map<number, (Moved & { now: Box })[]>()
+    for (const letter of letters) {
+      if (!letter.now) continue
+      const row = Math.round(letter.now.y)
+      rows.set(row, [...(rows.get(row) ?? []), { ...letter, now: letter.now }])
+    }
+    const [most] = [...rows.values()].sort((a, b) => b.length - a.length)
+    if (!most) return
+    // As far around its letters as it was: the first and the last of them
+    // are as far from its edges as they were, when they are still its first
+    // and its last, and it is as far above and below them.
+    most.sort((a, b) => a.now.x - b.now.x)
+    const lead = most[0]
+    const tail = most[most.length - 1]
+    const middle = (box: Box) => box.x + box.width / 2
+    const were = letters.map((letter) => letter.was.x)
+    const before =
+      lead.was.x === Math.min(...were)
+        ? lead.was.x - left
+        : lead.now.width / 2 + 1
+    const after =
+      tail.was.x === Math.max(...were)
+        ? right - tail.was.x
+        : tail.now.width / 2 + 1
+    const down = lead.now.y + lead.now.height / 2 - lead.was.y
+    const from = through(back, middle(lead.now) - before, top + down)
+    const to = through(back, middle(tail.now) + after, bottom + down)
+    const fresh = doc.newArray()
+    for (const value of [
+      Math.min(from.x, to.x),
+      Math.min(from.y, to.y),
+      Math.max(from.x, to.x),
+      Math.max(from.y, to.y),
+    ])
+      fresh.push(doc.newReal(Math.round(value * 100) / 100))
+    note.put("Rect", fresh)
+    // Corners that were said for where it lay before say nothing now.
+    note.delete("QuadPoints")
+  })
+}
+
 /**
  * Change one line.
  * @returns The editor's fonts it was written with, by key; null when it already is what is asked.
@@ -466,77 +801,16 @@ function carryOut(
     const same = text.replace(/\s+/g, " ") === line.text.replace(/\s+/g, " ")
     if (same && !op.look && !op.move) return null
     if (line.fixed && text) throw new Error(line.fixed)
-    const looks = spreadLooks(line.text, text, line.looks)
-    // The looks the letters will have: the line's own, with another size or colour laid over them.
-    const styles = restyled(line, op.look)
-    /** One of the editor's fonts the whole line is to be set in, when that was asked for. */
-    const set = op.look?.font
-    if (set && !session.fonts.get(set)) throw new FontMissing(set)
-    const glyphs: Glyph[] = []
-    /** The fonts the letters need a name for on the page: the file's own by number, the editor's by key. */
-    const own = new Set<number>()
-    const ours = new Set<string>()
-    const writes = (look: number, letter: string) => {
-      const number = numbers[look]
-      return number === null || set
-        ? undefined
-        : codesOf(mupdf, session, number).letters.get(letter)
-    }
-    Array.from(text).forEach((letter, at) => {
-      let look = looks[at]
-      // A mark that the look it was given cannot write, and another look of
-      // the line can (a star that is always set in a font of its own),
-      // takes that look whole: its font, its size and its height.
-      if (letter.trim() && !writes(look, letter)) {
-        const other = styles.findIndex((_style, index) => writes(index, letter))
-        if (other >= 0) look = other
-      }
-      const style = styles[look]
-      const lent = set ?? style.standIn
-      const number = numbers[look]
-      const size = { size: style.size, colour: style.colour, rise: style.rise }
-      const has = writes(look, letter)
-      if (has && number !== null) {
-        own.add(number)
-        glyphs.push({
-          ...size,
-          font: `KS${number}`,
-          code: has.code,
-          advance: has.advance * style.size,
-        })
-        return
-      }
-      // A gap between words. A font the whole line is set in writes its own
-      // space, so the words are apart by as much as that font means and are
-      // read as words; where a file's font has no space, the gap is only room.
-      const spaced =
-        !letter.trim() && set
-          ? session.fonts.get(set)?.encodeCharacter(letter.codePointAt(0)!)
-          : 0
-      if (!letter.trim() && !spaced) {
-        glyphs.push({
-          ...size,
-          font: "",
-          code: "",
-          advance: SPACE * style.size,
-        })
-        return
-      }
-      const font = session.fonts.get(lent)
-      if (!font) throw new FontMissing(lent)
-      const glyph = font.encodeCharacter(letter.codePointAt(0)!)
-      if (!glyph)
-        throw new Error(
-          `No font here has the letter “${letter}”. Nothing was changed.`
-        )
-      ours.add(lent)
-      glyphs.push({
-        ...size,
-        font: oursAs(lent),
-        code: glyph.toString(16).padStart(4, "0"),
-        advance: font.advanceGlyph(glyph) * style.size,
-      })
-    })
+    const resolved = resolve(
+      mupdf,
+      session,
+      text,
+      spreadLooks(line.text, text, line.looks),
+      // The looks the letters will have: the line's own, with another size or colour laid over them.
+      restyled(line, op.look),
+      numbers,
+      op.look?.font
+    )
     return {
       line,
       bands,
@@ -546,9 +820,7 @@ function carryOut(
         x: line.origin.x + (op.move?.x ?? 0),
         y: line.origin.y + (op.move?.y ?? 0),
       },
-      glyphs,
-      own: [...own],
-      ours: [...ours],
+      resolved,
       others: before
         .filter((one) => one !== target)
         .map((one) => mark(one.line))
@@ -556,48 +828,10 @@ function carryOut(
     }
   })
   if (!plan) return null
-  const { line, text, glyphs } = plan
+  const { line, text, resolved } = plan
+  const glyphs: Glyph[] = resolved.pieces
 
-  // Out with the old letters, and nothing else: no picture, no drawing, and
-  // nothing put in their place.
-  withPage(doc, index, (page) => {
-    const notes = page.getObject().get("Annots")
-    const links: Obj[] = []
-    if (notes.isArray())
-      notes.forEach((note) => {
-        if (note.get("Subtype").asName() === "Link") links.push(note)
-      })
-    // Marks for taking out that the file came with are not ours to apply.
-    const waiting = page
-      .getAnnotations()
-      .filter((annot) => annot.getType() === "Redact")
-      .map((annot) => annot.getObject())
-    if (waiting.length && notes.isArray())
-      for (let at = notes.length - 1; at >= 0; at--)
-        if (
-          waiting.some((one) => one.asIndirect() === notes.get(at).asIndirect())
-        )
-          notes.delete(at)
-    const cut = page.createAnnotation("Redact")
-    cut.setQuadPoints(plan.bands)
-    page.applyRedactions(
-      false,
-      mupdf.PDFPage.REDACT_IMAGE_NONE,
-      mupdf.PDFPage.REDACT_LINE_ART_NONE,
-      mupdf.PDFPage.REDACT_TEXT_REMOVE
-    )
-    // Links that lay over the line stay links, and marks that were waiting wait on.
-    const object = page.getObject()
-    let now = object.get("Annots")
-    const back = [...links, ...waiting]
-    if (back.length && !now.isArray()) {
-      now = doc.newArray()
-      object.put("Annots", now)
-    }
-    const there = new Set<number>()
-    if (now.isArray()) now.forEach((note) => void there.add(note.asIndirect()))
-    for (const note of back) if (!there.has(note.asIndirect())) now.push(note)
-  })
+  withPage(doc, index, (page) => takeOut(mupdf, doc, page, plan.bands))
 
   withPage(doc, index, (page) => {
     const left = read(mupdf, session, page)
@@ -607,54 +841,328 @@ function carryOut(
       throw new Error(
         "This line cannot be changed without touching the text beside it. Nothing was changed."
       )
-    if (!glyphs.length) return
-    const object = page.getObject()
-    const names = fontNames(doc, object)
-    for (const number of plan.own)
-      names.put(`KS${number}`, doc.newIndirect(number))
-    for (const key of plan.ours)
-      names.put(oursAs(key), doc.addFont(session.fonts.get(key)!))
-    const written = contentFor(
-      runsOf(glyphs, plan.origin, line.along),
-      inverse(page.getTransform() as Matrix)
-    )
-    // The page's own content is closed off, so that what is written starts
-    // from nothing, whatever that content left behind.
-    const all = doc.newArray()
-    all.push(doc.addStream("q\n", {}))
-    const content = object.get("Contents")
-    if (content.isArray()) content.forEach((part) => void all.push(part))
-    else if (!content.isNull()) all.push(content)
-    all.push(doc.addStream("Q\n", {}))
-    all.push(doc.addStream(written, {}))
-    object.put("Contents", all)
+    if (glyphs.length)
+      writeRuns(
+        session,
+        page,
+        runsOf(glyphs, plan.origin, line.along),
+        resolved
+      )
+    // Links over its letters go where the letters went.
+    if (line.along.x === 1) {
+      const to = carry(line.text, text)
+      let far = plan.origin.x
+      const places = resolved.pieces.map((piece) => {
+        const box = {
+          x: far,
+          y: plan.origin.y - (line.origin.y - line.box.y),
+          width: piece.advance,
+          height: line.box.height,
+        }
+        far += piece.advance
+        return box
+      })
+      followLinks(
+        doc,
+        page,
+        plan.bands.map((band, at) => {
+          const now = to(at)
+          return { was: middleOf(band), now: now === null ? null : places[now] }
+        }),
+        []
+      )
+    }
   })
 
   // The proof: the page is read again, and the new words must be there.
   if (glyphs.length)
     withPage(doc, index, (page) => {
-      const wanted = text.replace(/\s+/g, "")
-      const found = read(mupdf, session, page).some(
-        (one) =>
-          // On the line it was written on: beside or beyond where it starts,
-          // and no higher or lower than that.
-          Math.abs(
-            (one.line.origin.x - plan.origin.x) * line.along.y -
-              (one.line.origin.y - plan.origin.y) * line.along.x
-          ) < 2 && one.line.text.replace(/\s+/g, "").includes(wanted)
+      if (
+        !readsAt(
+          read(mupdf, session, page),
+          plan.origin,
+          line.along,
+          text.replace(/\s+/g, "")
+        )
       )
-      if (!found)
         throw new Error(
           "The new words could not be read back from the page. Nothing was changed."
         )
     })
-  return plan.ours
+  return { fonts: resolved.ours, wrote: null }
+}
+
+const ACROSS = { x: 1, y: 0 }
+
+/**
+ * Change a paragraph: its lines are taken out from the first one the
+ * change touches, and its words are laid out again from there within the
+ * width it had.
+ * @returns The editor's fonts it was written with and the lines that were written; null when it already is what is asked.
+ */
+function reflow(
+  mupdf: Engine,
+  session: EditSession,
+  index: number,
+  op: FlowOp
+) {
+  const { doc } = session
+  const plan = withPage(doc, index, (page) => {
+    const before = read(mupdf, session, page)
+    const targets = op.lines.map((given) => {
+      const found = before.find(({ line }) =>
+        isLine(line, { box: given.box, was: given.was })
+      )
+      if (!found)
+        throw new Error(
+          "That paragraph is not on the page as it was. Nothing was changed."
+        )
+      return found
+    })
+    if (new Set(targets).size !== targets.length)
+      throw new Error("That is not a change to a paragraph.")
+    const lines = targets.map((target) => target.line)
+    const text = op.text
+      .split("\n")
+      .map((line) => line.replace(/[^\S\n]+/g, " ").trim())
+      .join("\n")
+      .replace(/^\n+|\n+$/g, "")
+    for (const line of lines) {
+      if (line.along.x !== 1)
+        throw new Error(
+          "A paragraph whose lines are turned on the page is changed line by line."
+        )
+      if (line.fixed && text) throw new Error(line.fixed)
+    }
+    const old = joined(lines, wordsOf(before.map((one) => one.line)))
+    const shape = shapeOf(lines)
+    const align = op.align ?? shape.align
+    const afresh = Boolean(op.look || op.move || align !== shape.align)
+    const from = afresh ? 0 : firstChanged(old.starts, old.text, text)
+    if (from === lines.length) return null
+
+    // The looks of all the lines, one line's after another's, as the text counts them.
+    const all = {
+      styles: lines.flatMap((line) => line.styles),
+      looks: old.looks,
+    }
+    const main = mainStyle(all)
+    const by = op.look?.size && main ? op.look.size / main.size : 1
+    const leading = shape.leading * by
+    const resolved = resolve(
+      mupdf,
+      session,
+      text,
+      spreadLooks(old.text, text, old.looks),
+      restyled(all, op.look),
+      targets.flatMap((target) => target.numbers),
+      op.look?.font
+    )
+    // How far apart the words of the paragraph stand. A file does not say:
+    // many fonts in files have no space at all and words are simply placed,
+    // and where there is a space, letters and words are often set a hair
+    // closer or wider than the font says. So it is measured: what is left
+    // of each line's width when its letters are taken off, shared among its
+    // gaps. Laid out with that, a line that was not changed comes out as
+    // wide as it was, and breaks where it broke.
+    let width = shape.right - shape.left
+    const fresh = resolved.pieces.find((piece) => piece.letter === " ")
+    const usual = fresh?.advance ?? SPACE * (main?.size ?? 12) * by
+    let gap = usual
+    if (!op.look?.font) {
+      const measured: { solid: number; gaps: number; wide: number }[] = []
+      for (const target of targets) {
+        try {
+          const { pieces } = resolve(
+            mupdf,
+            session,
+            target.line.text,
+            target.line.looks,
+            target.line.styles,
+            target.numbers,
+            undefined
+          )
+          const blank = pieces.filter((piece) => !piece.letter.trim())
+          measured.push({
+            solid:
+              pieces.reduce((far, piece) => far + piece.advance, 0) -
+              blank.reduce((far, piece) => far + piece.advance, 0),
+            gaps: blank.length,
+            wide: target.line.box.width,
+          })
+        } catch {
+          // A line with a letter no font here has tells nothing.
+        }
+      }
+      const gaps = measured
+        .filter((line) => line.gaps > 0)
+        .map((line) => ((line.wide - line.solid) / line.gaps) * by)
+        .filter((one) => one > usual * 0.4 && one < usual * 3)
+        .sort((a, b) => a - b)
+      if (gaps.length)
+        gap =
+          align === "justify" || shape.align === "justify"
+            ? // Lines that were spread to both edges have wider gaps than the words need.
+              Math.min(usual, gaps[0])
+            : gaps[Math.floor(gaps.length / 2)]
+      // A space the font writes is written where it is as wide as the gap
+      // that was measured, to within a hair; else the gap is only room.
+      const written =
+        Boolean(fresh?.font) &&
+        Math.abs(usual - gap) < 0.02 * (main?.size ?? 12) * by
+      if (written) gap = usual
+      // No narrower than any of its lines is with that gap: a line that fitted before must fit again.
+      if (by === 1 && shape.align !== "justify")
+        measured.forEach((line, at) => {
+          const setIn = at === 0 && align === "left" ? shape.indent : 0
+          width = Math.max(width, line.solid + line.gaps * gap + setIn)
+        })
+      resolved.pieces = resolved.pieces.map((piece) =>
+        piece.letter.trim() || piece.letter === "\n" || (written && piece.font)
+          ? piece
+          : { ...piece, font: "", code: "", advance: gap }
+      )
+    }
+    const set =
+      align === "left" || align === "justify"
+        ? (line: number) => (from + line === 0 ? shape.indent : 0)
+        : () => 0
+    const flowed = flow(
+      resolved.pieces.slice(old.starts[from]),
+      (line) => width - set(line),
+      align,
+      // The engine reads a gap of four fifths of the letters' height as the end of a line.
+      (main?.size ?? 12) * by * 0.7
+    )
+    const start = lines[from]
+    const move = op.move ?? { x: 0, y: 0 }
+    /** How far a line's letters reach above and below the line they are written on. */
+    const up = (start.origin.y - start.box.y) * by
+    const down = (start.box.y + start.box.height - start.origin.y) * by
+    const written = flowed.map((line, at) => {
+      const origin = {
+        x: shape.left + set(at) + line.shift + move.x,
+        y: start.origin.y + at * leading + move.y,
+      }
+      return {
+        ...line,
+        origin,
+        box: {
+          x: origin.x,
+          y: origin.y - up,
+          width: line.width,
+          height: up + down,
+        },
+      }
+    })
+
+    // Nothing may be written over text that is not the paragraph's: the
+    // page could no longer be read line by line, and nobody could read it.
+    const others = before.filter((one) => !targets.includes(one))
+    const size = (main?.size ?? 12) * by
+    const bounds = page.getBounds()
+    const collides = (line: (typeof written)[number]) =>
+      line.origin.y + down > bounds[3] + 0.5 ||
+      others.some(({ line: other }) => {
+        const tall = mainStyle(other)?.size ?? size
+        return (
+          Math.min(line.box.x + line.box.width, other.box.x + other.box.width) -
+            Math.max(line.box.x, other.box.x) >
+            1 &&
+          other.along.x === 1 &&
+          // The middles of the two lines' letters, where they are densest.
+          Math.min(line.origin.y, other.origin.y) -
+            Math.max(line.origin.y - size * 0.6, other.origin.y - tall * 0.6) >
+            0
+        )
+      })
+    const over = written.findIndex(collides)
+    if (over >= 0) {
+      const needs = from + written.length
+      const room = from + over
+      throw new Error(
+        needs > lines.length && room >= lines.length
+          ? `This paragraph now needs ${needs} lines, and there is room for ${room} before it would run over what is below. Make it shorter, or its letters smaller. Nothing was changed.`
+          : "The paragraph would lie over other text on the page. Nothing was changed."
+      )
+    }
+    // Every letter that is taken out, by its number in the old text, and where it is written again.
+    const to = carry(old.text, text)
+    const places = new Map<number, Box>()
+    for (const line of written)
+      for (const place of line.places)
+        places.set(old.starts[from] + place.at, {
+          x: line.origin.x + place.x,
+          y: line.box.y,
+          width: place.advance,
+          height: line.box.height,
+        })
+    const moved: Moved[] = targets.slice(from).flatMap((target, at) =>
+      target.bands.map((band, letter) => {
+        const now = to(old.starts[from + at] + letter)
+        return {
+          was: middleOf(band),
+          now: now === null ? null : (places.get(now) ?? null),
+        }
+      })
+    )
+    return {
+      from,
+      written,
+      resolved,
+      moved,
+      stay: targets
+        .slice(0, from)
+        .flatMap((target) => target.bands.map(middleOf)),
+      bands: targets.slice(from).flatMap((target) => target.bands),
+      others: others.map((one) => mark(one.line)).sort(),
+      kept: targets.slice(0, from).map((one) => mark(one.line)),
+    }
+  })
+  if (!plan) return null
+  const { written, resolved } = plan
+
+  withPage(doc, index, (page) => takeOut(mupdf, doc, page, plan.bands))
+
+  withPage(doc, index, (page) => {
+    const left = read(mupdf, session, page)
+      .map((one) => mark(one.line))
+      .sort()
+    if (left.join("\n") !== [...plan.others, ...plan.kept].sort().join("\n"))
+      throw new Error(
+        "This paragraph cannot be changed without touching the text beside it. Nothing was changed."
+      )
+    const runs = written.flatMap((line) => runsOf(line.glyphs, line.origin))
+    if (runs.length) writeRuns(session, page, runs, resolved)
+    followLinks(doc, page, plan.moved, plan.stay)
+  })
+
+  // The proof: the page is read again, and every line that was written must be there.
+  withPage(doc, index, (page) => {
+    const now = read(mupdf, session, page)
+    for (const line of written) {
+      const words = line.text.replace(/\s+/g, "")
+      if (words && !readsAt(now, line.origin, ACROSS, words))
+        throw new Error(
+          "The new words could not be read back from the page. Nothing was changed."
+        )
+    }
+  })
+  return {
+    fonts: resolved.ours,
+    wrote: {
+      from: plan.from,
+      lines: written
+        .filter((line) => line.text.trim())
+        .map((line) => ({ box: line.box, text: line.text })),
+    } as Wrote,
+  }
 }
 
 /**
- * Change the words of lines, as one step that can be undone.
+ * Change the words of lines and of paragraphs, as one step that can be undone.
  * @returns The pages that changed, counted from 0.
- * @throws When the change holds something that is not a change to a line,
+ * @throws When the change holds something that is not a change to text,
  * or a line cannot be changed; the file is then as it was.
  */
 export function applyText(
@@ -663,7 +1171,7 @@ export function applyText(
   change: TextChange
 ): number[] {
   const ops = change.ops.map((op) => {
-    const read = readTextOp(op)
+    const read = readTextChange(op)
     if (!read) throw new Error("That is not a change to a line.")
     return read
   })
@@ -673,14 +1181,21 @@ export function applyText(
     session,
     change.label,
     (touch) => {
+      const wrote: (Wrote | null)[] = []
       for (const op of ops) {
+        wrote.push(null)
         if (op.page >= session.doc.countPages()) continue
-        const used = carryOut(mupdf, session, op.page, op)
-        if (!used) continue
+        const made =
+          op.do === "reflow"
+            ? reflow(mupdf, session, op.page, op)
+            : carryOut(mupdf, session, op.page, op)
+        if (!made) continue
         touch(op.page)
-        for (const key of used) fonts.add(key)
+        for (const key of made.fonts) fonts.add(key)
+        wrote[wrote.length - 1] = made.wrote
       }
       done.fonts = [...fonts]
+      if (wrote.some(Boolean)) done.wrote = wrote
     },
     { kind: "text", change: done }
   )

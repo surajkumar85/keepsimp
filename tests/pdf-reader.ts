@@ -354,3 +354,49 @@ export async function danglingRefs(bytes: Uint8Array, password?: string) {
     walk(object, ref.objectNumber, 0)
   return dangling
 }
+
+/** Where the links of each page lie, as pdf.js reads them: boxes in points from the page's top left corner, with where each leads. */
+export async function linkBoxes(bytes: Uint8Array, password?: string) {
+  const doc = await getDocument({
+    data: bytes.slice(),
+    password,
+    verbosity: 0,
+    useSystemFonts: false,
+  }).promise
+  try {
+    const pages: {
+      x: number
+      y: number
+      width: number
+      height: number
+      to: string
+    }[][] = []
+    for (let number = 1; number <= doc.numPages; number++) {
+      const page = await doc.getPage(number)
+      const view = page.getViewport({ scale: 1 })
+      const notes = await page.getAnnotations()
+      pages.push(
+        notes
+          .filter((note) => note.subtype === "Link")
+          .map((note) => {
+            const [a, b, c, d, e, f] = view.transform
+            const [left, low, right, high] = note.rect as number[]
+            const x0 = a * left + c * low + e
+            const y0 = b * left + d * low + f
+            const x1 = a * right + c * high + e
+            const y1 = b * right + d * high + f
+            return {
+              x: Math.min(x0, x1),
+              y: Math.min(y0, y1),
+              width: Math.abs(x1 - x0),
+              height: Math.abs(y1 - y0),
+              to: String(note.url ?? note.dest ?? ""),
+            }
+          })
+      )
+    }
+    return pages
+  } finally {
+    await doc.loadingTask.destroy()
+  }
+}

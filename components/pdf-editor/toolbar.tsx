@@ -10,6 +10,7 @@ import {
 } from "react"
 import {
   IconAlignCenter,
+  IconAlignJustified,
   IconAlignLeft,
   IconAlignRight,
   IconArrowBackUp,
@@ -31,6 +32,7 @@ import {
   IconNote,
   IconPencil,
   IconPhotoPlus,
+  IconPilcrow,
   IconPointer,
   IconRectangleFilled,
   IconRubberStamp,
@@ -88,7 +90,8 @@ import type { Comments } from "./use-comments"
 import { mainStyle } from "@/lib/pdf-editor/retext"
 import { isOwn, type OwnKey } from "@/lib/pdf-editor/own-font"
 import { canListFonts, LocalFontsDialog } from "./local-fonts-dialog"
-import { RETEXT_HINT, type Retext } from "./use-retext"
+import { ALIGNS, shapeOf, type Align } from "@/lib/pdf-editor/paragraphs"
+import { PARAGRAPH_HINT, RETEXT_HINT, type Retext } from "./use-retext"
 import type { Editor } from "./use-editor"
 
 const TOOLS: { tool: Tool; label: string; key: string; icon: ReactNode }[] = [
@@ -599,9 +602,35 @@ function LineLookRow({ editor, retext }: { editor: Editor; retext: Retext }) {
           backToLine()
         }}
       />
+      {typing.lines && (
+        <div
+          role="group"
+          aria-label="Alignment of the paragraph"
+          className="flex shrink-0 items-center"
+        >
+          {ALIGNS.map((align) => (
+            <Toggle
+              key={align}
+              label={ALIGN_LABELS[align]}
+              pressed={(typing.align ?? shapeOf(typing.lines!).align) === align}
+              onPress={() => {
+                retext.setAlign(align)
+                backToLine()
+              }}
+            >
+              {ALIGN_ICONS[align]}
+            </Toggle>
+          ))}
+        </div>
+      )}
       <Button
         type="button"
         variant="outline"
+        title={
+          typing.lines
+            ? "Put the words into the file (Ctrl+Enter, or ⌘ Enter)"
+            : "Put the words into the file (Enter)"
+        }
         onClick={() => retext.finish()}
         className="shrink-0"
       >
@@ -609,6 +638,19 @@ function LineLookRow({ editor, retext }: { editor: Editor; retext: Retext }) {
       </Button>
     </>
   )
+}
+
+const ALIGN_LABELS: Record<Align, string> = {
+  left: "Set the paragraph to the left",
+  centre: "Set the paragraph about its middle",
+  right: "Set the paragraph to the right",
+  justify: "Set the paragraph to both edges",
+}
+const ALIGN_ICONS: Record<Align, ReactNode> = {
+  left: <IconAlignLeft aria-hidden="true" />,
+  centre: <IconAlignCenter aria-hidden="true" />,
+  right: <IconAlignRight aria-hidden="true" />,
+  justify: <IconAlignJustified aria-hidden="true" />,
 }
 
 /** A thin line between groups of a bar. */
@@ -992,8 +1034,24 @@ export function EditorToolbar({
                 className="line-clamp-2 min-w-0 flex-1 px-1 text-xs leading-4 whitespace-normal text-muted-foreground"
                 data-testid="editor-hint"
               >
-                {retext.on ? retext.note || RETEXT_HINT : HINTS[state.tool]}
+                {retext.on
+                  ? retext.note ||
+                    (retext.blocks ? PARAGRAPH_HINT : RETEXT_HINT)
+                  : HINTS[state.tool]}
               </p>
+            )}
+            {!acting && parts.length === 0 && retext.on && (
+              <Button
+                type="button"
+                size="sm"
+                variant={retext.blocks ? "secondary" : "ghost"}
+                aria-pressed={retext.blocks}
+                title="On: lines that belong together are changed as one paragraph, which flows again. Off: every line by itself."
+                onClick={() => retext.setBlocks(!retext.blocks)}
+                className="order-first h-11 shrink-0 md:h-9"
+              >
+                <IconPilcrow aria-hidden="true" /> Paragraphs
+              </Button>
             )}
             {acting && (
               <div
