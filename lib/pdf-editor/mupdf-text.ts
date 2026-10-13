@@ -262,8 +262,22 @@ function read(mupdf: Engine, session: EditSession, page: MuPDF.PDFPage) {
   const device = new mupdf.DisplayListDevice(list)
   const lines: Read[] = []
   try {
-    page.runPageContents(device, mupdf.Matrix.identity)
-    device.close()
+    // Reading can change a file. A file that says how it is built (a
+    // tagged one) and says it not quite rightly is mended by the engine as
+    // the page is run, and the engine lets nothing be changed outside an
+    // operation: it gives up half way and leaves a file that can no longer
+    // be written. So the page is run inside one, its own when no step is
+    // being made.
+    const own = !session.working
+    if (own) session.doc.beginOperation("Read the page")
+    try {
+      page.runPageContents(device, mupdf.Matrix.identity)
+      device.close()
+    } catch (error) {
+      if (own) session.doc.abandonOperation()
+      throw error
+    }
+    if (own) session.doc.endOperation()
     const text = list.toStructuredText("preserve-whitespace")
     try {
       interface Letter {

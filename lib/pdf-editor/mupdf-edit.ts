@@ -102,6 +102,8 @@ export interface EditSession {
   position: number
   /** Steps are being made again, and are not to be listed a second time. */
   again?: boolean
+  /** A step is being made this moment: the engine is in the middle of an operation. */
+  working?: boolean
   /** Told when the working copy has become another document: after an undo it is made anew. */
   moved?: (doc: Doc) => void
   /**
@@ -865,10 +867,13 @@ export function inStep(
   const touched = new Set<number>()
   const before = doc.getJournal().position
   doc.beginOperation(label)
+  session.working = true
   try {
     work((page) => void touched.add(page))
+    session.working = false
     doc.endOperation()
   } catch (error) {
+    session.working = false
     doc.abandonOperation()
     // What the step had put into the file is out again, and the engine
     // has not forgotten it: see `remake`.
