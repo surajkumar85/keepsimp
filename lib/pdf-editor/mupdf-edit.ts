@@ -104,6 +104,8 @@ export interface EditSession {
   fonts: Map<string, MuPDF.Font>
   /** Pictures that were added, by the name they were given. */
   pictures: Map<string, { image: MuPDF.Image; size: Size }>
+  /** Other files whose pages are added, by the name each was handed over under: made ready, as bytes (see `mupdf-pages.ts`). */
+  inserts: Map<string, Uint8Array>
   /** How many pages the file came with. */
   firstPages: number
   /** How many steps were in force when the last download was made. */
@@ -168,6 +170,7 @@ export function editingOf(
     firstPages: doc.countPages(),
     fonts: new Map(),
     pictures: new Map(),
+    inserts: new Map(),
     saved: null,
     steps: [],
     position: 0,
@@ -185,6 +188,7 @@ export function letGo(session: EditSession) {
   for (const font of session.fonts.values()) font.destroy()
   session.pictures.clear()
   session.fonts.clear()
+  session.inserts.clear()
   session.reading?.doc.destroy()
   session.reading = undefined
 }
@@ -1210,7 +1214,9 @@ export interface ExportReport {
   /** In how many steps links were added, changed or taken away. */
   links: number
   /** How often the list of pages was changed, how many pages were taken out, and what went with them. */
-  pages: { steps: number; taken: number; lost: Lost }
+  pages: { steps: number; taken: number; added: number; lost: Lost }
+  /** Only for some pages written as a file of their own: how many. */
+  part?: number
   /**
    * Only for a signed file whose changes were written after it: whether
    * the file as it came is still there, byte for byte, at the start of the
@@ -1304,11 +1310,18 @@ export function pagesChanged(steps: readonly Step[]) {
   const changes = steps
     .filter(changesPages)
     .map((step) => step.done.change as PagesChange)
+  const ops = changes.flatMap((change) => change.ops)
   return {
     steps: changes.length,
-    taken: changes
-      .flatMap((change) => change.ops)
-      .reduce((sum, op) => sum + (op.do === "delete" ? op.pages.length : 0), 0),
+    taken: ops.reduce(
+      (sum, op) => sum + (op.do === "delete" ? op.pages.length : 0),
+      0
+    ),
+    /** How many pages came from other files. */
+    added: ops.reduce(
+      (sum, op) => sum + (op.do === "insert" ? op.count : 0),
+      0
+    ),
     lost: lostIn(changes),
   }
 }

@@ -58,7 +58,8 @@ import { fontUrls } from "@/lib/pdf-editor/fonts"
 import { changeCount, unsaved } from "@/lib/pdf-editor/history"
 import type { ExportReport } from "@/lib/pdf-editor/mupdf-edit"
 import { formLine, unfilled } from "@/lib/pdf-editor/forms"
-import { checkLines, editedName } from "@/lib/pdf-editor/report"
+import { isInsert } from "@/lib/pdf-editor/pages"
+import { checkLines, editedName, partName } from "@/lib/pdf-editor/report"
 import { PdfClient, type EditState } from "@/lib/pdf-merger/client"
 import type { FileFacts } from "@/lib/pdf-merger/files"
 import { looksLikePdf, megabytes } from "@/lib/pdf-merger/settings"
@@ -130,8 +131,15 @@ async function takeUpDraft(client: PdfClient, id: string, kept: KeptDraft) {
       if (!response.ok) return null
       client.editFont(id, key, await response.arrayBuffer())
     }
-    for (const [name, picture] of kept.pictures)
-      if (!(await client.editPicture(id, name, picture))) return null
+    for (const [name, picture] of kept.pictures) {
+      // Another PDF whose pages were added is kept as it was made ready.
+      if (isInsert(name)) {
+        const taken = await client.editInsert(id, name, picture, {
+          ready: true,
+        })
+        if (!("pages" in taken)) return null
+      } else if (!(await client.editPicture(id, name, picture))) return null
+    }
     return await client.editTakeUp(id, kept.draft.steps, kept.draft.position)
   } catch {
     return null
@@ -632,6 +640,43 @@ function Workspace({
     }
   }
 
+  /**
+   * Save some pages of the file as it stands as a file of their own, with
+   * what is chosen for a download. The file in the editor is as it was.
+   * @returns What was saved, with what the check found amiss, if anything.
+   * @throws With words for the list of pages when nothing could be written.
+   */
+  async function savePart(only: number[]) {
+    const worker = client.current
+    if (!worker) throw new Error("The file could not be written. Try again.")
+    if (problem && !after) throw new Error(problem)
+    await editor.settled()
+    const job = worker.editExport(doc.id, {
+      keepEditable,
+      comments: commentsHow,
+      fields: fieldsHow,
+      after: false,
+      lock: after ? null : lockOf(extras, () => crypto.randomUUID()),
+      only,
+    })
+    const made = await job.promise
+    if (!made) return null
+    const blob = new Blob([made.bytes], { type: "application/pdf" })
+    const href = URL.createObjectURL(blob)
+    const saved = partName(name, only)
+    const link = document.createElement("a")
+    link.href = href
+    link.download = saved
+    link.click()
+    // The browser has the file by then; the address is let go of.
+    setTimeout(() => URL.revokeObjectURL(href), 60_000)
+    return {
+      name: saved,
+      size: blob.size,
+      warning: checkLines(made.report).find((line) => !line.good)?.text ?? "",
+    }
+  }
+
   const onKey = (event: {
     target: EventTarget | null
     key: string
@@ -784,6 +829,7 @@ function Workspace({
         file={doc.id}
         name={name}
         onGo={goToPage}
+        onSavePart={savePart}
       />
     ) : undefined,
     actions: (

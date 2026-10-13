@@ -12,6 +12,8 @@ import {
   IconArrowLeft,
   IconArrowRight,
   IconCopy,
+  IconFileExport,
+  IconFileImport,
   IconFilePlus,
   IconRotate,
   IconRotateClockwise,
@@ -20,8 +22,10 @@ import {
   IconX,
 } from "@tabler/icons-react"
 import { Button } from "@/components/ui/button"
+import { useDeviceLimits } from "@/components/pdf/use-device-limits"
 import { PageThumb } from "@/components/pdf-reader/reader-sidebar"
 import type { ReaderSource } from "@/components/pdf-reader/types"
+import { sizeLabel } from "@/lib/image-compressor/formats"
 import { pagesNamed } from "@/lib/pdf-editor/pages"
 import { cn } from "cn"
 import type { Editor } from "./use-editor"
@@ -51,6 +55,7 @@ export function PagesPanel({
   file,
   name,
   onGo,
+  onSavePart,
 }: {
   editor: Editor
   pages: Pages
@@ -60,6 +65,10 @@ export function PagesPanel({
   name: string
   /** Show a page in the reader. */
   onGo: (page: number) => void
+  /** Save some pages as a file of their own; what was saved, or null when it was called off. */
+  onSavePart: (
+    pages: number[]
+  ) => Promise<{ name: string; size: number; warning: string } | null>
 }) {
   const ids = useId()
   const scroller = useRef<HTMLDivElement>(null)
@@ -71,6 +80,16 @@ export function PagesPanel({
   /** The keyboard is to be on the page it stands on, once that page is drawn. */
   const wanted = useRef(false)
   const [place, setPlace] = useState("")
+  /** What came of saving pages or adding a file, said under the buttons. */
+  const [said, setSaid] = useState<{ text: string; bad: boolean } | null>(null)
+  const [saving, setSaving] = useState(false)
+  /** Another file that wants its password before its pages can be added. */
+  const [locked, setLocked] = useState<{ file: File; wrong: boolean } | null>(
+    null
+  )
+  const [password, setPassword] = useState("")
+  const picker = useRef<HTMLInputElement>(null)
+  const limits = useDeviceLimits()
   const { count, chosen, cursor } = pages
   const columns = Math.max(1, Math.floor(view.width / TILE))
   const wide = view.width / columns
@@ -284,8 +303,55 @@ export function PagesPanel({
     )
   }
 
+  /** Add the pages of another PDF after the last chosen page, or at the end. */
+  const addFrom = async (chosenFile: File, with_?: string) => {
+    setSaid(null)
+    if (chosenFile.size > limits.fileBytes) {
+      setLocked(null)
+      setSaid({
+        text: `${chosenFile.name} is larger than ${sizeLabel(limits.fileBytes)}, the most this device can take.`,
+        bad: true,
+      })
+      return
+    }
+    const how = await pages.addFrom(chosenFile, with_)
+    if (how === "locked" || how === "wrong") {
+      setLocked({ file: chosenFile, wrong: how === "wrong" })
+      return
+    }
+    setLocked(null)
+    setPassword("")
+    if (how === "done")
+      setSaid({
+        text: `The pages of ${chosenFile.name} were added.`,
+        bad: false,
+      })
+  }
+  const savePart = async () => {
+    setSaid(null)
+    setSaving(true)
+    try {
+      const saved = await onSavePart(chosen)
+      if (saved)
+        setSaid({
+          text: `Saved ${pagesNamed(chosen)} as ${saved.name} (${sizeLabel(saved.size)}).${saved.warning ? ` ${saved.warning}` : ""}`,
+          bad: Boolean(saved.warning),
+        })
+    } catch (error) {
+      setSaid({
+        text:
+          (error as Error).message ||
+          "The file could not be written. Try again.",
+        bad: true,
+      })
+    } finally {
+      setSaving(false)
+    }
+  }
+
   const act =
     "shrink-0 text-muted-foreground hover:text-foreground disabled:opacity-40"
+  const more = "h-11 shrink-0 gap-1.5 px-2.5 md:h-9"
   const none = chosen.length === 0
   const toPlace = () => {
     const number = Number(place)
@@ -312,7 +378,8 @@ export function PagesPanel({
       }}
       className="absolute inset-x-0 bottom-0 z-10 flex h-[70%] flex-col border-t bg-popover shadow-lg md:static md:h-auto md:w-80 md:shrink-0 md:border-t-0 md:border-l md:shadow-none"
     >
-      <div className="space-y-2 border-b p-2">
+      {/* On a small screen the buttons may not take the room of the pages: they scroll by themselves. */}
+      <div className="max-h-[60%] shrink-0 space-y-2 overflow-y-auto border-b p-2 md:max-h-none md:overflow-visible">
         <div className="flex items-center justify-between gap-2">
           <h2
             id={`${ids}-title`}
@@ -418,16 +485,13 @@ export function PagesPanel({
             type="button"
             variant="ghost"
             size="icon"
-            aria-label="Add a blank page"
-            title={
-              none
-                ? "Add a blank page at the end"
-                : "Add a blank page after the last chosen page"
-            }
-            onClick={() => void pages.addBlank()}
+            aria-label="Save as a file"
+            title="Save the chosen pages as a file of their own"
+            disabled={none || saving}
+            onClick={() => void savePart()}
             className={act}
           >
-            <IconFilePlus aria-hidden="true" />
+            <IconFileExport aria-hidden="true" />
           </Button>
           <Button
             type="button"
@@ -441,7 +505,104 @@ export function PagesPanel({
             <IconSelectAll aria-hidden="true" />
           </Button>
         </div>
-        {!none && count > 1 && (
+        <div
+          role="group"
+          aria-label="Add pages"
+          className="flex items-center gap-1 overflow-x-auto"
+        >
+          <Button
+            type="button"
+            variant="outline"
+            title={
+              none
+                ? "Add a blank page at the end"
+                : "Add a blank page after the last chosen page"
+            }
+            onClick={() => void pages.addBlank()}
+            className={more}
+          >
+            <IconFilePlus aria-hidden="true" /> Blank page
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            title={
+              none
+                ? "Add the pages of another PDF at the end"
+                : "Add the pages of another PDF after the last chosen page"
+            }
+            onClick={() => picker.current?.click()}
+            className={more}
+          >
+            <IconFileImport aria-hidden="true" /> Pages from a PDF
+          </Button>
+          <input
+            ref={picker}
+            id={`${ids}-file`}
+            type="file"
+            accept="application/pdf,.pdf"
+            aria-label="A PDF whose pages are added"
+            className="sr-only"
+            tabIndex={-1}
+            onChange={(event) => {
+              const [chosenFile] = event.target.files ?? []
+              event.target.value = ""
+              if (chosenFile) void addFrom(chosenFile)
+            }}
+          />
+        </div>
+        {locked && (
+          <form
+            className="space-y-1.5 rounded-md border p-2 text-xs"
+            data-testid="pages-locked"
+            onSubmit={(event) => {
+              event.preventDefault()
+              if (password) void addFrom(locked.file, password)
+            }}
+          >
+            <label htmlFor={`${ids}-password`} className="block">
+              {locked.file.name} is locked. Type its password to add its pages;
+              it is used on this device only.
+            </label>
+            <div className="flex items-center gap-2">
+              <input
+                id={`${ids}-password`}
+                type="password"
+                autoComplete="off"
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                aria-invalid={locked.wrong || undefined}
+                aria-describedby={locked.wrong ? `${ids}-wrong` : undefined}
+                className="h-11 min-w-0 flex-1 rounded-md border bg-background px-2 text-base text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring md:h-9 md:text-sm"
+              />
+              <Button
+                type="submit"
+                variant="outline"
+                className="h-11 md:h-9"
+                disabled={!password}
+              >
+                Add
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                className="h-11 md:h-9"
+                onClick={() => {
+                  setLocked(null)
+                  setPassword("")
+                }}
+              >
+                Cancel
+              </Button>
+            </div>
+            {locked.wrong && (
+              <p id={`${ids}-wrong`} role="alert" className="text-destructive">
+                That is not its password.
+              </p>
+            )}
+          </form>
+        )}
+        {!none && count > 1 && !locked && (
           <form
             className="flex items-center gap-2 px-1 text-xs text-muted-foreground"
             onSubmit={(event) => {
@@ -471,6 +632,18 @@ export function PagesPanel({
               Move
             </Button>
           </form>
+        )}
+        {said && (
+          <p
+            role={said.bad ? "alert" : "status"}
+            data-testid="pages-said"
+            className={cn(
+              "px-1 text-xs break-words",
+              said.bad ? "text-destructive" : "text-muted-foreground"
+            )}
+          >
+            {said.text}
+          </p>
         )}
         <p
           role="status"

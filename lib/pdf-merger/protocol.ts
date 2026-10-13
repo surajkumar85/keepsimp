@@ -214,6 +214,20 @@ export type PdfRequest =
   | { type: "edit-page-links"; id: string; request: number; page: number }
   /** Add, change or take away links of a page, as one step. */
   | { type: "edit-page-link"; id: string; request: number; change: LinkChange }
+  /**
+   * Hand over another PDF whose pages are to be added, under a name. It is
+   * made ready first, unless it is one that was made ready before and kept
+   * with a draft.
+   */
+  | {
+      type: "edit-insert"
+      id: string
+      request: number
+      name: string
+      file: Blob
+      password?: string
+      ready?: boolean
+    }
   /** Move, take out, copy, turn or add pages, as one step. */
   | { type: "edit-pages"; id: string; request: number; change: PagesChange }
   /** Change pictures a page already has, as one step. */
@@ -251,6 +265,8 @@ export type PdfRequest =
        */
       after: boolean
       lock: Lock | null
+      /** Only these pages, counted from 0, as a file of their own. */
+      only?: number[]
     }
   /** One end of a line to a helper that runs the picture codecs on a core of its own. */
   | { type: "helper"; port: MessagePort }
@@ -403,6 +419,21 @@ export type PdfResponse =
       request: number
       found: Found[] | null
       more: boolean
+    }
+  /**
+   * `pages` is how many pages the file has; null when it could not be
+   * taken, and then `locked` says that it wants a password (`wrong` that
+   * the one given is not it) or `message` says why. `bytes` is the file as
+   * it was made ready, for a draft to keep.
+   */
+  | {
+      type: "edit-insert"
+      request: number
+      pages: number | null
+      bytes?: ArrayBuffer
+      locked?: boolean
+      wrong?: boolean
+      message?: string
     }
   /** `news` is null when the change could not be made; `message` then says why. */
   | {

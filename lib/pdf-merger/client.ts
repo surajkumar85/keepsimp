@@ -28,6 +28,16 @@ import type {
 } from "./protocol"
 
 /** Where a file being edited stands when it is opened. */
+/**
+ * What came of handing over another PDF: how many pages it has, with the
+ * file as it was made ready (for a draft to keep); that it wants a
+ * password; or why it could not be taken.
+ */
+export type Inserted =
+  | { pages: number; bytes?: ArrayBuffer }
+  | { locked: true; wrong: boolean }
+  | { failed: string }
+
 export type EditState = NonNullable<
   Extract<PdfResponse, { type: "edit-state" }>["state"]
 >
@@ -155,6 +165,7 @@ export class PdfClient {
     (state: EditState | null) => void
   >()
   private readonly editPictures = new Map<number, (size: Size | null) => void>()
+  private readonly editInserts = new Map<number, (taken: Inserted) => void>()
   private readonly editLines = new Map<
     number,
     (lines: PageLine[] | null) => void
@@ -253,6 +264,15 @@ export class PdfClient {
     } else if (message.type === "edit-draft") {
       this.editDrafts.get(message.request)?.(message.draft)
       this.editDrafts.delete(message.request)
+    } else if (message.type === "edit-insert") {
+      this.editInserts.get(message.request)?.(
+        message.pages !== null
+          ? { pages: message.pages, bytes: message.bytes }
+          : message.locked
+            ? { locked: true, wrong: Boolean(message.wrong) }
+            : { failed: message.message ?? "That file could not be read." }
+      )
+      this.editInserts.delete(message.request)
     } else if (message.type === "edit-picture") {
       this.editPictures.get(message.request)?.(message.size)
       this.editPictures.delete(message.request)
@@ -416,6 +436,9 @@ export class PdfClient {
     this.editStates.clear()
     for (const done of this.editPictures.values()) done(null)
     this.editPictures.clear()
+    for (const done of this.editInserts.values())
+      done({ failed: "That file could not be read." })
+    this.editInserts.clear()
     for (const done of this.editLines.values()) done(null)
     this.editLines.clear()
     for (const done of this.pagePicturesAsked.values()) done(null)
@@ -492,6 +515,23 @@ export class PdfClient {
       const request = ++this.requests
       this.editPictures.set(request, resolve)
       this.send({ type: "edit-picture", id, request, name, file })
+    })
+  }
+
+  /**
+   * Hand the worker another PDF whose pages are to be added, under a name.
+   * @param how Its password, when it has one; `ready` for a file that was made ready before and kept with a draft.
+   */
+  editInsert(
+    id: string,
+    name: string,
+    file: Blob,
+    how: { password?: string; ready?: boolean } = {}
+  ) {
+    return new Promise<Inserted>((resolve) => {
+      const request = ++this.requests
+      this.editInserts.set(request, resolve)
+      this.send({ type: "edit-insert", id, request, name, file, ...how })
     })
   }
 
@@ -660,6 +700,8 @@ export class PdfClient {
       fields: "keep" | "flatten"
       after: boolean
       lock: Lock | null
+      /** Only these pages, counted from 0, as a file of their own. */
+      only?: number[]
     }
   ) {
     const job = ++this.jobs

@@ -6,7 +6,7 @@ import { makeFormPdf } from "../tests/pdf-fixtures"
 import { readPictures } from "../tests/pdf-pictures"
 import { danglingRefs, texts } from "../tests/pdf-reader"
 import { makeTextPdf, TEXT } from "../tests/pdf-text"
-import { bytesOf, reader, readerReady, type Upload } from "./pdf"
+import { bytesOf, pdf, reader, readerReady, type Upload } from "./pdf"
 
 const ROUTE = "/dashboard/pdf-editor/"
 
@@ -187,6 +187,59 @@ test("keeps a draft when asked, and takes it up after the page was closed", asyn
   await page.reload()
   await expect(card(page)).toHaveCount(0)
   await expect(keep(page)).toBeChecked()
+})
+
+test("keeps pages that were moved and pages added from another PDF in a draft", async ({
+  page,
+}) => {
+  await page.goto(ROUTE)
+  await keep(page).click()
+  await page
+    .locator("#editor-file")
+    .setInputFiles(await pdf("book.pdf", "bk", { pages: 3 }))
+  await readerReady(page)
+  await pick(page, "Pages").click()
+  const panel = page.getByTestId("editor-pages")
+  // A locked file's pages: the draft keeps them without the password.
+  await panel.getByLabel("A PDF whose pages are added").setInputFiles(
+    await pdf("locked.pdf", "lk", {
+      pages: 2,
+      password: { user: "open sesame" },
+    })
+  )
+  const locked = page.getByTestId("pages-locked")
+  await locked.getByLabel(/locked\.pdf is locked/).fill("open sesame")
+  await locked.getByRole("button", { name: "Add" }).click()
+  await changes(page, 1)
+  await panel.getByRole("option", { name: "Page 5", exact: true }).click()
+  await panel.getByRole("button", { name: "Move one place earlier" }).click()
+  await changes(page, 2)
+  await page.getByRole("button", { name: "Close the editor" }).click()
+  await expect(status(page)).toHaveAttribute("data-status", "kept")
+  const keys = await keptKeys(page)
+  expect(keys.filter((key) => key.startsWith("picture/pdf-"))).toHaveLength(1)
+
+  await page.reload()
+  await expect(card(page)).toContainText("book.pdf · 2 changes, kept just now")
+  await card(page).getByRole("button", { name: "Take it up" }).click()
+  await readerReady(page)
+  await changes(page, 2)
+  await expect(page.getByTestId("editor-undo")).toHaveAttribute(
+    "aria-label",
+    "Undo: Move page 5"
+  )
+  const pending = page.waitForEvent("download")
+  await page.getByTestId("editor-download").click()
+  const bytes = await bytesOf(await pending)
+  await expect(page.getByTestId("editor-check")).toBeVisible()
+  expect(await danglingRefs(bytes)).toEqual([])
+  expect((await texts(bytes)).map((text) => text.split(" ")[0])).toEqual([
+    "bk-P1",
+    "bk-P2",
+    "bk-P3",
+    "lk-P2",
+    "lk-P1",
+  ])
 })
 
 test("takes up a draft in which the page's own words were changed, with the font that stood in", async ({

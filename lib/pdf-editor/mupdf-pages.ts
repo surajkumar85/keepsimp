@@ -10,17 +10,24 @@
  * out goes with it.
  */
 import type * as MuPDF from "mupdf"
+import { open } from "@/lib/pdf-compressor/mupdf-compress"
+import { closePdf, mergePages, openPdf } from "@/lib/pdf-merger/mupdf-engine"
+import { splitPart } from "@/lib/pdf-splitter/mupdf-split"
 import { onTurnedPage } from "./objects"
 import {
   canDo,
+  exportEdited,
   inStep,
   pageSize,
   rewriteThings,
   turnOf,
   type EditSession,
+  type ExportOptions,
+  type ExportReport,
 } from "./mupdf-edit"
 import {
   changedBy,
+  isInsert,
   planOf,
   readPageOp,
   runsAfter,
@@ -520,6 +527,118 @@ function writeRuns(
   root.put("PageLabels", tree)
 }
 
+/** The pages of another file were asked for, and the file has not been handed over. */
+export class InsertMissing extends Error {
+  constructor(readonly file: string) {
+    super("The file whose pages were added is no longer there. Add it again.")
+  }
+}
+
+/**
+ * Make another file ready to have its pages added to the one being
+ * edited. It is written anew by the merging engine as a file of its own:
+ * links by name are given their places, a form's fields are drawn into
+ * their pages (a field would need a place in this file's form, and its
+ * name may be taken), a signature becomes its picture, and bookmarks are
+ * left behind. What comes out is not locked, so it can be kept in a draft
+ * and added again without its password.
+ * @throws PasswordNeeded when the file is locked and the password is missing or wrong.
+ */
+export async function prepareInsert(
+  mupdf: Engine,
+  bytes: Uint8Array,
+  password?: string,
+  checkpoint?: () => Promise<void>
+): Promise<Uint8Array> {
+  const opened = openPdf(mupdf, bytes, password)
+  try {
+    const made = await mergePages(
+      mupdf,
+      new Map([["file", { pdf: opened, name: "" }]]),
+      opened.pages.map((_, index) => ({
+        source: "file",
+        index,
+        rotation: 0 as const,
+      })),
+      {
+        bookmarks: "none",
+        forms: "flatten",
+        labels: "continuous",
+        attachments: false,
+        checkpoint,
+      }
+    )
+    return made.bytes
+  } finally {
+    closePdf(opened)
+  }
+}
+
+/**
+ * Hand the session another file whose pages can then be added, under a
+ * name. The file must have been made ready (`prepareInsert`).
+ * @returns How many pages it has.
+ * @throws When it is not a file that was made ready.
+ */
+export function addInsert(
+  mupdf: Engine,
+  session: EditSession,
+  name: string,
+  prepared: Uint8Array
+) {
+  if (!isInsert(name)) throw new Error("That is not a name for a file.")
+  const source = open(mupdf, prepared)
+  try {
+    const count = source.countPages()
+    if (source.needsPassword() || count < 1)
+      throw new Error("That file cannot be added.")
+    session.inserts.set(name, prepared)
+    return count
+  } finally {
+    source.destroy()
+  }
+}
+
+/**
+ * Some pages of the file as it stands, as a file of their own. The whole
+ * file is written and checked as for a download, and the pages are then
+ * taken out of that by the splitting engine, with the links, bookmarks and
+ * fields that still have somewhere to point.
+ * @param pages The pages, counted from 0, in the order they are to have.
+ */
+export async function exportPart(
+  mupdf: Engine,
+  session: EditSession,
+  pages: readonly number[],
+  options: ExportOptions = {}
+): Promise<{ bytes: Uint8Array; report: ExportReport }> {
+  const count = session.doc.countPages()
+  if (
+    !pages.length ||
+    pages.some((page) => !Number.isInteger(page) || page < 0 || page >= count)
+  )
+    throw new Error("Choose the pages to save.")
+  // A part is no download of the file: what is unsaved stays unsaved.
+  const { saved } = session
+  const { lock, ...rest } = options
+  const whole = await exportEdited(mupdf, session, rest)
+  session.saved = saved
+  const opened = openPdf(mupdf, whole.bytes, session.password)
+  try {
+    const part = await splitPart(mupdf, opened, pages, {
+      attachments: true,
+      lock,
+      checkpoint: options.checkpoint,
+    })
+    return {
+      bytes: part.bytes,
+      report: { ...whole.report, locked: Boolean(lock), part: pages.length },
+    }
+  } finally {
+    closePdf(opened)
+  }
+}
+
 /** Make one change to the list of pages. */
 function change(
   mupdf: Engine,
@@ -547,6 +666,34 @@ function change(
       op.at === doc.countPages() ? -1 : op.at,
       doc.addPage([0, 0, width, height], 0, doc.newDictionary(), "")
     )
+    return none
+  }
+  if (op.do === "insert") {
+    const held = session.inserts.get(op.file)
+    if (!held) throw new InsertMissing(op.file)
+    const source = open(mupdf, held)
+    const map = doc.newGraftMap()
+    try {
+      if (source.countPages() !== op.count)
+        throw new Error("That is not the file that was added.")
+      const pages = Array.from({ length: op.count }, (_, index) =>
+        source.findPage(index)
+      )
+      // Each page is made to stand alone before any is copied: a link from
+      // one to another would else bring the whole of the other file along.
+      for (const page of pages) standAlone(page)
+      for (const page of pages)
+        for (const key of ["Parent", "B", "StructParents"]) page.delete(key)
+      pages.forEach((page, index) =>
+        doc.insertPage(
+          op.at + index === doc.countPages() ? -1 : op.at + index,
+          map.graftObject(page)
+        )
+      )
+    } finally {
+      map.destroy()
+      source.destroy()
+    }
     return none
   }
   if (op.do === "copy") {

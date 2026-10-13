@@ -16,7 +16,6 @@ import {
   runsAfter,
   readPageOp,
   SHEETS,
-  sizesAfter,
   whereNow,
   whyNot,
   type PageOp,
@@ -31,7 +30,9 @@ const said = (plan: Plan | null) =>
         ? `${page.was}${page.by ? ">" : ""}`
         : "copy" in page
           ? `c${page.copy}`
-          : "b"
+          : "from" in page
+            ? `f${page.page}`
+            : "b"
     )
     .join(" ") ?? null
 
@@ -58,6 +59,9 @@ describe("readPageOp", () => {
     expect(
       readPageOp({ do: "blank", at: 2, size: { ...SHEETS.A4, more: 1 } })
     ).toEqual({ do: "blank", at: 2, size: SHEETS.A4 })
+    expect(
+      readPageOp({ do: "insert", at: 1, file: "pdf-k1a", count: 3, more: 1 })
+    ).toEqual({ do: "insert", at: 1, file: "pdf-k1a", count: 3 })
   })
 
   it("refuses what is not a change to pages", () => {
@@ -86,6 +90,12 @@ describe("readPageOp", () => {
       { do: "blank", at: 0, size: { width: 2, height: 100 } },
       { do: "blank", at: 0, size: { width: 100, height: 20_000 } },
       { do: "blank", at: 0, size: { width: "100", height: 100 } },
+      { do: "insert", at: 0, file: "pdf-k1", count: 0 },
+      { do: "insert", at: 0, file: "pdf-k1", count: MOST_PAGES + 1 },
+      { do: "insert", at: 0, file: "k1", count: 2 },
+      { do: "insert", at: 0, file: 7, count: 2 },
+      { do: "insert", at: -1, file: "pdf-k1", count: 2 },
+      { do: "insert", at: 0, file: "pdf-../x", count: 2 },
     ])
       expect(readPageOp(bad)).toBeNull()
   })
@@ -162,6 +172,12 @@ describe("planOf", () => {
     expect(said(planOf(2, { do: "blank", at: 2, size: SHEETS.A4 }))).toBe(
       "0 1 b"
     )
+    expect(
+      said(planOf(2, { do: "insert", at: 1, file: "pdf-a", count: 3 }))
+    ).toBe("0 f0 f1 f2 1")
+    expect(
+      said(planOf(2, { do: "insert", at: 2, file: "pdf-a", count: 1 }))
+    ).toBe("0 1 f0")
   })
 
   it("refuses what the file cannot take, and says why", () => {
@@ -193,6 +209,16 @@ describe("planOf", () => {
         { do: "blank", at: 0, size: SHEETS.A4 },
         "A file can have 20,000 pages at most here.",
       ],
+      [
+        MOST_PAGES - 2,
+        { do: "insert", at: 0, file: "pdf-a", count: 3 },
+        "A file can have 20,000 pages at most here.",
+      ],
+      [
+        3,
+        { do: "insert", at: 4, file: "pdf-a", count: 3 },
+        "That page is not in the file.",
+      ],
     ]
     for (const [count, op, why] of refused) {
       expect(whyNot(count, op)).toBe(why)
@@ -203,16 +229,11 @@ describe("planOf", () => {
     expect(whyNot(3, { do: "move", pages: [0], to: 3 })).toBe("")
     expect(whyNot(3, { do: "blank", at: 3, size: SHEETS.A4 })).toBe("")
     expect(whyNot(3, { do: "turn", pages: [2], by: 180 })).toBe("")
+    expect(whyNot(3, { do: "insert", at: 3, file: "pdf-a", count: 9 })).toBe("")
   })
 })
 
 describe("what follows from a plan", () => {
-  const sizes = [
-    { width: 100, height: 200 },
-    { width: 300, height: 400 },
-    { width: 500, height: 600 },
-  ]
-
   it("names the pages that are not what was at their place", () => {
     expect(changedBy(5, planOf(5, { do: "move", pages: [3], to: 1 })!)).toEqual(
       [1, 2, 3]
@@ -229,33 +250,6 @@ describe("what follows from a plan", () => {
     expect(
       changedBy(3, planOf(3, { do: "blank", at: 3, size: SHEETS.A4 })!)
     ).toEqual([3])
-  })
-
-  it("gives each page its size, a quarter turn making it as wide as it was high", () => {
-    expect(
-      sizesAfter(sizes, planOf(3, { do: "move", pages: [2], to: 0 })!)
-    ).toEqual([sizes[2], sizes[0], sizes[1]])
-    expect(
-      sizesAfter(sizes, planOf(3, { do: "turn", pages: [0], by: 90 })!)[0]
-    ).toEqual({ width: 200, height: 100 })
-    expect(
-      sizesAfter(sizes, planOf(3, { do: "turn", pages: [0], by: 270 })!)[0]
-    ).toEqual({ width: 200, height: 100 })
-    expect(
-      sizesAfter(sizes, planOf(3, { do: "turn", pages: [0], by: 180 })!)[0]
-    ).toEqual(sizes[0])
-    expect(sizesAfter(sizes, planOf(3, { do: "copy", pages: [1] })!)).toEqual([
-      sizes[0],
-      sizes[1],
-      sizes[1],
-      sizes[2],
-    ])
-    expect(
-      sizesAfter(
-        sizes,
-        planOf(3, { do: "blank", at: 1, size: SHEETS.Letter })!
-      )[1]
-    ).toEqual(SHEETS.Letter)
   })
 
   it("says where each page of before is, and carries what was known of it", () => {
@@ -308,6 +302,12 @@ describe("what follows from a plan", () => {
     expect(
       chosenAfter(planOf(5, { do: "blank", at: 5, size: SHEETS.A4 })!, [1])
     ).toEqual([5])
+    expect(
+      chosenAfter(
+        planOf(5, { do: "insert", at: 1, file: "pdf-a", count: 2 })!,
+        [4]
+      )
+    ).toEqual([1, 2])
   })
 })
 
@@ -340,6 +340,13 @@ describe("runsAfter", () => {
     expect(runs({ do: "move", pages: [0], to: 6 }, [0])).toBe("0@0 1@1")
     // Both pages of the first run to the end: only the second run is left.
     expect(runs({ do: "move", pages: [0, 1], to: 6 }, [0, 1])).toBe("1@0")
+    // Pages of another file join the run they are put into.
+    expect(runs({ do: "insert", at: 0, file: "pdf-a", count: 2 })).toBe(
+      "0@0 1@4"
+    )
+    expect(runs({ do: "insert", at: 6, file: "pdf-a", count: 2 })).toBe(
+      "0@0 1@2"
+    )
     // The page a run began with is moved into the other: the run begins with the next.
     expect(runs({ do: "move", pages: [2], to: 0 }, [2])).toBe("0@0 1@3")
   })
@@ -363,6 +370,12 @@ describe("what a change is called", () => {
     expect(labelOf({ do: "turn", pages: [4], by: 90 })).toBe("Turn page 5")
     expect(labelOf({ do: "blank", at: 0, size: SHEETS.A4 })).toBe(
       "Add a blank page"
+    )
+    expect(labelOf({ do: "insert", at: 0, file: "pdf-a", count: 1 })).toBe(
+      "Add a page from a file"
+    )
+    expect(labelOf({ do: "insert", at: 0, file: "pdf-a", count: 1200 })).toBe(
+      "Add 1,200 pages from a file"
     )
   })
 })

@@ -77,7 +77,7 @@ test("moves pages, takes one out and turns one, and the download is the pages as
   // Nothing is chosen: only what needs no page can be done.
   await expect(act(page, "Delete")).toBeDisabled()
   await expect(act(page, "Turn to the right")).toBeDisabled()
-  await expect(act(page, "Add a blank page")).toBeEnabled()
+  await expect(act(page, "Blank page")).toBeEnabled()
 
   // The fourth page, two places earlier.
   await tile(page, 4).click()
@@ -216,7 +216,7 @@ test("copies pages, adds a blank one, moves pages to a place by number and by dr
   // The copies are the chosen ones now.
   await expect(status(page)).toHaveText("Chosen: pages 4 to 5 of 7.")
   // A blank page after them, as large as the page before it.
-  await act(page, "Add a blank page").click()
+  await act(page, "Blank page").click()
   await changes(page, 2)
   await expect(undo(page)).toHaveAttribute(
     "aria-label",
@@ -282,6 +282,91 @@ test("copies pages, adds a blank one, moves pages to a place by number and by dr
   ])
   // A form's field stays on the page it is on, and is not copied.
   expect(got.read.fields).toEqual(["second"])
+})
+
+test("adds the pages of another PDF, also of a locked one, and saves chosen pages as a file of their own", async ({
+  page,
+}) => {
+  await open(page)
+  await pick(page, "Pages").click()
+  const other = panel(page).getByLabel("A PDF whose pages are added")
+  const said = page.getByTestId("pages-said")
+  // With nothing chosen, the pages go to the end.
+  await other.setInputFiles(await pdf("other.pdf", "ot", { pages: 2 }))
+  await changes(page, 1)
+  await expect(undo(page)).toHaveAttribute(
+    "aria-label",
+    "Undo: Add 2 pages from a file"
+  )
+  await expect(page.getByTestId("pages-count")).toHaveText("7")
+  await expect(said).toHaveText("The pages of other.pdf were added.")
+
+  // A locked file wants its password, and says so when it is not the one.
+  await tile(page, 1).click()
+  await other.setInputFiles(
+    await pdf("locked.pdf", "lk", {
+      pages: 1,
+      password: { user: "open sesame" },
+    })
+  )
+  const locked = page.getByTestId("pages-locked")
+  await expect(locked).toContainText("locked.pdf is locked.")
+  await changes(page, 1)
+  await locked.getByLabel(/locked\.pdf is locked/).fill("not it")
+  await locked.getByRole("button", { name: "Add" }).click()
+  await expect(locked.getByRole("alert")).toHaveText(
+    "That is not its password."
+  )
+  await changes(page, 1)
+  await locked.getByLabel(/locked\.pdf is locked/).fill("open sesame")
+  await page.keyboard.press("Enter")
+  await changes(page, 2)
+  await expect(locked).toHaveCount(0)
+  await expect(page.getByTestId("pages-count")).toHaveText("8")
+  // What is no PDF is refused, and nothing changes.
+  await other.setInputFiles({
+    name: "notes.pdf",
+    mimeType: "application/pdf",
+    buffer: Buffer.from("these are notes, not a PDF"),
+  })
+  await expect(reader(page).getByRole("alert").first()).toBeVisible()
+  await changes(page, 2)
+
+  // The locked file's page and the two after it, as a file of their own.
+  await tile(page, 2).click()
+  await tile(page, 4).click({ modifiers: ["Shift"] })
+  const pending = page.waitForEvent("download")
+  await act(page, "Save as a file").click()
+  const got = await pending
+  expect(got.suggestedFilename()).toBe("book-pages-2-to-4.pdf")
+  const part = await readPdf(await bytesOf(got))
+  expect(part.pages.map((one) => one.text.split(" ")[0])).toEqual([
+    "lk-P1",
+    "bk-P2",
+    "bk-P3",
+  ])
+  expect(part.encrypted).toBe(false)
+  await expect(said).toContainText(
+    "Saved pages 2 to 4 as book-pages-2-to-4.pdf"
+  )
+  // That was no download of the file: its changes are still to be downloaded.
+  await changes(page, 2)
+
+  const whole = await saved(page, page.getByTestId("editor-download"))
+  expect(whole.texts).toEqual([
+    "bk-P1",
+    "lk-P1",
+    "bk-P2",
+    "bk-P3",
+    "bk-P4",
+    "bk-P5",
+    "ot-P1",
+    "ot-P2",
+  ])
+  expect(whole.read.encrypted).toBe(false)
+  await expect(page.getByTestId("editor-check")).toContainText(
+    "3 pages came from another file, as they look: a form's fields on them are part of the page now, and that file's bookmarks were not brought along."
+  )
 })
 
 test("keeps what was added to a page with it when the page is moved and turned, and other tools let go", async ({

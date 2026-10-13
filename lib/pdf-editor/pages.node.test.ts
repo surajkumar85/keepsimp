@@ -23,7 +23,8 @@ import {
   taggedLine,
 } from "@/tests/pdf-tagged"
 import { makeTextPdf, TEXT } from "@/tests/pdf-text"
-import { readDraft } from "./draft"
+import { PasswordNeeded } from "@/lib/pdf-merger/mupdf-engine"
+import { picturesOf, readDraft } from "./draft"
 import { fontUrls } from "./fonts"
 import {
   addFont,
@@ -39,7 +40,13 @@ import {
   takeUp,
   type EditSession,
 } from "./mupdf-edit"
-import { applyPages } from "./mupdf-pages"
+import {
+  addInsert,
+  applyPages,
+  exportPart,
+  InsertMissing,
+  prepareInsert,
+} from "./mupdf-pages"
 import { applyText, linesOn } from "./mupdf-text"
 import { BLACK, type ShapeObject } from "./objects"
 import { labelOf, planOf, SHEETS, type PageOp, type PagesChange } from "./pages"
@@ -179,6 +186,7 @@ describe("pages put in another order", () => {
     expect(report.pages).toEqual({
       steps: 2,
       taken: 0,
+      added: 0,
       lost: { links: 0, bookmarks: 0, fields: 0 },
     })
     stopEditing(session)
@@ -260,6 +268,7 @@ describe("pages taken out", () => {
     expect(report.pages).toEqual({
       steps: 1,
       taken: 1,
+      added: 0,
       lost: { links: 2, bookmarks: 2, fields: 1 },
     })
     expect(report.untouched).toEqual({ checked: 5, differ: [] })
@@ -574,6 +583,231 @@ describe("the numbers a file gives its own pages", () => {
       { do: "blank", at: 0, size: SHEETS.A4 },
     ] as PageOp[])
       expect((await labels(0, op)).labels).toBeNull()
+  })
+})
+
+describe("pages of another file", () => {
+  /** Three pages with a link from the first to the third, a field on the second and a bookmark. */
+  const other = (password?: string) =>
+    makePdf("ot", {
+      pages: 3,
+      links: [{ from: 1, to: 3, how: "name" }],
+      fields: [{ name: "second", value: "filled in", page: 2 }],
+      bookmarks: [{ title: "Other", page: 2 }],
+      ...(password ? { password: { user: password } } : null),
+    })
+
+  it("are added as they look, with their links, and nothing of this file is changed", async () => {
+    const bytes = await book()
+    const before = await readPdf(bytes)
+    const session = editing(bytes)
+    const ready = await prepareInsert(mupdf, await other())
+    expect(addInsert(mupdf, session, "pdf-a", ready)).toBe(3)
+    expect(
+      change(session, { do: "insert", at: 2, file: "pdf-a", count: 3 }).pages
+    ).toEqual([2, 3, 4, 5, 6, 7, 8])
+    expect(historyOf(session).steps).toEqual(["Add 3 pages from a file"])
+    const { got, texts, links, bytes: out, report } = await read(session)
+    expect(texts).toEqual([
+      "pg-P1",
+      "pg-P2",
+      "ot-P1",
+      "ot-P2",
+      "ot-P3",
+      "pg-P3",
+      "pg-P4",
+      "pg-P5",
+      "pg-P6",
+    ])
+    // The other file's link leads to its own third page, where that is now.
+    expect(links[2]).toEqual([5])
+    // This file's links and bookmarks follow their pages past the new ones.
+    expect(links[0]).toEqual([7])
+    expect(got.bookmarks).toEqual([
+      { title: "One", to: 1, items: [] },
+      {
+        title: "Three",
+        to: 6,
+        items: [
+          { title: "Four", to: 7, items: [] },
+          { title: "Three again", to: 6, items: [] },
+        ],
+      },
+      { title: "Third", to: 6, items: [] },
+      { title: "Six", to: 9, items: [] },
+    ])
+    // The other file's field is part of its page: this file's form is as it was.
+    expect(got.fields).toEqual(before.fields)
+    expect(got.pages[3].fields).toEqual([])
+    expect(got.pages[3].text).toContain("filled in")
+    expect(await catalogue(out)).toEqual(await catalogue(bytes))
+    // The new pages join the run of numbers of the page they are put after: i to v, then 1 to 4.
+    expect(got.labels).toEqual([
+      "i",
+      "ii",
+      "iii",
+      "iv",
+      "v",
+      "1",
+      "2",
+      "3",
+      "4",
+    ])
+    expect(report.pages).toEqual({
+      steps: 1,
+      taken: 0,
+      added: 3,
+      lost: { links: 0, bookmarks: 0, fields: 0 },
+    })
+    expect(report.untouched).toEqual({ checked: 6, differ: [] })
+
+    // Undone and made again, and added a second time at the end.
+    stepBack(session)
+    expect((await read(session)).texts).toHaveLength(6)
+    stepForward(session)
+    change(session, { do: "insert", at: 9, file: "pdf-a", count: 3 })
+    const twice = await read(session)
+    expect(twice.texts.slice(9)).toEqual(["ot-P1", "ot-P2", "ot-P3"])
+    expect(twice.links[9]).toEqual([12])
+    expect(twice.links[2]).toEqual([5])
+    stopEditing(session)
+  })
+
+  it("need the file's password once, and are kept without it", async () => {
+    const locked = await other("open sesame")
+    await expect(prepareInsert(mupdf, locked)).rejects.toBeInstanceOf(
+      PasswordNeeded
+    )
+    await expect(prepareInsert(mupdf, locked, "wrong")).rejects.toBeInstanceOf(
+      PasswordNeeded
+    )
+    const ready = await prepareInsert(mupdf, locked, "open sesame")
+    const session = editing(await makePdf("mn", { pages: 1 }))
+    expect(addInsert(mupdf, session, "pdf-b", ready)).toBe(3)
+    change(session, { do: "insert", at: 0, file: "pdf-b", count: 3 })
+    const { got, texts } = await read(session)
+    expect(texts).toEqual(["ot-P1", "ot-P2", "ot-P3", "mn-P1"])
+    // The result is not locked: the other file's lock is not this file's.
+    expect(got.encrypted).toBe(false)
+    stopEditing(session)
+  })
+
+  it("are refused when the file was not handed over, or is not the one that was", async () => {
+    const session = editing(await makePdf("mn", { pages: 2 }))
+    expect(() =>
+      change(session, { do: "insert", at: 0, file: "pdf-c", count: 3 })
+    ).toThrow(InsertMissing)
+    const ready = await prepareInsert(mupdf, await other())
+    expect(() => addInsert(mupdf, session, "picture", ready)).toThrow(
+      "That is not a name for a file."
+    )
+    addInsert(mupdf, session, "pdf-c", ready)
+    expect(() =>
+      change(session, { do: "insert", at: 0, file: "pdf-c", count: 2 })
+    ).toThrow("That is not the file that was added.")
+    // A locked file is no file that was made ready.
+    expect(() =>
+      addInsert(mupdf, session, "pdf-d", new Uint8Array(4))
+    ).toThrow()
+    expect(historyOf(session).steps).toEqual([])
+    expect((await read(session)).texts).toEqual(["mn-P1", "mn-P2"])
+    stopEditing(session)
+  })
+
+  it("are kept with a draft and taken up with it", async () => {
+    const main = await makePdf("mn", { pages: 2 })
+    const session = editing(main)
+    const ready = await prepareInsert(mupdf, await other())
+    addInsert(mupdf, session, "pdf-e", ready)
+    change(session, { do: "insert", at: 1, file: "pdf-e", count: 3 })
+    change(session, { do: "delete", pages: [2] })
+    const kept = readDraft(
+      JSON.parse(
+        JSON.stringify({
+          name: "main.pdf",
+          size: 1000,
+          when: 1,
+          steps: session.steps,
+          position: session.position,
+        })
+      )
+    )!
+    // The draft names the file among what it has to keep.
+    expect(picturesOf(kept.steps)).toEqual(["pdf-e"])
+    const without = editing(main)
+    expect(() => takeUp(without, kept.steps, kept.position)).toThrow(
+      InsertMissing
+    )
+    expect(historyOf(without).steps).toEqual([])
+    addInsert(mupdf, without, "pdf-e", ready)
+    takeUp(without, kept.steps, kept.position)
+    expect((await read(without)).texts).toEqual([
+      "mn-P1",
+      "ot-P1",
+      "ot-P3",
+      "mn-P2",
+    ])
+    stopEditing(session)
+    stopEditing(without)
+  })
+})
+
+describe("some pages as a file of their own", () => {
+  it("are written with what still has somewhere to lead, and the file in the editor is as it was", async () => {
+    const session = editing(await book())
+    change(session, { do: "turn", pages: [3], by: 90 })
+    expect(session.saved).toBeNull()
+    const { bytes, report } = await exportPart(mupdf, session, [0, 3, 5])
+    expect(await danglingRefs(bytes)).toEqual([])
+    const got = await readPdf(bytes)
+    expect(got.pages.map((page) => page.text.split(" ")[0])).toEqual([
+      "pg-P1",
+      "pg-P4",
+      "pg-P6",
+    ])
+    expect(got.pages[1].rotate).toBe(90)
+    // The first page's link to the fourth leads to it where it is now; the last page's link to the first as well.
+    expect(got.pages.map((page) => page.links)).toEqual([[2], [], [1]])
+    // A heading whose own page is not in the part leads to the first page beneath it that is.
+    expect(got.bookmarks).toEqual([
+      { title: "One", to: 1, items: [] },
+      { title: "Three", to: 2, items: [{ title: "Four", to: 2, items: [] }] },
+      { title: "Six", to: 3, items: [] },
+    ])
+    expect(got.fields).toEqual([])
+    expect(got.attachments).toEqual(["a.txt"])
+    expect(report.part).toBe(3)
+    // It was no download of the file: what is unsaved stays unsaved.
+    expect(session.saved).toBeNull()
+    expect(session.doc.countPages()).toBe(6)
+
+    // Locked, when that is asked for; in the order that is asked for.
+    const locked = await exportPart(mupdf, session, [2, 1], {
+      lock: { password: "part", ownerPassword: "owner", permissions: -1 },
+    })
+    expect(locked.report.locked).toBe(true)
+    await expect(readPdf(locked.bytes)).rejects.toThrow()
+    const opened = await readPdf(locked.bytes, "part")
+    expect(opened.pages.map((page) => page.text.split(" ")[0])).toEqual([
+      "pg-P3",
+      "pg-P2",
+    ])
+    expect(opened.fields).toEqual(["second", "third"])
+    stopEditing(session)
+  })
+
+  it("are refused when none is chosen, or one that is not there", async () => {
+    const session = editing(await makePdf("mn", { pages: 2 }))
+    await expect(exportPart(mupdf, session, [])).rejects.toThrow(
+      "Choose the pages to save."
+    )
+    await expect(exportPart(mupdf, session, [2])).rejects.toThrow(
+      "Choose the pages to save."
+    )
+    await expect(exportPart(mupdf, session, [0.5])).rejects.toThrow(
+      "Choose the pages to save."
+    )
+    stopEditing(session)
   })
 })
 

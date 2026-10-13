@@ -23,6 +23,8 @@ export type PageOp =
   /** An empty page before the page that is now at `at`. */
   | { do: "blank"; at: number; size: Size }
   | { do: "turn"; pages: number[]; by: Turn }
+  /** Every page of another file that was handed over, before the page that is now at `at`. `count` is how many pages it has. */
+  | { do: "insert"; at: number; file: string; count: number }
 
 /** What links, bookmarks and fields went with pages that were taken out. */
 export interface Lost {
@@ -45,6 +47,8 @@ export type Source =
   /** A copy of the page that was at `copy`. */
   | { copy: number }
   | { blank: Size }
+  /** A page of another file, by the name the file was handed over under. */
+  | { from: string; page: number }
 
 /** The list of pages after a change: for each, where it comes from. */
 export type Plan = Source[]
@@ -60,6 +64,9 @@ export const SHEETS = {
   A4: { width: 595.28, height: 841.89 },
   Letter: { width: 612, height: 792 },
 } as const
+
+/** The names other files go by whose pages are added: told apart from the names of pictures. */
+export const isInsert = (name: string) => /^pdf-[a-z0-9]{1,40}$/.test(name)
 
 const isCount = (value: unknown): value is number =>
   Number.isInteger(value) && (value as number) >= 0
@@ -91,6 +98,12 @@ export function readPageOp(value: unknown): PageOp | null {
       size: { width: size.width, height: size.height },
     }
   }
+  if (op.do === "insert") {
+    if (!isCount(op.at) || typeof op.file !== "string" || !isInsert(op.file))
+      return null
+    if (!isCount(op.count) || op.count < 1 || op.count > MOST_PAGES) return null
+    return { do: "insert", at: op.at, file: op.file, count: op.count }
+  }
   const pages = readPages(op.pages)
   if (!pages) return null
   if (op.do === "move")
@@ -119,15 +132,15 @@ export function readLost(value: unknown, ops: number): Lost[] | undefined {
 
 /** Why a change cannot be made to a file with so many pages; "" when it can. */
 export function whyNot(count: number, op: PageOp): string {
-  const pages = op.do === "blank" ? [] : op.pages
-  if (pages.some((page) => page >= count))
-    return "That page is not in the file."
-  if (op.do === "blank")
+  if (op.do === "blank" || op.do === "insert")
     return op.at > count
       ? "That page is not in the file."
-      : count + 1 > MOST_PAGES
+      : count + (op.do === "blank" ? 1 : op.count) > MOST_PAGES
         ? tooMany
         : ""
+  const { pages } = op
+  if (pages.some((page) => page >= count))
+    return "That page is not in the file."
   if (op.do === "move")
     return op.to > count ? "That page is not in the file." : ""
   if (op.do === "delete")
@@ -149,6 +162,15 @@ export function planOf(count: number, op: PageOp): Plan | null {
   const all = Array.from({ length: count }, (_, was): Source => ({ was }))
   if (op.do === "blank")
     return [...all.slice(0, op.at), { blank: op.size }, ...all.slice(op.at)]
+  if (op.do === "insert")
+    return [
+      ...all.slice(0, op.at),
+      ...Array.from({ length: op.count }, (_, page): Source => ({
+        from: op.file,
+        page,
+      })),
+      ...all.slice(op.at),
+    ]
   const chosen = new Set(op.pages)
   if (op.do === "turn")
     return all.map((page, at) =>
@@ -185,17 +207,6 @@ export function changedBy(count: number, plan: Plan): number[] {
       changed.push(at)
   }
   return changed
-}
-
-/** Each page's size after a change. A page turned a quarter is as wide as it was high. */
-export function sizesAfter(sizes: readonly Size[], plan: Plan): Size[] {
-  return plan.map((page) => {
-    if ("blank" in page) return page.blank
-    const was = sizes[("was" in page ? page.was : page.copy) as number]
-    return "was" in page && (page.by === 90 || page.by === 270)
-      ? { width: was.height, height: was.width }
-      : was
-  })
 }
 
 /** Where each page of before is after a change, by its old place. Pages that were taken out are not in it. */
@@ -275,6 +286,10 @@ export function pagesNamed(pages: readonly number[]) {
 /** What a change is called in the list of what can be undone. */
 export function labelOf(op: PageOp) {
   if (op.do === "blank") return "Add a blank page"
+  if (op.do === "insert")
+    return op.count === 1
+      ? "Add a page from a file"
+      : `Add ${op.count.toLocaleString("en")} pages from a file`
   const named = pagesNamed(op.pages)
   return {
     move: `Move ${named}`,

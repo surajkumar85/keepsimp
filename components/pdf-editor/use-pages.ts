@@ -91,6 +91,18 @@ export function usePages(editor: Editor, comments: Comments) {
     return change({ do: "blank", at, size: blankSize(sizes, at) })
   }
 
+  /**
+   * Every page of another PDF after the last chosen page, or at the end.
+   * @returns "locked" or "wrong" when its password is wanted; "failed" when it cannot be read; "done".
+   */
+  const addFrom = async (file: Blob, password?: string) => {
+    const at = chosen.length ? chosen[chosen.length - 1] + 1 : count
+    const how = await editor.insertPdf(file, at, password)
+    // The new pages are not known here until the file says how many they are: nothing is chosen.
+    if (how === "done") setPicked([])
+    return how
+  }
+
   /** Why the chosen pages cannot be taken out; "" when they can. */
   const whyNotRemove = chosen.length
     ? whyNot(count, { do: "delete", pages: chosen })
@@ -113,6 +125,7 @@ export function usePages(editor: Editor, comments: Comments) {
     moveToPlace,
     drop,
     addBlank,
+    addFrom,
     canMove: (by: -1 | 1) => nudge(count, chosen, by) !== null,
     whyNotRemove,
   }

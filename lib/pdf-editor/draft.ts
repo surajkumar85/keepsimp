@@ -15,7 +15,7 @@ import { FONT_KEYS, fontsFor, readObject } from "./objects"
 import { isOwn } from "./own-font"
 import { readLinkOp } from "./links"
 import { readPictureOp, type PictureOp } from "./page-pictures"
-import { readLost, readPageOp } from "./pages"
+import { readLost, readPageOp, type PagesChange } from "./pages"
 import { readTextChange, readWrote } from "./paragraphs"
 import type { Op } from "./tools"
 
@@ -167,9 +167,21 @@ export const fontsOf = (steps: readonly Step[]) => [
   ]),
 ]
 
-/** The pictures the steps of a draft place, by name, each once: those that were added, and those put in the place of a picture of the page. */
+/**
+ * The files the steps of a draft need beside the one being edited, by
+ * name, each once: pictures that were added, pictures put in the place of
+ * a picture of the page, and other PDFs whose pages were added (made
+ * ready, see `prepareInsert`; their names tell them apart, `isInsert`).
+ */
 export const picturesOf = (steps: readonly Step[]) => [
   ...new Set([
+    ...steps.flatMap((step) =>
+      step.done.kind === "pages"
+        ? (step.done.change as PagesChange).ops.flatMap((op) =>
+            op.do === "insert" ? [op.file] : []
+          )
+        : []
+    ),
     ...[...thingsIn(steps)].flatMap((thing) =>
       thing.kind === "picture" ? [thing.picture] : []
     ),

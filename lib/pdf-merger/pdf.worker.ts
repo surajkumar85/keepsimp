@@ -52,7 +52,12 @@ import { readDraft } from "@/lib/pdf-editor/draft"
 import { canWriteAfter, exportAfter } from "@/lib/pdf-editor/mupdf-signed"
 import type { PageLink } from "@/lib/pdf-editor/links"
 import { applyLinks, linksOn } from "@/lib/pdf-editor/mupdf-links"
-import { applyPages } from "@/lib/pdf-editor/mupdf-pages"
+import {
+  addInsert,
+  applyPages,
+  exportPart,
+  prepareInsert,
+} from "@/lib/pdf-editor/mupdf-pages"
 import { applyPictures, picturesOn } from "@/lib/pdf-editor/mupdf-pictures"
 import { readQuery, type Found } from "@/lib/pdf-editor/find"
 import {
@@ -930,6 +935,38 @@ async function editPicture(
   post({ type: "edit-picture", request: request.request, size })
 }
 
+/** Another PDF whose pages are to be added: made ready, unless it was before, and kept for the steps that add its pages. */
+async function editInsert(
+  request: Extract<PdfRequest, { type: "edit-insert" }>
+) {
+  const answer = (
+    rest: Omit<
+      Extract<PdfResponse, { type: "edit-insert" }>,
+      "type" | "request"
+    >
+  ) => post({ type: "edit-insert", request: request.request, ...rest })
+  try {
+    const session = editing.get(request.id)
+    if (!session) throw new Error(EDIT_FAILED)
+    const mupdf = await engine
+    const given = new Uint8Array(await request.file.arrayBuffer())
+    const ready = request.ready
+      ? given
+      : await prepareInsert(mupdf, given, request.password)
+    const pages = addInsert(mupdf, session, request.name, ready)
+    // The page keeps a copy for a draft; the session keeps its own.
+    answer({ pages, bytes: request.ready ? undefined : ready.slice().buffer })
+  } catch (error) {
+    if (error instanceof PasswordNeeded)
+      answer({ pages: null, locked: true, wrong: error.wrong })
+    else
+      answer({
+        pages: null,
+        message: readable(error, "That file could not be read as a PDF."),
+      })
+  }
+}
+
 async function editExport(
   request: Extract<PdfRequest, { type: "edit-export" }>
 ) {
@@ -945,15 +982,23 @@ async function editExport(
       paused = performance.now()
       if (job <= cancelled) throw new Cancelled()
     }
-    const result = request.after
-      ? await exportAfter(await engine, session, { checkpoint })
-      : await exportEdited(await engine, session, {
+    const result = request.only
+      ? await exportPart(await engine, session, request.only, {
           keepEditable: request.keepEditable,
           comments: request.comments,
           fields: request.fields,
           lock: request.lock ?? undefined,
           checkpoint,
         })
+      : request.after
+        ? await exportAfter(await engine, session, { checkpoint })
+        : await exportEdited(await engine, session, {
+            keepEditable: request.keepEditable,
+            comments: request.comments,
+            fields: request.fields,
+            lock: request.lock ?? undefined,
+            checkpoint,
+          })
     const out = result.bytes.buffer as ArrayBuffer
     post({ type: "edit-exported", job, bytes: out, report: result.report }, [
       out,
@@ -1248,6 +1293,7 @@ self.onmessage = (event: MessageEvent<PdfRequest>) => {
   else if (request.type === "edit-page-links")
     enqueue({ run: async () => editPageLinks(request) })
   else if (request.type === "edit-pages") void editPages(request)
+  else if (request.type === "edit-insert") void editInsert(request)
   else if (request.type === "edit-page-link")
     enqueue({ run: () => editPageLink(request) })
   else if (request.type === "edit-page-pictures")

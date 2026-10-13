@@ -728,6 +728,42 @@ export function useEditor(
     [flush, enqueue, file]
   )
 
+  /**
+   * Add every page of another PDF before the page at a place. The file is
+   * handed to the worker first, which makes it ready; a locked one wants
+   * its password.
+   * @returns "locked" or "wrong" when a password is wanted; "failed" when the file cannot be read (the bar says why); "done" otherwise.
+   */
+  const insertPdf = useCallback(
+    async (chosen: Blob, at: number, password?: string) => {
+      const worker = client.current
+      if (!worker) return "failed" as const
+      const name = `pdf-${newId()}`
+      setBusy((count) => count + 1)
+      try {
+        const taken = await worker.editInsert(file, name, chosen, {
+          password,
+        })
+        if ("locked" in taken) return taken.wrong ? "wrong" : "locked"
+        if ("failed" in taken) {
+          setProblem(taken.failed)
+          return "failed" as const
+        }
+        // What a draft keeps is the file as it was made ready: it needs no password again.
+        if (taken.bytes)
+          onPicture?.(
+            name,
+            new Blob([taken.bytes], { type: "application/pdf" })
+          )
+        await changePages({ do: "insert", at, file: name, count: taken.pages })
+        return "done" as const
+      } finally {
+        setBusy((count) => count - 1)
+      }
+    },
+    [client, file, onPicture, changePages]
+  )
+
   /** The pictures a page already has, with where they are, read once for each state of the page. */
   const pagePictures = useCallback(
     (page: number, version: number) => {
@@ -1389,6 +1425,7 @@ export function useEditor(
     bookmarks,
     layout,
     changePages,
+    insertPdf,
     objects,
     comments,
     fields,

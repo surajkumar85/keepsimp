@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 import type { ExportReport } from "./mupdf-edit"
-import { checkLines as everyLine, editedName } from "./report"
+import { checkLines as everyLine, editedName, partName } from "./report"
 
 const report = (change: Partial<ExportReport> = {}): ExportReport => ({
   added: 1,
@@ -14,7 +14,12 @@ const report = (change: Partial<ExportReport> = {}): ExportReport => ({
   retext: { steps: 0, lines: 0, found: 0 },
   pictures: { steps: 0, cut: false },
   links: 0,
-  pages: { steps: 0, taken: 0, lost: { links: 0, bookmarks: 0, fields: 0 } },
+  pages: {
+    steps: 0,
+    taken: 0,
+    added: 0,
+    lost: { links: 0, bookmarks: 0, fields: 0 },
+  },
   ...change,
 })
 
@@ -28,6 +33,15 @@ describe("editedName", () => {
   it("has a name for a file without one", () => {
     expect(editedName(".pdf")).toBe("document-edited.pdf")
     expect(editedName("  ")).toBe("document-edited.pdf")
+  })
+})
+
+describe("partName", () => {
+  it("names some pages of a file as a file of their own", () => {
+    expect(partName("Plan 2026.pdf", [2])).toBe("Plan 2026-page-3.pdf")
+    expect(partName("plan.PDF", [1, 2, 3])).toBe("plan-pages-2-to-4.pdf")
+    expect(partName("plan", [0, 4, 9])).toBe("plan-3-pages.pdf")
+    expect(partName(".pdf", [0])).toBe("document-page-1.pdf")
   })
 })
 
@@ -335,9 +349,15 @@ describe("what became of the page's own text", () => {
 
 describe("what became of the pages", () => {
   const none = { links: 0, bookmarks: 0, fields: 0 }
-  const told = (pages: ExportReport["pages"], signed = false) =>
+  const told = (
+    pages: Omit<ExportReport["pages"], "added"> & { added?: number },
+    signed = false
+  ) =>
     checkLines(
-      report({ pages, ...(signed ? { signature: { intact: true } } : null) })
+      report({
+        pages: { added: 0, ...pages },
+        ...(signed ? { signature: { intact: true } } : null),
+      })
     )
       .map((line) => line.text)
       .filter(
@@ -354,7 +374,10 @@ describe("what became of the pages", () => {
     )
     expect(
       everyLine(
-        report({ added: 0, pages: { steps: 1, taken: 0, lost: none } })
+        report({
+          added: 0,
+          pages: { steps: 1, taken: 0, added: 0, lost: none },
+        })
       ).some((line) => line.text.startsWith("Nothing was added"))
     ).toBe(false)
   })
@@ -388,6 +411,22 @@ describe("what became of the pages", () => {
         lost: { links: 0, bookmarks: 2, fields: 1 },
       })[1]
     ).toContain("went too: 2 bookmarks, 1 form field.")
+  })
+
+  it("says how pages from another file come, and that a part is a part", () => {
+    expect(told({ steps: 1, taken: 0, added: 1, lost: none })[1]).toBe(
+      "1 page came from another file, as it looks: a form's fields on it are part of the page now, and that file's bookmarks were not brought along."
+    )
+    expect(told({ steps: 2, taken: 0, added: 1200, lost: none })[1]).toBe(
+      "1,200 pages came from another file, as they look: a form's fields on them are part of the page now, and that file's bookmarks were not brought along."
+    )
+    expect(everyLine(report({ part: 1 }))[0]).toEqual({
+      text: "Only 1 page was written, as a file of its own. The file in the editor is as it was, with everything that is not yet downloaded.",
+      good: true,
+    })
+    expect(everyLine(report({ part: 30 }))[0].text).toBe(
+      "Only 30 pages were written, as a file of their own. The file in the editor is as it was, with everything that is not yet downloaded."
+    )
   })
 
   it("does not say that anything is gone from a file that was only added to", () => {

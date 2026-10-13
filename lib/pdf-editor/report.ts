@@ -3,11 +3,18 @@
  * the check found when the result was read back.
  */
 import type { ExportReport } from "./mupdf-edit"
+import { pagesNamed } from "./pages"
 
 /** The name the result is saved under: the file's own, marked as edited. */
 export function editedName(name: string) {
   const stem = name.replace(/\.pdf$/i, "").trim() || "document"
   return `${stem}-edited.pdf`
+}
+
+/** The name some pages of a file are saved under as a file of their own: "plan-page-3.pdf", "plan-pages-2-to-4.pdf", "plan-3-pages.pdf". */
+export function partName(name: string, pages: readonly number[]) {
+  const stem = name.replace(/\.pdf$/i, "").trim() || "document"
+  return `${stem}-${pagesNamed(pages).replace(/ /g, "-")}.pdf`
 }
 
 /** One thing the check found. `good` is false for what should be looked at before the file is relied on. */
@@ -26,6 +33,12 @@ function pageList(pages: readonly number[], most = 5) {
 /** What the check found, a line for each thing that was looked at. */
 export function checkLines(report: ExportReport): CheckLine[] {
   const lines: CheckLine[] = []
+  // Some pages as a file of their own: that this is not the whole is said first.
+  if (report.part)
+    lines.push({
+      text: `Only ${report.part.toLocaleString("en")} page${report.part === 1 ? " was" : "s were"} written, as a file of ${report.part === 1 ? "its" : "their"} own. The file in the editor is as it was, with everything that is not yet downloaded.`,
+      good: true,
+    })
   // A signed file whose changes were written after it: that is said first.
   if (report.signature)
     lines.push(
@@ -158,6 +171,13 @@ export function checkLines(report: ExportReport): CheckLine[] {
       text: `The pages were put in order, turned, copied, added or taken out in ${count(times, "step")}.`,
       good: true,
     })
+    if (report.pages.added > 0) {
+      const { added } = report.pages
+      lines.push({
+        text: `${count(added, "page")} came from another file, as ${added === 1 ? "it looks" : "they look"}: a form's fields on ${added === 1 ? "it" : "them"} are part of the page now, and that file's bookmarks were not brought along.`,
+        good: true,
+      })
+    }
     if (taken > 0) {
       // What led to a page that is gone, and what was on it, went with it.
       const went = [
