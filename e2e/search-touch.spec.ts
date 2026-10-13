@@ -180,3 +180,37 @@ test("finger swipes scroll search results without changing selection or moving t
   await expect(page).toHaveURL(/\/dashboard\/image-compressor\/$/)
   await expect(dialog).toBeHidden()
 })
+
+// Safari on a phone cannot scroll by touch anything inside an element whose
+// opacity was animated when it appeared: a finger on the search results moved
+// nothing (seen in the iOS simulator; no browser that runs here shows it).
+// So a window grows in and a sheet slides in, and neither fades in.
+test("a window and a sheet appear without fading in, so a phone can scroll inside them", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.emulateMedia({ reducedMotion: "reduce" })
+  await page.goto("/dashboard/")
+  /** How see-through an element is in the state it appears from, with nothing in between. */
+  const startsAt = (which: string) =>
+    page.evaluate((name) => {
+      const element = document.querySelector<HTMLElement>(name)!
+      const before = element.style.transition
+      element.style.transition = "none"
+      element.setAttribute("data-starting-style", "")
+      const opacity = getComputedStyle(element).opacity
+      element.removeAttribute("data-starting-style")
+      element.style.transition = before
+      return opacity
+    }, which)
+  await page.getByTestId("search-button").click()
+  const dialog = page.getByRole("dialog", { name: "Search tools" })
+  await expect(dialog.getByRole("listbox")).toBeVisible()
+  expect(await startsAt('[data-slot="dialog-content"]')).toBe("1")
+  await dialog.getByRole("button", { name: "Close search" }).click()
+  await expect(dialog).toBeHidden()
+  // The list of tools at the side is a sheet on a phone.
+  await page.getByRole("button", { name: "Toggle Sidebar" }).click()
+  await expect(page.locator('[data-mobile="true"]')).toBeVisible()
+  expect(await startsAt('[data-mobile="true"]')).toBe("1")
+})

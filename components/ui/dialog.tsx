@@ -42,6 +42,13 @@ function DialogOverlay({
 /**
  * A window over the page. By default it is a centred card; pass a class to
  * size it, as the PDF reader does to fill the screen.
+ *
+ * It grows in and does not fade in: the backdrop does the fading. Safari on
+ * a phone cannot scroll by touch anything inside an element whose opacity
+ * was animated when it appeared (checked in the iOS simulator: with the
+ * fade, a finger on a list in the window moves nothing; without it, it
+ * scrolls). Fading out on closing is harmless, since the window is gone
+ * afterwards.
  */
 function DialogContent({
   className,
@@ -57,7 +64,7 @@ function DialogContent({
       <DialogPrimitive.Popup
         data-slot="dialog-content"
         className={cn(
-          "fixed top-1/2 left-1/2 z-50 flex max-h-[calc(100dvh-2rem)] w-[calc(100vw-2rem)] max-w-lg -translate-x-1/2 -translate-y-1/2 flex-col gap-4 rounded-2xl border bg-popover bg-clip-padding p-4 text-sm text-popover-foreground shadow-lg transition duration-200 ease-in-out outline-none data-ending-style:scale-[0.98] data-ending-style:opacity-0 data-starting-style:scale-[0.98] data-starting-style:opacity-0 motion-reduce:transition-none",
+          "fixed top-1/2 left-1/2 z-50 flex max-h-[calc(100dvh-2rem)] w-[calc(100vw-2rem)] max-w-lg -translate-x-1/2 -translate-y-1/2 flex-col gap-4 rounded-2xl border bg-popover bg-clip-padding p-4 text-sm text-popover-foreground shadow-lg transition duration-200 ease-in-out outline-none data-ending-style:scale-[0.98] data-ending-style:opacity-0 data-starting-style:scale-[0.98] motion-reduce:transition-none",
           className
         )}
         {...props}
