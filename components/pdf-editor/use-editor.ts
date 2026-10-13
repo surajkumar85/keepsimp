@@ -48,6 +48,7 @@ import {
   readFont,
 } from "@/lib/pdf-editor/own-font"
 import type { OwnFile } from "@/lib/pdf-editor/draft-store"
+import type { PagePicture, PictureOp } from "@/lib/pdf-editor/page-pictures"
 import type { Align } from "@/lib/pdf-editor/paragraphs"
 import { standIns, type LineLook, type PageLine } from "@/lib/pdf-editor/retext"
 import { breakLines, combLine } from "@/lib/pdf-editor/text-layout"
@@ -177,6 +178,7 @@ export function useEditor(
   )
   const lettersRead = useRef(new Map<string, Promise<LetterLine[]>>())
   const linesRead = useRef(new Map<string, Promise<PageLine[]>>())
+  const picturesRead = useRef(new Map<string, Promise<PagePicture[]>>())
   /** How many changes are in force this moment, ahead of what has been drawn. */
   const position = useRef((opened.history ?? emptyHistory).position)
   /** What the file last said its pages hold. */
@@ -623,6 +625,80 @@ export function useEditor(
       )
     },
     [ensureFont, flush, enqueue, file]
+  )
+
+  /** The pictures a page already has, with where they are, read once for each state of the page. */
+  const pagePictures = useCallback(
+    (page: number, version: number) => {
+      const key = `${page}/${version}`
+      let reading = picturesRead.current.get(key)
+      if (!reading) {
+        reading = (async () =>
+          (await client.current?.pagePictures(file, page)) ?? [])()
+        picturesRead.current.set(key, reading)
+      }
+      return reading
+    },
+    [client, file]
+  )
+
+  /**
+   * Change a picture a page already has: put it somewhere else, cut it to
+   * a part or show it whole, put another in its place, or take it out. It
+   * is seen when the file has answered.
+   */
+  const changePicture = useCallback(
+    (
+      page: number,
+      picture: PagePicture,
+      what: Pick<PictureOp, "by" | "cut" | "picture" | "remove">,
+      label: string
+    ) => {
+      flush()
+      return enqueue((worker) =>
+        worker.editPagePicture(file, {
+          label,
+          ops: [
+            {
+              do: "picture",
+              page,
+              index: picture.index,
+              at: picture.at,
+              ...what,
+            },
+          ],
+        })
+      )
+    },
+    [flush, enqueue, file]
+  )
+
+  /** Put another picture in the place of one a page already has: it is handed to the worker first, like one that is added. */
+  const replacePicture = useCallback(
+    async (page: number, picture: PagePicture, chosen: Blob) => {
+      const worker = client.current
+      if (!worker) return
+      const name = newId()
+      setBusy((count) => count + 1)
+      try {
+        if (!(await worker.editPicture(file, name, chosen))) {
+          setProblem(
+            "This picture could not be read. PNG, JPEG, WebP and AVIF can be used."
+          )
+          return
+        }
+        onPicture?.(name, chosen)
+        await changePicture(
+          page,
+          picture,
+          { picture: name },
+          "Put another picture in its place"
+        )
+      } finally {
+        setBusy((count) => count - 1)
+      }
+    },
+    [client, file, onPicture, changePicture]
   )
 
   /**
@@ -1219,6 +1295,9 @@ export function useEditor(
     lines,
     retext,
     reflow,
+    pagePictures,
+    changePicture,
+    replacePicture,
     versions,
     history,
     state,

@@ -155,11 +155,14 @@ test("takes a line out, leaves a line as it was, and undoes with the keyboard al
   await expect(field(page)).toHaveCount(0)
   await expect(reader(page)).toBeVisible()
   await changes(page, 0)
+  // The keyboard is back on the line that was being typed.
+  await expect(line(page, TEXT.warning)).toBeFocused()
   // Words that were not changed are no change either.
   await line(page, TEXT.warning).click()
   await page.keyboard.press("Enter")
   await expect(field(page)).toHaveCount(0)
   await changes(page, 0)
+  await expect(line(page, TEXT.warning)).toBeFocused()
 
   // Delete takes a line out; nothing typed in a line does the same.
   await line(page, TEXT.linked).focus()
@@ -334,9 +337,11 @@ test("moves a line by dragging it and with the arrow keys, and retypes one that 
   await line(page, TEXT.total).focus()
   await page.keyboard.press("ArrowDown")
   await changes(page, 2)
-  await line(page, TEXT.total).focus()
+  // The keyboard stays on the line, so that it can be moved by several presses.
+  await expect(line(page, TEXT.total)).toBeFocused()
   await page.keyboard.press("Shift+ArrowRight")
   await changes(page, 3)
+  await expect(line(page, TEXT.total)).toBeFocused()
 
   // A line that runs up the page is typed straight and written turned.
   if (!isMobile) {

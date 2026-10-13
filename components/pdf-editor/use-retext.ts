@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useState } from "react"
+import { useCallback, useRef, useState } from "react"
 import type { Point } from "@/lib/pdf-editor/geometry"
 import type { Align } from "@/lib/pdf-editor/paragraphs"
 import { standIns, type LineLook, type PageLine } from "@/lib/pdf-editor/retext"
@@ -27,6 +27,8 @@ export interface Retyping {
   lines?: PageLine[]
   /** Another way of setting the paragraph between its edges, when one was chosen. */
   align?: Align
+  /** The frame it was opened from, to which the keyboard goes back when the typing ends. */
+  spot?: string
 }
 
 const squeezed = (text: string) => text.replace(/\s+/g, " ").trim()
@@ -49,6 +51,19 @@ export function useRetext(editor: Editor, comments: Comments) {
     setTyping(null)
   }
   const on = wanted && !other
+
+  /**
+   * The frame the keyboard belongs to when frames are made anew: the line
+   * that was typed in, or moved with the arrow keys. A frame is made anew
+   * whenever the page is read again, and the window's own keeper of the
+   * keyboard takes it away from whatever is removed; without this, a line
+   * could be moved by one press and no more.
+   */
+  const held = useRef<string | null>(null)
+  const hold = useCallback((spot: string | null) => {
+    held.current = spot
+  }, [])
+  const isHeld = useCallback((spot: string) => held.current === spot, [])
 
   const { setTool, deselect, retext, reflow } = editor
   const setCommentTool = comments.setTool
@@ -128,8 +143,15 @@ export function useRetext(editor: Editor, comments: Comments) {
     []
   )
 
+  /** Leave what is being typed as it was. */
+  const leave = useCallback(() => {
+    held.current = typing?.spot ?? null
+    setTyping(null)
+  }, [typing])
+
   /** Put what is being typed into the file, as it stands. */
   const finish = useCallback(() => {
+    held.current = typing?.spot ?? null
     if (typing && !typing.line.fixed)
       change(
         typing.page,
@@ -151,6 +173,9 @@ export function useRetext(editor: Editor, comments: Comments) {
     setTyping,
     setLook,
     setAlign,
+    hold,
+    isHeld,
+    leave,
     finish,
     change,
     note,

@@ -70,6 +70,7 @@ import { EditorToolbar } from "./toolbar"
 import { useComments } from "./use-comments"
 import { useDraft, type DraftStatus } from "./use-draft"
 import { useEditor } from "./use-editor"
+import { useInpage } from "./use-inpage"
 import { useRetext } from "./use-retext"
 
 const INPUT_ID = "editor-file"
@@ -312,7 +313,7 @@ const ABILITIES = [
   {
     icon: IconPencil,
     title: "Add text, pictures and shapes",
-    text: "Type anywhere on a page, place pictures, and draw boxes, ellipses, lines, arrows and freehand. Everything can be moved, resized, turned and undone.",
+    text: "Type anywhere on a page, place pictures, and draw boxes, ellipses, lines, arrows and freehand. Everything can be moved, resized, turned and undone. The pictures a page already has can be moved, resized, cut to a part, exchanged and taken out.",
   },
   {
     icon: IconEdit,
@@ -371,6 +372,7 @@ function Workspace({
   const editor = useEditor(client, doc.id, opened, onPicture, own)
   const comments = useComments(editor, mode === "annotate" ? "highlight" : null)
   const retext = useRetext(editor, comments)
+  const inpage = useInpage(editor, comments, retext)
   /** A page opened for one job shows the tools of that job alone until the others are asked for. */
   const [allTools, setAllTools] = useState(false)
   /** The window a signature is made in is open. A page opened for signing begins with it. */
@@ -686,6 +688,21 @@ function Workspace({
       retext.setOn(false)
       return used()
     }
+    // I changes the pictures the page already has; Escape lets go of one, then of the tool.
+    if (plain && letter === "i") {
+      inpage.setOn(!inpage.on)
+      return used()
+    }
+    if (event.key === "Escape" && inpage.on) {
+      if (inpage.chosen?.cut) inpage.setCutting(false)
+      else if (inpage.chosen) inpage.deselect()
+      else inpage.setOn(false)
+      return used()
+    }
+    if (event.key === "Enter" && inpage.chosen?.cut) {
+      inpage.finishCut()
+      return used()
+    }
     // Any other tool's key puts a comment tool down.
     if (plain && comments.tool && "vtboladckrqx".includes(letter))
       comments.setTool(null)
@@ -741,6 +758,7 @@ function Workspace({
           editor={editor}
           comments={comments}
           retext={retext}
+          inpage={inpage}
           first={mode === "annotate" ? "comments" : "things"}
           focus={
             allTools
@@ -810,6 +828,7 @@ function Workspace({
           editor={editor}
           comments={comments}
           retext={retext}
+          inpage={inpage}
           page={entry.page}
           size={entry.size}
           scale={scale}

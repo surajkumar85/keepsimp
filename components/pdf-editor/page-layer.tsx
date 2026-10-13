@@ -32,6 +32,8 @@ import { FieldSpots } from "./field-layer"
 import { LineSpots } from "./retext-layer"
 import type { Comments } from "./use-comments"
 import type { Retext } from "./use-retext"
+import { PictureSpots } from "./picture-layer"
+import type { Inpage } from "./use-inpage"
 import { laidOut, pagePoint, type Editor } from "./use-editor"
 
 const points = (list: readonly Point[]) =>
@@ -127,10 +129,12 @@ export function PageLayer({
   scale,
   comments,
   retext,
+  inpage,
 }: {
   editor: Editor
   comments: Comments
   retext: Retext
+  inpage: Inpage
   /** Counted from 0. */
   page: number
   size: Size
@@ -219,6 +223,14 @@ export function PageLayer({
         // Pressing the page puts a line that is being changed into the file.
         if (retext.typing) {
           retext.finish()
+          // The pointer is elsewhere now: the keyboard is not brought back to the line.
+          retext.hold(null)
+          return
+        }
+        retext.hold(null)
+        // And lets go of a picture of the page that was chosen.
+        if (inpage.chosen) {
+          inpage.deselect()
           return
         }
         // Pressing the page ends the typing, also where a tap does not take the keyboard away.
@@ -296,10 +308,19 @@ export function PageLayer({
           scale={scale}
         />
       )}
+      {inpage.on && (
+        <PictureSpots
+          editor={editor}
+          inpage={inpage}
+          page={page}
+          version={editor.versions[page] ?? 0}
+          scale={scale}
+        />
+      )}
       <FieldSpots
         editor={editor}
         page={page}
-        idle={!drawing && !gesture && !mine && !retext.on}
+        idle={!drawing && !gesture && !mine && !retext.on && !inpage.on}
       />
       {objects.map((object) => {
         const corners = cornersOf(object.box, object.rotation)

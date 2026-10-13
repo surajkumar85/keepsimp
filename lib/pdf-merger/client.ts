@@ -4,6 +4,7 @@ import { poolSize } from "@/lib/image-batch/pool"
 import type { Size } from "@/lib/image-compressor/geometry"
 import type { CommentChange, LetterLine } from "@/lib/pdf-editor/comments"
 import type { FieldChange } from "@/lib/pdf-editor/forms"
+import type { PagePicture, PictureChange } from "@/lib/pdf-editor/page-pictures"
 import type { PageLine, TextChange } from "@/lib/pdf-editor/retext"
 import type { ExportReport, Step } from "@/lib/pdf-editor/mupdf-edit"
 import type { Change } from "@/lib/pdf-editor/tools"
@@ -155,6 +156,10 @@ export class PdfClient {
     number,
     (lines: PageLine[] | null) => void
   >()
+  private readonly pagePicturesAsked = new Map<
+    number,
+    (pictures: PagePicture[] | null) => void
+  >()
   private readonly editDrafts = new Map<
     number,
     (draft: { steps: Step[]; position: number } | null) => void
@@ -223,6 +228,9 @@ export class PdfClient {
     } else if (message.type === "edit-lines") {
       this.editLines.get(message.request)?.(message.lines)
       this.editLines.delete(message.request)
+    } else if (message.type === "edit-page-pictures") {
+      this.pagePicturesAsked.get(message.request)?.(message.pictures)
+      this.pagePicturesAsked.delete(message.request)
     } else if (message.type === "edit-draft") {
       this.editDrafts.get(message.request)?.(message.draft)
       this.editDrafts.delete(message.request)
@@ -391,6 +399,8 @@ export class PdfClient {
     this.editPictures.clear()
     for (const done of this.editLines.values()) done(null)
     this.editLines.clear()
+    for (const done of this.pagePicturesAsked.values()) done(null)
+    this.pagePicturesAsked.clear()
     for (const done of this.editDrafts.values()) done(null)
     this.editDrafts.clear()
     for (const done of this.editLetters.values()) done(null)
@@ -510,6 +520,24 @@ export class PdfClient {
       const request = ++this.requests
       this.editLines.set(request, resolve)
       this.send({ type: "edit-lines", id, request, page })
+    })
+  }
+
+  /** The pictures a page already has, with where they are; null when the page could not be read. */
+  pagePictures(id: string, page: number) {
+    return new Promise<PagePicture[] | null>((resolve) => {
+      const request = ++this.requests
+      this.pagePicturesAsked.set(request, resolve)
+      this.send({ type: "edit-page-pictures", id, request, page })
+    })
+  }
+
+  /** Change pictures a page already has, as one step; what the pages hold afterwards. */
+  editPagePicture(id: string, change: PictureChange) {
+    return new Promise<EditNews>((resolve, reject) => {
+      const request = ++this.requests
+      this.editNews.set(request, { resolve, reject })
+      this.send({ type: "edit-page-picture", id, request, change })
     })
   }
 

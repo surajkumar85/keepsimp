@@ -73,7 +73,7 @@ const CHECK_EDGE = 700
  * changes are written after a signed file, and how a draft is taken up.
  */
 export interface Done {
-  kind: "things" | "comments" | "fields" | "text"
+  kind: "things" | "comments" | "fields" | "text" | "pictures"
   change: unknown
 }
 
@@ -1163,6 +1163,12 @@ export interface ExportReport {
    */
   retext: { steps: number; lines: number; found: number }
   /**
+   * The pictures the pages already had: in how many steps they were
+   * changed, and whether one of them was cut to a part, which hides the
+   * rest of a picture and leaves it in the file.
+   */
+  pictures: { steps: number; cut: boolean }
+  /**
    * Only for a signed file whose changes were written after it: whether
    * the file as it came is still there, byte for byte, at the start of the
    * result, which is what its signature covers.
@@ -1225,6 +1231,19 @@ const textOf = (doc: Doc, index: number) =>
       words.destroy()
     }
   })
+
+/** In how many steps the pictures the pages already had were changed, and whether one was cut to a part. */
+export const picturesChanged = (steps: readonly Step[]) => {
+  const changed = steps.filter((step) => step.done.kind === "pictures")
+  return {
+    steps: changed.length,
+    cut: changed.some((step) =>
+      (step.done.change as { ops: { cut?: unknown }[] }).ops.some((op) =>
+        Boolean(op.cut)
+      )
+    ),
+  }
+}
 
 /**
  * The file as it stands, ready to be downloaded. The working copy is not
@@ -1488,6 +1507,7 @@ export async function exportEdited(
         locked: Boolean(lock),
         comments: { had: commented.count, how, has: commentPages(doc).count },
         retext: { steps: retexts, lines: rewritten.length, found: reread },
+        pictures: picturesChanged(session.steps.slice(0, position)),
         fields: { had: form.values.size, how: fieldsHow, ...fieldsRead },
       },
     }

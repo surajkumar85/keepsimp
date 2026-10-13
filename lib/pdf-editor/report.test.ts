@@ -12,6 +12,7 @@ const report = (change: Partial<ExportReport> = {}): ExportReport => ({
   comments: { had: 0, how: "keep", has: 0 },
   fields: { had: 0, how: "keep", same: 0, left: 0 },
   retext: { steps: 0, lines: 0, found: 0 },
+  pictures: { steps: 0, cut: false },
   ...change,
 })
 
@@ -247,6 +248,38 @@ describe("what became of a signature", () => {
       text: "The signed part of the file is not what it was. Its signature will not hold; read the result before you rely on it.",
       good: false,
     })
+  })
+})
+
+describe("what became of the pictures a page already had", () => {
+  const told = (pictures: ExportReport["pictures"]) =>
+    everyLine(report({ added: 0, pictures }))
+
+  it("says in how many places they were changed", () => {
+    expect(told({ steps: 1, cut: false })).toEqual([
+      {
+        text: "Pictures the page already had were changed in 1 place.",
+        good: true,
+      },
+    ])
+    expect(told({ steps: 1200, cut: false })[0].text).toBe(
+      "Pictures the pages already had were changed in 1,200 places."
+    )
+    // Nothing is said of pictures that were not changed.
+    expect(
+      told({ steps: 0, cut: false }).some((line) =>
+        line.text.includes("Pictures")
+      )
+    ).toBe(false)
+  })
+
+  it("says that the rest of a picture that was cut to a part is still in the file", () => {
+    expect(told({ steps: 2, cut: true })).toEqual([
+      {
+        text: "Pictures the pages already had were changed in 2 places. A picture that was cut to a part is whole in the file: the rest of it is hidden, not removed.",
+        good: true,
+      },
+    ])
   })
 })
 

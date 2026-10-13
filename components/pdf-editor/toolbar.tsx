@@ -10,6 +10,7 @@ import {
 } from "react"
 import {
   IconAlignCenter,
+  IconArrowsMaximize,
   IconAlignJustified,
   IconAlignLeft,
   IconAlignRight,
@@ -31,7 +32,12 @@ import {
   IconMessages,
   IconNote,
   IconPencil,
+  IconCrop,
+  IconPhotoEdit,
   IconPhotoPlus,
+  IconReplace,
+  IconRotate2,
+  IconRotateClockwise2,
   IconPilcrow,
   IconPointer,
   IconRectangleFilled,
@@ -91,6 +97,7 @@ import { mainStyle } from "@/lib/pdf-editor/retext"
 import { isOwn, type OwnKey } from "@/lib/pdf-editor/own-font"
 import { canListFonts, LocalFontsDialog } from "./local-fonts-dialog"
 import { ALIGNS, shapeOf, type Align } from "@/lib/pdf-editor/paragraphs"
+import { CUT_HINT, INPAGE_HINT, type Inpage } from "./use-inpage"
 import { PARAGRAPH_HINT, RETEXT_HINT, type Retext } from "./use-retext"
 import type { Editor } from "./use-editor"
 
@@ -640,6 +647,145 @@ function LineLookRow({ editor, retext }: { editor: Editor; retext: Retext }) {
   )
 }
 
+/**
+ * What can be done to a picture of the page that was chosen: turned, cut
+ * to a part, shown whole again, exchanged, taken out.
+ */
+function PictureRow({ inpage }: { inpage: Inpage }) {
+  const picker = useRef<HTMLInputElement>(null)
+  const { chosen } = inpage
+  const hint = (words: string) => (
+    <p
+      className="line-clamp-2 min-w-40 flex-1 px-1 text-xs leading-4 whitespace-normal text-muted-foreground"
+      data-testid="editor-hint"
+    >
+      {words}
+    </p>
+  )
+  if (!chosen) return hint(INPAGE_HINT)
+  if (chosen.cut)
+    return (
+      <>
+        <Button
+          type="button"
+          variant="outline"
+          title="Cut the picture to the part that is framed (Enter)"
+          onClick={() => inpage.finishCut()}
+          className="shrink-0"
+        >
+          Done
+        </Button>
+        <Button
+          type="button"
+          variant="ghost"
+          title="Leave the picture as it is (Escape)"
+          onClick={() => inpage.setCutting(false)}
+          className="shrink-0"
+        >
+          Leave it
+        </Button>
+        {hint(CUT_HINT)}
+      </>
+    )
+  const { picture } = chosen
+  return (
+    <>
+      <div
+        role="group"
+        aria-label="The picture that is chosen"
+        className="flex shrink-0 items-center gap-1"
+      >
+        <RowAction
+          label="Turn it a quarter to the left"
+          onPress={() => inpage.turn(-1)}
+        >
+          <IconRotate2 aria-hidden="true" />
+        </RowAction>
+        <RowAction
+          label="Turn it a quarter to the right"
+          onPress={() => inpage.turn(1)}
+        >
+          <IconRotateClockwise2 aria-hidden="true" />
+        </RowAction>
+        {picture.upright && (
+          <RowAction
+            label="Cut it to a part"
+            words="Cut to a part"
+            onPress={() => inpage.setCutting(true)}
+          >
+            <IconCrop aria-hidden="true" />
+          </RowAction>
+        )}
+        {picture.cut && (
+          <RowAction
+            label="Show the whole picture again"
+            words="Show it whole"
+            onPress={() => inpage.showWhole()}
+          >
+            <IconArrowsMaximize aria-hidden="true" />
+          </RowAction>
+        )}
+        <input
+          ref={picker}
+          type="file"
+          accept="image/png,image/jpeg,image/webp,image/avif,image/gif,image/bmp"
+          aria-label="Choose a picture to put in its place"
+          className="sr-only"
+          onChange={(event) => {
+            const [file] = Array.from(event.target.files ?? [])
+            event.target.value = ""
+            if (file) inpage.replace(file)
+          }}
+        />
+        <RowAction
+          label="Put another picture in its place"
+          words="Another picture"
+          onPress={() => picker.current?.click()}
+        >
+          <IconReplace aria-hidden="true" />
+        </RowAction>
+        <RowAction
+          label="Take the picture out"
+          onPress={() => inpage.takeOut(chosen.page, picture)}
+        >
+          <IconTrash aria-hidden="true" />
+        </RowAction>
+      </div>
+      {hint(
+        `${picture.width.toLocaleString("en")} by ${picture.height.toLocaleString("en")} dots${picture.cut ? ", cut to a part" : ""}. Drag it to move it, drag its corner to change its size; + and − do that from the keyboard, the arrow keys move it.`
+      )}
+    </>
+  )
+}
+
+/** A button of the row under the tools: an icon, with words beside it where they help. */
+function RowAction({
+  label,
+  words,
+  onPress,
+  children,
+}: {
+  label: string
+  words?: string
+  onPress: () => void
+  children: ReactNode
+}) {
+  return (
+    <Button
+      type="button"
+      variant="ghost"
+      size={words ? "sm" : "icon"}
+      aria-label={label}
+      title={label}
+      onClick={onPress}
+      className={words ? "h-11 shrink-0 md:h-9" : "shrink-0"}
+    >
+      {children}
+      {words}
+    </Button>
+  )
+}
+
 const ALIGN_LABELS: Record<Align, string> = {
   left: "Set the paragraph to the left",
   centre: "Set the paragraph about its middle",
@@ -672,11 +818,14 @@ export function EditorToolbar({
   onAllTools,
   onSign,
   retext,
+  inpage,
 }: {
   editor: Editor
   comments: Comments
   /** Changing the words that are already on the page. */
   retext: Retext
+  /** Changing the pictures that are already on the page. */
+  inpage: Inpage
   /** Which tools come first in the row: those that add things, or those that comment. */
   first?: "things" | "comments"
   /**
@@ -762,11 +911,12 @@ export function EditorToolbar({
             pressed={
               !comments.tool &&
               state.tool === tool &&
-              !(tool === "select" && retext.on)
+              !(tool === "select" && (retext.on || inpage.on))
             }
             onPress={() => {
               comments.setTool(null)
               retext.setOn(false)
+              inpage.setOn(false)
               editor.setTool(tool)
             }}
           >
@@ -809,6 +959,15 @@ export function EditorToolbar({
       >
         <IconPhotoPlus aria-hidden="true" />
       </Button>
+      {/* Beside the button that adds a picture: the tool that changes the pictures that are there. */}
+      <Toggle
+        label="Pictures of the page"
+        shortcut="I"
+        pressed={inpage.on}
+        onPress={() => inpage.setOn(!inpage.on)}
+      >
+        <IconPhotoEdit aria-hidden="true" />
+      </Toggle>
     </>
   )
   // Focused on one job, the other tools are put away, unless one of them is in hand.
@@ -818,6 +977,7 @@ export function EditorToolbar({
       : focus === "signing"
         ? comments.tool === null &&
           !retext.on &&
+          !inpage.on &&
           (state.tool === "select" || SIGNING.includes(state.tool))
         : false
   const marks = COMMENT_TOOLS.map(({ tool, label, key, icon }) => (
@@ -943,6 +1103,8 @@ export function EditorToolbar({
       >
         {retext.typing ? (
           <LineLookRow editor={editor} retext={retext} />
+        ) : inpage.on ? (
+          <PictureRow inpage={inpage} />
         ) : comments.tool ? (
           <>
             <Swatches

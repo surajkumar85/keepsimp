@@ -15,6 +15,7 @@ import type {
 import type { FieldChange, FormFacts, FormField } from "@/lib/pdf-editor/forms"
 import type { History } from "@/lib/pdf-editor/history"
 import type { ExportReport, Step } from "@/lib/pdf-editor/mupdf-edit"
+import type { PagePicture, PictureChange } from "@/lib/pdf-editor/page-pictures"
 import type { PageLine, TextChange } from "@/lib/pdf-editor/retext"
 import type { EditorObject } from "@/lib/pdf-editor/objects"
 import type { Change } from "@/lib/pdf-editor/tools"
@@ -200,6 +201,15 @@ export type PdfRequest =
   | { type: "edit-lines"; id: string; request: number; page: number }
   /** Change the words of lines of a page, as one step. */
   | { type: "edit-text"; id: string; request: number; change: TextChange }
+  /** The pictures a page already has, with where they are, for them to be changed. */
+  | { type: "edit-page-pictures"; id: string; request: number; page: number }
+  /** Change pictures a page already has, as one step. */
+  | {
+      type: "edit-page-picture"
+      id: string
+      request: number
+      change: PictureChange
+    }
   /** The steps that were made, as a draft keeps them. */
   | { type: "edit-draft"; id: string; request: number }
   /** Take a draft up: steps as they were kept, checked before they are made again. */
@@ -360,6 +370,11 @@ export type PdfResponse =
   /** Null when the page could not be read. */
   | { type: "edit-letters"; request: number; lines: LetterLine[] | null }
   | { type: "edit-lines"; request: number; lines: PageLine[] | null }
+  | {
+      type: "edit-page-pictures"
+      request: number
+      pictures: PagePicture[] | null
+    }
   /** `news` is null when the change could not be made; `message` then says why. */
   | {
       type: "edit-news"

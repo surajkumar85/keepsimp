@@ -343,3 +343,89 @@ export async function readPictures(bytes: Uint8Array, password?: string) {
     await doc.loadingTask.destroy()
   }
 }
+
+/** A picture as a page paints it, read with pdf.js. */
+export interface Painted {
+  /** Where it is, in points from the page's top left corner as the page is shown. */
+  x: number
+  y: number
+  width: number
+  height: number
+  /** How many dots it has. */
+  dots: { width: number; height: number }
+  /** A clip was set for it alone, so that only a part of it shows. */
+  clipped: boolean
+}
+
+type Six = [number, number, number, number, number, number]
+/** One measure after another: a point goes through the first, then the second. */
+const after = (one: Six, two: Six): Six => [
+  one[0] * two[0] + one[1] * two[2],
+  one[0] * two[1] + one[1] * two[3],
+  one[2] * two[0] + one[3] * two[2],
+  one[2] * two[1] + one[3] * two[3],
+  one[4] * two[0] + one[5] * two[2] + two[4],
+  one[4] * two[1] + one[5] * two[3] + two[5],
+]
+
+/**
+ * Where every page of a file paints its pictures, in the order it paints
+ * them, as pdf.js follows the page's content.
+ */
+export async function paintedPictures(bytes: Uint8Array, password?: string) {
+  const doc = await getDocument({
+    data: bytes.slice(),
+    password,
+    verbosity: 0,
+    useSystemFonts: false,
+    isOffscreenCanvasSupported: false,
+    isImageDecoderSupported: false,
+    wasmUrl: "node_modules/pdfjs-dist/wasm/",
+  }).promise
+  try {
+    const pages: Painted[][] = []
+    for (let number = 1; number <= doc.numPages; number++) {
+      const page = await doc.getPage(number)
+      const shown = page.getViewport({ scale: 1 }).transform as Six
+      const operators = await page.getOperatorList()
+      const painted: Painted[] = []
+      let state = { ctm: [1, 0, 0, 1, 0, 0] as Six, clipped: false }
+      const saved: (typeof state)[] = []
+      for (const [index, operator] of operators.fnArray.entries()) {
+        const args = operators.argsArray[index] as unknown[]
+        if (operator === OPS.save) saved.push({ ...state })
+        else if (operator === OPS.restore) state = saved.pop() ?? state
+        else if (operator === OPS.transform)
+          state = { ...state, ctm: after(args as unknown as Six, state.ctm) }
+        else if (operator === OPS.clip || operator === OPS.eoClip)
+          state = { ...state, clipped: true }
+        else if (operator === OPS.paintImageXObject) {
+          const through = after(state.ctm, shown)
+          const corners = [
+            [0, 0],
+            [1, 0],
+            [0, 1],
+            [1, 1],
+          ].map(([x, y]) => [
+            through[0] * x + through[2] * y + through[4],
+            through[1] * x + through[3] * y + through[5],
+          ])
+          const xs = corners.map((corner) => corner[0])
+          const ys = corners.map((corner) => corner[1])
+          painted.push({
+            x: Math.min(...xs),
+            y: Math.min(...ys),
+            width: Math.max(...xs) - Math.min(...xs),
+            height: Math.max(...ys) - Math.min(...ys),
+            dots: { width: args[1] as number, height: args[2] as number },
+            clipped: state.clipped,
+          })
+        }
+      }
+      pages.push(painted)
+    }
+    return pages
+  } finally {
+    await doc.loadingTask.destroy()
+  }
+}

@@ -35,10 +35,15 @@ function Spot({
   fixed,
   block,
   scale,
+  spot,
+  retext,
   onPress,
   onMove,
   onTakeOut,
 }: {
+  /** What the frame goes by, for the keyboard to find it again when it is made anew. */
+  spot: string
+  retext: Retext
   box: Box
   label: string
   title: string
@@ -53,8 +58,26 @@ function Spot({
 }) {
   const from = useRef<Point | null>(null)
   const [moved, setMoved] = useState<Point | null>(null)
+  const frame = useRef<HTMLButtonElement>(null)
+  const { hold, isHeld } = retext
+  // The keyboard was on this line when the page was read again: it is on it still.
+  useEffect(() => {
+    if (!isHeld(spot)) return
+    // Now, and again once the window has done with the frame that went
+    // away: it puts the keyboard on itself a moment after losing it.
+    const take = () => {
+      if (isHeld(spot)) frame.current?.focus({ preventScroll: true })
+    }
+    take()
+    let later = requestAnimationFrame(() => {
+      take()
+      later = requestAnimationFrame(take)
+    })
+    return () => cancelAnimationFrame(later)
+  }, [isHeld, spot])
   return (
     <button
+      ref={frame}
       type="button"
       data-hold
       data-testid={block ? "editor-block" : "editor-line"}
@@ -106,6 +129,8 @@ function Spot({
         event.stopPropagation()
         // A drag ends in a click as well; it was a drag.
         if (moved) return
+        // The keyboard goes where this press takes it, not back to a line that was left.
+        hold(null)
         onPress()
       }}
       onKeyDown={(event) => {
@@ -117,11 +142,18 @@ function Spot({
           ArrowDown: [0, far],
         }
         const taken = event.key === "Delete" || event.key === "Backspace"
+        // Tab takes the keyboard elsewhere, and it is not brought back.
+        if (event.key === "Tab") hold(null)
         if (!taken && !by[event.key]) return
         event.preventDefault()
         event.stopPropagation()
-        if (taken) onTakeOut()
-        else onMove({ x: by[event.key][0], y: by[event.key][1] })
+        if (taken) {
+          hold(null)
+          onTakeOut()
+        } else {
+          hold(spot)
+          onMove({ x: by[event.key][0], y: by[event.key][1] })
+        }
       }}
     />
   )
@@ -186,6 +218,8 @@ export function LineSpots({
           <Spot
             // A line that was moved is another line: it starts where the file now has it.
             key={`${key}/${at}`}
+            spot={`${page}/line/${at}`}
+            retext={retext}
             box={line.box}
             label={`Change the line: ${line.text}`}
             title={
@@ -194,7 +228,13 @@ export function LineSpots({
             fixed={Boolean(line.fixed)}
             scale={scale}
             onPress={() =>
-              retext.setTyping({ page, line, text: line.text, look: {} })
+              retext.setTyping({
+                page,
+                line,
+                text: line.text,
+                look: {},
+                spot: `${page}/line/${at}`,
+              })
             }
             onMove={(by) => retext.change(page, line, line.text, {}, by)}
             onTakeOut={() => retext.change(page, line, "")}
@@ -208,6 +248,8 @@ export function LineSpots({
         return (
           <Spot
             key={`${key}/block/${block.lines[0]}`}
+            spot={`${page}/block/${block.lines[0]}`}
+            retext={retext}
             block
             box={block.box}
             label={`Change the paragraph: ${startOf(whole.text)}`}
@@ -220,6 +262,7 @@ export function LineSpots({
                 text: whole.text,
                 look: {},
                 lines: of,
+                spot: `${page}/block/${block.lines[0]}`,
               })
             }
             onMove={(by) =>
@@ -286,7 +329,7 @@ export function LineSpots({
                   event.stopPropagation()
                   if (event.key === "Escape") {
                     event.preventDefault()
-                    retext.setTyping(null)
+                    retext.leave()
                   } else if (event.key === "Enter") {
                     event.preventDefault()
                     retext.finish()
@@ -409,7 +452,7 @@ function BlockField({ retext, page }: { retext: Retext; page: number }) {
           event.stopPropagation()
           if (event.key === "Escape") {
             event.preventDefault()
-            retext.setTyping(null)
+            retext.leave()
           } else if (
             event.key === "Enter" &&
             (event.ctrlKey || event.metaKey)

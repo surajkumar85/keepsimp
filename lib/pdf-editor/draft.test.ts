@@ -269,6 +269,41 @@ describe("a draft, read back", () => {
       })!.done.change
     ).not.toHaveProperty("fonts")
     expect(picturesOf(steps)).toEqual(["photo-1", "photo-2"])
+    // A picture put in the place of one the page had is needed like one that was added.
+    const at = [200, 0, 0, -100, 40, 160]
+    const swapped = readStep({
+      done: {
+        kind: "pictures",
+        change: {
+          ops: [
+            { do: "picture", page: 0, index: 0, at, picture: "photo-3" },
+            { do: "picture", page: 0, index: 1, at, remove: true },
+            { do: "picture", page: 0, index: 2, at, picture: "photo-1" },
+          ],
+        },
+      },
+      label: "Put another picture in its place",
+      touched: [0],
+    })!
+    expect(swapped.done.change).toMatchObject({
+      ops: [{ picture: "photo-3" }, { remove: true }, { picture: "photo-1" }],
+    })
+    expect(picturesOf([...steps, swapped])).toEqual([
+      "photo-1",
+      "photo-2",
+      "photo-3",
+    ])
+    // What is no change to a picture is no step.
+    expect(
+      readStep({
+        done: {
+          kind: "pictures",
+          change: { ops: [{ do: "picture", page: 0, index: 0, at }] },
+        },
+        label: "Nothing",
+        touched: [0],
+      })
+    ).toBeNull()
     expect(fontsOf([])).toEqual([])
   })
 

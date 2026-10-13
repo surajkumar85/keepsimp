@@ -13,6 +13,7 @@ import { readFieldOp } from "./forms"
 import type { Step } from "./mupdf-edit"
 import { FONT_KEYS, fontsFor, readObject } from "./objects"
 import { isOwn } from "./own-font"
+import { readPictureOp, type PictureOp } from "./page-pictures"
 import { readTextChange, readWrote } from "./paragraphs"
 import type { Op } from "./tools"
 
@@ -64,6 +65,7 @@ const readers = {
   comments: readCommentOp,
   fields: readFieldOp,
   text: readTextChange,
+  pictures: readPictureOp,
 } as const
 
 /** A step as it comes out of storage, with every change in it checked, or null when it is not one. */
@@ -157,13 +159,20 @@ export const fontsOf = (steps: readonly Step[]) => [
   ]),
 ]
 
-/** The pictures the steps of a draft place, by name, each once. */
+/** The pictures the steps of a draft place, by name, each once: those that were added, and those put in the place of a picture of the page. */
 export const picturesOf = (steps: readonly Step[]) => [
-  ...new Set(
-    [...thingsIn(steps)].flatMap((thing) =>
+  ...new Set([
+    ...[...thingsIn(steps)].flatMap((thing) =>
       thing.kind === "picture" ? [thing.picture] : []
-    )
-  ),
+    ),
+    ...steps.flatMap((step) =>
+      step.done.kind === "pictures"
+        ? (step.done.change as { ops: PictureOp[] }).ops.flatMap((op) =>
+            op.picture ? [op.picture] : []
+          )
+        : []
+    ),
+  ]),
 ]
 
 /** What the page says about a draft: how much was done, and when it was kept. */

@@ -49,7 +49,9 @@ import type { LetterLine } from "@/lib/pdf-editor/comments"
 import { applyFields, fieldsOn, formFacts } from "@/lib/pdf-editor/mupdf-forms"
 import { readDraft } from "@/lib/pdf-editor/draft"
 import { canWriteAfter, exportAfter } from "@/lib/pdf-editor/mupdf-signed"
+import { applyPictures, picturesOn } from "@/lib/pdf-editor/mupdf-pictures"
 import { applyText, linesOn } from "@/lib/pdf-editor/mupdf-text"
+import type { PagePicture } from "@/lib/pdf-editor/page-pictures"
 import type { PageLine } from "@/lib/pdf-editor/retext"
 import {
   compressCustom,
@@ -694,6 +696,42 @@ async function editText(request: Extract<PdfRequest, { type: "edit-text" }>) {
   }
 }
 
+async function editPagePicture(
+  request: Extract<PdfRequest, { type: "edit-page-picture" }>
+) {
+  const session = editing.get(request.id)
+  try {
+    if (!session) throw new Error(EDIT_FAILED)
+    const pages = applyPictures(await engine, session, request.change)
+    post({
+      type: "edit-news",
+      request: request.request,
+      news: newsOf(session, pages),
+    })
+  } catch (error) {
+    post({
+      type: "edit-news",
+      request: request.request,
+      news: null,
+      message: readable(error, EDIT_FAILED),
+    })
+  }
+}
+
+function editPagePictures(
+  request: Extract<PdfRequest, { type: "edit-page-pictures" }>
+) {
+  const session = editing.get(request.id)
+  let pictures: PagePicture[] | null = null
+  try {
+    if (session && request.page < session.doc.countPages())
+      pictures = picturesOn(session, request.page)
+  } catch {
+    // The page says that the pictures of this page could not be read.
+  }
+  post({ type: "edit-page-pictures", request: request.request, pictures })
+}
+
 async function editLines(request: Extract<PdfRequest, { type: "edit-lines" }>) {
   const session = editing.get(request.id)
   let lines: PageLine[] | null = null
@@ -1080,6 +1118,10 @@ self.onmessage = (event: MessageEvent<PdfRequest>) => {
     enqueue({ run: () => editText(request) })
   else if (request.type === "edit-lines")
     enqueue({ run: () => editLines(request) })
+  else if (request.type === "edit-page-pictures")
+    enqueue({ run: async () => editPagePictures(request) })
+  else if (request.type === "edit-page-picture")
+    enqueue({ run: () => editPagePicture(request) })
   else if (request.type === "edit-letters")
     enqueue({ run: async () => editLetters(request) })
   else if (request.type === "edit-step")

@@ -48,6 +48,11 @@ const content: TutorialContent = {
         "PNG, JPEG, WebP, AVIF, GIF and BMP. A PNG or JPEG goes into the file as it is, without being saved again; other kinds are kept without loss. See-through parts stay see-through.",
     },
     {
+      term: "Pictures of the page",
+      detail:
+        "For the pictures a file already has (I). Each gets a frame. Drag a picture to move it and its corner to change its size; the arrow keys move it, + and − change its size, Delete takes it out. With a picture chosen, the bar turns it by a quarter, cuts it to a part, puts another picture in its place or takes it out. A picture's own data is never saved again. Cutting to a part hides the rest of the picture; the whole picture stays in the file, and “Show it whole” brings it back. A picture that is taken out is no longer in the file. Pictures that are part of a drawing the page reuses are not offered.",
+    },
+    {
       term: "Cover",
       detail:
         "A filled box that hides what is under it. It only covers: the words underneath are still in the file and can be copied out by anyone. Do not use it to hide private information. Redaction, which removes what is under it, comes in a later version.",

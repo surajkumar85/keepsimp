@@ -461,6 +461,15 @@ function fontNames(doc: Doc, page: Obj) {
 const mark = ({ box, text }: PageLine) =>
   `${Math.round(box.x)},${Math.round(box.y)}:${text.replace(/\s+/g, "")}`
 
+/** What the lines of a page say and about where, each as one mark, sorted: what a change that is not to text must leave as it was. */
+export function marksOn(mupdf: Engine, session: EditSession, index: number) {
+  return withPage(session.doc, index, (page) =>
+    read(mupdf, session, page)
+      .map((one) => mark(one.line))
+      .sort()
+  )
+}
+
 /** The letters of some new words as they will be written, and the fonts they need a name for on the page. */
 interface Resolved {
   pieces: Piece[]

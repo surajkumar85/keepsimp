@@ -43,7 +43,8 @@ export function checkLines(report: ExportReport): CheckLine[] {
     report.added === 0 &&
     report.comments.had === 0 &&
     report.fields.had === 0 &&
-    report.retext.steps === 0
+    report.retext.steps === 0 &&
+    report.pictures.steps === 0
   )
     lines.push({
       text: "Nothing was added. The file was written again as it is.",
@@ -140,6 +141,13 @@ export function checkLines(report: ExportReport): CheckLine[] {
             good: true,
           }
     )
+  }
+  if (report.pictures.steps > 0) {
+    const { steps: times, cut } = report.pictures
+    lines.push({
+      text: `Pictures the page${times === 1 ? "" : "s"} already had were changed in ${times.toLocaleString("en")} place${times === 1 ? "" : "s"}.${cut ? " A picture that was cut to a part is whole in the file: the rest of it is hidden, not removed." : ""}`,
+      good: true,
+    })
   }
   const form = report.fields
   const fields = (count: number) =>
