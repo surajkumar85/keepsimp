@@ -111,7 +111,7 @@ test("changes the words of a line, in the line's own font, and takes the old one
   )
 })
 
-test("keeps the pages where they are when End or Home is pressed in a line", async ({
+test("keeps the pages where they are when End or Home is pressed in a line, and moves the caret", async ({
   page,
 }) => {
   await open(page, await text())
@@ -120,23 +120,39 @@ test("keeps the pages where they are when End or Home is pressed in a line", asy
   await expect(field(page)).toBeFocused()
   const pages = page.getByTestId("reader-pages")
   const top = () => pages.evaluate((element) => element.scrollTop)
+  const caret = () =>
+    field(page).evaluate((element) => {
+      const typed = element as HTMLInputElement
+      return [typed.selectionStart, typed.selectionEnd]
+    })
   const before = await top()
+  const end = TEXT.total.length
   // The caret is at the end already, where End can move nothing; and on a
   // Mac these keys are for scrolling, wherever the keyboard is.
-  for (const key of ["End", "End", "PageDown", "Home", "Home", "PageUp"]) {
+  for (const [key, at] of [
+    ["End", [end, end]],
+    ["PageDown", [end, end]],
+    ["Home", [0, 0]],
+    ["Home", [0, 0]],
+    ["PageUp", [0, 0]],
+    ["End", [end, end]],
+    // With Shift, what lies between is selected.
+    ["Shift+Home", [0, end]],
+    ["End", [end, end]],
+  ] as const) {
     await page.keyboard.press(key)
-    await page.waitForTimeout(150)
+    expect(await caret()).toEqual(at)
+    await page.waitForTimeout(100)
     expect(await top()).toBe(before)
   }
-  // The line is still being typed, on the page it is on.
+  // The line is still being typed, on the page it is on: Home, and words go in front.
   await expect(field(page)).toBeFocused()
-  await page.keyboard.press("ControlOrMeta+a")
-  await page.keyboard.type("Total due: 95 euros")
+  await page.keyboard.press("Home")
+  await page.keyboard.type("Net: ")
   await page.keyboard.press("Enter")
   await changes(page, 1)
-  await expect(line(page, "Total due: 95 euros")).toBeVisible()
+  await expect(line(page, `Net: ${TEXT.total}`)).toBeVisible()
   // With the keyboard on the pages themselves, the keys scroll them as ever.
-  await page.waitForTimeout(500)
   await pages.press("End")
   await expect.poll(top).toBeGreaterThan(before)
 })

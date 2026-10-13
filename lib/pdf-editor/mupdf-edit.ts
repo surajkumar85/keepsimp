@@ -20,6 +20,7 @@ import { drawPage, shareDuplicates } from "@/lib/pdf-merger/mupdf-engine"
 import { fontName } from "./fonts"
 import { centreOf, type Box, type Point } from "./geometry"
 import type { History } from "./history"
+import type { DocumentChange } from "./document"
 import { curvesThrough } from "./ink"
 import {
   labelPlace,
@@ -83,7 +84,14 @@ const CHECK_EDGE = 700
  */
 export interface Done {
   kind:
-    "things" | "comments" | "fields" | "text" | "pictures" | "links" | "pages"
+    | "things"
+    | "comments"
+    | "fields"
+    | "text"
+    | "pictures"
+    | "links"
+    | "pages"
+    | "document"
   change: unknown
 }
 
@@ -120,6 +128,8 @@ export interface EditSession {
   working?: boolean
   /** Counts up whenever the list of pages changes: by a change to it, or by one undone or made again. */
   laidOut?: number
+  /** Counts up whenever the file's bookmarks, details or own page numbers change, in the same ways. */
+  described?: number
   /** Told when the working copy has become another document: after an undo it is made anew. */
   moved?: (doc: Doc) => void
   /**
@@ -867,6 +877,8 @@ function remake(session: EditSession) {
 
 /** A step that changed the list of pages itself. */
 export const changesPages = (step: Step) => step.done.kind === "pages"
+/** A step that changed the file as a whole: its bookmarks, its details, its own page numbers. */
+export const describes = (step: Step) => step.done.kind === "document"
 
 /**
  * Take a draft up: the steps that were kept are this session's steps, and
@@ -883,6 +895,7 @@ export function takeUp(
   session.steps = [...steps]
   session.position = position
   if (steps.some(changesPages)) session.laidOut = (session.laidOut ?? 0) + 1
+  if (steps.some(describes)) session.described = (session.described ?? 0) + 1
   try {
     remake(session)
   } catch (error) {
@@ -993,6 +1006,7 @@ export function stepBack(session: EditSession): number[] | null {
     throw error
   }
   if (changesPages(step)) session.laidOut = (session.laidOut ?? 0) + 1
+  if (describes(step)) session.described = (session.described ?? 0) + 1
   return step.touched
 }
 
@@ -1015,6 +1029,7 @@ export function stepForward(session: EditSession): number[] | null {
   }
   session.position++
   if (changesPages(step)) session.laidOut = (session.laidOut ?? 0) + 1
+  if (describes(step)) session.described = (session.described ?? 0) + 1
   return step.touched
 }
 
@@ -1223,6 +1238,8 @@ export interface ExportReport {
   }
   /** Only for some pages written as a file of their own: how many. */
   part?: number
+  /** What of the file as a whole was changed. */
+  document: { details: boolean; bookmarks: boolean; labels: boolean }
   /**
    * Only for a signed file whose changes were written after it: whether
    * the file as it came is still there, byte for byte, at the start of the
@@ -1331,6 +1348,18 @@ export function pagesChanged(steps: readonly Step[]) {
     /** A page was cut to a part: the rest of it is hidden, and still in the file. */
     cut: ops.some((op) => op.do === "crop"),
     lost: lostIn(changes),
+  }
+}
+
+/** What of the file as a whole was changed: its bookmarks, its details, its own page numbers. */
+export function documentChanged(steps: readonly Step[]) {
+  const ops = steps
+    .filter(describes)
+    .flatMap((step) => (step.done.change as DocumentChange).ops)
+  return {
+    details: ops.some((op) => op.do === "details"),
+    bookmarks: ops.some((op) => op.do === "bookmarks"),
+    labels: ops.some((op) => op.do === "labels"),
   }
 }
 
@@ -1652,6 +1681,7 @@ export async function exportEdited(
         pictures: picturesChanged(inForce),
         links: linksChanged(inForce),
         pages: pagesChanged(inForce),
+        document: documentChanged(inForce),
         fields: { had: form.values.size, how: fieldsHow, ...fieldsRead },
       },
     }

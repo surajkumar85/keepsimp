@@ -1298,7 +1298,7 @@ function addFooter(
   writer.attach(page)
 }
 
-function writeBookmarks(out: Doc, bookmarks: readonly MergedBookmark[]) {
+export function writeBookmarks(out: Doc, bookmarks: readonly MergedBookmark[]) {
   const iterator = out.outlineIterator()
   const write = (items: readonly MergedBookmark[]) => {
     for (const item of items) {

@@ -21,6 +21,7 @@ const report = (change: Partial<ExportReport> = {}): ExportReport => ({
     cut: false,
     lost: { links: 0, bookmarks: 0, fields: 0 },
   },
+  document: { details: false, bookmarks: false, labels: false },
   ...change,
 })
 
@@ -466,5 +467,42 @@ describe("what became of the pages", () => {
     ).toContain(
       "The page's own text was changed in 2 places. The words as they were are still in the signed part of the file, where a program can find them. To be rid of them, download the file written anew."
     )
+  })
+})
+
+describe("what became of the file as a whole", () => {
+  const none = { details: false, bookmarks: false, labels: false }
+  const told = (document: Partial<ExportReport["document"]>) =>
+    checkLines(report({ document: { ...none, ...document } })).map(
+      (line) => line.text
+    )
+
+  it("says what was set, each for itself", () => {
+    expect(told({ details: true })).toContain(
+      "The file's title and other details are as you set them. A second description a file may carry (XMP) was taken out, so that the two cannot disagree."
+    )
+    expect(told({ bookmarks: true })).toContain(
+      "The bookmarks are as you set them."
+    )
+    expect(told({ labels: true })).toContain(
+      "The numbers the file gives its own pages are as you set them. They are what a program shows in its page box; nothing is written on the pages."
+    )
+    expect(
+      told({}).some((text) => /bookmarks|details|its own pages/.test(text))
+    ).toBe(false)
+  })
+
+  it("is not silent about a file in which only that was changed", () => {
+    for (const what of ["details", "bookmarks", "labels"] as const)
+      expect(
+        everyLine(
+          report({ added: 0, document: { ...none, [what]: true } })
+        ).some((line) => line.text.startsWith("Nothing was added"))
+      ).toBe(false)
+    expect(
+      everyLine(report({ added: 0 })).some((line) =>
+        line.text.startsWith("Nothing was added")
+      )
+    ).toBe(true)
   })
 })

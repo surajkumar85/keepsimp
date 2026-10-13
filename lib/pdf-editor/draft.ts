@@ -9,6 +9,7 @@
  * arrives from the page.
  */
 import { readCommentOp } from "./comments"
+import { readDocumentOp } from "./document"
 import { readFieldOp } from "./forms"
 import type { Step } from "./mupdf-edit"
 import { FONT_KEYS, fontsFor, readObject } from "./objects"
@@ -70,6 +71,7 @@ const readers = {
   pictures: readPictureOp,
   links: readLinkOp,
   pages: readPageOp,
+  document: readDocumentOp,
 } as const
 
 /** A step as it comes out of storage, with every change in it checked, or null when it is not one. */

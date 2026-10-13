@@ -30,6 +30,7 @@ import {
   IconHighlight,
   IconItalic,
   IconLine,
+  IconFileInfo,
   IconFiles,
   IconMessages,
   IconNumber123,
@@ -114,6 +115,7 @@ import { CROP_HINT, type Crop, type SheetName } from "./use-crop"
 import { FIND_HINT, type Find } from "./use-find"
 import { CUT_HINT, INPAGE_HINT, type Inpage } from "./use-inpage"
 import { LINKS_HINT, type Links } from "./use-links"
+import type { Described } from "./use-described"
 import type { Pages } from "./use-pages"
 import type { Repeat } from "./use-repeat"
 import { PARAGRAPH_HINT, RETEXT_HINT, type Retext } from "./use-retext"
@@ -1328,6 +1330,7 @@ export function EditorToolbar({
   pages,
   crop,
   repeat,
+  described,
 }: {
   editor: Editor
   comments: Comments
@@ -1345,6 +1348,8 @@ export function EditorToolbar({
   crop: Crop
   /** Page numbers, headers and watermarks, put on many pages at once. */
   repeat: Repeat
+  /** The file as a whole: its details, its bookmarks, its own page numbers. */
+  described: Described
   /** Which tools come first in the row: those that add things, or those that comment. */
   first?: "things" | "comments"
   /**
@@ -1673,6 +1678,19 @@ export function EditorToolbar({
           data-testid="repeat-toggle"
         >
           <IconNumber123 aria-hidden="true" />
+        </Button>
+        <Button
+          type="button"
+          variant={described.on ? "secondary" : "ghost"}
+          size="icon"
+          aria-pressed={described.on}
+          aria-label="Details and bookmarks"
+          title="The file's details, bookmarks and own page numbers"
+          onClick={() => described.setOn(!described.on)}
+          className="shrink-0"
+          data-testid="document-toggle"
+        >
+          <IconFileInfo aria-hidden="true" />
         </Button>
         <Button
           type="button"

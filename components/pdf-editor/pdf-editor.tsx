@@ -69,8 +69,10 @@ import { looksLikePdf, megabytes } from "@/lib/pdf-merger/settings"
 import { cn } from "cn"
 import { CommentsPanel } from "./comments-panel"
 import { PagesPanel } from "./pages-panel"
+import { DocumentPanel } from "./document-panel"
 import { RepeatPanel } from "./repeat-panel"
 import { useCrop } from "./use-crop"
+import { useDescribed } from "./use-described"
 import { useRepeat } from "./use-repeat"
 import { usePages } from "./use-pages"
 import { PageLayer } from "./page-layer"
@@ -529,6 +531,7 @@ function Workspace({
     mode === "watermark" ? "mark" : "numbers",
     mode === "numbers" || mode === "watermark"
   )
+  const described = useDescribed(comments, pageList, repeat)
   /** Go to a field and put the keyboard in it, once its page is on the screen. */
   const goToField = (page: number, id: string) => {
     setJump({ page, turn: -performance.now() })
@@ -972,6 +975,13 @@ function Workspace({
       />
     ) : repeat.on ? (
       <RepeatPanel repeat={repeat} />
+    ) : described.on ? (
+      <DocumentPanel
+        editor={editor}
+        described={described}
+        reading={readingNow}
+        onGo={goToPage}
+      />
     ) : undefined,
     actions: (
       <>
@@ -998,6 +1008,7 @@ function Workspace({
           pages={pageList}
           crop={crop}
           repeat={repeat}
+          described={described}
           first={mode === "annotate" ? "comments" : "things"}
           focus={
             allTools

@@ -234,12 +234,13 @@ test("mobile marketing has no overflow, keyboard FAQ access or unhandled errors"
     "/privacy/",
   ]) {
     await page.goto(route)
-    expect(
-      await page.evaluate(
-        () => document.documentElement.scrollWidth <= innerWidth
-      )
-    ).toBe(true)
     await expect(page.getByRole("heading", { level: 1 })).toBeVisible()
+    // Once the page has settled: a browser may measure it a moment before its styles are all in.
+    await expect
+      .poll(() =>
+        page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)
+      )
+      .toBe(true)
   }
   await page.goto("/")
   const summary = page.locator("summary").first()

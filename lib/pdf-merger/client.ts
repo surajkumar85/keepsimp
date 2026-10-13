@@ -7,6 +7,7 @@ import type { FieldChange } from "@/lib/pdf-editor/forms"
 import type { Found, Query } from "@/lib/pdf-editor/find"
 import type { LinkChange, PageLink } from "@/lib/pdf-editor/links"
 import type { PagePicture, PictureChange } from "@/lib/pdf-editor/page-pictures"
+import type { DocumentChange } from "@/lib/pdf-editor/document"
 import type { PagesChange } from "@/lib/pdf-editor/pages"
 import type { PageLine, TextChange } from "@/lib/pdf-editor/retext"
 import type { ExportReport, Step } from "@/lib/pdf-editor/mupdf-edit"
@@ -610,6 +611,15 @@ export class PdfClient {
       const request = ++this.requests
       this.pageLinksAsked.set(request, resolve)
       this.send({ type: "edit-page-links", id, request, page })
+    })
+  }
+
+  /** Change the file's bookmarks, its details or its own page numbers, as one step; what the file then says of itself. */
+  editDocument(id: string, change: DocumentChange) {
+    return new Promise<EditNews>((resolve, reject) => {
+      const request = ++this.requests
+      this.editNews.set(request, { resolve, reject })
+      this.send({ type: "edit-document", id, request, change })
     })
   }
 

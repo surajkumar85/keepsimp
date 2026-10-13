@@ -125,6 +125,17 @@ const NO_MATCHES: Match[] = []
 /** Keys that scroll what is around a field when they can move nothing in it. */
 const SCROLLING_KEYS = ["Home", "End", "PageUp", "PageDown"]
 
+/**
+ * Where the caret goes for Home or End: to the start or the end of the
+ * line it is in, or of everything that is typed.
+ */
+function caretTo(typed: string, from: number, back: boolean, whole: boolean) {
+  if (whole) return back ? 0 : typed.length
+  if (back) return typed.lastIndexOf("\n", from - 1) + 1
+  const end = typed.indexOf("\n", from)
+  return end < 0 ? typed.length : end
+}
+
 const turnOf = (entry: ReaderEntry) =>
   entry.kind === "page" ? entry.rotation : 0
 
@@ -395,22 +406,48 @@ function ReaderBody({
   }
 
   /**
-   * A key that moves the caret to an end of what is typed moves nothing
-   * when the caret is there already, and a browser then scrolls the pages
-   * to their end instead: whoever was typing on a page was thrown off it.
-   * The pages stay where they are while such a key is dealt with. This is
-   * seen before a field has the key, since a field keeps its keys to itself.
+   * End, Home, Page Up and Page Down in a field. Where such a key can move
+   * nothing in the field (the caret is at the end already), and on a Mac
+   * always, a browser scrolls what is around the field instead: the pages
+   * went to their end, and whoever was typing on a page was thrown off it.
+   * So the caret is moved here, to the start or the end of its line (of
+   * everything, for the Page keys and with Ctrl or ⌘), and the browser is
+   * told that the key is dealt with. This is seen before a field has the
+   * key, since a field keeps its keys to itself.
    */
   const keepPages = (event: KeyboardEvent) => {
-    const pages = area.current
+    if (!SCROLLING_KEYS.includes(event.key) || event.altKey) return
+    const target = event.target as HTMLElement
+    const field = target.closest("input, textarea")
     if (
-      !pages ||
-      !SCROLLING_KEYS.includes(event.key) ||
-      !(event.target as HTMLElement).closest(
-        "input, textarea, [contenteditable]"
-      )
-    )
+      field instanceof HTMLInputElement ||
+      field instanceof HTMLTextAreaElement
+    ) {
+      // A field without a caret, such as one for a number, has nothing to move.
+      const at = field.selectionDirection === "backward" ? "start" : "end"
+      const from = at === "start" ? field.selectionStart : field.selectionEnd
+      if (from !== null) {
+        const whole =
+          event.key.startsWith("Page") || event.ctrlKey || event.metaKey
+        const back = event.key === "Home" || event.key === "PageUp"
+        const to = caretTo(field.value, from, back, whole)
+        // With Shift, what lies between is selected, from where the selection began.
+        const anchor =
+          at === "start" ? field.selectionEnd! : field.selectionStart!
+        if (event.shiftKey)
+          field.setSelectionRange(
+            Math.min(anchor, to),
+            Math.max(anchor, to),
+            to < anchor ? "backward" : "forward"
+          )
+        else field.setSelectionRange(to, to)
+      }
+      event.preventDefault()
       return
+    }
+    // Anything else that is typed in: the pages are held where they are.
+    const pages = area.current
+    if (!pages || !target.closest("[contenteditable]")) return
     const { scrollTop: top, scrollLeft: left } = pages
     const stay = () => {
       pages.scrollTop = top

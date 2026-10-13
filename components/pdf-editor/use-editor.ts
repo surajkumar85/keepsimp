@@ -50,6 +50,7 @@ import {
 import type { OwnFile } from "@/lib/pdf-editor/draft-store"
 import type { Query } from "@/lib/pdf-editor/find"
 import type { LinkOp, PageLink } from "@/lib/pdf-editor/links"
+import type { DocumentOp } from "@/lib/pdf-editor/document"
 import { labelOf, type PageOp } from "@/lib/pdf-editor/pages"
 import {
   repeatedChange,
@@ -240,6 +241,8 @@ export function useEditor(
   const [bookmarks, setBookmarks] = useState(opened.bookmarks)
   /** Counts up whenever the list of pages itself changes. */
   const [layout, setLayout] = useState(0)
+  /** What the file says of itself, its bookmarks and its own page numbers, as the file has them. */
+  const [described, setDescribed] = useState(opened.document)
 
   const view = useCallback(
     (page: number, from = latest.current.objects): PageView => ({
@@ -393,6 +396,10 @@ export function useEditor(
         for (const { page, fields: here } of news.pages) now[page] = here
         return sized(now)
       })
+      if (news.document) {
+        setDescribed(news.document)
+        setBookmarks(news.document.bookmarks)
+      }
       if (news.layout) {
         setSizes(news.layout.sizes)
         setBookmarks(news.layout.bookmarks)
@@ -720,6 +727,15 @@ export function useEditor(
           ops: [{ do: "link", page, ...what }],
         })
       )
+    },
+    [flush, enqueue, file]
+  )
+
+  /** Change the file's bookmarks, its details or its own page numbers, as one step. */
+  const changeDocument = useCallback(
+    (label: string, ...ops: DocumentOp[]) => {
+      flush()
+      return enqueue((worker) => worker.editDocument(file, { label, ops }))
     },
     [flush, enqueue, file]
   )
@@ -1487,6 +1503,8 @@ export function useEditor(
     sizes,
     bookmarks,
     layout,
+    described,
+    changeDocument,
     changePages,
     insertPdf,
     repeat,

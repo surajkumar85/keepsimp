@@ -18,6 +18,8 @@ import type { ExportReport, Step } from "@/lib/pdf-editor/mupdf-edit"
 import type { Found } from "@/lib/pdf-editor/find"
 import type { LinkChange, PageLink } from "@/lib/pdf-editor/links"
 import type { PagePicture, PictureChange } from "@/lib/pdf-editor/page-pictures"
+import type { DocumentChange } from "@/lib/pdf-editor/document"
+import type { DocumentFacts } from "@/lib/pdf-editor/mupdf-document"
 import type { PagesChange } from "@/lib/pdf-editor/pages"
 import type { PageLine, TextChange } from "@/lib/pdf-editor/retext"
 import type { EditorObject } from "@/lib/pdf-editor/objects"
@@ -228,6 +230,13 @@ export type PdfRequest =
       password?: string
       ready?: boolean
     }
+  /** Change the file's bookmarks, its details or its own page numbers, as one step. */
+  | {
+      type: "edit-document"
+      id: string
+      request: number
+      change: DocumentChange
+    }
   /** Move, take out, copy, turn or add pages, as one step. */
   | { type: "edit-pages"; id: string; request: number; change: PagesChange }
   /** Change pictures a page already has, as one step. */
@@ -293,6 +302,8 @@ export interface EditNews {
    * hold another page than before, also places that are no more.
    */
   layout?: { sizes: Size[]; bookmarks: Bookmark[] }
+  /** When the file as a whole is another than before: its details, its bookmarks and its own page numbers. */
+  document?: DocumentFacts
 }
 
 export type PdfResponse =
@@ -394,6 +405,8 @@ export type PdfResponse =
         after: boolean
         history: History
         bookmarks: Bookmark[]
+        /** The file's details, its bookmarks and its own page numbers. */
+        document: DocumentFacts
       } | null
     }
   /** Null when the file is not open for editing. */

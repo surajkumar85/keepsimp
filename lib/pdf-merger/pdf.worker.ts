@@ -49,6 +49,7 @@ import type { Stage } from "@/lib/pdf-compressor/report"
 import type { LetterLine } from "@/lib/pdf-editor/comments"
 import { applyFields, fieldsOn, formFacts } from "@/lib/pdf-editor/mupdf-forms"
 import { readDraft } from "@/lib/pdf-editor/draft"
+import { applyDocument, documentOf } from "@/lib/pdf-editor/mupdf-document"
 import { canWriteAfter, exportAfter } from "@/lib/pdf-editor/mupdf-signed"
 import type { PageLink } from "@/lib/pdf-editor/links"
 import { applyLinks, linksOn } from "@/lib/pdf-editor/mupdf-links"
@@ -122,6 +123,8 @@ const originals = new Map<string, OpenedPdf>()
 const editing = new Map<string, EditSession>()
 /** Which lie of the pages each session's page was last told of (`laidOut`). */
 const toldOf = new WeakMap<EditSession, number>()
+/** And which state of the file as a whole (`described`). */
+const describedOf = new WeakMap<EditSession, number>()
 
 function closeFile(id: string) {
   const pdf = files.get(id)
@@ -595,8 +598,10 @@ function editState(
         history: historyOf(session),
         // A draft may have put the pages in another order: the bookmarks are read as they lead now.
         bookmarks: session.laidOut ? bookmarksOf(session.doc) : pdf.bookmarks,
+        document: documentOf(session),
       }
       toldOf.set(session, session.laidOut ?? 0)
+      describedOf.set(session, session.described ?? 0)
     }
   } catch {
     // The page says that the file could not be opened for editing.
@@ -628,6 +633,14 @@ function newsOf(
       ? undefined
       : { sizes: editSizes(session), bookmarks: bookmarksOf(session.doc) }
   toldOf.set(session, laid)
+  // The file as a whole is told of when it changed, and when its pages were
+  // put otherwise: its bookmarks lead to other places then.
+  const said = session.described ?? 0
+  const document =
+    layout || (describedOf.get(session) ?? 0) !== said
+      ? documentOf(session)
+      : undefined
+  describedOf.set(session, said)
   const count = session.doc.countPages()
   return {
     // A place past the end holds nothing; that it is gone is said by the sizes.
@@ -642,6 +655,29 @@ function newsOf(
     history: historyOf(session),
     lacking: [...lacking],
     ...(layout ? { layout } : null),
+    ...(document ? { document } : null),
+  }
+}
+
+async function editDocument(
+  request: Extract<PdfRequest, { type: "edit-document" }>
+) {
+  const session = editing.get(request.id)
+  try {
+    if (!session) throw new Error(EDIT_FAILED)
+    const pages = applyDocument(await engine, session, request.change)
+    const news = newsOf(session, pages)
+    // Whoever reads the file's bookmarks from here reads them as they are now.
+    const pdf = files.get(request.id)
+    if (pdf && news.document) pdf.bookmarks = news.document.bookmarks
+    post({ type: "edit-news", request: request.request, news })
+  } catch (error) {
+    post({
+      type: "edit-news",
+      request: request.request,
+      news: null,
+      message: readable(error, EDIT_FAILED),
+    })
   }
 }
 
@@ -1293,6 +1329,7 @@ self.onmessage = (event: MessageEvent<PdfRequest>) => {
   else if (request.type === "edit-page-links")
     enqueue({ run: async () => editPageLinks(request) })
   else if (request.type === "edit-pages") void editPages(request)
+  else if (request.type === "edit-document") void editDocument(request)
   else if (request.type === "edit-insert") void editInsert(request)
   else if (request.type === "edit-page-link")
     enqueue({ run: () => editPageLink(request) })

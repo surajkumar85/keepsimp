@@ -471,7 +471,7 @@ interface Run {
 }
 
 /** The runs of a file's own page numbers, in order; null when it simply counts its pages. */
-function runsOf(doc: Doc): Run[] | null {
+export function runsOf(doc: Doc): Run[] | null {
   const tree = doc.getTrailer().get("Root").get("PageLabels")
   if (!tree.isDictionary()) return null
   const runs: Run[] = []

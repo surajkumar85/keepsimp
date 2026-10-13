@@ -363,7 +363,7 @@ test("takes a size when the typing of it pauses, not at every key", async ({
   const box = things(page).first()
   await box.click()
   await expect(box).toHaveAttribute("data-selected", "true")
-  const size = reader(page).getByLabel("Size")
+  const size = reader(page).getByLabel("Size", { exact: true })
   await expect(size).toHaveValue("12")
   // Typed a key at a time: the field keeps what is typed, also what is no size yet.
   await size.click()
@@ -385,7 +385,7 @@ test("takes a size when the typing of it pauses, not at every key", async ({
   await expect(size).toHaveValue("30")
   // A size that is typed and not yet taken is taken by the press that starts a box.
   await pick(page, "Text").click()
-  await reader(page).getByLabel("Size").fill("20")
+  await reader(page).getByLabel("Size", { exact: true }).fill("20")
   await click(page, 220, 160)
   await expect(page.getByTestId("editor-typing")).toBeFocused()
   await page.keyboard.type("Twenty")
@@ -466,7 +466,7 @@ test("types text in a font, size and colour of its own, and changes the words la
   await expect(things(page).first()).toHaveAccessibleName("Text box: Dear Ada,")
 
   // A larger size from the bar.
-  await reader(page).getByLabel("Size").fill("24")
+  await reader(page).getByLabel("Size", { exact: true }).fill("24")
   await changes(page, 2)
 
   // Enter opens the box again; its words are changed.

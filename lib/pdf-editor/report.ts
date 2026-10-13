@@ -59,7 +59,10 @@ export function checkLines(report: ExportReport): CheckLine[] {
     report.retext.steps === 0 &&
     report.pictures.steps === 0 &&
     report.links === 0 &&
-    report.pages.steps === 0
+    report.pages.steps === 0 &&
+    !report.document.details &&
+    !report.document.bookmarks &&
+    !report.document.labels
   )
     lines.push({
       text: "Nothing was added. The file was written again as it is.",
@@ -212,6 +215,21 @@ export function checkLines(report: ExportReport): CheckLine[] {
   if (report.links > 0)
     lines.push({
       text: `Links were added, changed or taken away in ${report.links.toLocaleString("en")} place${report.links === 1 ? "" : "s"}. Where a link leads is not checked: try each one in the result.`,
+      good: true,
+    })
+  if (report.document.details)
+    lines.push({
+      text: "The file's title and other details are as you set them. A second description a file may carry (XMP) was taken out, so that the two cannot disagree.",
+      good: true,
+    })
+  if (report.document.bookmarks)
+    lines.push({
+      text: "The bookmarks are as you set them.",
+      good: true,
+    })
+  if (report.document.labels)
+    lines.push({
+      text: "The numbers the file gives its own pages are as you set them. They are what a program shows in its page box; nothing is written on the pages.",
       good: true,
     })
   const form = report.fields
