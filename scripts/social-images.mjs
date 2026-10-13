@@ -25,6 +25,30 @@ body { margin: 0; }
 `
 const cards = [
   [
+    "convert-hex-rgb-hsl-oklch",
+    "One color. Every useful code.",
+    "HEX, RGB, OKLCH and wide-gamut colors.",
+    "/images/color-convert-guide.svg",
+  ],
+  [
+    "check-color-contrast-wcag",
+    "Colors that leave the words clear.",
+    "Check contrast with transparency included.",
+    "/images/color-contrast-guide.svg",
+  ],
+  [
+    "make-color-palettes-gradients",
+    "A palette, ready for its next job.",
+    "Make, mix and export colors locally.",
+    "/images/color-palette-guide.svg",
+  ],
+  [
+    "company-brand-color-palettes",
+    "A brand color, with its source.",
+    "Explore company palettes and copy their codes.",
+    "/images/color-brand-guide.svg",
+  ],
+  [
     "keepsimp",
     "Less busywork. More room to create.",
     "Free browser tools. No account. No uploads.",
@@ -80,8 +104,8 @@ const cards = [
   ],
   [
     "free-online-tools-no-upload",
-    "Nine free tools. No uploads.",
-    "PDFs, images, GIFs and JSON, all in your browser.",
+    "Ten free tools. No uploads.",
+    "PDFs, images, JSON and colors, all in your browser.",
     "/images/tools-overview.svg",
   ],
   [

@@ -1,6 +1,6 @@
 # KeepSimp design reference
 
-Version 4.0 · marketing, functional dashboard, chips, image comparison, batch tools, result tables, JSON workspace, animation player, adjustment sliders, document lists, page grids, dialogs, the document reader, page boards, category colours and the search in the top bar · updated 11 October 2026 · applies to every future implementation. Token version 4 adds five category colours and two shadows.
+Version 4.1 · marketing, functional dashboard, chips, image comparison, batch tools, result tables, JSON workspace, animation player, adjustment sliders, document lists, page grids, dialogs, the document reader, page boards, category colours the search in the top bar and color data previews · updated 13 October 2026 · applies to every future implementation. Token version 4 adds five category colours and two shadows.
 
 KeepSimp combines the requested shadcn preset with Airbnb-informed clarity, spacing, hierarchy, and human language. The exact numbers below are **KeepSimp decisions**, not an official Airbnb token export. Airbnb's public references reviewed here do not provide a complete numerical radius specification. We retain our own teal identity and fonts.
 
@@ -200,3 +200,7 @@ For an intentional system change: edit tokens, regenerate CSS, update this docum
 Use browser tests for complete rendered flows. Pure logic belongs in unit tests; async server components are covered through browser journeys. [Next.js Vitest guide](https://nextjs.org/docs/app/guides/testing/vitest), [Next.js Playwright guide](https://nextjs.org/docs/app/guides/testing/playwright)
 
 The marketing phase adds real image and JSON download journeys, metadata and sitemap validation, responsive marketing checks, article navigation, and accessibility scans. Unit coverage includes catalogue, image processing lifecycle, precision-preserving JSON formatting, SEO helpers and the image compressor's pure modules. Coverage refers to those modules, not every application component.
+
+## Color utility data previews
+
+The color utility shows common conversion formats first, with the remaining spaces in a native keyboard-operable disclosure. It uses seven wrapping Base UI workspace tabs and the existing compact cards and controls. Computed swatches, gradients and contrast samples represent document data and may use inline color values from `lib/color/`; these are not replacements for theme tokens. Keep all labels, buttons, errors and normal supporting text on semantic tokens. Deliberately failing contrast samples carry `data-color-preview` and are excluded from control accessibility scans. Company colors are sourced reference data, not KeepSimp brand tokens. See [the color utility reference](color-utility.md) before changing these workflows.

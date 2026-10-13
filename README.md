@@ -70,3 +70,5 @@ The initializer required a new directory, so the same preset/template was genera
 ## License
 
 The application uses [AGPL-3.0-only](LICENSE), following the project's open-source direction. Dependencies, font files, and generated upstream components retain their own license notices.
+
+The [color utility reference](docs/color-utility.md) records color standards, brand sources, numerical decisions and limits for the converter, palettes, contrast, gradients and local image sampling.

@@ -1,5 +1,7 @@
 export type BlogPost = {
   slug: string
+  published?: string
+  modified?: string
   /** The heading of the article, in the site's own voice. */
   title: string
   /**
@@ -30,6 +32,7 @@ export type BlogPost = {
 }
 
 export const posts: readonly BlogPost[] = [
+  ...colorPosts,
   overviewPost,
   {
     slug: "compress-images-without-uploading",
@@ -691,3 +694,5 @@ import {
   resizePost,
   targetSizePost,
 } from "./tool-blog"
+
+import { colorPosts } from "./color-blog"

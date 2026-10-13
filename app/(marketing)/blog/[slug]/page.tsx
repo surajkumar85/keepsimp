@@ -31,8 +31,8 @@ export async function generateMetadata({
     openGraph: {
       ...base.openGraph,
       type: "article",
-      publishedTime: site.updated,
-      modifiedTime: site.updated,
+      publishedTime: post.published ?? site.updated,
+      modifiedTime: post.modified ?? post.published ?? site.updated,
       authors: ["KeepSimp"],
     },
   }
@@ -59,8 +59,8 @@ export default async function ArticlePage({
               description: post.description,
               keywords: post.keywords?.join(", "),
               image: [absoluteUrl(`/images/social/${post.slug}.png`)],
-              datePublished: site.updated,
-              dateModified: site.updated,
+              datePublished: post.published ?? site.updated,
+              dateModified: post.modified ?? post.published ?? site.updated,
               author: {
                 "@type": "Organization",
                 name: "KeepSimp",
@@ -125,7 +125,18 @@ export default async function ArticlePage({
               <span className="mx-2" aria-hidden="true">
                 ·
               </span>{" "}
-              <time dateTime="2026-10-10">10 October 2026</time>
+              <time dateTime={(post.published ?? site.updated).slice(0, 10)}>
+                {new Intl.DateTimeFormat("en-GB", {
+                  day: "numeric",
+                  month: "long",
+                  year: "numeric",
+                  timeZone: "UTC",
+                }).format(
+                  new Date(
+                    `${(post.published ?? site.updated).slice(0, 10)}T12:00:00Z`
+                  )
+                )}
+              </time>
               <span className="mx-2" aria-hidden="true">
                 ·
               </span>

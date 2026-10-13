@@ -12,6 +12,8 @@ import { ImageConverter } from "@/components/image-converter/image-converter"
 import { ImageConverterTutorial } from "@/components/image-converter/tutorial"
 import { ImageResizer } from "@/components/image-resizer/image-resizer"
 import { ImageResizerTutorial } from "@/components/image-resizer/tutorial"
+import { ColorWorkspace } from "@/components/color-workspace/workspace"
+import { ColorTutorial } from "@/components/color-workspace/tutorial"
 import { JsonTool } from "@/components/json-tool"
 import { PdfCompressor } from "@/components/pdf-compressor/pdf-compressor"
 import { PdfCompressorTutorial } from "@/components/pdf-compressor/tutorial"
@@ -44,6 +46,24 @@ export async function generateMetadata({
   const { tool: id } = await params
   const tool = ready.find((tool) => tool.id === id)
   if (!tool) notFound()
+  if (id === "color-utility")
+    return {
+      ...pageMetadata(
+        "Free color converter, palette maker & contrast checker",
+        "Convert HEX, RGB, HSL, OKLCH and wide-gamut colors. Make palettes and gradients, check WCAG contrast, extract image colors and browse sourced company palettes locally.",
+        `/dashboard/${id}/`,
+        "/images/social/convert-hex-rgb-hsl-oklch.png"
+      ),
+      keywords: [
+        "color converter",
+        "HEX to RGB",
+        "OKLCH",
+        "palette generator",
+        "WCAG contrast checker",
+        "CSS gradients",
+        "company brand colors",
+      ],
+    }
   if (id === "json-formatter")
     return pageMetadata(
       "Free JSON formatter, validator & viewer",
@@ -116,6 +136,18 @@ export default async function ToolPage({
                 : "DeveloperApplication",
           operatingSystem: "Modern web browser",
           description: tool.description,
+          ...(id === "color-utility"
+            ? {
+                featureList: [
+                  "Color format conversion",
+                  "Palette and gradient creation",
+                  "WCAG contrast checker",
+                  "Local image color extraction",
+                  "Sourced company brand palettes",
+                  "CSS, JSON, SVG and PNG palette exports",
+                ],
+              }
+            : {}),
           ...(id === "json-formatter"
             ? {
                 featureList: [
@@ -146,7 +178,9 @@ export default async function ToolPage({
       <p className="mt-2 mb-6 text-sm text-muted-foreground">
         {tool.description} Free, with no account or uploads.
       </p>
-      {id === "image-compressor" ? (
+      {id === "color-utility" ? (
+        <ColorWorkspace />
+      ) : id === "image-compressor" ? (
         <ImageCompressor />
       ) : id === "image-resizer" ? (
         <ImageResizer />
@@ -177,7 +211,9 @@ export default async function ToolPage({
       ) : (
         <JsonTool />
       )}
-      {id === "image-compressor" ? (
+      {id === "color-utility" ? (
+        <ColorTutorial />
+      ) : id === "image-compressor" ? (
         <ImageCompressorTutorial />
       ) : id === "image-resizer" ? (
         <ImageResizerTutorial />

@@ -3,6 +3,7 @@ import {
   IconArrowsMinimize,
   IconArrowsSplit2,
   IconBraces,
+  IconPalette,
   IconCut,
   IconDimensions,
   IconCrop,
@@ -48,6 +49,7 @@ const icons: Record<string, typeof IconBraces> = {
   "add-page-numbers": IconNumber123,
   "watermark-pdf": IconDroplet,
   "json-formatter": IconBraces,
+  "color-utility": IconPalette,
 }
 
 /**

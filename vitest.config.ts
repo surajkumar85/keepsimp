@@ -19,6 +19,9 @@ export default defineConfig({
       provider: "v8",
       include: [
         "lib/catalogue.ts",
+        "lib/color/core.ts",
+        "lib/color/palette.ts",
+        "lib/color/vision.ts",
         "lib/json-tools.ts",
         "lib/json-workspace/document.ts",
         "lib/json-workspace/numbers.ts",

@@ -14,5 +14,16 @@ export default function sitemap(): MetadataRoute.Sitemap {
     ...tools
       .filter((tool) => tool.status === "available")
       .map((tool) => `/dashboard/${tool.id}/`),
-  ].map((path) => ({ url: absoluteUrl(path), lastModified: site.updated }))
+  ].map((path) => {
+    const article = posts.find((post) => path === `/blog/${post.slug}/`)
+    return {
+      url: absoluteUrl(path),
+      lastModified:
+        article?.modified ??
+        article?.published ??
+        (path === "/dashboard/color-utility/"
+          ? "2026-10-13T00:00:00+05:30"
+          : site.updated),
+    }
+  })
 }

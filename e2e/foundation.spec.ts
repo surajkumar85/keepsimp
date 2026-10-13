@@ -6,16 +6,16 @@ test("tools are grouped, coloured by kind, and follow validated category URLs", 
   page,
 }) => {
   await page.goto("/dashboard/")
-  await expect(page.getByTestId("tool-card")).toHaveCount(15)
+  await expect(page.getByTestId("tool-card")).toHaveCount(16)
   // What works comes first; what is still to come is kept apart and quiet.
   const ready = page.getByTestId("tools-ready")
   const planned = page.getByTestId("tools-planned")
   await expect(ready.getByRole("heading", { level: 3 }).first()).toContainText(
     "Ready to use"
   )
-  await expect(ready.getByTestId("tool-card")).toHaveCount(9)
+  await expect(ready.getByTestId("tool-card")).toHaveCount(10)
   await expect(planned.getByTestId("tool-card")).toHaveCount(6)
-  await expect(ready.getByRole("link")).toHaveCount(9)
+  await expect(ready.getByRole("link")).toHaveCount(10)
   await expect(planned.getByRole("link")).toHaveCount(0)
   // Each kind of tool has its own colour, taken from the tokens.
   const colourOf = (name: string) =>
@@ -44,7 +44,7 @@ test("tools are grouped, coloured by kind, and follow validated category URLs", 
   await expect(page.getByTestId("tool-card")).toHaveCount(3)
   await expect(page.getByTestId("tools-ready")).toHaveCount(0)
   await page.goto("/dashboard/?category=invalid")
-  await expect(page.getByTestId("tool-card")).toHaveCount(15)
+  await expect(page.getByTestId("tool-card")).toHaveCount(16)
 })
 
 test("the search in the top bar finds tools and opens them", async ({
@@ -58,7 +58,7 @@ test("the search in the top bar finds tools and opens them", async ({
   await expect(box).toBeFocused()
   const options = dialog.getByRole("option")
   // With nothing typed, every tool is offered, working tools first.
-  await expect(options).toHaveCount(21)
+  await expect(options).toHaveCount(22)
   await expect(options.first()).toContainText("Image compressor")
   await expect(options.first()).toHaveAttribute("aria-selected", "true")
   // Both converters write WebP; only one of them makes boomerangs.
@@ -194,7 +194,7 @@ test("theme persists and both themes pass accessibility checks", async ({
     // The search, with its list open and a tool chosen.
     await page.getByTestId("search-button").click()
     const search = page.getByRole("dialog", { name: "Search tools" })
-    await expect(search.getByRole("option")).toHaveCount(21)
+    await expect(search.getByRole("option")).toHaveCount(22)
     const open = await new AxeBuilder({ page })
       .include("[role=dialog]")
       .withTags(["wcag2a", "wcag2aa", "wcag21aa"])
@@ -321,7 +321,7 @@ test("navigation remains usable at 320px", async ({ page }) => {
   // The search still fits, as a round button, and its list fits the screen.
   await page.getByTestId("search-button").click()
   const search = page.getByRole("dialog", { name: "Search tools" })
-  await expect(search.getByRole("option")).toHaveCount(21)
+  await expect(search.getByRole("option")).toHaveCount(22)
   const box = await search.boundingBox()
   expect(box!.x).toBeGreaterThanOrEqual(0)
   expect(box!.x + box!.width).toBeLessThanOrEqual(320)

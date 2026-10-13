@@ -2,12 +2,12 @@ import type { BlogPost } from "./blog"
 
 /** The post that goes through every tool on the site, with a link to each. */
 export const overviewPost: BlogPost = {
+  modified: "2026-10-13T00:00:00+05:30",
   slug: "free-online-tools-no-upload",
-  title: "Nine free tools that never ask for your files.",
-  searchTitle:
-    "Free online PDF, image and JSON tools that work without uploading",
+  title: "Ten free tools that never ask for your files.",
+  searchTitle: "Free PDF, image, JSON and color tools without uploading",
   description:
-    "Every KeepSimp tool in one place: edit, annotate, compress, merge and split PDFs, resize and convert images, convert GIFs, and format JSON. Free, no sign-up, your files stay with you.",
+    "Every KeepSimp tool together: edit, annotate, compress, merge and split PDFs, resize and convert images, convert GIFs, format JSON, and work with colors. Free, no sign-up, your files stay with you.",
   keywords: [
     "free online tools",
     "no upload",
@@ -22,13 +22,14 @@ export const overviewPost: BlogPost = {
     "convert image",
     "GIF converter",
     "JSON formatter",
+    "color converter",
     "privacy",
   ],
   category: "Start here",
   readingTime: "5 min read",
   image: "/images/tools-overview.svg",
   imageAlt:
-    "Nine tiles, one for each KeepSimp tool: four for PDFs, four for images and animations, and one for JSON",
+    "Tiles representing PDF, image, animation and JSON tools, with a color palette strip",
   tool: "",
   intro:
     "Most online tools work the same way: you upload a file, wait, and download the result, often after a sign-up or a limit of two files a day. KeepSimp works differently. Each tool runs inside your browser, on your own computer or phone, so the file never leaves it. There is no account, no watermark and no daily limit. Here is every tool we have today, what it is good for, and where to read more.",
@@ -228,6 +229,20 @@ export const overviewPost: BlogPost = {
         {
           label: "Guide: format JSON without losing precision",
           href: "/blog/format-json-without-losing-precision/",
+        },
+      ],
+    },
+    {
+      id: "color-utility",
+      title: "Color utility: from a swatch to a palette.",
+      paragraphs: [
+        "Convert color codes, make palettes and gradients, check WCAG contrast and extract colors from a local image. Browse sourced company palettes and copy their codes, or export your own palette as CSS, JSON, SVG or PNG.",
+      ],
+      links: [
+        { label: "Open the color utility", href: "/dashboard/color-utility/" },
+        {
+          label: "Guide: one color, a code for every place",
+          href: "/blog/convert-hex-rgb-hsl-oklch/",
         },
       ],
     },
