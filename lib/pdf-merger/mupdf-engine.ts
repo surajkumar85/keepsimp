@@ -214,6 +214,9 @@ const toBookmarks = (items: EngineBookmark[] | null | undefined): Bookmark[] =>
     children: toBookmarks(item.down),
   }))
 
+/** A file's bookmarks as it has them this moment. */
+export const bookmarksOf = (doc: Doc) => toBookmarks(doc.loadOutline())
+
 /** Page settings a page may leave to the tree above it. */
 const INHERITED = ["Resources", "MediaBox", "CropBox", "Rotate"]
 

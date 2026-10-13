@@ -65,6 +65,12 @@ export function useComments(editor: Editor, start: CommentTool | null) {
     null
   )
   const [listed, setListed] = useState(false)
+  // When the list of pages is another, the comment that was picked may be on another page, or on none.
+  const [laid, setLaid] = useState(editor.layout)
+  if (laid !== editor.layout) {
+    setLaid(editor.layout)
+    setPicked(null)
+  }
   /** A comment whose words are to be typed as soon as it is listed. */
   const [typing, setTyping] = useState<string | null>(null)
   const [author, showAuthor] = useState(readName)

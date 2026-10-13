@@ -64,6 +64,8 @@ import type { FileFacts } from "@/lib/pdf-merger/files"
 import { looksLikePdf, megabytes } from "@/lib/pdf-merger/settings"
 import { cn } from "cn"
 import { CommentsPanel } from "./comments-panel"
+import { PagesPanel } from "./pages-panel"
+import { usePages } from "./use-pages"
 import { PageLayer } from "./page-layer"
 import { SignatureDialog } from "./signature-dialog"
 import { EditorToolbar } from "./toolbar"
@@ -407,6 +409,7 @@ function Workspace({
     []
   )
   const find = useFind(editor, comments, retext, inpage, links, goToPage)
+  const pageList = usePages(editor, comments)
   /** Go to a field and put the keyboard in it, once its page is on the screen. */
   const goToField = (page: number, id: string) => {
     setJump({ page, turn: -performance.now() })
@@ -425,7 +428,7 @@ function Workspace({
   const [window_, setWindow] = useState<number | null>(0)
   const lastPage = useRef(0)
   /** The page shown on the card while the window is closed. */
-  const [previewPage, setPreviewPage] = useState(0)
+  const [previewAt, setPreviewPage] = useState(0)
   const preview = useRef<HTMLCanvasElement>(null)
   const keepEditing = useRef<HTMLButtonElement>(null)
   const [keepEditable, setKeepEditable] = useState(false)
@@ -437,7 +440,9 @@ function Workspace({
   const cancel = useRef<(() => void) | null>(null)
   const url = useRef<string | null>(null)
   const { name } = doc.file
-  const pages = opened.sizes.length
+  const pages = editor.sizes.length
+  // The page that was last read may have been taken out since.
+  const previewPage = Math.min(previewAt, pages - 1)
 
   useEffect(
     () => () => {
@@ -531,7 +536,7 @@ function Workspace({
             state: "ready",
             title: name,
             start: window_,
-            entries: opened.sizes.map((size, page) => ({
+            entries: editor.sizes.map((size, page) => ({
               kind: "page",
               key: `${doc.id}/${page}`,
               file: doc.id,
@@ -541,9 +546,9 @@ function Workspace({
               label: `${name}, page ${page + 1}`,
               version: versions[page],
             })),
-            bookmarks: { file: doc.id, items: opened.bookmarks },
+            bookmarks: { file: doc.id, items: editor.bookmarks },
           },
-    [window_, name, doc.id, opened, versions]
+    [window_, name, doc.id, editor.sizes, editor.bookmarks, versions]
   )
 
   // Written after a signed file, nothing else is chosen: no lock to be wrong about.
@@ -721,6 +726,11 @@ function Workspace({
       find.setOn(false)
       return used()
     }
+    // M shows the list of pages, where they are moved, turned, copied and taken out.
+    if (plain && letter === "m") {
+      pageList.setOn(!pageList.on)
+      return used()
+    }
     // J adds and changes links; Escape lets go of one, then of the tool.
     if (plain && letter === "j") {
       links.setOn(!links.on)
@@ -766,6 +776,15 @@ function Workspace({
     showPage: jump,
     panel: comments.listed ? (
       <CommentsPanel editor={editor} comments={comments} />
+    ) : pageList.on ? (
+      <PagesPanel
+        editor={editor}
+        pages={pageList}
+        source={reader.source}
+        file={doc.id}
+        name={name}
+        onGo={goToPage}
+      />
     ) : undefined,
     actions: (
       <>
@@ -789,6 +808,7 @@ function Workspace({
           inpage={inpage}
           links={links}
           find={find}
+          pages={pageList}
           first={mode === "annotate" ? "comments" : "things"}
           focus={
             allTools
@@ -956,7 +976,7 @@ function Workspace({
               data-testid="editor-preview"
               className="h-auto max-h-96 w-auto max-w-full bg-white shadow-sm"
               style={{
-                aspectRatio: `${opened.sizes[previewPage].width} / ${opened.sizes[previewPage].height}`,
+                aspectRatio: `${editor.sizes[previewPage].width} / ${editor.sizes[previewPage].height}`,
               }}
             />
           </button>

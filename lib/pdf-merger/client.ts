@@ -7,6 +7,7 @@ import type { FieldChange } from "@/lib/pdf-editor/forms"
 import type { Found, Query } from "@/lib/pdf-editor/find"
 import type { LinkChange, PageLink } from "@/lib/pdf-editor/links"
 import type { PagePicture, PictureChange } from "@/lib/pdf-editor/page-pictures"
+import type { PagesChange } from "@/lib/pdf-editor/pages"
 import type { PageLine, TextChange } from "@/lib/pdf-editor/retext"
 import type { ExportReport, Step } from "@/lib/pdf-editor/mupdf-edit"
 import type { Change } from "@/lib/pdf-editor/tools"
@@ -569,6 +570,15 @@ export class PdfClient {
       const request = ++this.requests
       this.pageLinksAsked.set(request, resolve)
       this.send({ type: "edit-page-links", id, request, page })
+    })
+  }
+
+  /** Move, take out, copy, turn or add pages, as one step; how the pages lie afterwards and what they hold. */
+  editPages(id: string, change: PagesChange) {
+    return new Promise<EditNews>((resolve, reject) => {
+      const request = ++this.requests
+      this.editNews.set(request, { resolve, reject })
+      this.send({ type: "edit-pages", id, request, change })
     })
   }
 

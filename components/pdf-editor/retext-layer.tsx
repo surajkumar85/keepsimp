@@ -132,6 +132,13 @@ function Spot({
         from.current = null
         setMoved(null)
       }}
+      // The keyboard was taken to this line, by Tab or by a program that
+      // reads the page aloud: it is not brought back to the line it was on.
+      // Without this, the line that was typed in last took the keyboard
+      // back a moment later, and Delete took out that line instead.
+      onFocus={() => {
+        if (!isHeld(spot)) hold(null)
+      }}
       onDoubleClick={(event) => event.stopPropagation()}
       onClick={(event) => {
         event.stopPropagation()

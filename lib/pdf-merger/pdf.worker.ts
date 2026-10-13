@@ -2,6 +2,7 @@
 import { decodeImageFile, TOO_MANY_PIXELS } from "@/lib/image-compressor/decode"
 import { sniffFormat } from "@/lib/image-compressor/formats"
 import {
+  bookmarksOf,
   closePdf,
   mergePages,
   openPdf,
@@ -51,6 +52,7 @@ import { readDraft } from "@/lib/pdf-editor/draft"
 import { canWriteAfter, exportAfter } from "@/lib/pdf-editor/mupdf-signed"
 import type { PageLink } from "@/lib/pdf-editor/links"
 import { applyLinks, linksOn } from "@/lib/pdf-editor/mupdf-links"
+import { applyPages } from "@/lib/pdf-editor/mupdf-pages"
 import { applyPictures, picturesOn } from "@/lib/pdf-editor/mupdf-pictures"
 import { readQuery, type Found } from "@/lib/pdf-editor/find"
 import {
@@ -113,6 +115,8 @@ const originals = new Map<string, OpenedPdf>()
 /** Let go of a file, and of the file it was cut from. */
 /** Files that are being edited: each is the very document in `files`, with its fonts, pictures and list of changes. */
 const editing = new Map<string, EditSession>()
+/** Which lie of the pages each session's page was last told of (`laidOut`). */
+const toldOf = new WeakMap<EditSession, number>()
 
 function closeFile(id: string) {
   const pdf = files.get(id)
@@ -584,8 +588,10 @@ function editState(
         form: formFacts(session.doc, fields),
         after: canWriteAfter(session),
         history: historyOf(session),
-        bookmarks: pdf.bookmarks,
+        // A draft may have put the pages in another order: the bookmarks are read as they lead now.
+        bookmarks: session.laidOut ? bookmarksOf(session.doc) : pdf.bookmarks,
       }
+      toldOf.set(session, session.laidOut ?? 0)
     }
   } catch {
     // The page says that the file could not be opened for editing.
@@ -610,15 +616,47 @@ function newsOf(
         // A font that is missing has already failed the change itself.
       }
   }
+  // The list of pages is another than the page knows: it is told of all of it.
+  const laid = session.laidOut ?? 0
+  const layout =
+    (toldOf.get(session) ?? 0) === laid
+      ? undefined
+      : { sizes: editSizes(session), bookmarks: bookmarksOf(session.doc) }
+  toldOf.set(session, laid)
+  const count = session.doc.countPages()
   return {
-    pages: pages.map((page) => ({
-      page,
-      objects: objectsOn(session, page),
-      comments: commentsOn(session, page),
-      fields: fieldsOn(session, page),
-    })),
+    // A place past the end holds nothing; that it is gone is said by the sizes.
+    pages: pages
+      .filter((page) => page < count)
+      .map((page) => ({
+        page,
+        objects: objectsOn(session, page),
+        comments: commentsOn(session, page),
+        fields: fieldsOn(session, page),
+      })),
     history: historyOf(session),
     lacking: [...lacking],
+    ...(layout ? { layout } : null),
+  }
+}
+
+async function editPages(request: Extract<PdfRequest, { type: "edit-pages" }>) {
+  const session = editing.get(request.id)
+  try {
+    if (!session) throw new Error(EDIT_FAILED)
+    const pages = applyPages(await engine, session, request.change)
+    const news = newsOf(session, pages)
+    // Whoever reads the file's bookmarks from here reads them as they are now.
+    const pdf = files.get(request.id)
+    if (pdf && news.layout) pdf.bookmarks = news.layout.bookmarks
+    post({ type: "edit-news", request: request.request, news })
+  } catch (error) {
+    post({
+      type: "edit-news",
+      request: request.request,
+      news: null,
+      message: readable(error, EDIT_FAILED),
+    })
   }
 }
 
@@ -1209,6 +1247,7 @@ self.onmessage = (event: MessageEvent<PdfRequest>) => {
     enqueue({ run: () => editReplace(request) })
   else if (request.type === "edit-page-links")
     enqueue({ run: async () => editPageLinks(request) })
+  else if (request.type === "edit-pages") void editPages(request)
   else if (request.type === "edit-page-link")
     enqueue({ run: () => editPageLink(request) })
   else if (request.type === "edit-page-pictures")

@@ -45,7 +45,8 @@ export function checkLines(report: ExportReport): CheckLine[] {
     report.fields.had === 0 &&
     report.retext.steps === 0 &&
     report.pictures.steps === 0 &&
-    report.links === 0
+    report.links === 0 &&
+    report.pages.steps === 0
   )
     lines.push({
       text: "Nothing was added. The file was written again as it is.",
@@ -134,14 +135,47 @@ export function checkLines(report: ExportReport): CheckLine[] {
             text: `${(written - reread).toLocaleString("en")} of the ${written.toLocaleString("en")} line${written === 1 ? "" : "s"} you changed could not be read back from the result. Read the result before you rely on it.`,
             good: false,
           }
-        : {
-            text:
-              written === 0
-                ? `The page's own text was changed in ${places}. What you took out is no longer in the file.`
-                : `The page's own text was changed in ${places}. The old words are no longer in the file, and ${written === 1 ? "the line you wrote was" : `all ${written.toLocaleString("en")} lines you wrote were`} read back from the result.`,
-            good: true,
-          }
+        : report.signature
+          ? {
+              // Written after a signed file, the file as it came is all still there.
+              text: `The page's own text was changed in ${places}. The words as they were are still in the signed part of the file, where a program can find them. To be rid of them, download the file written anew.`,
+              good: true,
+            }
+          : {
+              text:
+                written === 0
+                  ? `The page's own text was changed in ${places}. What you took out is no longer in the file.`
+                  : `The page's own text was changed in ${places}. The old words are no longer in the file, and ${written === 1 ? "the line you wrote was" : `all ${written.toLocaleString("en")} lines you wrote were`} read back from the result.`,
+              good: true,
+            }
     )
+  }
+  if (report.pages.steps > 0) {
+    const { steps: times, taken, lost } = report.pages
+    const count = (number: number, one: string, many = `${one}s`) =>
+      `${number.toLocaleString("en")} ${number === 1 ? one : many}`
+    lines.push({
+      text: `The pages were put in order, turned, copied, added or taken out in ${count(times, "step")}.`,
+      good: true,
+    })
+    if (taken > 0) {
+      // What led to a page that is gone, and what was on it, went with it.
+      const went = [
+        lost.links ? count(lost.links, "link") : "",
+        lost.bookmarks ? count(lost.bookmarks, "bookmark") : "",
+        lost.fields ? count(lost.fields, "form field") : "",
+      ].filter(Boolean)
+      const them = taken === 1 ? "it" : "them"
+      const too = went.length
+        ? ` What led to ${them} or was on ${them} went too: ${went.join(", ")}.`
+        : ""
+      lines.push({
+        text: report.signature
+          ? `${count(taken, "page")} you took out ${taken === 1 ? "is" : "are"} still in the signed part of the file, where a program can find ${them}. To be rid of ${them}, download the file written anew.${too}`
+          : `${count(taken, "page")} you took out ${taken === 1 ? "is" : "are"} no longer in the file.${too}`,
+        good: true,
+      })
+    }
   }
   if (report.pictures.steps > 0) {
     const { steps: times, cut } = report.pictures

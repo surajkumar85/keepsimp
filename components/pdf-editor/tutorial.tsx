@@ -48,6 +48,11 @@ const content: TutorialContent = {
         "PNG, JPEG, WebP, AVIF, GIF and BMP. A PNG or JPEG goes into the file as it is, without being saved again; other kinds are kept without loss. See-through parts stay see-through.",
     },
     {
+      term: "Pages",
+      detail:
+        "For the pages themselves (M). A list of small pages opens beside them. Press a page to choose it; with Shift, all from the page pressed before; with Ctrl or ⌘, one more. The buttons above the list turn the chosen pages to the left or the right, move them a place earlier or later, copy them, take them out, and add an empty page after them. Drag pages to put them elsewhere, or type the place they are to have. From the keyboard: the arrow keys choose, Alt and an arrow move the chosen pages, Delete takes them out. Links and bookmarks follow their pages. With a page that is taken out go the links and bookmarks that led to it and the form fields that were on it, and the download says how many. A copy of a page has no form fields of its own. Every change is one step, and undo takes it back.",
+    },
+    {
       term: "Find and replace",
       detail:
         "For changing words everywhere (F). Type what to look for and press Enter: the words are found through the whole file, across the line breaks of a paragraph too, and each place is shown on its page, with what it says now and what it will say. Replace changes the place that is shown; Replace all changes every place as one step, which one undo takes back. Two buttons tell capitals from small letters and find whole words only. A place that cannot be changed, such as a paragraph that would grow over what is below it, is left as it was, and the bar says why.",

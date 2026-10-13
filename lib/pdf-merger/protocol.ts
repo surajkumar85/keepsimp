@@ -18,6 +18,7 @@ import type { ExportReport, Step } from "@/lib/pdf-editor/mupdf-edit"
 import type { Found } from "@/lib/pdf-editor/find"
 import type { LinkChange, PageLink } from "@/lib/pdf-editor/links"
 import type { PagePicture, PictureChange } from "@/lib/pdf-editor/page-pictures"
+import type { PagesChange } from "@/lib/pdf-editor/pages"
 import type { PageLine, TextChange } from "@/lib/pdf-editor/retext"
 import type { EditorObject } from "@/lib/pdf-editor/objects"
 import type { Change } from "@/lib/pdf-editor/tools"
@@ -213,6 +214,8 @@ export type PdfRequest =
   | { type: "edit-page-links"; id: string; request: number; page: number }
   /** Add, change or take away links of a page, as one step. */
   | { type: "edit-page-link"; id: string; request: number; change: LinkChange }
+  /** Move, take out, copy, turn or add pages, as one step. */
+  | { type: "edit-pages"; id: string; request: number; change: PagesChange }
   /** Change pictures a page already has, as one step. */
   | {
       type: "edit-page-picture"
@@ -268,6 +271,12 @@ export interface EditNews {
   lacking: string[]
   /** After words were replaced in many places: why each place that was left out could not be changed. */
   refused?: string[]
+  /**
+   * When the list of pages is another than before: every page's size, and
+   * the bookmarks as they lead now. `pages` then names the places that
+   * hold another page than before, also places that are no more.
+   */
+  layout?: { sizes: Size[]; bookmarks: Bookmark[] }
 }
 
 export type PdfResponse =

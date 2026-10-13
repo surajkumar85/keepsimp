@@ -50,6 +50,7 @@ import {
 import type { OwnFile } from "@/lib/pdf-editor/draft-store"
 import type { Query } from "@/lib/pdf-editor/find"
 import type { LinkOp, PageLink } from "@/lib/pdf-editor/links"
+import { labelOf, type PageOp } from "@/lib/pdf-editor/pages"
 import type { FlowOp } from "@/lib/pdf-editor/paragraphs"
 import type { PagePicture, PictureOp } from "@/lib/pdf-editor/page-pictures"
 import type { Align } from "@/lib/pdf-editor/paragraphs"
@@ -227,7 +228,11 @@ export function useEditor(
     },
     []
   )
-  const sizes = opened.sizes
+  /** Every page's size as it is shown; the list changes when pages are moved, added or taken out. */
+  const [sizes, setSizes] = useState(opened.sizes)
+  const [bookmarks, setBookmarks] = useState(opened.bookmarks)
+  /** Counts up whenever the list of pages itself changes. */
+  const [layout, setLayout] = useState(0)
 
   const view = useCallback(
     (page: number, from = latest.current.objects): PageView => ({
@@ -363,20 +368,32 @@ export function useEditor(
 
   const takeNews = useCallback(
     (news: Awaited<ReturnType<PdfClient["editApply"]>>) => {
+      // When the list of pages is another, what is kept of each page is as long as the list.
+      const count = news.layout?.sizes.length
+      const sized = <T>(pages: T[]) =>
+        count === undefined ? pages : pages.slice(0, count)
       const next = [...truth.current]
       for (const { page, objects: now } of news.pages) next[page] = now
-      truth.current = next
+      truth.current = sized(next)
       show()
       setComments((was) => {
         const now = [...was]
         for (const { page, comments: here } of news.pages) now[page] = here
-        return now
+        return sized(now)
       })
       setFields((was) => {
         const now = [...was]
         for (const { page, fields: here } of news.pages) now[page] = here
-        return now
+        return sized(now)
       })
+      if (news.layout) {
+        setSizes(news.layout.sizes)
+        setBookmarks(news.layout.bookmarks)
+        setLayout((was) => was + 1)
+        // What was selected may be on another page now, or on none.
+        setState((was) => ({ ...was, selection: null, gesture: null }))
+        setTyping(null)
+      }
       setVersions((was) => {
         const drawn = [...was]
         for (const { page } of news.pages) drawn[page] = (drawn[page] ?? 0) + 1
@@ -390,7 +407,7 @@ export function useEditor(
           : ""
       )
     },
-    [show]
+    [show, setState, setTyping]
   )
 
   /**
@@ -695,6 +712,17 @@ export function useEditor(
           label,
           ops: [{ do: "link", page, ...what }],
         })
+      )
+    },
+    [flush, enqueue, file]
+  )
+
+  /** Move, take out, copy, turn or add pages, as one step. */
+  const changePages = useCallback(
+    (op: PageOp) => {
+      flush()
+      return enqueue((worker) =>
+        worker.editPages(file, { label: labelOf(op), ops: [op] })
       )
     },
     [flush, enqueue, file]
@@ -1358,6 +1386,9 @@ export function useEditor(
 
   return {
     sizes,
+    bookmarks,
+    layout,
+    changePages,
     objects,
     comments,
     fields,

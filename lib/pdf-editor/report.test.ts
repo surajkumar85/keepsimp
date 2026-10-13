@@ -14,6 +14,7 @@ const report = (change: Partial<ExportReport> = {}): ExportReport => ({
   retext: { steps: 0, lines: 0, found: 0 },
   pictures: { steps: 0, cut: false },
   links: 0,
+  pages: { steps: 0, taken: 0, lost: { links: 0, bookmarks: 0, fields: 0 } },
   ...change,
 })
 
@@ -328,6 +329,88 @@ describe("what became of the page's own text", () => {
     })
     expect(told({ steps: 1, lines: 1, found: 0 })[0].text).toBe(
       "1 of the 1 line you changed could not be read back from the result. Read the result before you rely on it."
+    )
+  })
+})
+
+describe("what became of the pages", () => {
+  const none = { links: 0, bookmarks: 0, fields: 0 }
+  const told = (pages: ExportReport["pages"], signed = false) =>
+    checkLines(
+      report({ pages, ...(signed ? { signature: { intact: true } } : null) })
+    )
+      .map((line) => line.text)
+      .filter(
+        (text) =>
+          /pages? /.test(text) && !/signed part of the file is/.test(text)
+      )
+
+  it("says that the list of pages was changed, and is not silent when nothing else was", () => {
+    expect(told({ steps: 1, taken: 0, lost: none })).toEqual([
+      "The pages were put in order, turned, copied, added or taken out in 1 step.",
+    ])
+    expect(told({ steps: 1200, taken: 0, lost: none })[0]).toContain(
+      "in 1,200 steps."
+    )
+    expect(
+      everyLine(
+        report({ added: 0, pages: { steps: 1, taken: 0, lost: none } })
+      ).some((line) => line.text.startsWith("Nothing was added"))
+    ).toBe(false)
+  })
+
+  it("says that pages taken out are gone, with what led to them and was on them", () => {
+    expect(told({ steps: 1, taken: 1, lost: none })[1]).toBe(
+      "1 page you took out is no longer in the file."
+    )
+    expect(
+      told({
+        steps: 2,
+        taken: 3,
+        lost: { links: 2, bookmarks: 1, fields: 4 },
+      })[1]
+    ).toBe(
+      "3 pages you took out are no longer in the file. What led to them or was on them went too: 2 links, 1 bookmark, 4 form fields."
+    )
+    expect(
+      told({
+        steps: 1,
+        taken: 1,
+        lost: { links: 1, bookmarks: 0, fields: 0 },
+      })[1]
+    ).toBe(
+      "1 page you took out is no longer in the file. What led to it or was on it went too: 1 link."
+    )
+    expect(
+      told({
+        steps: 1,
+        taken: 2,
+        lost: { links: 0, bookmarks: 2, fields: 1 },
+      })[1]
+    ).toContain("went too: 2 bookmarks, 1 form field.")
+  })
+
+  it("does not say that anything is gone from a file that was only added to", () => {
+    expect(told({ steps: 1, taken: 1, lost: none }, true)[1]).toBe(
+      "1 page you took out is still in the signed part of the file, where a program can find it. To be rid of it, download the file written anew."
+    )
+    expect(
+      told(
+        { steps: 1, taken: 2, lost: { links: 1, bookmarks: 0, fields: 0 } },
+        true
+      )[1]
+    ).toBe(
+      "2 pages you took out are still in the signed part of the file, where a program can find them. To be rid of them, download the file written anew. What led to them or was on them went too: 1 link."
+    )
+    expect(
+      checkLines(
+        report({
+          signature: { intact: true },
+          retext: { steps: 2, lines: 0, found: 0 },
+        })
+      ).map((line) => line.text)
+    ).toContain(
+      "The page's own text was changed in 2 places. The words as they were are still in the signed part of the file, where a program can find them. To be rid of them, download the file written anew."
     )
   })
 })

@@ -30,6 +30,7 @@ import {
   IconHighlight,
   IconItalic,
   IconLine,
+  IconFiles,
   IconMessages,
   IconNote,
   IconPencil,
@@ -110,6 +111,7 @@ import { cn } from "cn"
 import { FIND_HINT, type Find } from "./use-find"
 import { CUT_HINT, INPAGE_HINT, type Inpage } from "./use-inpage"
 import { LINKS_HINT, type Links } from "./use-links"
+import type { Pages } from "./use-pages"
 import { PARAGRAPH_HINT, RETEXT_HINT, type Retext } from "./use-retext"
 import type { Editor } from "./use-editor"
 
@@ -1206,6 +1208,7 @@ export function EditorToolbar({
   inpage,
   links,
   find,
+  pages,
 }: {
   editor: Editor
   comments: Comments
@@ -1217,6 +1220,8 @@ export function EditorToolbar({
   links: Links
   /** Finding and replacing words through the file. */
   find: Find
+  /** The list of pages, where they are moved, turned, copied and taken out. */
+  pages: Pages
   /** Which tools come first in the row: those that add things, or those that comment. */
   first?: "things" | "comments"
   /**
@@ -1497,6 +1502,21 @@ export function EditorToolbar({
           </>
         )}
         <Rule />
+        <Button
+          type="button"
+          variant={pages.on ? "secondary" : "ghost"}
+          aria-pressed={pages.on}
+          aria-label="Pages"
+          title="Pages: move, turn, copy, add and take out (M)"
+          onClick={() => pages.setOn(!pages.on)}
+          className="h-11 shrink-0 gap-1.5 px-2.5 md:h-9"
+          data-testid="pages-toggle"
+        >
+          <IconFiles aria-hidden="true" />
+          <span className="font-mono text-xs">
+            {pages.count.toLocaleString("en")}
+          </span>
+        </Button>
         <Button
           type="button"
           variant={comments.listed ? "secondary" : "ghost"}

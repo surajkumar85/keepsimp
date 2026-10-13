@@ -47,6 +47,15 @@ import {
   type EditorObject,
   type TextObject,
 } from "./objects"
+import {
+  carried,
+  lostIn,
+  planOf,
+  whereNow,
+  type Lost,
+  type PagesChange,
+  type Plan,
+} from "./pages"
 import { isOurs, type TextChange } from "./retext"
 import { BASELINE, combStarts, lineStart } from "./text-layout"
 import type { Change, Op } from "./tools"
@@ -73,7 +82,8 @@ const CHECK_EDGE = 700
  * changes are written after a signed file, and how a draft is taken up.
  */
 export interface Done {
-  kind: "things" | "comments" | "fields" | "text" | "pictures" | "links"
+  kind:
+    "things" | "comments" | "fields" | "text" | "pictures" | "links" | "pages"
   change: unknown
 }
 
@@ -94,6 +104,8 @@ export interface EditSession {
   fonts: Map<string, MuPDF.Font>
   /** Pictures that were added, by the name they were given. */
   pictures: Map<string, { image: MuPDF.Image; size: Size }>
+  /** How many pages the file came with. */
+  firstPages: number
   /** How many steps were in force when the last download was made. */
   saved: number | null
   /** Every change that was made, oldest first. */
@@ -104,6 +116,8 @@ export interface EditSession {
   again?: boolean
   /** A step is being made this moment: the engine is in the middle of an operation. */
   working?: boolean
+  /** Counts up whenever the list of pages changes: by a change to it, or by one undone or made again. */
+  laidOut?: number
   /** Told when the working copy has become another document: after an undo it is made anew. */
   moved?: (doc: Doc) => void
   /**
@@ -151,6 +165,7 @@ export function editingOf(
     doc,
     original: bytes,
     password,
+    firstPages: doc.countPages(),
     fonts: new Map(),
     pictures: new Map(),
     saved: null,
@@ -192,18 +207,18 @@ export function withPage<T>(
   }
 }
 
+/** A page's size as it is shown, in points. */
+export const pageSize = (session: EditSession, index: number): Size =>
+  withPage(session.doc, index, (page) => {
+    const [left, top, right, bottom] = page.getBounds()
+    return { width: right - left, height: bottom - top }
+  })
+
 /** Every page's size as it is shown, in points. */
-export function pageSizes(session: EditSession): Size[] {
-  const sizes: Size[] = []
-  for (let index = 0; index < session.doc.countPages(); index++)
-    sizes.push(
-      withPage(session.doc, index, (page) => {
-        const [left, top, right, bottom] = page.getBounds()
-        return { width: right - left, height: bottom - top }
-      })
-    )
-  return sizes
-}
+export const pageSizes = (session: EditSession): Size[] =>
+  Array.from({ length: session.doc.countPages() }, (_, index) =>
+    pageSize(session, index)
+  )
 
 /** Give the session a font file. */
 export function addFont(
@@ -709,6 +724,24 @@ function write(
   }
 }
 
+/**
+ * Write every thing on a page again as what it has become: after its page
+ * is turned, it is somewhere else in what the page shows.
+ */
+export function rewriteThings(
+  mupdf: Engine,
+  session: EditSession,
+  index: number,
+  become: (thing: EditorObject) => EditorObject
+) {
+  withPage(session.doc, index, (page) => {
+    for (const annot of page.getAnnotations()) {
+      const thing = thingOf(annot)
+      if (thing) write(mupdf, session, page, annot, checked(become(thing)))
+    }
+  })
+}
+
 /** The things added to a page, bottom first. */
 export function objectsOn(session: EditSession, index: number): EditorObject[] {
   return withPage(session.doc, index, (page) =>
@@ -828,6 +861,9 @@ function remake(session: EditSession) {
   session.moved?.(doc)
 }
 
+/** A step that changed the list of pages itself. */
+export const changesPages = (step: Step) => step.done.kind === "pages"
+
 /**
  * Take a draft up: the steps that were kept are this session's steps, and
  * the working copy is made anew with those in force. The session must not
@@ -842,6 +878,7 @@ export function takeUp(
   if (session.steps.length) throw new Error("This file has been changed.")
   session.steps = [...steps]
   session.position = position
+  if (steps.some(changesPages)) session.laidOut = (session.laidOut ?? 0) + 1
   try {
     remake(session)
   } catch (error) {
@@ -951,6 +988,7 @@ export function stepBack(session: EditSession): number[] | null {
     session.position++
     throw error
   }
+  if (changesPages(step)) session.laidOut = (session.laidOut ?? 0) + 1
   return step.touched
 }
 
@@ -972,6 +1010,7 @@ export function stepForward(session: EditSession): number[] | null {
     session.again = false
   }
   session.position++
+  if (changesPages(step)) session.laidOut = (session.laidOut ?? 0) + 1
   return step.touched
 }
 
@@ -1170,6 +1209,8 @@ export interface ExportReport {
   pictures: { steps: number; cut: boolean }
   /** In how many steps links were added, changed or taken away. */
   links: number
+  /** How often the list of pages was changed, how many pages were taken out, and what went with them. */
+  pages: { steps: number; taken: number; lost: Lost }
   /**
    * Only for a signed file whose changes were written after it: whether
    * the file as it came is still there, byte for byte, at the start of the
@@ -1235,6 +1276,43 @@ const textOf = (doc: Doc, index: number) =>
   })
 
 /** In how many steps links were added, changed or taken away. */
+/**
+ * The plans of the steps that changed the list of pages, by each step's
+ * place among the steps: how the pages lay after each change of it.
+ * @param first How many pages the file came with.
+ */
+export function plansIn(steps: readonly Step[], first: number) {
+  const plans = new Map<number, Plan[]>()
+  let count = first
+  steps.forEach((step, at) => {
+    if (!changesPages(step)) return
+    const made: Plan[] = []
+    for (const op of (step.done.change as PagesChange).ops) {
+      const plan = planOf(count, op)
+      // A step that was made has a plan; one without is left out of the reckoning.
+      if (!plan) continue
+      made.push(plan)
+      count = plan.length
+    }
+    plans.set(at, made)
+  })
+  return plans
+}
+
+/** How often the list of pages was changed, how many pages were taken out, and what went with them. */
+export function pagesChanged(steps: readonly Step[]) {
+  const changes = steps
+    .filter(changesPages)
+    .map((step) => step.done.change as PagesChange)
+  return {
+    steps: changes.length,
+    taken: changes
+      .flatMap((change) => change.ops)
+      .reduce((sum, op) => sum + (op.do === "delete" ? op.pages.length : 0), 0),
+    lost: lostIn(changes),
+  }
+}
+
 export const linksChanged = (steps: readonly Step[]) =>
   steps.filter((step) => step.done.kind === "links").length
 
@@ -1272,11 +1350,31 @@ export async function exportEdited(
     for (let index = 0; index < pages; index++)
       for (const object of objectsOn({ ...session, doc }, index))
         things.push({ page: index, object })
+    // A page is touched when a step that is in force changed it, which is
+    // how a page that only got a comment is known. Pages may have been put
+    // in another order since: what is known of each goes with it, and so
+    // does which page of the file as it came each one is. A page that was
+    // turned, copied or made is none of them.
+    const inForce = session.steps.slice(0, position)
+    const plans = plansIn(inForce, session.firstPages)
+    let origin: (number | null)[] = Array.from(
+      { length: session.firstPages },
+      (_, page) => page
+    )
+    let changed = origin.map(() => false)
+    inForce.forEach((step, at) => {
+      const made = plans.get(at)
+      if (!made) for (const page of step.touched) changed[page] = true
+      else
+        for (const plan of made) {
+          origin = carried(origin, plan, null)
+          changed = carried(changed, plan, true)
+        }
+    })
     const touched = new Set(things.map((thing) => thing.page))
-    // A page is also touched when a step that is in force changed it, which
-    // is how a page that only got a comment is known.
-    for (const step of session.steps.slice(0, position))
-      for (const page of step.touched) touched.add(page)
+    changed.forEach((is, page) => {
+      if (is) touched.add(page)
+    })
     if (!options.keepEditable) flatten(session, doc)
     const commented = commentPages(doc)
     const how = commented.count ? (options.comments ?? "keep") : "keep"
@@ -1303,7 +1401,15 @@ export async function exportEdited(
     // Lines of the page's own text that were changed, as they should now read.
     const rewritten: { page: number; box: Box; text: string }[] = []
     let retexts = 0
-    for (const step of session.steps.slice(0, position)) {
+    for (const [at, step] of inForce.entries()) {
+      // Lines that were written follow their pages; those of a page that was taken out are no more.
+      for (const plan of plans.get(at) ?? []) {
+        const now = whereNow(plan)
+        for (const line of rewritten.splice(0)) {
+          const page = now.get(line.page)
+          if (page !== undefined) rewritten.push({ ...line, page })
+        }
+      }
       if (step.done.kind !== "text") continue
       retexts++
       const change = step.done.change as TextChange
@@ -1440,19 +1546,28 @@ export async function exportEdited(
       if (pageLetters.get(page)!.includes(text.replace(/\s+/g, ""))) reread++
     }
     const untouched = { checked: 0, differ: [] as number[] }
+    // Each is compared with the page of the file as it came that it is,
+    // wherever it lies now.
+    const comparable = (page: number) =>
+      !touched.has(page) && typeof origin[page] === "number"
     const others = Array.from({ length: pages }, (_, page) => page).filter(
-      (page) => !touched.has(page)
+      comparable
     )
     if (others.length) {
       const original = open(mupdf, session.original, session.password)
       try {
-        if (original.countPages() === pages)
+        if (original.countPages() === session.firstPages)
           for (const page of pagesToCheck(others, pages, CHECK_PAGES).filter(
-            (page) => !touched.has(page)
+            comparable
           )) {
             await options.checkpoint?.()
             untouched.checked++
-            const was = drawPage(mupdf, original, page, CHECK_EDGE)
+            const was = drawPage(
+              mupdf,
+              original,
+              origin[page] as number,
+              CHECK_EDGE
+            )
             const is = drawPage(mupdf, doc, page, CHECK_EDGE)
             if (
               was.width !== is.width ||
@@ -1513,8 +1628,9 @@ export async function exportEdited(
         locked: Boolean(lock),
         comments: { had: commented.count, how, has: commentPages(doc).count },
         retext: { steps: retexts, lines: rewritten.length, found: reread },
-        pictures: picturesChanged(session.steps.slice(0, position)),
-        links: linksChanged(session.steps.slice(0, position)),
+        pictures: picturesChanged(inForce),
+        links: linksChanged(inForce),
+        pages: pagesChanged(inForce),
         fields: { had: form.values.size, how: fieldsHow, ...fieldsRead },
       },
     }

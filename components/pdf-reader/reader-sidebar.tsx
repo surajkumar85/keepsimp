@@ -13,14 +13,21 @@ const THUMB = 132
 /** Rows drawn beyond the strip's edges, so scrolling does not show gaps. */
 const SPARE = 3
 
-function Thumb({
+/**
+ * A small picture of a page, drawn when it is first shown and again when
+ * the page changes.
+ * @param edge The longest side of the picture, in pixels.
+ */
+export function PageThumb({
   entry,
   turn,
   source,
+  edge = THUMB,
 }: {
   entry: ReaderEntry
   turn: number
   source: ReaderSource
+  edge?: number
 }) {
   const canvas = useRef<HTMLCanvasElement>(null)
   const [drawn, setDrawn] = useState(false)
@@ -31,7 +38,7 @@ function Thumb({
     if (file === null || page === null) return
     let alive = true
     // Small pictures wait behind the pages being read.
-    const asked = source.draw(file, page, THUMB * 2, false)
+    const asked = source.draw(file, page, edge * 2, false)
     let waiting = true
     void asked.promise.then((bitmap) => {
       waiting = false
@@ -50,16 +57,16 @@ function Thumb({
       alive = false
       if (waiting) source.forget([asked.request])
     }
-  }, [file, page, source, version])
+  }, [file, page, source, version, edge])
   const sideways = turn % 180 !== 0
   const shape = sideways
     ? { width: entry.size.height, height: entry.size.width }
     : entry.size
-  const scale = THUMB / Math.max(shape.width, shape.height, 1)
+  const scale = edge / Math.max(shape.width, shape.height, 1)
   return (
     <span
       className="flex items-center justify-center"
-      style={{ width: THUMB, height: THUMB }}
+      style={{ width: edge, height: edge }}
     >
       <span
         className="flex items-center justify-center bg-background shadow-sm ring-1 ring-foreground/10"
@@ -142,7 +149,7 @@ function PageStrip({
             index === current && "bg-primary/10 ring-1 ring-primary"
           )}
         >
-          <Thumb entry={entry} turn={turnOf(entry)} source={source} />
+          <PageThumb entry={entry} turn={turnOf(entry)} source={source} />
           <span className="font-mono text-xs text-muted-foreground">
             {index + 1}
           </span>

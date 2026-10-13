@@ -45,6 +45,12 @@ export function useLinks(
   const [wanted, setWanted] = useState(false)
   const [chosen, setChosen] = useState<ChosenLink | null>(null)
   const [note, setNote] = useState("")
+  // When the list of pages is another, the link that was chosen may be on another page, or on none.
+  const [laid, setLaid] = useState(editor.layout)
+  if (laid !== editor.layout) {
+    setLaid(editor.layout)
+    setChosen(null)
+  }
   // Any other tool that is taken in hand puts this one down.
   const other =
     editor.state.tool !== "select" ||

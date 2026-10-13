@@ -14,6 +14,7 @@ import {
   MOST_LETTERS,
   MOST_POINTS,
   moved,
+  onTurnedPage,
   pulled,
   reach,
   readObject,
@@ -205,6 +206,58 @@ describe("turnedTo", () => {
     expect(upright.to.x).toBeCloseTo(5)
     expect(upright.to.y).toBeCloseTo(45)
     expect(turnedTo(ink, 180).strokes[0][0].x).toBeCloseTo(20)
+  })
+})
+
+describe("onTurnedPage", () => {
+  // A page 200 wide and 300 high, as it is shown before the turn.
+  const page = { width: 200, height: 300 }
+
+  it("keeps a box where it is on what the page shows, and turns it with the page", () => {
+    // Its middle is at 60, 27.2: a quarter on, that is 300 - 27.2 across and 60 down.
+    const quarter = onTurnedPage(text, page, 90)
+    expect(quarter.rotation).toBe(90)
+    expect(quarter.box.width).toBe(100)
+    expect(quarter.box.height).toBeCloseTo(14.4)
+    expect(quarter.box.x + 50).toBeCloseTo(272.8)
+    expect(quarter.box.y + 7.2).toBeCloseTo(60)
+    const half = onTurnedPage(text, page, 180)
+    expect(half.rotation).toBe(180)
+    expect(half.box.x + 50).toBeCloseTo(140)
+    expect(half.box.y + 7.2).toBeCloseTo(272.8)
+    const three = onTurnedPage({ ...text, rotation: 350 }, page, 270)
+    expect(three.rotation).toBe(260)
+    expect(three.box.x + 50).toBeCloseTo(27.2)
+    expect(three.box.y + 7.2).toBeCloseTo(140)
+    // Four quarters bring it back to where it was.
+    let round = text
+    let sheet = page
+    for (let turn = 0; turn < 4; turn++) {
+      round = onTurnedPage(round, sheet, 90)
+      sheet = { width: sheet.height, height: sheet.width }
+    }
+    expect(round.rotation).toBe(0)
+    expect(round.box.x).toBeCloseTo(text.box.x)
+    expect(round.box.y).toBeCloseTo(text.box.y)
+  })
+
+  it("turns what a call-out points at, and every point of a thing made of points", () => {
+    const callout = onTurnedPage({ ...text, tip: { x: 150, y: 250 } }, page, 90)
+    expect(callout.tip).toEqual({ x: 50, y: 150 })
+    expect(onTurnedPage(text, page, 90)).not.toHaveProperty("tip")
+    const turned = onTurnedPage(line, page, 180)
+    expect(turned.rotation).toBe(0)
+    expect(turned.from).toEqual({
+      x: 200 - line.from.x,
+      y: 300 - line.from.y,
+    })
+    expect(turned.to).toEqual({ x: 200 - line.to.x, y: 300 - line.to.y })
+    expect(turned.box.width).toBeCloseTo(line.box.width)
+    const drawn = onTurnedPage(ink, page, 270)
+    expect(drawn.strokes[0][0]).toEqual({
+      x: ink.strokes[0][0].y,
+      y: 200 - ink.strokes[0][0].x,
+    })
   })
 })
 

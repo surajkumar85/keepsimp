@@ -49,6 +49,13 @@ export function useFind(
   const [at, setAt] = useState(0)
   const [note, setNote] = useState("")
   const [looking, setLooking] = useState(false)
+  // When the list of pages is another, the places that were found are on other pages: they are looked for anew.
+  const [laid, setLaid] = useState(editor.layout)
+  if (laid !== editor.layout) {
+    setLaid(editor.layout)
+    setResult(null)
+    setAt(0)
+  }
   // Any other tool that is taken in hand puts this one down.
   const other =
     editor.state.tool !== "select" ||

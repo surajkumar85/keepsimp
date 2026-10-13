@@ -36,6 +36,12 @@ export interface ChosenPicture {
 export function useInpage(editor: Editor, comments: Comments, retext: Retext) {
   const [wanted, setWanted] = useState(false)
   const [chosen, setChosen] = useState<ChosenPicture | null>(null)
+  // When the list of pages is another, the picture that was chosen may be on another page, or on none.
+  const [laid, setLaid] = useState(editor.layout)
+  if (laid !== editor.layout) {
+    setLaid(editor.layout)
+    setChosen(null)
+  }
   // Any other tool that is taken in hand puts this one down.
   const other =
     editor.state.tool !== "select" || comments.tool !== null || retext.on

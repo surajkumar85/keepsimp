@@ -3,6 +3,7 @@
  * it is moved, pulled, turned or restyled. Nothing here knows about the
  * engine or the screen.
  */
+import type { Size } from "@/lib/image-compressor/geometry"
 import {
   boundsOf,
   centreOf,
@@ -369,6 +370,39 @@ export function turnedTo<T extends EditorObject>(
     ) as T
   }
   return { ...object, rotation: wholeTurn(degrees) }
+}
+
+/**
+ * A thing on a page that is turned to the right, so that it stays where it
+ * is on what the page shows: its place turns with the page, and so does it.
+ * @param page The page's size as it is shown before the turn.
+ * @param by 90, 180 or 270 degrees.
+ */
+export function onTurnedPage<T extends EditorObject>(
+  object: T,
+  page: Size,
+  by: number
+): T {
+  const turn = (point: Point): Point =>
+    by === 90
+      ? { x: page.height - point.y, y: point.x }
+      : by === 180
+        ? { x: page.width - point.x, y: page.height - point.y }
+        : { x: point.y, y: page.width - point.x }
+  if (made(object)) return mapPoints(object, turn) as T
+  const centre = turn(centreOf(object.box))
+  const next = {
+    ...object,
+    box: {
+      ...object.box,
+      x: centre.x - object.box.width / 2,
+      y: centre.y - object.box.height / 2,
+    },
+    rotation: wholeTurn(object.rotation + by),
+  }
+  return object.kind === "text" && object.tip
+    ? { ...next, tip: turn(object.tip) }
+    : next
 }
 
 /** A text box with other words, lines or size: its height follows. */

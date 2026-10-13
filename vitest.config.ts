@@ -81,6 +81,7 @@ export default defineConfig({
         "lib/pdf-editor/links.ts",
         "lib/pdf-editor/own-font.ts",
         "lib/pdf-editor/page-pictures.ts",
+        "lib/pdf-editor/pages.ts",
         "lib/pdf-editor/paragraphs.ts",
         "lib/pdf-editor/report.ts",
         "lib/pdf-editor/retext.ts",
