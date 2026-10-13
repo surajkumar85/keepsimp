@@ -354,6 +354,96 @@ test("moves, resizes, turns, restyles and removes a thing with the mouse and the
   await expect(reader(page)).toBeHidden()
 })
 
+test("takes a size when the typing of it pauses, not at every key", async ({
+  page,
+}) => {
+  await open(page, await sample())
+  await write(page, 60, 120, "A heading")
+  await changes(page, 1)
+  const box = things(page).first()
+  await box.click()
+  await expect(box).toHaveAttribute("data-selected", "true")
+  const size = reader(page).getByLabel("Size")
+  await expect(size).toHaveValue("12")
+  // Typed a key at a time: the field keeps what is typed, also what is no size yet.
+  await size.click()
+  await page.keyboard.press("ControlOrMeta+a")
+  await page.keyboard.press("Backspace")
+  await expect(size).toHaveValue("")
+  await page.keyboard.type("3", { delay: 0 })
+  await expect(size).toHaveValue("3")
+  await page.keyboard.type("0")
+  await expect(size).toHaveValue("30")
+  // One change for the number that was typed, not one for every key.
+  await changes(page, 2)
+  await expect(page.getByTestId("editor-undo")).toHaveAttribute(
+    "aria-label",
+    "Undo: Change the look"
+  )
+  await page.waitForTimeout(800)
+  await changes(page, 2)
+  await expect(size).toHaveValue("30")
+  // A size that is typed and not yet taken is taken by the press that starts a box.
+  await pick(page, "Text").click()
+  await reader(page).getByLabel("Size").fill("20")
+  await click(page, 220, 160)
+  await expect(page.getByTestId("editor-typing")).toBeFocused()
+  await page.keyboard.type("Twenty")
+  await page.keyboard.press("Control+Enter")
+  await changes(page, 3)
+  await expect(page.getByTestId("editor-typing")).toHaveCount(0)
+  await pick(page, "Select").click()
+  await box.click()
+  await expect(box).toHaveAttribute("data-selected", "true")
+  await expect(size).toHaveValue("30")
+  // Beyond what letters can be: brought to the largest when the field is left.
+  await size.fill("5000")
+  await page.keyboard.press("Enter")
+  await expect(size).toHaveValue("288")
+  await changes(page, 4)
+  // What is no number leaves the size as it is.
+  await size.fill("")
+  await size.blur()
+  await expect(size).toHaveValue("288")
+  await changes(page, 4)
+
+  const got = await saved(page, page.getByTestId("editor-download"))
+  const [placed] = await textPlaces(got.bytes)
+  expect(placed.find((run) => run.text === "Twenty")?.size).toBeCloseTo(20, 1)
+  // At that size only the first word of the heading is still on the page.
+  expect(placed.find((run) => run.text === "A")?.size).toBeCloseTo(288, 0)
+})
+
+test("makes a thing see-through in one change, however far the slider is moved", async ({
+  page,
+}) => {
+  await open(page, await sample())
+  await pick(page, "Box").click()
+  await reader(page).getByRole("button", { name: "Inside: Blue" }).click()
+  await drag(page, [60, 100], [140, 160])
+  await changes(page, 1)
+  await expect(things(page).first()).toHaveAttribute("data-selected", "true")
+  const slider = reader(page).getByLabel("See-through")
+  await expect(slider).toHaveValue("100")
+  await slider.focus()
+  // Six places down, a key at a time: the slider follows at once.
+  for (let press = 0; press < 6; press++) await page.keyboard.press("ArrowLeft")
+  await expect(slider).toHaveValue("70")
+  await expect(slider).toHaveAttribute("aria-valuetext", "70% solid")
+  await changes(page, 2)
+  await page.waitForTimeout(800)
+  await changes(page, 2)
+  await expect(slider).toHaveValue("70")
+  // Left at once after a move, it is taken at once; undone, it shows what was.
+  await page.keyboard.press("ArrowLeft")
+  await slider.blur()
+  await changes(page, 3)
+  await page.getByTestId("editor-undo").click()
+  await changes(page, 2)
+  await things(page).first().click()
+  await expect(slider).toHaveValue("70")
+})
+
 test("types text in a font, size and colour of its own, and changes the words later", async ({
   page,
 }) => {

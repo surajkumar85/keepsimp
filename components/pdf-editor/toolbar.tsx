@@ -3,6 +3,7 @@
 import {
   Fragment,
   useId,
+  useEffect,
   useRef,
   useState,
   type InputHTMLAttributes,
@@ -232,6 +233,153 @@ function Settled({
         if (event.key === "Enter") event.currentTarget.blur()
       }}
       className="h-11 rounded-md border bg-background px-2 text-base text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring md:h-9 md:text-sm"
+    />
+  )
+}
+
+/**
+ * A slider whose number is taken when it is let go of, or when the keys
+ * that move it pause: dragged from one end to the other it is one change,
+ * not one for every place it passed.
+ * @param says The number in words, for a screen reader.
+ */
+function Slide({
+  value,
+  onSettle,
+  says,
+  ...props
+}: {
+  value: number
+  onSettle: (value: number) => void
+  says: (value: number) => string
+} & Omit<
+  InputHTMLAttributes<HTMLInputElement>,
+  "value" | "onChange" | "type"
+>) {
+  /** Where it has been dragged to; null when it shows the number it stands for. */
+  const [draft, setDraft] = useState<number | null>(null)
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const wait = () => {
+    if (timer.current) clearTimeout(timer.current)
+    timer.current = null
+  }
+  const settle = (to: number | null) => {
+    wait()
+    setDraft(null)
+    if (to !== null && to !== value) onSettle(to)
+  }
+  useEffect(() => wait, [])
+  const shown = draft ?? value
+  return (
+    <input
+      {...props}
+      type="range"
+      value={shown}
+      onChange={(event) => {
+        const to = Number(event.target.value)
+        setDraft(to)
+        wait()
+        timer.current = setTimeout(() => settle(to), SETTLE_AFTER)
+      }}
+      onPointerUp={() => settle(draft)}
+      onBlur={() => settle(draft)}
+      aria-valuetext={says(shown)}
+    />
+  )
+}
+
+/** How long typing in a number has to pause before the number is taken, in milliseconds. */
+const SETTLE_AFTER = 500
+
+/**
+ * A number that is typed in peace: it is taken when the typing pauses,
+ * when the field is left, or on Enter, and not at every key. Taken at
+ * every key, "24" is first "2", which is no size at all, and the field
+ * fought the hand that typed in it.
+ * @param accepts Whether a number within the bounds is one that can be taken.
+ */
+function NumberField({
+  value,
+  min,
+  max,
+  accepts = () => true,
+  onSettle,
+  onEnter,
+  className,
+  ...props
+}: {
+  value: number
+  min: number
+  max: number
+  accepts?: (value: number) => boolean
+  onSettle: (value: number) => void
+  /** After Enter has taken the number. */
+  onEnter?: () => void
+} & Omit<
+  InputHTMLAttributes<HTMLInputElement>,
+  "value" | "onChange" | "min" | "max" | "type"
+>) {
+  /** What is being typed; null when the field shows the number it stands for. */
+  const [draft, setDraft] = useState<string | null>(null)
+  const field = useRef<HTMLInputElement>(null)
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const wait = () => {
+    if (timer.current) clearTimeout(timer.current)
+    timer.current = null
+  }
+  /** Take what is typed. A number beyond the bounds is brought to the nearest that is within them, once typing is over. */
+  const settle = (typed: string | null, over: boolean) => {
+    wait()
+    if (over) setDraft(null)
+    if (typed === null || !typed.trim()) return
+    const number = Number(typed)
+    if (!Number.isFinite(number)) return
+    const within = over ? Math.min(max, Math.max(min, number)) : number
+    if (within < min || within > max || !accepts(within)) return
+    if (within !== value) onSettle(within)
+  }
+  const latest = useRef({ draft, settle })
+  useEffect(() => {
+    latest.current = { draft, settle }
+  })
+  // A press anywhere else takes the number before the press does its own
+  // work: a text box started with that press has the size that was typed.
+  const typing = draft !== null
+  useEffect(() => {
+    if (!typing) return
+    const press = (event: PointerEvent) => {
+      if (event.target !== field.current)
+        latest.current.settle(latest.current.draft, true)
+    }
+    document.addEventListener("pointerdown", press, true)
+    return () => document.removeEventListener("pointerdown", press, true)
+  }, [typing])
+  useEffect(() => wait, [])
+  return (
+    <input
+      {...props}
+      ref={field}
+      type="number"
+      min={min}
+      max={max}
+      value={draft ?? String(value)}
+      onChange={(event) => {
+        const typed = event.target.value
+        setDraft(typed)
+        wait()
+        timer.current = setTimeout(() => settle(typed, false), SETTLE_AFTER)
+      }}
+      onBlur={() => settle(draft, true)}
+      onKeyDown={(event) => {
+        if (event.key !== "Enter") return
+        event.preventDefault()
+        settle(draft, true)
+        onEnter?.()
+      }}
+      className={cn(
+        "h-11 rounded-md border bg-background px-2 text-base text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring md:h-9 md:text-sm",
+        className
+      )}
     />
   )
 }
@@ -590,26 +738,17 @@ function LineLookRow({ editor, retext }: { editor: Editor; retext: Retext }) {
       )}
       <label className="flex shrink-0 items-center gap-2 text-xs text-muted-foreground">
         Size
-        <input
-          type="number"
+        <NumberField
           inputMode="decimal"
           min={SMALLEST_TEXT}
           max={LARGEST_TEXT}
           step="any"
           aria-label="Size of the line"
           value={look.size ?? style?.size ?? 12}
-          onChange={(event) => {
-            const size = Number(event.target.value)
-            if (size >= SMALLEST_TEXT && size <= LARGEST_TEXT)
-              retext.setLook({ size })
-          }}
-          onKeyDown={(event) => {
-            // Enter in the size goes back to the words; it does not end them.
-            if (event.key !== "Enter") return
-            event.preventDefault()
-            backToLine()
-          }}
-          className="h-11 w-20 rounded-md border bg-background px-2 text-base text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring md:h-9 md:text-sm"
+          onSettle={(size) => retext.setLook({ size })}
+          // Enter in the size goes back to the words; it does not end them.
+          onEnter={backToLine}
+          className="w-20"
         />
       </label>
       <Swatches
@@ -1572,18 +1711,14 @@ export function EditorToolbar({
                 </div>
                 <label className="flex shrink-0 items-center gap-2 text-xs text-muted-foreground">
                   Size
-                  <input
-                    type="number"
+                  <NumberField
                     inputMode="decimal"
                     min={SMALLEST_TEXT}
                     max={LARGEST_TEXT}
+                    step="any"
                     value={look.size}
-                    onChange={(event) => {
-                      const size = Number(event.target.value)
-                      if (size >= SMALLEST_TEXT && size <= LARGEST_TEXT)
-                        editor.setLook({ size })
-                    }}
-                    className="h-11 w-16 rounded-md border bg-background px-2 text-base text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring md:h-9 md:text-sm"
+                    onSettle={(size) => editor.setLook({ size })}
+                    className="w-16"
                   />
                 </label>
                 {has("comb") && (
@@ -1592,19 +1727,16 @@ export function EditorToolbar({
                     title="For the row of boxes a form has for a postcode or a number: one letter goes in each. Leave it at 0 for ordinary text."
                   >
                     Boxes
-                    <input
-                      type="number"
+                    <NumberField
                       inputMode="numeric"
                       min={0}
                       max={MOST_BOXES}
                       value={look.comb}
                       aria-label="Boxes to spread the letters over"
-                      onChange={(event) => {
-                        const comb = Number(event.target.value)
-                        // One box is no row of boxes: it is ordinary text.
-                        if (comb === 0 || isComb(comb)) editor.setLook({ comb })
-                      }}
-                      className="h-11 w-16 rounded-md border bg-background px-2 text-base text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring md:h-9 md:text-sm"
+                      // One box is no row of boxes: it is ordinary text.
+                      accepts={(comb) => comb === 0 || isComb(comb)}
+                      onSettle={(comb) => editor.setLook({ comb })}
+                      className="w-16"
                     />
                   </label>
                 )}
@@ -1804,18 +1936,13 @@ export function EditorToolbar({
             {has("opacity") && (
               <label className="flex shrink-0 items-center gap-2 pr-2 text-xs text-muted-foreground">
                 See-through
-                <input
-                  type="range"
+                <Slide
                   min={5}
                   max={100}
                   step={5}
                   value={Math.round(look.opacity * 100)}
-                  onChange={(event) =>
-                    editor.setLook({
-                      opacity: Number(event.target.value) / 100,
-                    })
-                  }
-                  aria-valuetext={`${Math.round(look.opacity * 100)}% solid`}
+                  onSettle={(solid) => editor.setLook({ opacity: solid / 100 })}
+                  says={(solid) => `${solid}% solid`}
                   className="h-11 w-24 accent-primary md:h-9"
                 />
               </label>

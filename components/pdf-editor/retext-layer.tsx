@@ -1,6 +1,14 @@
 "use client"
 
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
+import {
+  useContext,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react"
+import { PageDrawn } from "@/components/pdf-reader/reader-page"
 import { screenFamily } from "@/lib/pdf-editor/fonts"
 import type { Box, Point } from "@/lib/pdf-editor/geometry"
 import {
@@ -14,7 +22,7 @@ import { cssColour } from "@/lib/pdf-editor/styles"
 import { mainStyle, standIns, type PageLine } from "@/lib/pdf-editor/retext"
 import { cn } from "cn"
 import type { Editor } from "./use-editor"
-import type { Retext } from "./use-retext"
+import type { Retext, Settling } from "./use-retext"
 
 /** The generic family of one of the editor's fonts, for the browser to type in before that font is loaded. */
 const generic = (key: string) =>
@@ -188,6 +196,8 @@ export function LineSpots({
     null
   )
   const key = `${page}/${version}`
+  /** The state of the page whose picture is on the screen. */
+  const drawn = useContext(PageDrawn)
   const { lines: linesOf } = editor
   useEffect(() => {
     let stale = false
@@ -275,6 +285,14 @@ export function LineSpots({
         )
       })}
       {typing?.lines && <BlockField retext={retext} page={page} />}
+      {!typing &&
+        retext.settling?.page === page &&
+        // Until the page shows them: drawn again since they were sent, or
+        // answered with no change at all.
+        drawn <= retext.settling.since &&
+        !(retext.settling.done && version === retext.settling.since) && (
+          <SettlingWords settling={retext.settling} />
+        )}
       {typing &&
         !typing.lines &&
         (() => {
@@ -494,6 +512,59 @@ function BlockField({ retext, page }: { retext: Retext; page: number }) {
           {says.join(" ")}
         </p>
       )}
+    </div>
+  )
+}
+
+/**
+ * Words that were typed and are on their way into the file, shown where
+ * they were typed until the page has been drawn again. Without them the
+ * page would show the old words once more for a moment, and then the new.
+ */
+function SettlingWords({ settling }: { settling: Settling }) {
+  const { line, text, look, lines } = settling
+  const style = mainStyle(line)
+  const by = look.size && style ? look.size / style.size : 1
+  const size = (style?.size ?? 12) * by
+  const shown = look.font ?? style?.standIn ?? "sans"
+  const shape = lines ? shapeOf(lines) : null
+  const align = settling.align ?? shape?.align ?? "left"
+  return (
+    <div
+      aria-hidden="true"
+      data-testid="editor-settling"
+      className="pointer-events-none absolute bg-white px-px"
+      style={{
+        left: (shape?.left ?? line.box.x) - 1,
+        top: line.box.y,
+        minHeight: line.box.height * by,
+        ...(shape
+          ? {
+              width: shape.right - shape.left + 2,
+              whiteSpace: "pre-wrap",
+              overflowWrap: "break-word",
+              lineHeight: `${shape.leading * by}px`,
+              textAlign:
+                align === "centre"
+                  ? "center"
+                  : align === "justify"
+                    ? "justify"
+                    : align,
+              textIndent: shape.indent > 0 ? shape.indent * by : undefined,
+            }
+          : {
+              minWidth: line.box.width + 2,
+              whiteSpace: "pre",
+              lineHeight: `${line.box.height * by}px`,
+            }),
+        fontFamily: `"${screenFamily(shown)}", ${generic(shown)}`,
+        fontWeight: shown.includes("bold") ? 700 : 400,
+        fontStyle: shown.includes("italic") ? "italic" : "normal",
+        fontSize: size,
+        color: cssColour(look.colour ?? style?.colour ?? [0, 0, 0]),
+      }}
+    >
+      {text}
     </div>
   )
 }

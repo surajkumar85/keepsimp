@@ -111,6 +111,58 @@ test("changes the words of a line, in the line's own font, and takes the old one
   )
 })
 
+test("keeps the new words on the page until the page shows them, so the old ones are not seen again", async ({
+  page,
+}) => {
+  await open(page, await text())
+  await page.keyboard.press("e")
+  await line(page, TEXT.total).click()
+  await field(page).fill("Total due: 95 dollars")
+  // What is over the line, and which picture of the page is under it, at every change of the window.
+  await page.evaluate(() => {
+    const seen: string[] = []
+    Object.assign(window, { seen })
+    const sheet = document.querySelector(
+      '[data-testid=reader-page][data-page="1"]'
+    )!
+    const first = sheet.getAttribute("data-drawn")
+    new MutationObserver(() => {
+      const picture = sheet.getAttribute("data-drawn") === first ? "old" : "new"
+      const over = document.querySelector("[data-testid=editor-retext]")
+        ? "typing"
+        : document.querySelector("[data-testid=editor-settling]")
+          ? "settling"
+          : "bare"
+      const state = `${picture}/${over}`
+      if (seen[seen.length - 1] !== state) seen.push(state)
+    }).observe(document.querySelector("[data-testid=reader]")!, {
+      subtree: true,
+      childList: true,
+      attributes: true,
+      attributeFilter: ["data-drawn"],
+    })
+  })
+  await page.keyboard.press("Enter")
+  await changes(page, 1)
+  await expect(page.getByTestId("editor-settling")).toHaveCount(0)
+  await expect(line(page, "Total due: 95 dollars")).toBeVisible()
+  const seen = await page.evaluate(
+    () => (window as unknown as { seen: string[] }).seen
+  )
+  // The typed words stood over the old picture until the new one was there.
+  expect(seen).toContain("old/settling")
+  expect(seen).not.toContain("old/bare")
+  expect(seen[seen.length - 1]).toBe("new/bare")
+
+  // A change that is refused leaves the line as it was, with nothing over it.
+  await line(page, TEXT.turned).click()
+  await field(page).fill("Printed sideways 漢")
+  await page.keyboard.press("Enter")
+  await expect(reader(page).getByRole("alert")).toBeVisible()
+  await expect(page.getByTestId("editor-settling")).toHaveCount(0)
+  await changes(page, 1)
+})
+
 test("says which letters a line's font lacks, and sets those in the closest font it has", async ({
   page,
 }) => {

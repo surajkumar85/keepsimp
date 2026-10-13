@@ -1,6 +1,13 @@
 "use client"
 
-import { Fragment, useEffect, useRef, useState, type ReactNode } from "react"
+import {
+  createContext,
+  Fragment,
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react"
 import { cn } from "cn"
 import { drawEdge } from "@/lib/pdf-reader/layout"
 import type { Match } from "@/lib/pdf-reader/search"
@@ -12,6 +19,13 @@ import {
   type Placement,
 } from "@/lib/pdf-reader/text"
 import type { ReaderEntry, ReaderSource } from "./types"
+
+/**
+ * Which state of a page is on the screen: the number of the version whose
+ * picture was last drawn, or -1 before the first. What lies over a page
+ * reads it to know when a change it made can be seen.
+ */
+export const PageDrawn = createContext(-1)
 
 /** The browser's letters stand in for the page's, unseen, so text can be selected. */
 const TEXT_FONT = "sans-serif"
@@ -86,6 +100,8 @@ export function ReaderPage({
     "drawing"
   )
   const [layer, setLayer] = useState<Layer | null>(null)
+  /** The version of the page whose picture is on the screen. */
+  const [drawn, setDrawn] = useState(-1)
 
   const file = entry.kind === "page" ? entry.file : null
   const page = entry.kind === "page" ? entry.page : null
@@ -124,6 +140,7 @@ export function ReaderPage({
           drawnOnce.current = true
           drawnEdge.current = edge
           setPicture("drawn")
+          setDrawn(version)
         })
       },
       // A zoom waits to settle; a page that changed is drawn again at once.
@@ -172,6 +189,7 @@ export function ReaderPage({
       data-testid="reader-page"
       data-page={number}
       data-state={state}
+      data-drawn={drawn < 0 ? undefined : drawn}
       data-text={layer ? layer.lines.length : undefined}
       className="absolute bg-background shadow-md ring-1 ring-foreground/10"
       style={box}
@@ -277,7 +295,7 @@ export function ReaderPage({
                   />
                 )
               })}
-              {overlay}
+              <PageDrawn.Provider value={drawn}>{overlay}</PageDrawn.Provider>
             </div>
             {layer && layer.lines.length === 0 && (
               <p className="sr-only">
