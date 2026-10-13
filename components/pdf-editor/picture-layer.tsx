@@ -17,7 +17,7 @@ const SLACK = 4
 const SMALLEST = 8
 
 /** Follow the pointer from a press to its release, in points of the page. */
-function useDrag(scale: number, onEnd: (by: Point) => void) {
+export function useDrag(scale: number, onEnd: (by: Point) => void) {
   const from = useRef<Point | null>(null)
   const [by, setBy] = useState<Point | null>(null)
   return {

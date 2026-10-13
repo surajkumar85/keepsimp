@@ -33,6 +33,8 @@ import {
   IconNote,
   IconPencil,
   IconCrop,
+  IconLink,
+  IconLinkPlus,
   IconPhotoEdit,
   IconPhotoPlus,
   IconReplace,
@@ -97,7 +99,9 @@ import { mainStyle } from "@/lib/pdf-editor/retext"
 import { isOwn, type OwnKey } from "@/lib/pdf-editor/own-font"
 import { canListFonts, LocalFontsDialog } from "./local-fonts-dialog"
 import { ALIGNS, shapeOf, type Align } from "@/lib/pdf-editor/paragraphs"
+import { cn } from "cn"
 import { CUT_HINT, INPAGE_HINT, type Inpage } from "./use-inpage"
+import { LINKS_HINT, type Links } from "./use-links"
 import { PARAGRAPH_HINT, RETEXT_HINT, type Retext } from "./use-retext"
 import type { Editor } from "./use-editor"
 
@@ -758,6 +762,95 @@ function PictureRow({ inpage }: { inpage: Inpage }) {
   )
 }
 
+/**
+ * Links: a new one, and for the one that is chosen or being made, where it
+ * leads, typed as an address or as a page.
+ */
+function LinkRow({ links }: { links: Links }) {
+  const { chosen } = links
+  const ids = useId()
+  if (!chosen)
+    return (
+      <>
+        <RowAction
+          label="Add a link in the middle of the page"
+          words="New link"
+          onPress={links.beginHere}
+        >
+          <IconLinkPlus aria-hidden="true" />
+        </RowAction>
+        <p
+          className="line-clamp-2 min-w-40 flex-1 px-1 text-xs leading-4 whitespace-normal text-muted-foreground"
+          data-testid="editor-hint"
+        >
+          {LINKS_HINT}
+        </p>
+      </>
+    )
+  return (
+    <>
+      <label
+        htmlFor={`${ids}-target`}
+        className="shrink-0 text-xs text-muted-foreground"
+      >
+        Leads to
+      </label>
+      <input
+        id={`${ids}-target`}
+        // A link that was just drawn waits for where it leads.
+        autoFocus={!chosen.link}
+        type="text"
+        inputMode="url"
+        autoComplete="off"
+        autoCapitalize="off"
+        spellCheck={false}
+        placeholder="An address, or a page number"
+        value={chosen.typed}
+        aria-describedby={links.note ? `${ids}-note` : undefined}
+        aria-invalid={links.note ? true : undefined}
+        onChange={(event) => links.setTyped(event.target.value)}
+        onKeyDown={(event) => {
+          event.stopPropagation()
+          if (event.key === "Enter") {
+            event.preventDefault()
+            links.apply()
+          } else if (event.key === "Escape") {
+            event.preventDefault()
+            links.deselect()
+          }
+        }}
+        className="h-11 w-56 shrink-0 rounded-md border bg-background px-2 text-base text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring aria-invalid:border-destructive md:h-9 md:text-sm"
+      />
+      <Button
+        type="button"
+        variant="outline"
+        onClick={links.apply}
+        className="shrink-0"
+      >
+        {chosen.link ? "Change" : "Add"}
+      </Button>
+      <RowAction
+        label={chosen.link ? "Take the link away" : "Leave it"}
+        onPress={() => links.takeAway(chosen.page, chosen.link)}
+      >
+        <IconTrash aria-hidden="true" />
+      </RowAction>
+      <p
+        id={`${ids}-note`}
+        role={links.note ? "alert" : undefined}
+        className={cn(
+          "line-clamp-2 min-w-40 flex-1 px-1 text-xs leading-4 whitespace-normal",
+          links.note ? "text-destructive" : "text-muted-foreground"
+        )}
+        data-testid="editor-hint"
+      >
+        {links.note ||
+          `A web address, an e-mail address, or a page from 1 to ${links.pages.toLocaleString("en")}. Where a link leads is not checked.`}
+      </p>
+    </>
+  )
+}
+
 /** A button of the row under the tools: an icon, with words beside it where they help. */
 function RowAction({
   label,
@@ -819,6 +912,7 @@ export function EditorToolbar({
   onSign,
   retext,
   inpage,
+  links,
 }: {
   editor: Editor
   comments: Comments
@@ -826,6 +920,8 @@ export function EditorToolbar({
   retext: Retext
   /** Changing the pictures that are already on the page. */
   inpage: Inpage
+  /** Adding and changing links. */
+  links: Links
   /** Which tools come first in the row: those that add things, or those that comment. */
   first?: "things" | "comments"
   /**
@@ -911,12 +1007,13 @@ export function EditorToolbar({
             pressed={
               !comments.tool &&
               state.tool === tool &&
-              !(tool === "select" && (retext.on || inpage.on))
+              !(tool === "select" && (retext.on || inpage.on || links.on))
             }
             onPress={() => {
               comments.setTool(null)
               retext.setOn(false)
               inpage.setOn(false)
+              links.setOn(false)
               editor.setTool(tool)
             }}
           >
@@ -968,6 +1065,14 @@ export function EditorToolbar({
       >
         <IconPhotoEdit aria-hidden="true" />
       </Toggle>
+      <Toggle
+        label="Links"
+        shortcut="J"
+        pressed={links.on}
+        onPress={() => links.setOn(!links.on)}
+      >
+        <IconLink aria-hidden="true" />
+      </Toggle>
     </>
   )
   // Focused on one job, the other tools are put away, unless one of them is in hand.
@@ -978,6 +1083,7 @@ export function EditorToolbar({
         ? comments.tool === null &&
           !retext.on &&
           !inpage.on &&
+          !links.on &&
           (state.tool === "select" || SIGNING.includes(state.tool))
         : false
   const marks = COMMENT_TOOLS.map(({ tool, label, key, icon }) => (
@@ -1105,6 +1211,8 @@ export function EditorToolbar({
           <LineLookRow editor={editor} retext={retext} />
         ) : inpage.on ? (
           <PictureRow inpage={inpage} />
+        ) : links.on ? (
+          <LinkRow links={links} />
         ) : comments.tool ? (
           <>
             <Swatches

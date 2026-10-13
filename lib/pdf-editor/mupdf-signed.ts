@@ -26,6 +26,7 @@ import {
   objectsOn,
   type EditSession,
   type ExportReport,
+  linksChanged,
   picturesChanged,
 } from "./mupdf-edit"
 import { fieldsOn } from "./mupdf-forms"
@@ -120,6 +121,7 @@ export async function exportAfter(
           found: 0,
         },
         pictures: picturesChanged(session.steps.slice(0, position)),
+        links: linksChanged(session.steps.slice(0, position)),
         fields: { had: form.values.size, how: "keep", same, left },
         signature: { intact: beginsWith(bytes, session.original) },
       },

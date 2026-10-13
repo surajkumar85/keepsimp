@@ -4,6 +4,7 @@ import { poolSize } from "@/lib/image-batch/pool"
 import type { Size } from "@/lib/image-compressor/geometry"
 import type { CommentChange, LetterLine } from "@/lib/pdf-editor/comments"
 import type { FieldChange } from "@/lib/pdf-editor/forms"
+import type { LinkChange, PageLink } from "@/lib/pdf-editor/links"
 import type { PagePicture, PictureChange } from "@/lib/pdf-editor/page-pictures"
 import type { PageLine, TextChange } from "@/lib/pdf-editor/retext"
 import type { ExportReport, Step } from "@/lib/pdf-editor/mupdf-edit"
@@ -160,6 +161,10 @@ export class PdfClient {
     number,
     (pictures: PagePicture[] | null) => void
   >()
+  private readonly pageLinksAsked = new Map<
+    number,
+    (links: PageLink[] | null) => void
+  >()
   private readonly editDrafts = new Map<
     number,
     (draft: { steps: Step[]; position: number } | null) => void
@@ -228,6 +233,9 @@ export class PdfClient {
     } else if (message.type === "edit-lines") {
       this.editLines.get(message.request)?.(message.lines)
       this.editLines.delete(message.request)
+    } else if (message.type === "edit-page-links") {
+      this.pageLinksAsked.get(message.request)?.(message.links)
+      this.pageLinksAsked.delete(message.request)
     } else if (message.type === "edit-page-pictures") {
       this.pagePicturesAsked.get(message.request)?.(message.pictures)
       this.pagePicturesAsked.delete(message.request)
@@ -401,6 +409,8 @@ export class PdfClient {
     this.editLines.clear()
     for (const done of this.pagePicturesAsked.values()) done(null)
     this.pagePicturesAsked.clear()
+    for (const done of this.pageLinksAsked.values()) done(null)
+    this.pageLinksAsked.clear()
     for (const done of this.editDrafts.values()) done(null)
     this.editDrafts.clear()
     for (const done of this.editLetters.values()) done(null)
@@ -520,6 +530,24 @@ export class PdfClient {
       const request = ++this.requests
       this.editLines.set(request, resolve)
       this.send({ type: "edit-lines", id, request, page })
+    })
+  }
+
+  /** The links of a page, with where they lie and lead; null when the page could not be read. */
+  pageLinks(id: string, page: number) {
+    return new Promise<PageLink[] | null>((resolve) => {
+      const request = ++this.requests
+      this.pageLinksAsked.set(request, resolve)
+      this.send({ type: "edit-page-links", id, request, page })
+    })
+  }
+
+  /** Add, change or take away links, as one step; what the pages hold afterwards. */
+  editPageLink(id: string, change: LinkChange) {
+    return new Promise<EditNews>((resolve, reject) => {
+      const request = ++this.requests
+      this.editNews.set(request, { resolve, reject })
+      this.send({ type: "edit-page-link", id, request, change })
     })
   }
 

@@ -13,6 +13,7 @@ import { readFieldOp } from "./forms"
 import type { Step } from "./mupdf-edit"
 import { FONT_KEYS, fontsFor, readObject } from "./objects"
 import { isOwn } from "./own-font"
+import { readLinkOp } from "./links"
 import { readPictureOp, type PictureOp } from "./page-pictures"
 import { readTextChange, readWrote } from "./paragraphs"
 import type { Op } from "./tools"
@@ -66,6 +67,7 @@ const readers = {
   fields: readFieldOp,
   text: readTextChange,
   pictures: readPictureOp,
+  links: readLinkOp,
 } as const
 
 /** A step as it comes out of storage, with every change in it checked, or null when it is not one. */

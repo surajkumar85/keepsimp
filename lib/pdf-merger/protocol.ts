@@ -15,6 +15,7 @@ import type {
 import type { FieldChange, FormFacts, FormField } from "@/lib/pdf-editor/forms"
 import type { History } from "@/lib/pdf-editor/history"
 import type { ExportReport, Step } from "@/lib/pdf-editor/mupdf-edit"
+import type { LinkChange, PageLink } from "@/lib/pdf-editor/links"
 import type { PagePicture, PictureChange } from "@/lib/pdf-editor/page-pictures"
 import type { PageLine, TextChange } from "@/lib/pdf-editor/retext"
 import type { EditorObject } from "@/lib/pdf-editor/objects"
@@ -203,6 +204,10 @@ export type PdfRequest =
   | { type: "edit-text"; id: string; request: number; change: TextChange }
   /** The pictures a page already has, with where they are, for them to be changed. */
   | { type: "edit-page-pictures"; id: string; request: number; page: number }
+  /** The links of a page, with where they lie and lead. */
+  | { type: "edit-page-links"; id: string; request: number; page: number }
+  /** Add, change or take away links of a page, as one step. */
+  | { type: "edit-page-link"; id: string; request: number; change: LinkChange }
   /** Change pictures a page already has, as one step. */
   | {
       type: "edit-page-picture"
@@ -375,6 +380,7 @@ export type PdfResponse =
       request: number
       pictures: PagePicture[] | null
     }
+  | { type: "edit-page-links"; request: number; links: PageLink[] | null }
   /** `news` is null when the change could not be made; `message` then says why. */
   | {
       type: "edit-news"

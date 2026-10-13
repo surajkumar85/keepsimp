@@ -13,6 +13,7 @@ const report = (change: Partial<ExportReport> = {}): ExportReport => ({
   fields: { had: 0, how: "keep", same: 0, left: 0 },
   retext: { steps: 0, lines: 0, found: 0 },
   pictures: { steps: 0, cut: false },
+  links: 0,
   ...change,
 })
 
@@ -248,6 +249,20 @@ describe("what became of a signature", () => {
       text: "The signed part of the file is not what it was. Its signature will not hold; read the result before you rely on it.",
       good: false,
     })
+  })
+})
+
+describe("what became of links", () => {
+  it("says in how many places they were changed, and that where they lead is not checked", () => {
+    expect(everyLine(report({ added: 0, links: 1 }))).toEqual([
+      {
+        text: "Links were added, changed or taken away in 1 place. Where a link leads is not checked: try each one in the result.",
+        good: true,
+      },
+    ])
+    expect(everyLine(report({ added: 0, links: 2400 }))[0].text).toContain(
+      "in 2,400 places."
+    )
   })
 })
 

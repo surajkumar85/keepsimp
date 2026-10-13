@@ -44,7 +44,8 @@ export function checkLines(report: ExportReport): CheckLine[] {
     report.comments.had === 0 &&
     report.fields.had === 0 &&
     report.retext.steps === 0 &&
-    report.pictures.steps === 0
+    report.pictures.steps === 0 &&
+    report.links === 0
   )
     lines.push({
       text: "Nothing was added. The file was written again as it is.",
@@ -149,6 +150,11 @@ export function checkLines(report: ExportReport): CheckLine[] {
       good: true,
     })
   }
+  if (report.links > 0)
+    lines.push({
+      text: `Links were added, changed or taken away in ${report.links.toLocaleString("en")} place${report.links === 1 ? "" : "s"}. Where a link leads is not checked: try each one in the result.`,
+      good: true,
+    })
   const form = report.fields
   const fields = (count: number) =>
     `${count.toLocaleString("en")} field${count === 1 ? "" : "s"}`

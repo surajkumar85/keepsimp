@@ -71,6 +71,7 @@ import { useComments } from "./use-comments"
 import { useDraft, type DraftStatus } from "./use-draft"
 import { useEditor } from "./use-editor"
 import { useInpage } from "./use-inpage"
+import { useLinks } from "./use-links"
 import { useRetext } from "./use-retext"
 
 const INPUT_ID = "editor-file"
@@ -373,6 +374,7 @@ function Workspace({
   const comments = useComments(editor, mode === "annotate" ? "highlight" : null)
   const retext = useRetext(editor, comments)
   const inpage = useInpage(editor, comments, retext)
+  const links = useLinks(editor, comments, retext, inpage)
   /** A page opened for one job shows the tools of that job alone until the others are asked for. */
   const [allTools, setAllTools] = useState(false)
   /** The window a signature is made in is open. A page opened for signing begins with it. */
@@ -703,6 +705,16 @@ function Workspace({
       inpage.finishCut()
       return used()
     }
+    // J adds and changes links; Escape lets go of one, then of the tool.
+    if (plain && letter === "j") {
+      links.setOn(!links.on)
+      return used()
+    }
+    if (event.key === "Escape" && links.on) {
+      if (links.chosen) links.deselect()
+      else links.setOn(false)
+      return used()
+    }
     // Any other tool's key puts a comment tool down.
     if (plain && comments.tool && "vtboladckrqx".includes(letter))
       comments.setTool(null)
@@ -759,6 +771,7 @@ function Workspace({
           comments={comments}
           retext={retext}
           inpage={inpage}
+          links={links}
           first={mode === "annotate" ? "comments" : "things"}
           focus={
             allTools
@@ -829,6 +842,7 @@ function Workspace({
           comments={comments}
           retext={retext}
           inpage={inpage}
+          links={links}
           page={entry.page}
           size={entry.size}
           scale={scale}

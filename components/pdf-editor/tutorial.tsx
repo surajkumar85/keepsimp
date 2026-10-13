@@ -48,6 +48,11 @@ const content: TutorialContent = {
         "PNG, JPEG, WebP, AVIF, GIF and BMP. A PNG or JPEG goes into the file as it is, without being saved again; other kinds are kept without loss. See-through parts stay see-through.",
     },
     {
+      term: "Links",
+      detail:
+        "For the places of a page that lead somewhere when pressed (J). Each link gets a frame. Choose one to see where it leads and to lead it somewhere else: type a web address, an e-mail address or a page number, and press Enter. Drag a link to move it and its corner to change its size; Delete takes it away. Drag a box on the page for a new link, or use “New link” in the bar. Only web, e-mail and telephone addresses are taken. Where a link leads is not checked, and nothing is sent to it.",
+    },
+    {
       term: "Pictures of the page",
       detail:
         "For the pictures a file already has (I). Each gets a frame. Drag a picture to move it and its corner to change its size; the arrow keys move it, + and − change its size, Delete takes it out. With a picture chosen, the bar turns it by a quarter, cuts it to a part, puts another picture in its place or takes it out. A picture's own data is never saved again. Cutting to a part hides the rest of the picture; the whole picture stays in the file, and “Show it whole” brings it back. A picture that is taken out is no longer in the file. Pictures that are part of a drawing the page reuses are not offered.",

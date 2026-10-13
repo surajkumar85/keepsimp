@@ -49,6 +49,8 @@ import type { LetterLine } from "@/lib/pdf-editor/comments"
 import { applyFields, fieldsOn, formFacts } from "@/lib/pdf-editor/mupdf-forms"
 import { readDraft } from "@/lib/pdf-editor/draft"
 import { canWriteAfter, exportAfter } from "@/lib/pdf-editor/mupdf-signed"
+import type { PageLink } from "@/lib/pdf-editor/links"
+import { applyLinks, linksOn } from "@/lib/pdf-editor/mupdf-links"
 import { applyPictures, picturesOn } from "@/lib/pdf-editor/mupdf-pictures"
 import { applyText, linesOn } from "@/lib/pdf-editor/mupdf-text"
 import type { PagePicture } from "@/lib/pdf-editor/page-pictures"
@@ -696,6 +698,42 @@ async function editText(request: Extract<PdfRequest, { type: "edit-text" }>) {
   }
 }
 
+async function editPageLink(
+  request: Extract<PdfRequest, { type: "edit-page-link" }>
+) {
+  const session = editing.get(request.id)
+  try {
+    if (!session) throw new Error(EDIT_FAILED)
+    const pages = applyLinks(await engine, session, request.change)
+    post({
+      type: "edit-news",
+      request: request.request,
+      news: newsOf(session, pages),
+    })
+  } catch (error) {
+    post({
+      type: "edit-news",
+      request: request.request,
+      news: null,
+      message: readable(error, EDIT_FAILED),
+    })
+  }
+}
+
+function editPageLinks(
+  request: Extract<PdfRequest, { type: "edit-page-links" }>
+) {
+  const session = editing.get(request.id)
+  let links: PageLink[] | null = null
+  try {
+    if (session && request.page < session.doc.countPages())
+      links = linksOn(session, request.page)
+  } catch {
+    // The page says that the links of this page could not be read.
+  }
+  post({ type: "edit-page-links", request: request.request, links })
+}
+
 async function editPagePicture(
   request: Extract<PdfRequest, { type: "edit-page-picture" }>
 ) {
@@ -1118,6 +1156,10 @@ self.onmessage = (event: MessageEvent<PdfRequest>) => {
     enqueue({ run: () => editText(request) })
   else if (request.type === "edit-lines")
     enqueue({ run: () => editLines(request) })
+  else if (request.type === "edit-page-links")
+    enqueue({ run: async () => editPageLinks(request) })
+  else if (request.type === "edit-page-link")
+    enqueue({ run: () => editPageLink(request) })
   else if (request.type === "edit-page-pictures")
     enqueue({ run: async () => editPagePictures(request) })
   else if (request.type === "edit-page-picture")

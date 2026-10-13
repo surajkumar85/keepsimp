@@ -48,6 +48,7 @@ import {
   readFont,
 } from "@/lib/pdf-editor/own-font"
 import type { OwnFile } from "@/lib/pdf-editor/draft-store"
+import type { LinkOp, PageLink } from "@/lib/pdf-editor/links"
 import type { PagePicture, PictureOp } from "@/lib/pdf-editor/page-pictures"
 import type { Align } from "@/lib/pdf-editor/paragraphs"
 import { standIns, type LineLook, type PageLine } from "@/lib/pdf-editor/retext"
@@ -179,6 +180,7 @@ export function useEditor(
   const lettersRead = useRef(new Map<string, Promise<LetterLine[]>>())
   const linesRead = useRef(new Map<string, Promise<PageLine[]>>())
   const picturesRead = useRef(new Map<string, Promise<PagePicture[]>>())
+  const linksRead = useRef(new Map<string, Promise<PageLink[]>>())
   /** How many changes are in force this moment, ahead of what has been drawn. */
   const position = useRef((opened.history ?? emptyHistory).position)
   /** What the file last said its pages hold. */
@@ -625,6 +627,35 @@ export function useEditor(
       )
     },
     [ensureFont, flush, enqueue, file]
+  )
+
+  /** The links of a page, with where they lie and lead, read once for each state of the page. */
+  const pageLinks = useCallback(
+    (page: number, version: number) => {
+      const key = `${page}/${version}`
+      let reading = linksRead.current.get(key)
+      if (!reading) {
+        reading = (async () =>
+          (await client.current?.pageLinks(file, page)) ?? [])()
+        linksRead.current.set(key, reading)
+      }
+      return reading
+    },
+    [client, file]
+  )
+
+  /** Add a link to a page, or lead one somewhere else, put it somewhere else or take it away. */
+  const changeLink = useCallback(
+    (page: number, what: Omit<LinkOp, "do" | "page">, label: string) => {
+      flush()
+      return enqueue((worker) =>
+        worker.editPageLink(file, {
+          label,
+          ops: [{ do: "link", page, ...what }],
+        })
+      )
+    },
+    [flush, enqueue, file]
   )
 
   /** The pictures a page already has, with where they are, read once for each state of the page. */
@@ -1295,6 +1326,9 @@ export function useEditor(
     lines,
     retext,
     reflow,
+    pageLinks,
+    changeLink,
+    middle,
     pagePictures,
     changePicture,
     replacePicture,

@@ -73,7 +73,7 @@ const CHECK_EDGE = 700
  * changes are written after a signed file, and how a draft is taken up.
  */
 export interface Done {
-  kind: "things" | "comments" | "fields" | "text" | "pictures"
+  kind: "things" | "comments" | "fields" | "text" | "pictures" | "links"
   change: unknown
 }
 
@@ -1168,6 +1168,8 @@ export interface ExportReport {
    * rest of a picture and leaves it in the file.
    */
   pictures: { steps: number; cut: boolean }
+  /** In how many steps links were added, changed or taken away. */
+  links: number
   /**
    * Only for a signed file whose changes were written after it: whether
    * the file as it came is still there, byte for byte, at the start of the
@@ -1231,6 +1233,10 @@ const textOf = (doc: Doc, index: number) =>
       words.destroy()
     }
   })
+
+/** In how many steps links were added, changed or taken away. */
+export const linksChanged = (steps: readonly Step[]) =>
+  steps.filter((step) => step.done.kind === "links").length
 
 /** In how many steps the pictures the pages already had were changed, and whether one was cut to a part. */
 export const picturesChanged = (steps: readonly Step[]) => {
@@ -1508,6 +1514,7 @@ export async function exportEdited(
         comments: { had: commented.count, how, has: commentPages(doc).count },
         retext: { steps: retexts, lines: rewritten.length, found: reread },
         pictures: picturesChanged(session.steps.slice(0, position)),
+        links: linksChanged(session.steps.slice(0, position)),
         fields: { had: form.values.size, how: fieldsHow, ...fieldsRead },
       },
     }

@@ -32,8 +32,10 @@ import { FieldSpots } from "./field-layer"
 import { LineSpots } from "./retext-layer"
 import type { Comments } from "./use-comments"
 import type { Retext } from "./use-retext"
+import { LinkSpots } from "./link-layer"
 import { PictureSpots } from "./picture-layer"
 import type { Inpage } from "./use-inpage"
+import type { Links } from "./use-links"
 import { laidOut, pagePoint, type Editor } from "./use-editor"
 
 const points = (list: readonly Point[]) =>
@@ -130,11 +132,13 @@ export function PageLayer({
   comments,
   retext,
   inpage,
+  links,
 }: {
   editor: Editor
   comments: Comments
   retext: Retext
   inpage: Inpage
+  links: Links
   /** Counted from 0. */
   page: number
   size: Size
@@ -317,10 +321,21 @@ export function PageLayer({
           scale={scale}
         />
       )}
+      {links.on && (
+        <LinkSpots
+          editor={editor}
+          links={links}
+          page={page}
+          version={editor.versions[page] ?? 0}
+          scale={scale}
+        />
+      )}
       <FieldSpots
         editor={editor}
         page={page}
-        idle={!drawing && !gesture && !mine && !retext.on && !inpage.on}
+        idle={
+          !drawing && !gesture && !mine && !retext.on && !inpage.on && !links.on
+        }
       />
       {objects.map((object) => {
         const corners = cornersOf(object.box, object.rotation)
