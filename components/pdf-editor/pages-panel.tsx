@@ -304,6 +304,12 @@ export function PagesPanel({
     <aside
       aria-labelledby={`${ids}-title`}
       data-testid="editor-pages"
+      // The keyboard was taken to a button or a field of the list: it is
+      // not brought back to the page it was on a moment ago.
+      onFocusCapture={(event) => {
+        if (!(event.target as HTMLElement).matches("[data-page]"))
+          wanted.current = false
+      }}
       className="absolute inset-x-0 bottom-0 z-10 flex h-[70%] flex-col border-t bg-popover shadow-lg md:static md:h-auto md:w-80 md:shrink-0 md:border-t-0 md:border-l md:shadow-none"
     >
       <div className="space-y-2 border-b p-2">

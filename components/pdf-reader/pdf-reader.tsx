@@ -122,6 +122,8 @@ export interface ReaderExtras {
 }
 
 const NO_MATCHES: Match[] = []
+/** Keys that scroll what is around a field when they can move nothing in it. */
+const SCROLLING_KEYS = ["Home", "End", "PageUp", "PageDown"]
 
 const turnOf = (entry: ReaderEntry) =>
   entry.kind === "page" ? entry.rotation : 0
@@ -392,6 +394,32 @@ function ReaderBody({
     area.current?.focus({ preventScroll: true })
   }
 
+  /**
+   * A key that moves the caret to an end of what is typed moves nothing
+   * when the caret is there already, and a browser then scrolls the pages
+   * to their end instead: whoever was typing on a page was thrown off it.
+   * The pages stay where they are while such a key is dealt with. This is
+   * seen before a field has the key, since a field keeps its keys to itself.
+   */
+  const keepPages = (event: KeyboardEvent) => {
+    const pages = area.current
+    if (
+      !pages ||
+      !SCROLLING_KEYS.includes(event.key) ||
+      !(event.target as HTMLElement).closest(
+        "input, textarea, [contenteditable]"
+      )
+    )
+      return
+    const { scrollTop: top, scrollLeft: left } = pages
+    const stay = () => {
+      pages.scrollTop = top
+      pages.scrollLeft = left
+    }
+    pages.addEventListener("scroll", stay)
+    setTimeout(() => pages.removeEventListener("scroll", stay), 400)
+  }
+
   const onKeyDown = (event: KeyboardEvent) => {
     if (extras?.onKey?.(event)) return
     if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "f") {
@@ -400,13 +428,8 @@ function ReaderBody({
       return
     }
     const target = event.target as HTMLElement
-    if (
-      target.closest("input, textarea, [contenteditable]") ||
-      event.ctrlKey ||
-      event.metaKey ||
-      event.altKey
-    )
-      return
+    const field = target.closest("input, textarea, [contenteditable]")
+    if (field || event.ctrlKey || event.metaKey || event.altKey) return
     if (event.key === "+" || event.key === "=") {
       event.preventDefault()
       change({ fit: null, zoom: stepZoom(zoom, 1) })
@@ -473,6 +496,7 @@ function ReaderBody({
   return (
     <div
       className="flex min-h-0 flex-1 flex-col"
+      onKeyDownCapture={keepPages}
       onKeyDown={onKeyDown}
       data-testid="reader"
       data-zoom={Math.round(zoom * 100)}

@@ -111,6 +111,36 @@ test("changes the words of a line, in the line's own font, and takes the old one
   )
 })
 
+test("keeps the pages where they are when End or Home is pressed in a line", async ({
+  page,
+}) => {
+  await open(page, await text())
+  await page.keyboard.press("e")
+  await line(page, TEXT.total).click()
+  await expect(field(page)).toBeFocused()
+  const pages = page.getByTestId("reader-pages")
+  const top = () => pages.evaluate((element) => element.scrollTop)
+  const before = await top()
+  // The caret is at the end already, where End can move nothing; and on a
+  // Mac these keys are for scrolling, wherever the keyboard is.
+  for (const key of ["End", "End", "PageDown", "Home", "Home", "PageUp"]) {
+    await page.keyboard.press(key)
+    await page.waitForTimeout(150)
+    expect(await top()).toBe(before)
+  }
+  // The line is still being typed, on the page it is on.
+  await expect(field(page)).toBeFocused()
+  await page.keyboard.press("ControlOrMeta+a")
+  await page.keyboard.type("Total due: 95 euros")
+  await page.keyboard.press("Enter")
+  await changes(page, 1)
+  await expect(line(page, "Total due: 95 euros")).toBeVisible()
+  // With the keyboard on the pages themselves, the keys scroll them as ever.
+  await page.waitForTimeout(500)
+  await pages.press("End")
+  await expect.poll(top).toBeGreaterThan(before)
+})
+
 test("keeps the new words on the page until the page shows them, so the old ones are not seen again", async ({
   page,
 }) => {

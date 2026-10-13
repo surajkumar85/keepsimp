@@ -223,8 +223,12 @@ test("copies pages, adds a blank one, moves pages to a place by number and by dr
     "Undo: Add a blank page"
   )
   await expect(status(page)).toHaveText("Chosen: page 6 of 8.")
-  // The blank page is made the first by its number.
+  // The blank page is made the first by its number. A page is pressed and
+  // the number typed at once: the keyboard stays in the field.
+  await tile(page, 6).click()
   await panel(page).getByLabel("Move to place").fill("1")
+  await expect(panel(page).getByLabel("Move to place")).toBeFocused()
+  await expect(panel(page).getByLabel("Move to place")).toHaveValue("1")
   await act(page, "Move").click()
   await changes(page, 3)
   await expect(tile(page, 1)).toHaveAttribute("aria-selected", "true")
