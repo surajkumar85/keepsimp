@@ -101,7 +101,11 @@ Sign with a `.p12`/`.pfx` on the device, with a visible signature or none, and s
 
 Signing at download: see "Signing with a certificate" in `docs/pdf-editor.md`. What the proof found: MuPDF's WASM build has no signing; written as an update, its placeholders (`[0/**********/**********/**********]` and a hex `/Contents` of zeros) land uncompressed and can be filled in place. The first build opened .p12 files with node-forge; its advisory with no fix failed the production audit in CI, so `pkcs12.ts` and `legacy-ciphers.ts` replaced it (same output on every fixture). Run `npm run audit:production` before pushing a new dependency. MuPDF's quick page text leaves out widgets: read a signature's look through `toDisplayList(true)`. Keep pages through `withPage`, or a page the engine holds does not know the widget just added to it.
 
-Next: part 2, a panel that reads every signature a file has (`signatures.ts` checks one), says whether each is intact and covers the whole file, and what changed after it (compare the revision the signature covers with the file: pages, comments, fields). Check it against `pdfsig` on the files part 1 signs and on `makeSignedPdf`.
+### Part 2: built
+
+Reading the signatures a file carries, with the Verify a PDF signature door: see "Reading signatures" in `docs/pdf-editor.md`. What it found: PKI.js writes a signature's encapsulated content as a constructed octet string, so read it in pieces (`octetsOf`); what a signature says of itself (time, reason, place) is outside what it covers, so read it from the file as it was signed; a gap in the ranges wider than the signature's own `<hex>` room is refused. The door's sample must be dated inside its test certificate's dates, or the list rightly says the certificate was not valid then. Every check was set against `pdfsig`.
+
+The ten phases are complete. What could come after, if asked: time stamps from a time-stamping authority and revocation data (both need the network, so they need the user's say), a list of trusted issuers the user can add to, and typing in scripts that need shaping.
 
 ## When a part is done, report
 

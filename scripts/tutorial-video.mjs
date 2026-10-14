@@ -19,6 +19,7 @@ const tools = [
   "pdf-editor",
   "ocr-pdf",
   "redact-pdf",
+  "verify-pdf-signature",
 ]
 const tool = process.argv[2] ?? tools[0]
 if (!tools.includes(tool)) {

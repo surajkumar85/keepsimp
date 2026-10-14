@@ -149,6 +149,11 @@ const content: TutorialContent = {
         "Highlight, underline, strike out and squiggle are laid on words by dragging across them; the highlighter pen marks anything, also on a scan. A note is placed with one press and typed in the list of comments, where every comment of the file can be read, answered and deleted, the ones it came with included. On download they are kept as comments, drawn into the page, or left out.",
     },
     {
+      term: "Signatures",
+      detail:
+        "A file that carries digital signatures has a Signatures button. It lists each one: whether it still holds over what it signed, whose certificate made it and who issued that, the time it gives, and what was added to the file after it. Whom to trust is for you to judge; no list of issuers is kept here.",
+    },
+    {
       term: "Sign with a certificate",
       detail:
         "A digital signature made with your certificate (a .p12 or .pfx file, such as an e-ID, a company certificate or one your own software made) is added at download: turn on “Sign with a certificate”, choose the file, type its password and press Open to see who it names. It can show nowhere, in a box at the foot of a page, or in one of the file's empty places for a signature. It is added last, as an update after the file, so it covers everything, and it is read back before you download. A file that was signed before keeps that signature valid. The certificate and its password are read on this device and are never kept or sent. Programs that check signatures say whether the file changed since; whether to trust the certificate is theirs to say, from the issuers they know. A certificate that has expired, a file locked with a password, and keys other than RSA and elliptic-curve (P-256, P-384, P-521) are not signed with.",
@@ -770,6 +775,73 @@ const recognising: TutorialContent = {
     },
   ],
   guideHref: "/blog/make-a-scanned-pdf-searchable/",
+}
+
+const verifying: TutorialContent = {
+  video: {
+    file: "verify-pdf-signature-tutorial",
+    duration: { iso: "PT27S", label: "27 s" },
+    uploadDate: "2026-10-14",
+  },
+  name: "How to verify a PDF signature with KeepSimp",
+  description:
+    "Check a PDF's digital signatures in your browser: whether each still holds, whose certificate made it, and what was added to the file after it. Nothing is uploaded.",
+  intro: "Follow the steps below. Every option is explained underneath.",
+  steps: [
+    {
+      title: "Open the signed PDF",
+      text: "Drop it, choose it from your device or paste it. A locked file asks for its password. The list of its signatures opens beside the pages.",
+    },
+    {
+      title: "Read what each says",
+      text: "Each signature says whether it holds, whose certificate made it and who issued that, when it says it was signed, and its reason and place if it gives them.",
+    },
+    {
+      title: "See what changed after",
+      text: "A file can be added to after it is signed, as when a second person fills in a field or signs too. The list says what was added after each signature: fields, comments, pages that look different, other signatures.",
+    },
+    {
+      title: "Show it on the page",
+      text: "A signature that shows on a page has a button that goes to it.",
+    },
+  ],
+  options: [
+    {
+      term: "Holds, or does not",
+      detail:
+        "A signature covers the bytes of the file as it was signed. If one of them was changed afterwards, it does not hold, and the list says so. Additions written after a signature (a second version of the file) do not break it; the list says what they changed.",
+    },
+    {
+      term: "Whom to trust",
+      detail:
+        "A signature is made with a certificate, and a certificate names a person or a company. Whether that name can be believed depends on who issued the certificate. KeepSimp says who did, or that the certificate signed itself, but keeps no list of trusted issuers: Adobe's programs and your company may. A certificate that signed itself vouches for nobody.",
+    },
+    {
+      term: "The time a signature gives",
+      detail:
+        "It is the time on the clock of the device that signed. Without a time stamp from a time-stamping authority, which is not checked here, it is not proved.",
+    },
+    {
+      term: "Kinds of signature",
+      detail:
+        "Signatures of the kinds adbe.pkcs7.detached, ETSI.CAdES.detached and adbe.pkcs7.sha1 are checked; that covers what Acrobat, other programs and KeepSimp make. Older kinds and document time stamps are listed but not checked, and say so.",
+    },
+    {
+      term: "Your changes",
+      detail:
+        "The list is of the file as it was opened. Changes you make in the editor are written after the signatures when you download with “Keep it valid”, and the signatures still hold over what they signed.",
+    },
+    {
+      term: "All tools",
+      detail:
+        "This page is the PDF editor, opened for checking signatures. All tools shows the rest, and you can sign with your own certificate when you download.",
+    },
+  ],
+  guideHref: "/blog/verify-a-pdf-signature/",
+}
+
+export function PdfVerifyTutorial() {
+  return <ToolTutorial content={verifying} />
 }
 
 export function PdfOcrTutorial() {

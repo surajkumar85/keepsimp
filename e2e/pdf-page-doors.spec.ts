@@ -66,6 +66,16 @@ const DOORS = [
     focused: "opened for recognising the words of scanned pages",
     name: "OCR PDF",
   },
+  {
+    route: "/dashboard/verify-pdf-signature/",
+    title: /Verify a PDF signature online for free/,
+    drop: "Drop a signed PDF to check its signatures",
+    ability: "Does it still hold?",
+    guide: "/blog/verify-a-pdf-signature/",
+    article: "Is the signature still good?",
+    focused: "opened for checking signatures",
+    name: "Verify a PDF signature",
+  },
 ] as const
 
 async function open(page: Page, route: string) {

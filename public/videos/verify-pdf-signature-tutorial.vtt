@@ -1,0 +1,26 @@
+WEBVTT
+
+1
+00:00:00.000 --> 00:00:03.833
+Verify a PDF signature: a quick tour.
+Check a PDF's signatures, on your device.
+
+2
+00:00:04.200 --> 00:00:10.067
+Step 1 of 4: Open a signed PDF
+Drop it, choose it or paste it. Its signatures are read and checked as it opens.
+
+3
+00:00:10.433 --> 00:00:14.767
+Step 2 of 4: Does it still hold?
+The signature is checked against the bytes it covers. Changed by even one byte, it does not hold.
+
+4
+00:00:15.133 --> 00:00:19.667
+Step 3 of 4: Who, and when
+Whose certificate signed, and who issued it. Whom to trust is yours to judge: no list of issuers is kept here.
+
+5
+00:00:20.033 --> 00:00:26.667
+Step 4 of 4: What changed after
+This file was added to after it was signed: the witness's name was typed in. The list says so.

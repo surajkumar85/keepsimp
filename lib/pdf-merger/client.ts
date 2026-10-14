@@ -5,6 +5,7 @@ import type { OcrPicture } from "@/lib/pdf-editor/mupdf-ocr"
 import type { OcrChange } from "@/lib/pdf-editor/ocr"
 import type { Signer } from "@/lib/pdf-editor/certificate"
 import type { CertifyOptions } from "@/lib/pdf-editor/certify"
+import type { FoundSignature } from "@/lib/pdf-editor/signature-report"
 import type { MakeFieldChange } from "@/lib/pdf-editor/form-fields"
 import { poolSize } from "@/lib/image-batch/pool"
 import type { Size } from "@/lib/image-compressor/geometry"
@@ -184,6 +185,10 @@ export class PdfClient {
     number,
     (marks: RedactMark[] | null) => void
   >()
+  private readonly signaturesAsked = new Map<
+    number,
+    (signatures: FoundSignature[] | null) => void
+  >()
   private readonly certificates = new Map<
     number,
     (answer: {
@@ -310,6 +315,9 @@ export class PdfClient {
     } else if (message.type === "edit-fields-suggested") {
       this.fieldsSuggested.get(message.request)?.(message.suggestions)
       this.fieldsSuggested.delete(message.request)
+    } else if (message.type === "edit-signatures") {
+      this.signaturesAsked.get(message.request)?.(message.signatures)
+      this.signaturesAsked.delete(message.request)
     } else if (message.type === "edit-certificate") {
       const { signer, problem, places } = message
       this.certificates.get(message.request)?.({ signer, problem, places })
@@ -503,6 +511,8 @@ export class PdfClient {
     this.redactFound.clear()
     for (const done of this.fieldsSuggested.values()) done(null)
     this.fieldsSuggested.clear()
+    for (const done of this.signaturesAsked.values()) done(null)
+    this.signaturesAsked.clear()
     for (const done of this.certificates.values())
       done({ signer: null, problem: "The editor stopped.", places: [] })
     this.certificates.clear()
@@ -705,6 +715,15 @@ export class PdfClient {
       const request = ++this.requests
       this.redactMarksAsked.set(request, resolve)
       this.send({ type: "edit-redact-marks", id, request, page })
+    })
+  }
+
+  /** The signatures the file came with, each checked; null when they could not be read. */
+  signatures(id: string) {
+    return new Promise<FoundSignature[] | null>((resolve) => {
+      const request = ++this.requests
+      this.signaturesAsked.set(request, resolve)
+      this.send({ type: "edit-signatures", id, request })
     })
   }
 

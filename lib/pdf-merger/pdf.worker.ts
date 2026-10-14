@@ -1255,6 +1255,30 @@ async function editExport(
   }
 }
 
+async function editSignatures(
+  request: Extract<PdfRequest, { type: "edit-signatures" }>
+) {
+  const session = editing.get(request.id)
+  try {
+    if (!session) throw new Error(EDIT_FAILED)
+    // Loaded only when signatures are read: the cryptography is large.
+    const { signaturesOf } = await import("@/lib/pdf-editor/mupdf-signatures")
+    // The file as it came: what its signatures were made over.
+    const signatures = await signaturesOf(
+      await engine,
+      session.original,
+      session.password
+    )
+    post({ type: "edit-signatures", request: request.request, signatures })
+  } catch {
+    post({
+      type: "edit-signatures",
+      request: request.request,
+      signatures: null,
+    })
+  }
+}
+
 async function editCertificate(
   request: Extract<PdfRequest, { type: "edit-certificate" }>
 ) {
@@ -1577,6 +1601,7 @@ self.onmessage = (event: MessageEvent<PdfRequest>) => {
   else if (request.type === "edit-ocr-picture") void editOcrPicture(request)
   else if (request.type === "edit-ocr") void editOcr(request)
   else if (request.type === "edit-certificate") void editCertificate(request)
+  else if (request.type === "edit-signatures") void editSignatures(request)
   else if (request.type === "edit-insert") void editInsert(request)
   else if (request.type === "edit-page-link")
     enqueue({ run: () => editPageLink(request) })

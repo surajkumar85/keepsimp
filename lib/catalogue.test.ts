@@ -20,6 +20,7 @@ describe("doors", () => {
       "watermark-pdf",
       "redact-pdf",
       "create-pdf-form",
+      "verify-pdf-signature",
       "ocr-pdf",
     ])
     expect(listed).toHaveLength(tools.length - doors.length)
@@ -40,6 +41,7 @@ describe("doors", () => {
     expect(filterTools("signature", "all").map((tool) => tool.id)).toEqual([
       "sign-pdf",
       "create-pdf-form",
+      "verify-pdf-signature",
     ])
     expect(filterTools("fillable", "all").map((tool) => tool.id)).toEqual([
       "fill-pdf-form",
@@ -59,6 +61,9 @@ describe("doors", () => {
     ])
     expect(filterTools("scanned", "all").map((tool) => tool.id)).toEqual([
       "ocr-pdf",
+    ])
+    expect(filterTools("tampered", "all").map((tool) => tool.id)).toEqual([
+      "verify-pdf-signature",
     ])
   })
 })

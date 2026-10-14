@@ -63,6 +63,11 @@ for (const [route, film, last] of [
     "Step 5 of 5: Checked, then downloaded",
   ],
   [
+    "/dashboard/verify-pdf-signature/",
+    "verify-pdf-signature-tutorial",
+    "Step 4 of 4: What changed after",
+  ],
+  [
     "/dashboard/redact-pdf/",
     "redact-pdf-tutorial",
     "Step 4 of 4: Checked before you send it",

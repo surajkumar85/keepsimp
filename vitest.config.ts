@@ -104,6 +104,7 @@ export default defineConfig({
         "lib/pdf-editor/signatures.ts",
         "lib/pdf-editor/pkcs12.ts",
         "lib/pdf-editor/legacy-ciphers.ts",
+        "lib/pdf-editor/signature-report.ts",
         "lib/pdf-editor/paragraphs.ts",
         "lib/pdf-editor/report.ts",
         "lib/pdf-editor/retext.ts",

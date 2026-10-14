@@ -7,6 +7,10 @@ import {
   StandardFonts,
 } from "@cantoo/pdf-lib"
 import * as mupdf from "mupdf"
+import { readFile } from "node:fs/promises"
+import { PDFArray, PDFNumber, PDFString } from "@cantoo/pdf-lib"
+import { SignPdf } from "@signpdf/signpdf"
+import { P12Signer } from "@signpdf/signer-p12"
 
 // The files behind "Try a sample" in the PDF tools.
 // Run with `npm run samples:pdfs` after changing them.
@@ -773,6 +777,123 @@ await writeFile("public/samples/keepsimp-form.pdf", await form())
 await writeFile("public/samples/keepsimp-brochure.pdf", await brochure())
 await writeFile("public/samples/keepsimp-scan.pdf", await scan())
 await writeFile("public/samples/keepsimp-scanned-letter.pdf", await scan(false))
+await writeFile("public/samples/keepsimp-signed.pdf", await signedContract())
 console.log(
-  "Wrote public/samples/keepsimp-report.pdf, keepsimp-appendix.pdf, keepsimp-handbook.pdf, keepsimp-form.pdf, keepsimp-brochure.pdf, keepsimp-scan.pdf and keepsimp-scanned-letter.pdf"
+  "Wrote public/samples/keepsimp-report.pdf, keepsimp-appendix.pdf, keepsimp-handbook.pdf, keepsimp-form.pdf, keepsimp-brochure.pdf, keepsimp-scan.pdf, keepsimp-scanned-letter.pdf and keepsimp-signed.pdf"
 )
+
+/**
+ * A contract signed with a certificate, and then added to: the witness's
+ * name was typed in after it was signed, written after the signature as a
+ * second version of the file. Behind "Try a sample" on the page that checks
+ * signatures, it shows a signature that holds and what changed after it.
+ * The certificate is the test set's (tests/fixtures/certificates), issued
+ * by the KeepSimp Test Authority, which no program trusts.
+ */
+async function signedContract() {
+  const doc = await PDFDocument.create()
+  doc.setTitle("Signed agreement")
+  doc.setAuthor("KeepSimp")
+  doc.setCreationDate(written)
+  doc.setModificationDate(written)
+  const heading = await doc.embedFont(StandardFonts.HelveticaBold)
+  const body = await doc.embedFont(StandardFonts.Helvetica)
+  const page = doc.addPage([width, height])
+  page.drawText("Service agreement", {
+    x: 72,
+    y: height - 110,
+    size: 24,
+    font: heading,
+    color: ink,
+  })
+  const lines = [
+    "KeepSimp agrees to design three pages for the client by 1 December.",
+    "The client pays half on signing and half when the pages are delivered.",
+    "Either side may end this agreement with fourteen days' notice in writing.",
+  ]
+  lines.forEach((line, at) =>
+    page.drawText(line, {
+      x: 72,
+      y: height - 160 - at * 22,
+      size: 12,
+      font: body,
+      color: ink,
+    })
+  )
+  page.drawText("Signed for the client", {
+    x: 72,
+    y: height - 300,
+    size: 11,
+    font: body,
+    color: muted,
+  })
+  page.drawText("Witness", {
+    x: 72,
+    y: height - 400,
+    size: 11,
+    font: body,
+    color: muted,
+  })
+  const form = doc.getForm()
+  form.createTextField("Witness").addToPage(page, {
+    x: 72,
+    y: height - 440,
+    width: 220,
+    height: 24,
+    font: body,
+  })
+  const range = PDFArray.withContext(doc.context)
+  range.push(PDFNumber.of(0))
+  for (let at = 0; at < 3; at++) range.push(PDFName.of("**********"))
+  const value = doc.context.register(
+    doc.context.obj({
+      Type: "Sig",
+      Filter: "Adobe.PPKLite",
+      SubFilter: "adbe.pkcs7.detached",
+      ByteRange: range,
+      Contents: PDFHexString.of("0".repeat(16384)),
+      Reason: PDFString.of("Agreed"),
+      Location: PDFString.of("Leeds"),
+      M: PDFString.fromDate(new Date("2026-10-14T16:00:00Z")),
+    })
+  )
+  const widget = doc.context.register(
+    doc.context.obj({
+      Type: "Annot",
+      Subtype: "Widget",
+      FT: "Sig",
+      Rect: [72, height - 360, 292, height - 310],
+      V: value,
+      T: PDFString.of("Client"),
+      F: 4,
+      P: page.ref,
+    })
+  )
+  page.node.addAnnot(widget)
+  form.acroForm.addField(widget)
+  form.acroForm.dict.set(PDFName.of("SigFlags"), PDFNumber.of(3))
+  const unsigned = await doc.save({
+    useObjectStreams: false,
+    updateFieldAppearances: true,
+  })
+  const signer = new P12Signer(
+    await readFile("tests/fixtures/certificates/rsa-aes.p12"),
+    { passphrase: "keepsimp" }
+  )
+  const signed = await new SignPdf().sign(
+    Buffer.from(unsigned),
+    signer,
+    new Date("2026-10-14T16:00:00Z")
+  )
+  // After signing, the witness's name is typed in: a second version.
+  const after = new mupdf.PDFDocument(new Uint8Array(signed))
+  const [witness] = after
+    .loadPage(0)
+    .getWidgets()
+    .filter((one) => one.getName() === "Witness")
+  witness.setTextValue("Alex Morgan")
+  witness.update()
+  const bytes = after.saveToBuffer("incremental").asUint8Array().slice()
+  after.destroy()
+  return bytes
+}

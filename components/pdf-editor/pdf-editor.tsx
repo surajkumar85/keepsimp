@@ -13,6 +13,7 @@ import {
 import {
   IconAlertCircle,
   IconBook2,
+  IconCertificate,
   IconCircleCheck,
   IconDownload,
   IconEdit,
@@ -22,6 +23,7 @@ import {
   IconDroplet,
   IconEraser,
   IconEye,
+  IconFileInfo,
   IconKeyboard,
   IconLock,
   IconNumber123,
@@ -83,6 +85,8 @@ import { FormDesignPanel } from "./form-design-panel"
 import { FORM_HINT, useMakeForm } from "./use-make-form"
 import { REDACT_HINT, useRedact } from "./use-redact"
 import { useOcr } from "./use-ocr"
+import { useSignatures } from "./use-signatures"
+import { SignaturesPanel } from "./signatures-panel"
 import { useCertify } from "./use-certify"
 import { CertifyFields } from "./certify-fields"
 import { useRepeat } from "./use-repeat"
@@ -106,6 +110,8 @@ const SAMPLE = "keepsimp-handbook.pdf"
 const FORM_SAMPLE = "keepsimp-form.pdf"
 /** A scan as it comes, with no words of its own, for the page that recognises them. */
 const SCAN_SAMPLE = "keepsimp-scanned-letter.pdf"
+/** A signed contract, added to after it was signed, for the page that checks signatures. */
+const SIGNED_SAMPLE = "keepsimp-signed.pdf"
 
 /** The file that is open, and how far opening it has come. */
 interface OpenFile {
@@ -194,6 +200,7 @@ export type EditorMode =
   | "redact"
   | "create-form"
   | "ocr"
+  | "verify"
 
 /** The doors that open the editor for a job on the pages themselves. */
 const PAGE_JOBS: readonly EditorMode[] = ["crop", "numbers", "watermark"]
@@ -393,6 +400,29 @@ const REDACT_ABILITIES = [
   },
 ]
 
+const VERIFY_ABILITIES = [
+  {
+    icon: IconCircleCheck,
+    title: "Does it still hold?",
+    text: "Each digital signature is checked against the bytes it covers: changed by even one byte, and it does not hold.",
+  },
+  {
+    icon: IconCertificate,
+    title: "Who, and when",
+    text: "The certificate that signed, who issued it or that it signed itself, and the time the signature gives. Whom to trust is yours to judge: no list of issuers is kept here.",
+  },
+  {
+    icon: IconFileInfo,
+    title: "What changed after",
+    text: "A file signed and then added to is laid beside the version that was signed: fields filled in, comments, pages that look different, signatures added later.",
+  },
+  {
+    icon: IconLock,
+    title: "Nothing is uploaded",
+    text: "The file is read and its signatures checked on your device.",
+  },
+]
+
 const OCR_ABILITIES = [
   {
     icon: IconTextRecognition,
@@ -487,6 +517,10 @@ const SIGN_ABILITIES = [
 
 /** The words of the page before a file is opened, for each thing the editor is opened for. */
 const DOORS: Record<EditorMode, { heading: string; body: string }> = {
+  verify: {
+    heading: "Drop a signed PDF to check its signatures",
+    body: "Each signature is checked on your device: whether it still holds, whose certificate made it, when it says it was made, and what was added to the file after it. You can also paste a file with ⌘V or Ctrl+V.",
+  },
   ocr: {
     heading: "Drop a scanned PDF to make it searchable",
     body: "Its words are recognised on your device and laid unseen over the pages, so you can search, select, copy and redact them. The pages look just as they did. You can also paste a file with ⌘V or Ctrl+V.",
@@ -531,6 +565,8 @@ const DOORS: Record<EditorMode, { heading: string; body: string }> = {
 
 /** What a page opened for one job says it is, with a way to the whole editor. */
 const FOCUSED: Partial<Record<EditorMode, string>> = {
+  verify:
+    ", opened for checking signatures. Its other tools (text, pictures, forms, and signing with a certificate at download) are behind “All tools”.",
   ocr: ", opened for recognising the words of scanned pages. Its other tools (text, pictures, shapes, highlights, redaction) are behind “All tools”.",
   "create-form":
     ", opened for making fillable form fields. The other tools are behind “All tools”.",
@@ -733,6 +769,18 @@ function Workspace({
     makeForm,
     // A page opened for reading scans begins with its panel.
     mode === "ocr"
+  )
+  const signatures = useSignatures(
+    client,
+    doc.id,
+    comments,
+    pageList,
+    repeat,
+    described,
+    makeForm,
+    ocr,
+    // A page opened for checking signatures begins with their list.
+    mode === "verify"
   )
   /** The page shown on the card while the window is closed. */
   const [previewAt, setPreviewPage] = useState(0)
@@ -1197,6 +1245,8 @@ function Workspace({
         <RepeatPanel repeat={repeat} />
       ) : ocr.on ? (
         <OcrPanel ocr={ocr} />
+      ) : signatures.on ? (
+        <SignaturesPanel signatures={signatures} onGo={goToPage} />
       ) : described.on ? (
         <DocumentPanel
           editor={editor}
@@ -1245,6 +1295,7 @@ function Workspace({
           redact={redact}
           makeForm={makeForm}
           ocr={ocr}
+          signatures={signatures}
           first={mode === "annotate" ? "comments" : "things"}
           focus={
             allTools
@@ -1261,7 +1312,9 @@ function Workspace({
                         ? "redact"
                         : mode === "ocr"
                           ? "ocr"
-                          : null
+                          : mode === "verify"
+                            ? "verify"
+                            : null
           }
           onAllTools={() => setAllTools(true)}
           onSign={() => setSigning(true)}
@@ -1907,7 +1960,13 @@ export function PdfEditor({ mode = "edit" }: { mode?: EditorMode }) {
   async function loadSample() {
     try {
       const sample =
-        mode === "fill" ? FORM_SAMPLE : mode === "ocr" ? SCAN_SAMPLE : SAMPLE
+        mode === "fill"
+          ? FORM_SAMPLE
+          : mode === "ocr"
+            ? SCAN_SAMPLE
+            : mode === "verify"
+              ? SIGNED_SAMPLE
+              : SAMPLE
       const response = await fetch(`/samples/${sample}`)
       if (!response.ok) throw new Error()
       const blob = await response.blob()
@@ -2066,25 +2125,27 @@ export function PdfEditor({ mode = "edit" }: { mode?: EditorMode }) {
         <div className="space-y-4 rounded-xl border bg-card p-4 sm:p-5">
           <h2 className="section-title">What you can do</h2>
           <ul className="space-y-3 text-sm">
-            {(mode === "ocr"
-              ? OCR_ABILITIES
-              : mode === "create-form"
-                ? CREATE_FORM_ABILITIES
-                : mode === "redact"
-                  ? REDACT_ABILITIES
-                  : mode === "crop"
-                    ? CROP_ABILITIES
-                    : mode === "numbers"
-                      ? NUMBER_ABILITIES
-                      : mode === "watermark"
-                        ? WATERMARK_ABILITIES
-                        : mode === "fill"
-                          ? FILL_ABILITIES
-                          : mode === "sign"
-                            ? SIGN_ABILITIES
-                            : mode === "annotate"
-                              ? ANNOTATE_ABILITIES
-                              : ABILITIES
+            {(mode === "verify"
+              ? VERIFY_ABILITIES
+              : mode === "ocr"
+                ? OCR_ABILITIES
+                : mode === "create-form"
+                  ? CREATE_FORM_ABILITIES
+                  : mode === "redact"
+                    ? REDACT_ABILITIES
+                    : mode === "crop"
+                      ? CROP_ABILITIES
+                      : mode === "numbers"
+                        ? NUMBER_ABILITIES
+                        : mode === "watermark"
+                          ? WATERMARK_ABILITIES
+                          : mode === "fill"
+                            ? FILL_ABILITIES
+                            : mode === "sign"
+                              ? SIGN_ABILITIES
+                              : mode === "annotate"
+                                ? ANNOTATE_ABILITIES
+                                : ABILITIES
             ).map((item) => (
               <li key={item.title} className="flex gap-3">
                 <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">

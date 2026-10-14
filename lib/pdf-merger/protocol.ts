@@ -42,6 +42,7 @@ import type { OcrPicture } from "@/lib/pdf-editor/mupdf-ocr"
 import type { OcrChange } from "@/lib/pdf-editor/ocr"
 import type { Signer } from "@/lib/pdf-editor/certificate"
 import type { CertifyOptions } from "@/lib/pdf-editor/certify"
+import type { FoundSignature } from "@/lib/pdf-editor/signature-report"
 import type { Bookmark, BookmarkPolicy } from "./outline"
 import type { PictureMargin, PicturePage } from "./picture"
 import type { FooterPlace, NumberStyle, SheetChoice } from "./print"
@@ -317,6 +318,8 @@ export type PdfRequest =
        */
       certify?: { file: Uint8Array; password: string; options: CertifyOptions }
     }
+  /** The signatures the file being edited came with, each checked, with what changed after it. */
+  | { type: "edit-signatures"; id: string; request: number }
   /** Open a certificate file to sign with: who it names, and the file's empty places for a signature. */
   | {
       type: "edit-certificate"
@@ -506,6 +509,12 @@ export type PdfResponse =
     }
   /** `marks` is null when the page could not be read. */
   | { type: "edit-redact-marks"; request: number; marks: RedactMark[] | null }
+  /** `signatures` is null when the file's signatures could not be read. */
+  | {
+      type: "edit-signatures"
+      request: number
+      signatures: FoundSignature[] | null
+    }
   /** `signer` is null when the certificate cannot sign, and `problem` says why. */
   | {
       type: "edit-certificate"

@@ -374,6 +374,25 @@ export const tools: readonly Tool[] = [
     status: "available",
   },
   {
+    id: "verify-pdf-signature",
+    name: "Verify a PDF signature",
+    description:
+      "Check whether a PDF's digital signatures still hold, who made them, and what changed after.",
+    partOf: "pdf-editor",
+    category: "document",
+    keywords: [
+      "pdf",
+      "verify signature",
+      "check signature",
+      "digital signature",
+      "signature valid",
+      "certificate",
+      "tampered",
+      "changed after signing",
+    ],
+    status: "available",
+  },
+  {
     id: "ocr-pdf",
     name: "OCR PDF",
     description:

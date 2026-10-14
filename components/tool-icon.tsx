@@ -21,6 +21,7 @@ import {
   IconNumber123,
   IconPlayerTrackNext,
   IconForms,
+  IconRosetteDiscountCheck,
   IconSignature,
   IconTextRecognition,
   IconTransform,
@@ -54,6 +55,7 @@ const icons: Record<string, typeof IconBraces> = {
   "redact-pdf": IconEraser,
   "create-pdf-form": IconFilePlus,
   "ocr-pdf": IconTextRecognition,
+  "verify-pdf-signature": IconRosetteDiscountCheck,
   "json-formatter": IconBraces,
   "color-utility": IconPalette,
 }

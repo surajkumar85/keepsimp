@@ -175,6 +175,12 @@ const cards = [
     "/images/pdf-ocr-guide.svg",
   ],
   [
+    "verify-a-pdf-signature",
+    "Is the signature still good?",
+    "Check a PDF's signatures on your device.",
+    "/images/pdf-verify-guide.svg",
+  ],
+  [
     "redact-a-pdf-without-uploading",
     "A black box is not a redaction.",
     "Take text and pictures out of a PDF for good.",

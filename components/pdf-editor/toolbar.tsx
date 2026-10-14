@@ -33,6 +33,7 @@ import {
   IconFileInfo,
   IconFiles,
   IconMessages,
+  IconCertificate,
   IconNumber123,
   IconTextRecognition,
   IconResize,
@@ -136,6 +137,7 @@ import {
 } from "@/lib/pdf-editor/form-fields"
 import type { Redact } from "./use-redact"
 import type { Ocr } from "./use-ocr"
+import type { Signatures } from "./use-signatures"
 import type { Repeat } from "./use-repeat"
 import { PARAGRAPH_HINT, RETEXT_HINT, type Retext } from "./use-retext"
 import type { Editor } from "./use-editor"
@@ -1504,6 +1506,7 @@ export function EditorToolbar({
   redact,
   makeForm,
   ocr,
+  signatures,
 }: {
   editor: Editor
   comments: Comments
@@ -1528,6 +1531,8 @@ export function EditorToolbar({
   makeForm: MakeForm
   /** Recognising the words of scanned pages. */
   ocr: Ocr
+  /** The signatures the file came with. */
+  signatures: Signatures
   /** Which tools come first in the row: those that add things, or those that comment. */
   first?: "things" | "comments"
   /**
@@ -1535,7 +1540,15 @@ export function EditorToolbar({
    * up, or signing and filling in), with a button for the rest. A tool that
    * is in hand is always shown.
    */
-  focus?: "comments" | "signing" | "pages" | "redact" | "forms" | "ocr" | null
+  focus?:
+    | "comments"
+    | "signing"
+    | "pages"
+    | "redact"
+    | "forms"
+    | "ocr"
+    | "verify"
+    | null
   onAllTools?: () => void
   /** Open the window a signature is made in. */
   onSign: () => void
@@ -1838,7 +1851,7 @@ export function EditorToolbar({
               creatingForm
             ) : focus === "redact" ? (
               redacting
-            ) : focus === "ocr" ? null : (
+            ) : focus === "ocr" || focus === "verify" ? null : (
               // Recognising has no group here: its button is with the panels', which are always shown.
               marks
             )}
@@ -1924,6 +1937,23 @@ export function EditorToolbar({
         >
           <IconTextRecognition aria-hidden="true" />
         </Button>
+        {(Boolean(signatures.found?.length) || focus === "verify") && (
+          <Button
+            type="button"
+            variant={signatures.on ? "secondary" : "ghost"}
+            aria-pressed={signatures.on}
+            aria-label={`Signatures: ${(signatures.found?.length ?? 0).toLocaleString("en")}`}
+            title="The file's digital signatures, checked"
+            onClick={() => signatures.setOn(!signatures.on)}
+            className="h-11 shrink-0 gap-1.5 px-2.5 md:h-9"
+            data-testid="signatures-toggle"
+          >
+            <IconCertificate aria-hidden="true" />
+            <span className="font-mono text-xs">
+              {(signatures.found?.length ?? 0).toLocaleString("en")}
+            </span>
+          </Button>
+        )}
         <Button
           type="button"
           variant={described.on ? "secondary" : "ghost"}
