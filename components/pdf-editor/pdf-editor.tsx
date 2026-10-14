@@ -22,6 +22,7 @@ import {
   IconDroplet,
   IconEraser,
   IconEye,
+  IconKeyboard,
   IconLock,
   IconNumber123,
   IconPlayerStop,
@@ -85,6 +86,7 @@ import { useOcr } from "./use-ocr"
 import { useRepeat } from "./use-repeat"
 import { usePages } from "./use-pages"
 import { PageLayer } from "./page-layer"
+import { ShortcutsDialog } from "./shortcuts-dialog"
 import { SignatureDialog } from "./signature-dialog"
 import { EditorToolbar } from "./toolbar"
 import { useComments } from "./use-comments"
@@ -624,6 +626,8 @@ function Workspace({
   const [allTools, setAllTools] = useState(false)
   /** The window a signature is made in is open. A page opened for signing begins with it. */
   const [signing, setSigning] = useState(mode === "sign")
+  /** Whether the sheet of keyboard shortcuts is shown. */
+  const [keysShown, setKeysShown] = useState(false)
   const commentCount = countComments(editor.comments)
   const [commentsHow, setCommentsHow] =
     useState<(typeof COMMENT_CHOICES)[number]["value"]>("keep")
@@ -1036,6 +1040,16 @@ function Workspace({
       setSigning(true)
       return used()
     }
+    // ? shows the keys (Shift is part of it on most keyboards).
+    if (
+      event.key === "?" &&
+      !event.ctrlKey &&
+      !event.metaKey &&
+      !event.altKey
+    ) {
+      setKeysShown(true)
+      return used()
+    }
     // E changes the words that are there; Escape puts that down again.
     if (plain && letter === "e") {
       retext.setOn(!retext.on)
@@ -1175,6 +1189,17 @@ function Workspace({
     actions: (
       <>
         <Button
+          variant="ghost"
+          size="icon"
+          aria-label="Keyboard shortcuts"
+          title="Keyboard shortcuts (?)"
+          onClick={() => setKeysShown(true)}
+          className="max-md:hidden"
+          data-testid="editor-keys"
+        >
+          <IconKeyboard aria-hidden="true" />
+        </Button>
+        <Button
           aria-label="Download the PDF"
           title="Download the PDF"
           onClick={() => void download()}
@@ -1286,6 +1311,10 @@ function Workspace({
           {changeCount(history)}
         </p>
         {/* Inside the editor's window, so that it is a window of that window: one beside it would be out of reach of a screen reader. */}
+        <ShortcutsDialog
+          open={keysShown && open}
+          onClose={() => setKeysShown(false)}
+        />
         <SignatureDialog
           open={signing && open}
           onClose={() => setSigning(false)}

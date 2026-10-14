@@ -23,7 +23,7 @@
 
 /** Left out of the offline copy. */
 const SKIPPED = [
-  // Tutorial videos are 29 MB and stream on demand; posters and captions stay.
+  // Tutorial videos (about 70 MB) stream on demand; posters and captions stay.
   /^videos\/.*\.mp4$/,
   // Link-preview images are read by other sites, never by a visitor.
   /^images\/social\//,

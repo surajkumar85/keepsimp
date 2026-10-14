@@ -39,7 +39,7 @@ Both files in `service-worker/` are plain JavaScript with JSDoc types, because t
 
 - **Saved:** every page, the build files in `.next/static` (scripts, styles, fonts, WebAssembly codecs), and the files in `public/` (images, icons, tutorial posters and captions). This is about 37 MB in 213 files on disk and about 13 MB to download with Brotli compression; the PDF engine, which the merger, the splitter, the compressor and the editor share, is 10.4 MB of that on disk and 3.6 MB of the download. The PDF editor's sixteen font files (`public/fonts/editor/`: twelve for text and four that look written by hand, for typed signatures) are 5.4 MB on disk and 2.3 MB of the download: they are what text is typed in and what goes into the file, so the editor cannot type or sign by typing offline without them. The animation converter's caption font is a second copy of the Outfit file (32 KB), because the worker loads it by its own address.
 - **Not saved:**
-  - tutorial videos (56 MB), which stream on demand
+  - tutorial videos (about 70 MB, ten of them), which stream on demand
   - link-preview images, which only other sites read
   - copies a file-syncing program leaves beside a file in `public/` ("guide 2.svg"), which Git ignores and which exist on one machine only
   - the data Next.js fetches for page transitions, whose file names only exist after the build

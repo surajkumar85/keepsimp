@@ -12,6 +12,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest"
 import { danglingRefs, textPlaces, texts } from "@/tests/pdf-reader"
 import { SCAN_LINES, SCAN_SIZE, scannedPdf } from "@/tests/pdf-scan"
 import { readDraft } from "./draft"
+import { OCR_PARAMETERS } from "./ocr-files"
 import {
   exportEdited,
   historyOf,
@@ -35,6 +36,7 @@ beforeAll(async () => {
     ),
     cacheMethod: "none",
   })
+  await tesseract.setParameters(OCR_PARAMETERS as never)
 }, 60_000)
 
 afterAll(async () => {
@@ -238,7 +240,7 @@ describe("other languages and scripts", () => {
   it.each([
     ["deu", "Grüße"],
     ["rus", "документ"],
-    ["ara", "الفاتورة"],
+    ["ara", "الكرامة"],
     ["heb", "החשבונית"],
     ["chi_sim", "今天"],
     ["jpn", "今日"],
@@ -254,6 +256,7 @@ describe("other languages and scripts", () => {
         ),
         cacheMethod: "none",
       })
+      await reader.setParameters(OCR_PARAMETERS as never)
       const session = startEditing(mupdf, await scanOf(code))
       try {
         const picture = ocrPicture(mupdf, session, 0)

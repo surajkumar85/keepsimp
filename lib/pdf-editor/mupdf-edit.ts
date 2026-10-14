@@ -1693,42 +1693,6 @@ export async function exportEdited(
       const letters = pageLetters.get(page)!
       for (const word of words) if (letters.includes(word)) ocrFound++
     }
-    const untouched = { checked: 0, differ: [] as number[] }
-    // Each is compared with the page of the file as it came that it is,
-    // wherever it lies now.
-    const comparable = (page: number) =>
-      !touched.has(page) && typeof origin[page] === "number"
-    const others = Array.from({ length: pages }, (_, page) => page).filter(
-      comparable
-    )
-    if (others.length) {
-      const original = open(mupdf, session.original, session.password)
-      try {
-        if (original.countPages() === session.firstPages)
-          for (const page of pagesToCheck(others, pages, CHECK_PAGES).filter(
-            comparable
-          )) {
-            await options.checkpoint?.()
-            untouched.checked++
-            const was = drawPage(
-              mupdf,
-              original,
-              origin[page] as number,
-              CHECK_EDGE
-            )
-            const is = drawPage(mupdf, doc, page, CHECK_EDGE)
-            if (
-              was.width !== is.width ||
-              was.height !== is.height ||
-              was.data.some((value, at) => value !== is.data[at])
-            )
-              untouched.differ.push(page)
-          }
-      } finally {
-        original.destroy()
-      }
-    }
-
     // What the file carries besides its pages goes last, when everything
     // that reads the file has read it.
     const clean = options.clean && cleans(options.clean) ? options.clean : null
@@ -1758,6 +1722,50 @@ export async function exportEdited(
           : null),
       })
     )
+    // Pages nothing was done to are compared with the file as it came, drawn
+    // from the file as it is written: the copy it is written from can draw
+    // a page differently once fonts were cut, though what is written does not.
+    const untouched = { checked: 0, differ: [] as number[] }
+    // Each is compared with the page of the file as it came that it is,
+    // wherever it lies now.
+    const comparable = (page: number) =>
+      !touched.has(page) && typeof origin[page] === "number"
+    const others = Array.from({ length: pages }, (_, page) => page).filter(
+      comparable
+    )
+    if (others.length) {
+      const original = open(mupdf, session.original, session.password)
+      const written = open(
+        mupdf,
+        bytes,
+        lock ? lock.password : session.password
+      )
+      try {
+        if (original.countPages() === session.firstPages)
+          for (const page of pagesToCheck(others, pages, CHECK_PAGES).filter(
+            comparable
+          )) {
+            await options.checkpoint?.()
+            untouched.checked++
+            const was = drawPage(
+              mupdf,
+              original,
+              origin[page] as number,
+              CHECK_EDGE
+            )
+            const is = drawPage(mupdf, written, page, CHECK_EDGE)
+            if (
+              was.width !== is.width ||
+              was.height !== is.height ||
+              was.data.some((value, at) => value !== is.data[at])
+            )
+              untouched.differ.push(page)
+          }
+      } finally {
+        original.destroy()
+        written.destroy()
+      }
+    }
     // What the fields hold is read from the written file, not from the one
     // it was written from.
     const fieldsRead = { same: 0, left: 0 }

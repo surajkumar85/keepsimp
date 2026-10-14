@@ -2,7 +2,7 @@
 
 Changes PDFs in the browser. Nothing is uploaded: the file is opened, changed, drawn and written by MuPDF as WebAssembly in the worker the other PDF tools use. Live at `/dashboard/pdf-editor/`, and at `/dashboard/pdf-annotator/`, which is the same editor opened for marking up and commenting.
 
-The editor is built in ten phases, each shipped before the next begins. **Phases 1 to 8 and phase 9, parts 1 and 2 are built:** editing, comments, filling and signing, pages, redaction, making form fields by hand or from suggestions, and recognising the words of scans in 31 languages. The plan for the rest is at the end.
+The editor is built in ten phases, each shipped before the next begins. **Phases 1 to 9 are built:** editing, comments, filling and signing, pages, redaction, making form fields by hand or from suggestions, and recognising the words of scans in 31 languages. The plan for the rest is at the end.
 
 ## What it does (phase 1)
 
@@ -344,6 +344,60 @@ The **OCR PDF** door (`/dashboard/ocr-pdf/`) opens the editor with the panel for
 - **Tests.** `ocr.test.ts` and `ocr-files.test.ts` (100%); `ocr-files.node.test.ts` (the files served are the packages' own); `ocr.node.test.ts` reads each of the eight fixtures in its language with the real Tesseract and checks what pdf.js reads against what Tesseract read; `e2e/pdf-ocr.spec.ts` reads a German scan with German and English chosen, both loaded from this site.
 - **Limits.** Text that runs down the page is not offered (Tesseract's `_vert` data). Languages that mix scripts on a line (Japanese with Latin words) read those words less well. A misread Arabic letter changes the shape of those beside it, so Arabic reads less surely than the others; the panel says how sure it was.
 
+## Keys, videos and a benchmark (phase 9, third part)
+
+- **The sheet of keys.** `?` (or the keyboard button beside Download, on wider screens) opens a window inside the editor that lists every key: the tools, marking up, the panels, changes, what is selected, form fields and reading. The list is `lib/pdf-editor/shortcuts.ts`; the written help is made from it (`shortcutsSaid`), and its test reads the editor's code (the toolbar's keys, the tools `use-editor.ts` takes in hand, the letters `pdf-editor.tsx` answers to) and fails when a key is added, taken away or given two jobs without the list following. `e2e/pdf-editor-help.spec.ts` opens it by key and by button, with axe in both themes.
+- **Tutorial videos,** recorded from the built site by the shared recorder (`npm run tutorial:video -- pdf-editor`, `ocr-pdf`, `redact-pdf`; storyboards in `scripts/tutorial/`): the editor (45 s: change a line in the file's own font, add text, pages, keys, the check at download), OCR PDF (37 s: the sample scan read, then searched) and Redact PDF (30 s: a name marked on every page, applied, checked). Captions are written beside each, and each help section links its video; the help spec checks the files and captions. Videos stream and are left out of the offline copy.
+- **The benchmark,** `PDF_BENCH_DIR=<folder> npm run pdf:editor-benchmark` (`benchmarks/pdf-editor.benchmark.ts`), on the nine files of `node scripts/pdf-benchmark-files.mjs`. Online editors were not run: that would mean sending these files to other companies' servers and taking out accounts. What was measured beside other software is OCR, against OCRmyPDF, the open-source tool that runs Tesseract natively.
+
+### Editing real files
+
+Each file is opened, the first line of four words or more on its first pages is given "KeepSimp 2026" as its last words (letters a file's font may lack), and the result is written, checked by the editor, by `qpdf --check` and by Poppler.
+
+| File                | Opened           | Line changed                                                                                                                | Font                              | The editor's check                         | Written | qpdf  | Poppler reads it |
+| ------------------- | ---------------- | --------------------------------------------------------------------------------------------------------------------------- | --------------------------------- | ------------------------------------------ | ------- | ----- | ---------------- |
+| album-photos.pdf    | 6 pages, 7 ms    | changed in 14 ms                                                                                                            | the file's own                    | 5 compared, 0 differ; 1/1 lines read back  | 907 ms  | clean | yes              |
+| booklet-udhr.pdf    | 72 pages, 1 ms   | changed in 39 ms                                                                                                            | stand-in (LiberationSerif-Italic) | 12 compared, 0 differ; 1/1 lines read back | 833 ms  | clean | yes              |
+| form-irs-1040.pdf   | 2 pages, 1 ms    | changed in 161 ms                                                                                                           | the file's own                    | 1 compared, 0 differ; 1/1 lines read back  | 194 ms  | clean | yes              |
+| guide-irs-p17.pdf   | 142 pages, 15 ms | refused: The new words would run past the edge of the page. Make them shorter, or move the line first. Nothing was changed. | —                                 | 12 compared, 0 differ; 0/0 lines read back | 2544 ms | clean | —                |
+| paper-arxiv.pdf     | 15 pages, 1 ms   | changed in 51 ms                                                                                                            | the file's own                    | 12 compared, 0 differ; 1/1 lines read back | 1166 ms | clean | yes              |
+| report-ipcc-spm.pdf | 42 pages, 2 ms   | changed in 13 ms                                                                                                            | the file's own                    | 12 compared, 0 differ; 1/1 lines read back | 1418 ms | clean | yes              |
+| scan-archive.pdf    | 168 pages, 1 ms  | refused: This line cannot be changed without touching the text beside it. Nothing was changed.                              | —                                 | 12 compared, 0 differ; 0/0 lines read back | 8530 ms | clean | —                |
+| scan-phone.pdf      | 4 pages          | no line of text on its first pages (a scan)                                                                                 |                                   |                                            |         |       |                  |
+| slides-chromium.pdf | 4 pages, 0 ms    | changed in 7 ms                                                                                                             | stand-in (LiberationSans-Regular) | 3 compared, 0 differ; 1/1 lines read back  | 523 ms  | clean | yes              |
+
+The line on the cover of Publication 17 ends near the right edge; the longer words would have run off the page, and the change is refused with that reason. The archive scan's text lies under other text, and a change there would touch it, so it is refused. Times are a MacBook (M-series) in Node; the browser is about the same.
+
+### OCR beside OCRmyPDF
+
+Pages of three born-digital files are drawn as scans (clean: 300 dots to the inch, grey PNG; rough: 150, JPEG at quality 50), so the true words are known (MuPDF's reading of the original page). Each scan is read by the editor's OCR (tesseract.js 7, English `best_int` data, one thread of WebAssembly) and by OCRmyPDF with its defaults (native Tesseract and its own English data, all cores); the results are read by Poppler. "Drawn as the scan" compares Poppler's drawing of each page at 72 dots to the inch.
+
+OCRmyPDF 17.13.0, tesseract 5.5.3
+
+| Pages                       | Scan  | Read by  | True words found | Words found that are true | Time a page | Size           | Drawn as the scan |
+| --------------------------- | ----- | -------- | ---------------- | ------------------------- | ----------- | -------------- | ----------------- |
+| paper-arxiv.pdf p1,2,3      | clean | KeepSimp | 98.2%            | 96.0%                     | 5.4 s       | 1576 → 1597 KB | identical         |
+|                             | clean | OCRmyPDF | 98.5%            | 96.0%                     | 3.2 s       | 1576 → 1600 KB | identical         |
+| paper-arxiv.pdf p1,2,3      | rough | KeepSimp | 97.9%            | 97.1%                     | 5.3 s       | 486 → 508 KB   | identical         |
+|                             | rough | OCRmyPDF | 97.2%            | 94.8%                     | 2.2 s       | 486 → 488 KB   | identical         |
+| guide-irs-p17.pdf p13,14,15 | clean | KeepSimp | 95.5%            | 97.6%                     | 14.5 s      | 3146 → 3209 KB | identical         |
+|                             | clean | OCRmyPDF | 98.1%            | 98.8%                     | 5.2 s       | 3146 → 3190 KB | identical         |
+| guide-irs-p17.pdf p13,14,15 | rough | KeepSimp | 95.9%            | 97.8%                     | 14.8 s      | 970 → 1034 KB  | identical         |
+|                             | rough | OCRmyPDF | 97.6%            | 98.7%                     | 3.5 s       | 970 → 998 KB   | identical         |
+| booklet-udhr.pdf p5,6,7     | clean | KeepSimp | 93.8%            | 93.8%                     | 1.2 s       | 336 → 343 KB   | 3.70 of 255       |
+|                             | clean | OCRmyPDF | 93.8%            | 93.8%                     | 1.5 s       | 336 → 347 KB   | identical         |
+| booklet-udhr.pdf p5,6,7     | rough | KeepSimp | 93.5%            | 93.5%                     | 1.2 s       | 95 → 102 KB    | 3.37 of 255       |
+|                             | rough | OCRmyPDF | 92.6%            | 92.9%                     | 1.3 s       | 95 → 103 KB    | identical         |
+
+- **Accuracy** is close to OCRmyPDF's on the paper and the booklet, and 2 to 3 points behind on the dense IRS pages; the remaining gap is the language data and Tesseract's build, not the layer, whose words Poppler reads exactly as Tesseract read them. **Speed**: one WebAssembly thread in the browser against native Tesseract on every core, so 1.7 to 3 times slower on dense pages, and the same on light ones.
+- **Drawn as the scan.** The booklet's pages are 311.8110046 points square. MuPDF keeps numbers as 32-bit floats and writes the page box as 311.811, so Poppler's pixels move by a fraction of one: a mean difference of 3.7 in 255, which no eye sees side by side. MuPDF, and the editor's check, draw the pages identically. It happens whenever MuPDF writes such a file, with or without OCR, in every KeepSimp PDF tool.
+
+### What the benchmark found, and what was changed
+
+- **A false alarm in the check at download.** On the Chromium slides, after a line was changed with a stand-in font, the check said an untouched slide differed. The written file draws it exactly as the original (in Poppler and in MuPDF); it was the copy the file is written from that drew a slide with a picture in a colour profile differently once our font had been cut to its letters. Untouched pages are now drawn from the file as written (`exportEdited`). Two of those slides are a test fixture (`tests/fixtures/slides-chromium.pdf`), and the test fails on the old check.
+- **A refusal that did not say why.** Words that would run past the edge of the page were written and then refused because they could not be read back. They are now refused before anything is touched: "The new words would run past the edge of the page."
+- **OCR read across columns.** The library tesseract.js is made of takes a page for one block of text unless told otherwise; Tesseract's own program and OCRmyPDF let it find the columns. With that set (`OCR_PARAMETERS`, page segmentation 3), the dense IRS pages went from 92.4% to 95.5% of the words found (88.0% to 95.9% on the rough scan), and the booklet from 92.6% to 93.8%. On a two-line Arabic sample it read the letters' dots as a line of their own; on a page of Arabic it reads as well as before, and that page is now the Arabic fixture.
+
 ## One editor, several doors
 
 There is one PDF editor. The annotator, Sign PDF, Fill PDF form, Crop PDF, Add page numbers, Watermark PDF, Redact PDF, Create a fillable PDF form and OCR PDF are **doors**: each is a catalogue entry with `partOf: "pdf-editor"`. A door has an address, a title, a description, written help and an article of its own, is in the sitemap and the offline copy, and is found by the search in the header. It is not a card on the tools page, not counted in the sidebar and not an app shortcut (`listed` in `lib/catalogue.ts` is the tools without their doors), and the article that goes through every tool names it under the editor. Each page says what it is and links to the other.
@@ -483,7 +537,7 @@ The report (`ExportReport`) becomes the lines in the download card (`lib/pdf-edi
 6. **Pages and the document.** Built: pages moved, turned, copied, taken out and blank ones added, from a list beside the pages; the pages of another PDF added, and chosen pages saved as a file of their own; pages cropped, shown whole again and made another size; page numbers, headers and footers, Bates numbers and watermarks; bookmarks added, renamed, moved, nested and deleted; the file's title and other details; the numbers it gives its own pages. Focused pages: Crop PDF, Add page numbers, Watermark PDF. The phase is complete.
 7. **Redact and protect.** Built: places marked by area, by words, by search, by kind (e-mail addresses, phone numbers, card numbers) and by a shape of one's own; applied so that letters, pixels and drawings leave the file; looked at afterwards; details, attached files and scripts left out of a download on request; the Redact PDF page. A password and permissions were already among the download's choices.
 8. **Make forms.** Part 1 built: add, move, resize, rename and delete text, multiline text, checkboxes, radio groups, dropdowns, lists, dates and empty signature places; unique names, tooltips, required flags and text length limits. Focused page: Create a fillable PDF form. Part 2 built: picking several, lining up, spacing, one size, tab order and copying to other pages. Part 3 built: fields suggested from rules, boxes, squares and underscores, to add or dismiss.
-9. **OCR on the device,** videos, a benchmark beside other editors. Focused page: OCR PDF. Part 1 built: English OCR, laid unseen as one step, with the OCR PDF door, kept for offline use once used. Part 2 built: 31 languages, each loaded when chosen, with right-to-left and unspaced scripts written so that readers find them. Part 3: tutorial videos, a shortcut sheet, the benchmark.
+9. **OCR on the device,** videos, a benchmark beside other editors. Focused page: OCR PDF. Part 1 built: English OCR, laid unseen as one step, with the OCR PDF door, kept for offline use once used. Part 2 built: 31 languages, each loaded when chosen, with right-to-left and unspaced scripts written so that readers find them. Part 3 built: the sheet of keys, tutorial videos for the editor, OCR PDF and Redact PDF, and a benchmark on real files beside OCRmyPDF.
 10. **Certificate signatures.**
 
 Not planned: running a file's scripts, XFA forms, turning pages into pictures, uploads, accounts.

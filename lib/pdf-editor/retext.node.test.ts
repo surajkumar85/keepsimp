@@ -608,3 +608,54 @@ describe("undoing and keeping", () => {
     stopEditing(again)
   })
 })
+
+describe("the check of pages nothing was done to", () => {
+  it("draws them from the file as written, where cutting our font down changes nothing", async () => {
+    // Two slides printed by Chromium (from the benchmark set, made by
+    // scripts/pdf-benchmark-files.mjs): the second has a picture with a
+    // colour profile and a grey JPEG. Once a font of ours had been cut down
+    // to its letters, the copy the file was written from drew that slide
+    // differently, though the file as written draws it as it was; the
+    // check said the slide had changed.
+    const bytes = new Uint8Array(
+      readFileSync("tests/fixtures/slides-chromium.pdf")
+    )
+    const session = startEditing(mupdf, bytes)
+    give(session, ...Object.keys(fontUrls))
+    const line = lines(session).find(
+      (one) => one.text === "Results, plans and three open questions"
+    )!
+    // "KeepSimp" has letters the slide's own font lacks: ours stands in.
+    retext(session, line, "Results, plans and KeepSimp 2026")
+    const { bytes: written, report } = await exportEdited(mupdf, session)
+    expect(report.fontsCut).toBe(true)
+    expect(report.untouched).toEqual({ checked: 1, differ: [] })
+    // Poppler and MuPDF agree; this is MuPDF reading the written file afresh.
+    const look = (data: Uint8Array) => {
+      const doc = new mupdf.PDFDocument(data)
+      try {
+        return drawPage(mupdf, doc, 1, 600).data.join()
+      } finally {
+        doc.destroy()
+      }
+    }
+    expect(look(written)).toBe(look(bytes))
+    stopEditing(session)
+  })
+})
+
+describe("words that do not fit the page", () => {
+  it("are refused before anything is touched, with the reason", async () => {
+    const session = startEditing(mupdf, await makeTextPdf())
+    give(session, ...Object.keys(fontUrls))
+    const was = line(session, TEXT.warning)
+    // Far longer than the page is wide: it would run past its edge, where
+    // it could be neither seen nor read.
+    expect(() =>
+      retext(session, was, `${TEXT.warning} ${"and so on ".repeat(40)}`)
+    ).toThrow("The new words would run past the edge of the page.")
+    expect(historyOf(session).steps).toEqual([])
+    expect(line(session, TEXT.warning)).toBeDefined()
+    stopEditing(session)
+  })
+})

@@ -13,6 +13,7 @@ import {
   OCR_BASE,
   OCR_ENGINE_SIZE,
   OCR_LANGUAGES,
+  OCR_PARAMETERS,
   preferredLanguage,
 } from "@/lib/pdf-editor/ocr-files"
 import type { Comments } from "./use-comments"
@@ -119,7 +120,7 @@ export function useOcr(
     startedFor.current = langs
     return (tesseract.current ??= (async () => {
       const { createWorker, OEM } = await import("tesseract.js")
-      return createWorker(langs, OEM.LSTM_ONLY, {
+      const worker = await createWorker(langs, OEM.LSTM_ONLY, {
         workerPath: `${OCR_BASE}/worker.min.js`,
         corePath: OCR_BASE,
         langPath: OCR_BASE,
@@ -131,6 +132,8 @@ export function useOcr(
             progress.current(message.progress)
         },
       })
+      await worker.setParameters(OCR_PARAMETERS as never)
+      return worker
     })())
   }
 

@@ -846,15 +846,36 @@ function carryOut(
       numbers,
       op.look?.font
     )
+    // Where it is written: where it was, or as far from there as it is moved.
+    const origin = {
+      x: line.origin.x + (op.move?.x ?? 0),
+      y: line.origin.y + (op.move?.y ?? 0),
+    }
+    // Words that would run off the page cannot be read there, nor seen: a
+    // line that was on the page is not let run off it.
+    const long = resolved.pieces.reduce((sum, piece) => sum + piece.advance, 0)
+    const [x0, y0, x1, y1] = page.getBounds()
+    const on = ({ x, y }: Point) =>
+      x >= x0 - 1 && x <= x1 + 1 && y >= y0 - 1 && y <= y1 + 1
+    const end = {
+      x: origin.x + line.along.x * long,
+      y: origin.y + line.along.y * long,
+    }
+    const was = line.box
+    if (
+      text &&
+      on({ x: was.x, y: was.y }) &&
+      on({ x: was.x + was.width, y: was.y + was.height }) &&
+      !(on(origin) && on(end))
+    )
+      throw new Error(
+        "The new words would run past the edge of the page. Make them shorter, or move the line first. Nothing was changed."
+      )
     return {
       line,
       bands,
       text,
-      // Where it is written: where it was, or as far from there as it is moved.
-      origin: {
-        x: line.origin.x + (op.move?.x ?? 0),
-        y: line.origin.y + (op.move?.y ?? 0),
-      },
+      origin,
       resolved,
       others: before
         .filter((one) => one !== target)

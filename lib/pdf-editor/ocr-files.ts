@@ -131,6 +131,16 @@ export const OCR_LANGUAGES: OcrLanguage[] = [
   },
 ]
 
+/**
+ * How Tesseract is set up to read a page. Left to itself, the library that
+ * tesseract.js is made of takes a page for one block of text and reads
+ * across its columns; Tesseract's own program, and OCRmyPDF, find the
+ * columns and blocks first ("automatic page segmentation", 3). On pages in
+ * columns that read 3 to 8 points more of the words (see the benchmark in
+ * docs/pdf-editor.md).
+ */
+export const OCR_PARAMETERS = { tessedit_pageseg_mode: "3" } as const
+
 /** No more languages than this are read at once: each one more makes reading slower and no better. */
 export const MOST_LANGUAGES = 3
 

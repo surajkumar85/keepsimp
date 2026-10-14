@@ -16,6 +16,9 @@ const tools = [
   "pdf-merger",
   "pdf-splitter",
   "pdf-compressor",
+  "pdf-editor",
+  "ocr-pdf",
+  "redact-pdf",
 ]
 const tool = process.argv[2] ?? tools[0]
 if (!tools.includes(tool)) {

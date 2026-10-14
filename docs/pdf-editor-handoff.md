@@ -1,6 +1,6 @@
 # PDF editor: what is left, and how to build it
 
-This is a working brief for whoever builds phases 8 to 10 of the PDF editor. Phases 1 to 8 and phase 9, parts 1 and 2 are live. `AGENTS.md` holds the rules, `docs/pdf-editor.md` says what is built and how, and this file says what is left and the way of working that got the first seven phases shipped without regressions. Follow it step by step. Do not skip the proving steps: every one of them caught a real fault.
+This is a working brief for whoever builds phases 8 to 10 of the PDF editor. Phases 1 to 9 are live. `AGENTS.md` holds the rules, `docs/pdf-editor.md` says what is built and how, and this file says what is left and the way of working that got the first seven phases shipped without regressions. Follow it step by step. Do not skip the proving steps: every one of them caught a real fault.
 
 ## The way of working (do this for every part)
 
@@ -85,7 +85,11 @@ English OCR with the OCR PDF door: see "Recognising words on scans" in `docs/pdf
 
 31 languages: see "Recognising words in other languages" in `docs/pdf-editor.md`. Probe any script you add with a fixture in `tests/fixtures/ocr/` and read it back with pdf.js, `pdftotext` and MuPDF: right-to-left words and scripts written without spaces each needed a change before readers found them.
 
-Next: part 3, tutorial videos recorded from the real app, a shortcut sheet, and the benchmark beside other editors. Earlier notes on part 2 follow.
+### Part 3: built
+
+The sheet of keys (`?`), tutorial videos for the editor, OCR PDF and Redact PDF, and the benchmark (`npm run pdf:editor-benchmark`): see "Keys, videos and a benchmark" in `docs/pdf-editor.md`. The benchmark found three faults, each fixed with a test: a false alarm in the check at download, a refusal that did not say why, and tesseract.js reading across columns. Run it again after changing how text is written or how OCR reads, and update the published tables. Phase 9 is complete.
+
+Next: phase 10, certificate signatures. Earlier notes on part 2 follow.
 
 Earlier: part 2, other languages. Each language is an npm package of `@tesseract.js-data/<code>` (or the tessdata `best_int` files), served by the same route under the versioned folder, loaded only when chosen, and kept by the service worker once used. The font that draws nothing already serves every script; check right-to-left (Arabic, Hebrew) and vertical CJK with pdf.js and `pdftotext` before offering them.
 

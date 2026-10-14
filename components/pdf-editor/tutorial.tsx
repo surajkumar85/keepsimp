@@ -1,6 +1,12 @@
 import { ToolTutorial, type TutorialContent } from "@/components/tool-tutorial"
+import { shortcutsSaid } from "@/lib/pdf-editor/shortcuts"
 
 const content: TutorialContent = {
+  video: {
+    file: "pdf-editor-tutorial",
+    duration: { iso: "PT45S", label: "45 s" },
+    uploadDate: "2026-10-14",
+  },
   name: "How to use the KeepSimp PDF editor",
   description:
     "Change the words of a PDF and add text, pictures, shapes and drawings, in your browser. Every change is made in the real file and can be undone, the result is checked before you download it, and nothing is uploaded.",
@@ -149,8 +155,7 @@ const content: TutorialContent = {
     },
     {
       term: "Keyboard",
-      detail:
-        "Tab moves through the things on a page. Delete removes what is selected, Ctrl or ⌘ C, X, V and D copy, cut, paste and duplicate, and the square brackets move a thing forward or back. V, T, B, O, L, A, D, C, X, K, Q and R choose a tool, and G opens the signature window. Escape puts the tool down.",
+      detail: `Press ? in the editor, or the keyboard button beside Download, for a sheet of every key. ${shortcutsSaid()}`,
     },
     {
       term: "Keep what you added editable",
@@ -594,6 +599,11 @@ const watermarking: TutorialContent = {
 }
 
 const redacting: TutorialContent = {
+  video: {
+    file: "redact-pdf-tutorial",
+    duration: { iso: "PT30S", label: "30 s" },
+    uploadDate: "2026-10-14",
+  },
   name: "How to redact a PDF with KeepSimp",
   description:
     "Take names, numbers, pictures and whole areas out of a PDF for good, in your browser. What is under a mark is removed from the file, not covered. Nothing is uploaded.",
@@ -676,6 +686,11 @@ const redacting: TutorialContent = {
 }
 
 const recognising: TutorialContent = {
+  video: {
+    file: "ocr-pdf-tutorial",
+    duration: { iso: "PT37S", label: "37 s" },
+    uploadDate: "2026-10-14",
+  },
   name: "How to make a scanned PDF searchable with KeepSimp",
   description:
     "Recognise the words of scanned pages in your browser (OCR) and lay them unseen over the pages, so they can be searched, selected and copied. Nothing is uploaded.",

@@ -20,6 +20,7 @@
     "test:e2e:ui": "playwright test --ui",
     "image:benchmark": "vitest run --config vitest.benchmark.config.ts benchmarks/image-compressor.benchmark.ts",
     "pdf:benchmark": "vitest run --config vitest.benchmark.config.ts benchmarks/pdf-compressor.benchmark.ts",
+    "pdf:editor-benchmark": "vitest run --config vitest.benchmark.config.ts benchmarks/pdf-editor.benchmark.ts",
     "tutorial:video": "node scripts/tutorial-video.mjs",
     "pwa:icons": "node scripts/pwa-icons.mjs",
     "samples:animations": "node scripts/sample-animations.mjs",
