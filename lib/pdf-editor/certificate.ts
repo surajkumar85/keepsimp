@@ -2,15 +2,15 @@
  * A certificate to sign with, read from a .p12 or .pfx file on the device,
  * and the signature (CMS, as PAdES asks for it) made with its key.
  *
- * The file is opened with node-forge, which reads the old ciphers such
+ * The file is opened by `pkcs12.ts`, which reads the old ciphers such
  * files are often locked with (3DES, RC2) as well as AES. The key is then
  * handed to the browser's own cryptography (WebCrypto) and cannot be read
  * out again; the signature itself is put together with PKI.js. Nothing of
  * the file, its password or its key is kept or sent anywhere.
  */
 import * as asn1js from "asn1js"
-import forge from "node-forge"
 import * as pkijs from "pkijs"
+import { Pkcs12Problem, readPkcs12 } from "./pkcs12"
 
 /** Words for what is wrong with a certificate file, to be shown as they are. */
 export class CertificateProblem extends Error {}
@@ -71,10 +71,6 @@ export function readyWebCrypto() {
   engine = true
 }
 
-const bytesOf = (binary: string) =>
-  Uint8Array.from(binary, (letter) => letter.charCodeAt(0))
-const derOf = (asn1: forge.asn1.Asn1) =>
-  bytesOf(forge.asn1.toDer(asn1).getBytes())
 const bufferOf = (bytes: Uint8Array) =>
   bytes.buffer.slice(
     bytes.byteOffset,
@@ -108,13 +104,12 @@ const isAuthority = (certificate: pkijs.Certificate) =>
  * elliptic-curve key) and the key.
  */
 function kindOfKey(pkcs8: Uint8Array) {
-  const [, algorithm] = forge.asn1.fromDer(
-    forge.util.createBuffer(new Uint8Array(pkcs8))
-  ).value as forge.asn1.Asn1[]
-  const [id, params] = algorithm.value as forge.asn1.Asn1[]
-  const oid = (asn1: forge.asn1.Asn1) =>
-    forge.asn1.derToOid(asn1.value as string)
-  return `${oid(id)} ${params?.type === forge.asn1.Type.OID ? oid(params) : ""}`
+  const info = asn1js.fromBER(new Uint8Array(pkcs8)).result
+  const [, algorithm] = (info as asn1js.Sequence).valueBlock.value
+  const [id, params] = (algorithm as asn1js.Sequence).valueBlock.value
+  const oid = (one: asn1js.AsnType) =>
+    (one as asn1js.ObjectIdentifier).valueBlock.toString()
+  return `${oid(id)} ${params instanceof asn1js.ObjectIdentifier ? oid(params) : ""}`
 }
 
 /** A certificate's kind, with its curve for an elliptic-curve one: "1.2.840.10045.2.1 1.2.840.10045.3.1.7". */
@@ -160,34 +155,14 @@ export async function readIdentity(
   password: string
 ): Promise<Identity> {
   readyWebCrypto()
-  let p12: forge.pkcs12.Pkcs12Pfx
+  let keys: Uint8Array[]
+  let certificates: Uint8Array[]
   try {
-    const asn1 = forge.asn1.fromDer(
-      forge.util.createBuffer(new Uint8Array(file))
-    )
-    p12 = forge.pkcs12.pkcs12FromAsn1(asn1, false, password)
+    ;({ keys, certificates } = await readPkcs12(file, password))
   } catch (error) {
-    throw new CertificateProblem(
-      /password|MAC|decrypt/i.test(String((error as Error).message))
-        ? "That password does not open this certificate file."
-        : "This is not a certificate file that can be read (.p12 or .pfx)."
-    )
+    // The reader says what is wrong in words of its own, always.
+    throw new CertificateProblem((error as Pkcs12Problem).message)
   }
-  // forge gives a list for the kind asked for, empty when there are none.
-  const bagsOf = (type: string) =>
-    p12.getBags({ bagType: type })[type] as forge.pkcs12.Bag[]
-  const keyBags = [
-    ...bagsOf(forge.pki.oids.pkcs8ShroudedKeyBag),
-    ...bagsOf(forge.pki.oids.keyBag),
-  ]
-  const keys = keyBags.map((bag) =>
-    bag.key
-      ? derOf(forge.pki.wrapRsaPrivateKey(forge.pki.privateKeyToAsn1(bag.key)))
-      : derOf(bag.asn1!)
-  )
-  const certificates = bagsOf(forge.pki.oids.certBag).map((bag) =>
-    bag.cert ? derOf(forge.pki.certificateToAsn1(bag.cert)) : derOf(bag.asn1!)
-  )
   if (!keys.length)
     throw new CertificateProblem(
       "This file holds certificates but no key. Only a file with its private key can sign; export it again with the key."
