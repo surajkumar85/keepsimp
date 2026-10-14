@@ -12,7 +12,9 @@ import {
   IconLayoutAlignTop,
   IconLayoutDistributeHorizontal,
   IconLayoutDistributeVertical,
+  IconPlus,
   IconSortAscending,
+  IconWand,
   IconX,
 } from "@tabler/icons-react"
 import type { ReactNode } from "react"
@@ -271,6 +273,83 @@ function Arrange({ makeForm, busy }: { makeForm: MakeForm; busy: boolean }) {
   )
 }
 
+/** The fields a page seemed to ask for: each to be added or dismissed. */
+function Suggested({ makeForm, busy }: { makeForm: MakeForm; busy: boolean }) {
+  const { suggested } = makeForm
+  if (!suggested) return null
+  const { items, page } = suggested
+  return (
+    <section
+      className="space-y-2"
+      aria-labelledby="form-suggested-title"
+      data-testid="form-suggested"
+    >
+      <h3
+        id="form-suggested-title"
+        className="font-heading text-sm font-medium"
+      >
+        {items.length.toLocaleString("en")} suggested on page{" "}
+        {(page + 1).toLocaleString("en")}
+      </h3>
+      <div className="flex flex-wrap gap-2">
+        <Button
+          type="button"
+          disabled={busy}
+          onClick={() => void makeForm.take(items)}
+        >
+          Add all {items.length.toLocaleString("en")}
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          disabled={busy}
+          onClick={() => makeForm.dismiss("all")}
+        >
+          Dismiss all
+        </Button>
+      </div>
+      <ul className="space-y-1">
+        {items.slice(0, 200).map((one, at) => (
+          <li key={`${at}/${one.name}`} className="flex items-center gap-1">
+            <span className="min-w-0 flex-1 truncate text-sm">
+              {one.name.replace(/_/g, " ")}
+              <span className="text-xs text-muted-foreground">
+                {" "}
+                · {KIND_NAMES[one.kind]}
+              </span>
+            </span>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              aria-label={`Add ${one.name.replace(/_/g, " ")}`}
+              disabled={busy}
+              onClick={() => void makeForm.take([one])}
+            >
+              <IconPlus aria-hidden="true" />
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              aria-label={`Dismiss ${one.name.replace(/_/g, " ")}`}
+              onClick={() => makeForm.dismiss([one])}
+            >
+              <IconX aria-hidden="true" />
+            </Button>
+          </li>
+        ))}
+      </ul>
+      <p className="text-xs text-muted-foreground">
+        Found from the rules, boxes, squares and underscores the page draws, and
+        named after the words beside or over them. It is judged by look and can
+        be wrong: nothing is added until you say so. On a scanned page there is
+        nothing to read yet.
+      </p>
+    </section>
+  )
+}
+
 /** The order the Tab key goes through the fields of a page. */
 function TabOrder({
   makeForm,
@@ -383,6 +462,19 @@ export function FormDesignPanel({
             XFA forms cannot be changed here. Use a PDF with ordinary fields.
           </p>
         )}
+        <Button
+          type="button"
+          variant="outline"
+          className="w-full"
+          disabled={editor.busy || editor.form.xfa || makeForm.looking}
+          onClick={() => void makeForm.suggest()}
+        >
+          <IconWand aria-hidden="true" />
+          {makeForm.looking
+            ? "Looking at the page…"
+            : "Suggest fields on this page"}
+        </Button>
+        <Suggested makeForm={makeForm} busy={editor.busy || editor.form.xfa} />
         {makeForm.together.length > 1 && (
           <Arrange makeForm={makeForm} busy={editor.busy || editor.form.xfa} />
         )}

@@ -94,6 +94,7 @@ export default defineConfig({
         "lib/pdf-editor/repeated.ts",
         "lib/pdf-editor/redact.ts",
         "lib/pdf-editor/form-layout.ts",
+        "lib/pdf-editor/form-suggest.ts",
         "lib/pdf-editor/paragraphs.ts",
         "lib/pdf-editor/report.ts",
         "lib/pdf-editor/retext.ts",

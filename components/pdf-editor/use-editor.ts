@@ -814,6 +814,16 @@ export function useEditor(
     [flush, enqueue, file]
   )
 
+  /** The fields a page seems to ask for, from what it draws; null when it could not be read. */
+  const suggestFields = useCallback(
+    async (page: number) => {
+      flush()
+      await queue.current
+      return (await client.current?.suggestFields(file, page)) ?? null
+    },
+    [client, file, flush]
+  )
+
   /** Where some words, or things of a kind, are on the pages; null when the file could not be looked through. */
   const findToRedact = useCallback(
     async (sought: Sought) => {
@@ -1602,6 +1612,7 @@ export function useEditor(
     redactMarks,
     changeRedact,
     findToRedact,
+    suggestFields,
     makeFields,
     formNames,
     newId,

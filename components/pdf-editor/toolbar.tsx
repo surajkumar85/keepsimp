@@ -40,6 +40,7 @@ import {
   IconAsterisk,
   IconCrop,
   IconEraser,
+  IconWand,
   IconEdit,
   IconPlus,
   IconChevronDown,
@@ -1969,6 +1970,14 @@ export function EditorToolbar({
               onClick={() => void makeForm.add()}
             >
               Add field
+            </Button>
+            <Button
+              variant="outline"
+              disabled={editor.busy || editor.form.xfa || makeForm.looking}
+              title="Look at the page being read for the lines, boxes and squares a person would write on, and suggest fields for them. Nothing is added until you say so."
+              onClick={() => void makeForm.suggest()}
+            >
+              <IconWand aria-hidden="true" /> Suggest fields
             </Button>
             <Button
               variant="outline"

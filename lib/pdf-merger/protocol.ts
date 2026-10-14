@@ -37,6 +37,7 @@ import type { PageText, Quad } from "@/lib/pdf-reader/text"
 import type { HalveChoice } from "@/lib/pdf-splitter/halves"
 import type { Area } from "@/lib/pdf-splitter/text-rule"
 import type { FileFacts } from "./files"
+import type { Suggestion } from "@/lib/pdf-editor/form-suggest"
 import type { Bookmark, BookmarkPolicy } from "./outline"
 import type { PictureMargin, PicturePage } from "./picture"
 import type { FooterPlace, NumberStyle, SheetChoice } from "./print"
@@ -251,6 +252,8 @@ export type PdfRequest =
   | { type: "edit-redact-marks"; id: string; request: number; page: number }
   /** Where some words, or things of a kind, are on the pages, to be marked. */
   | { type: "edit-redact-find"; id: string; request: number; sought: Sought }
+  /** The fields a page seems to ask for, from the lines and boxes it draws. Nothing is changed. */
+  | { type: "edit-suggest-fields"; id: string; request: number; page: number }
   /** Change the file's bookmarks, its details or its own page numbers, as one step. */
   | {
       type: "edit-document"
@@ -481,6 +484,12 @@ export type PdfResponse =
     }
   /** `marks` is null when the page could not be read. */
   | { type: "edit-redact-marks"; request: number; marks: RedactMark[] | null }
+  /** `suggestions` is null when the page could not be read. */
+  | {
+      type: "edit-fields-suggested"
+      request: number
+      suggestions: Suggestion[] | null
+    }
   /** `found` is null when the file could not be looked through; `more` when there are more places than are given. */
   | {
       type: "edit-redact-found"

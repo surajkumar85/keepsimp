@@ -11,9 +11,11 @@ import {
   type Dimension,
   type Edge,
 } from "@/lib/pdf-editor/form-layout"
+import type { Suggestion } from "@/lib/pdf-editor/form-suggest"
 import { parseRanges } from "@/lib/pdf-merger/ranges"
 import {
   defaultSpec,
+  nameTaken,
   fitField,
   initialField,
   KIND_NAMES,
@@ -92,6 +94,18 @@ export function useMakeForm(
     },
     [picked]
   )
+  /** The fields a page seemed to ask for, still to be taken or dismissed. */
+  const [suggested, setSuggested] = useState<{
+    page: number
+    items: Suggestion[]
+  } | null>(null)
+  const [looking, setLooking] = useState(false)
+  // When the list of pages is another, the suggestions may be of another page.
+  const [laid, setLaid] = useState(editor.layout)
+  if (laid !== editor.layout) {
+    setLaid(editor.layout)
+    setSuggested(null)
+  }
   const [fresh, setFresh] = useState<string | null>(null)
   const [note, setNote] = useState("")
   const other =
@@ -149,7 +163,10 @@ export function useMakeForm(
       setWanted(next)
       setPanel(next)
       setNote("")
-      if (!next) setChosen(null)
+      if (!next) {
+        setChosen(null)
+        setSuggested(null)
+      }
     },
     [
       setChosen,
@@ -274,6 +291,72 @@ export function useMakeForm(
     setNote("")
     void putInOrder(page, next)
   }
+  /** Look at the page being read for the fields it seems to ask for; nothing is added. */
+  const suggest = async () => {
+    const { page } = middle()
+    setLooking(true)
+    setNote("")
+    try {
+      const got = await editor.suggestFields(page)
+      if (!got) {
+        setNote("This page could not be read for fields.")
+        return
+      }
+      setPanel(true)
+      if (!got.length) {
+        setSuggested(null)
+        setNote(
+          `Nothing to suggest on page ${page + 1}: it draws no empty boxes, rules or squares that are not fields already.`
+        )
+        return
+      }
+      setSuggested({ page, items: got })
+      setNote(
+        `${got.length.toLocaleString("en")} ${got.length === 1 ? "field" : "fields"} suggested on page ${page + 1}, from the lines and boxes it draws. Look them over: add the ones you want.`
+      )
+    } finally {
+      setLooking(false)
+    }
+  }
+  /** Add some of the suggested fields, as one step; they leave the suggestions. */
+  const take = async (items: readonly Suggestion[]) => {
+    if (!suggested || !items.length) return
+    const names = [...formNames]
+    const ops = items.map((one) => {
+      // A name may have been taken since the page was looked at.
+      let name = one.name
+      for (let n = 2; nameTaken(names, name); n++) name = `${one.name}_${n}`
+      names.push(name)
+      return {
+        do: "add" as const,
+        page: suggested.page,
+        box: one.box,
+        field: { ...defaultSpec(one.kind, names), name },
+      }
+    })
+    const news = await makeFields(
+      ops.length === 1
+        ? `Add a suggested field`
+        : `Add ${ops.length.toLocaleString("en")} suggested fields`,
+      ...ops
+    )
+    if (!news) return
+    const left = suggested.items.filter((one) => !items.includes(one))
+    setSuggested(left.length ? { ...suggested, items: left } : null)
+    setNote(
+      ops.length === 1
+        ? `Added “${ops[0].field.name}”. Change its name or kind in its settings.`
+        : `Added ${ops.length.toLocaleString("en")} fields.`
+    )
+  }
+  const dismiss = (items: readonly Suggestion[] | "all") => {
+    if (!suggested) return
+    const left =
+      items === "all"
+        ? []
+        : suggested.items.filter((one) => !items.includes(one))
+    setSuggested(left.length ? { ...suggested, items: left } : null)
+  }
   /** Copy the chosen field to the pages typed, such as "2-5" or "all". */
   const copyTo = async (text: string) => {
     if (!chosen) return
@@ -348,6 +431,11 @@ export function useMakeForm(
     nudge,
     byRows,
     copyTo,
+    suggested,
+    looking,
+    suggest,
+    take,
+    dismiss,
     field,
     fresh,
     setFresh,

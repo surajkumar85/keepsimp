@@ -57,6 +57,7 @@ import {
   redactFind,
   redactMarksOn,
 } from "@/lib/pdf-editor/mupdf-redact"
+import { suggestOn } from "@/lib/pdf-editor/mupdf-form-suggest"
 import {
   readClean,
   readSought,
@@ -738,6 +739,33 @@ function editRedactMarks(
     // The page says that the marks could not be read.
   }
   post({ type: "edit-redact-marks", request: request.request, marks })
+}
+
+async function editSuggestFields(
+  request: Extract<PdfRequest, { type: "edit-suggest-fields" }>
+) {
+  const session = editing.get(request.id)
+  try {
+    if (
+      !session ||
+      !Number.isInteger(request.page) ||
+      request.page < 0 ||
+      request.page >= session.doc.countPages()
+    )
+      throw new Error(EDIT_FAILED)
+    const suggestions = suggestOn(await engine, session, request.page)
+    post({
+      type: "edit-fields-suggested",
+      request: request.request,
+      suggestions,
+    })
+  } catch {
+    post({
+      type: "edit-fields-suggested",
+      request: request.request,
+      suggestions: null,
+    })
+  }
 }
 
 function editRedactFind(
@@ -1437,6 +1465,8 @@ self.onmessage = (event: MessageEvent<PdfRequest>) => {
   else if (request.type === "edit-redact") void editRedact(request)
   else if (request.type === "edit-redact-marks") editRedactMarks(request)
   else if (request.type === "edit-redact-find") editRedactFind(request)
+  else if (request.type === "edit-suggest-fields")
+    void editSuggestFields(request)
   else if (request.type === "edit-insert") void editInsert(request)
   else if (request.type === "edit-page-link")
     enqueue({ run: () => editPageLink(request) })

@@ -7,7 +7,7 @@ import {
   type KeyboardEvent,
   type PointerEvent,
 } from "react"
-import { fitField } from "@/lib/pdf-editor/form-fields"
+import { fitField, KIND_NAMES } from "@/lib/pdf-editor/form-fields"
 import {
   HANDLES,
   handlePoint,
@@ -145,12 +145,39 @@ export function FormDesignSpots({
     drag.current = null
     put()
   }
+  const suggestions =
+    makeForm.suggested?.page === page ? makeForm.suggested.items : []
   return (
     <div
       ref={surface}
       data-testid="form-design-surface"
       className="pointer-events-none absolute inset-0"
     >
+      {suggestions.map((one, at) => (
+        <button
+          key={`suggested/${at}/${one.name}`}
+          type="button"
+          data-hold
+          data-testid="form-suggested-field"
+          data-name={one.name}
+          aria-label={`Suggested ${KIND_NAMES[one.kind].toLowerCase()}: ${one.name.replace(/_/g, " ")}. Press to add it.`}
+          title={`Suggested: ${one.name.replace(/_/g, " ")}. Press to add it.`}
+          disabled={editor.busy}
+          className="pointer-events-auto absolute cursor-copy border-dashed border-primary bg-primary/5 outline-none hover:bg-primary/15 focus-visible:ring-2 focus-visible:ring-ring"
+          style={{
+            left: one.box.x,
+            top: one.box.y,
+            width: one.box.width,
+            height: one.box.height,
+            borderWidth: 1.5 / scale,
+          }}
+          onPointerDown={(event) => event.stopPropagation()}
+          onClick={(event) => {
+            event.stopPropagation()
+            void makeForm.take([one])
+          }}
+        />
+      ))}
       {fields.map((field) => {
         const selected =
           makeForm.chosen?.page === page && makeForm.chosen.id === field.id

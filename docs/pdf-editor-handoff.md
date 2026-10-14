@@ -1,6 +1,6 @@
 # PDF editor: what is left, and how to build it
 
-This is a working brief for whoever builds phases 8 to 10 of the PDF editor. Phases 1 to 7 are live; phase 8, part 1 is built and proved in this change. `AGENTS.md` holds the rules, `docs/pdf-editor.md` says what is built and how, and this file says what is left and the way of working that got the first seven phases shipped without regressions. Follow it step by step. Do not skip the proving steps: every one of them caught a real fault.
+This is a working brief for whoever builds phases 8 to 10 of the PDF editor. Phases 1 to 8 are live. `AGENTS.md` holds the rules, `docs/pdf-editor.md` says what is built and how, and this file says what is left and the way of working that got the first seven phases shipped without regressions. Follow it step by step. Do not skip the proving steps: every one of them caught a real fault.
 
 ## The way of working (do this for every part)
 
@@ -23,7 +23,7 @@ Traps that cost time: `get()` on a missing engine object throws (ask with one pa
 
 Say only what a tool does. If something cannot be done well, leave it out and say so in the limits; never ship a control that pretends.
 
-## Phase 8: make forms (parts 1 and 2 built; part 3 next)
+## Phase 8: make forms (built)
 
 Goal: a person turns any PDF into a form others can fill in, in this editor and in Acrobat, Preview, Chrome and Firefox. Door: **Create a fillable PDF form** at `/dashboard/create-pdf-form/`.
 
@@ -33,7 +33,7 @@ Build, as parts shipped one at a time:
 
 1. **Built: add, move, resize, rename, delete** text fields (one line, several lines), check boxes, round-button groups, drop-downs and lists, date fields and a place for a signature. Each has a name (unique; offer one), a tooltip (`TU`), required (`Ff` bit 2), a limit of letters (`MaxLen`), and for lists its choices. Fields are the file's own, read by the existing `lib/pdf-editor/forms.ts` and `mupdf-forms.ts`, so the Fill PDF form door must fill what this makes: test that journey end to end.
 2. **Order and layout**: tab order (the order in `Annots`, and `Tabs /S` or `/R` on the page: prove which viewers follow which), align, distribute, same size, copy to other pages (a copy needs a new name).
-3. **Suggest fields**: from the lines and boxes a page draws (a long thin rule or a run of underscores is a text field, a small square is a check box). It is judged by look and will be wrong sometimes: show suggestions to accept or dismiss, never add them unasked.
+3. **Built: suggest fields**: from the lines and boxes a page draws (a long thin rule or a run of underscores is a text field, a small square is a check box). It is judged by look and will be wrong sometimes: show suggestions to accept or dismiss, never add them unasked.
 
 A date field in other programs is a text field with a format script (`AFDate_FormatEx`). This editor never runs scripts, and its own filling reads that script as text. Decide with a probe whether to write the script so that other programs format the date, and say in the docs what was decided and why. A place for a signature is only a place: nothing here proves who signed.
 
@@ -89,4 +89,8 @@ What was built, which files, the test counts, what was checked on the live site 
 
 Picking several fields, lining up, spacing evenly, one size, tab order (with "By rows") and copying to other pages: see "Laying out form fields" in `docs/pdf-editor.md`. Part 1's empty text fields, dates and drop-downs had no look of their own and were invisible in Preview and in print; that is mended. When you check a form, render it with `qlmanage -t -s 700 -o . file.pdf` (macOS's own engine) as well as Poppler: Poppler draws missing looks itself and hides that fault.
 
-Next is part 3, suggestions.
+## Phase 8, part 3: built
+
+Suggested fields from rules, boxes, squares and underscores: see "Suggesting form fields" in `docs/pdf-editor.md`. The engine's structured text with the `vectors` option gives every path's box, whether it is stroked, whether it is a rectangle and its colour; a `Device` of our own made the WASM engine fail ("memory access out of bounds") when it was collected, so do not write one. Judge a page as it was written (the inverse of `page.getTransform()`), or a turned page gives nothing.
+
+Next is phase 9, OCR.

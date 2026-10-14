@@ -1,6 +1,7 @@
 import { test, expect, type Page } from "@playwright/test"
 import AxeBuilder from "@axe-core/playwright"
 import { PDFDocument } from "@cantoo/pdf-lib"
+import { paperForm, PAPER_FIELDS } from "../tests/pdf-paper-form"
 import { danglingRefs, readPdf } from "../tests/pdf-reader"
 import { bytesOf, pdf, reader, readerReady, type Upload } from "./pdf"
 const ROUTE = "/dashboard/create-pdf-form/"
@@ -500,4 +501,116 @@ test("copies a field to other pages, each with a name of its own", async ({
     expect(rect.getRectangle().x).toBeCloseTo(40, 0)
     expect(rect.getRectangle().width).toBeCloseTo(180, 0)
   }
+})
+
+const paper = async (): Promise<Upload> => ({
+  name: "paper-form.pdf",
+  mimeType: "application/pdf",
+  buffer: Buffer.from(await paperForm()),
+})
+const suggested = (page: Page) => page.getByTestId("form-suggested-field")
+
+test("suggests fields from what a paper form draws, and adds only those taken", async ({
+  page,
+}) => {
+  test.setTimeout(120000)
+  await open(page, await paper())
+  // Nothing is suggested until it is asked for.
+  await expect(suggested(page)).toHaveCount(0)
+  await pick(page, "Suggest fields").click()
+  const list = page.getByTestId("form-suggested")
+  await expect(list).toContainText("5 suggested on page 1")
+  await expect(suggested(page)).toHaveCount(5)
+  expect(
+    await suggested(page).evaluateAll((spots) =>
+      spots.map((spot) => spot.getAttribute("data-name"))
+    )
+  ).toEqual(PAPER_FIELDS)
+  // Asking is no change.
+  expect(await count(page)).toBe(0)
+  // One is taken by pressing it on the page.
+  await page
+    .locator('[data-testid=form-suggested-field][data-name="Name"]')
+    .click()
+  await changed(page, 1)
+  await expect(page.getByTestId("editor-undo")).toHaveAttribute(
+    "aria-label",
+    "Undo: Add a suggested field"
+  )
+  await expect(frame(page, "Name")).toHaveCount(1)
+  await expect(suggested(page)).toHaveCount(4)
+  // One is dismissed from the list, and the rest are added in one step.
+  await list.getByRole("button", { name: "Dismiss Phone" }).click()
+  await expect(suggested(page)).toHaveCount(3)
+  await list.getByRole("button", { name: "Add all 3" }).click()
+  await changed(page, 2)
+  await expect(page.getByTestId("editor-undo")).toHaveAttribute(
+    "aria-label",
+    "Undo: Add 3 suggested fields"
+  )
+  await expect(list).toHaveCount(0)
+  // Asked again, only what was dismissed is suggested again: what was added is a field.
+  await pick(page, "Suggest fields").click()
+  await expect(list).toContainText("1 suggested on page 1")
+  expect(
+    await suggested(page).evaluateAll((spots) =>
+      spots.map((spot) => spot.getAttribute("data-name"))
+    )
+  ).toEqual(["Phone"])
+  await list.getByRole("button", { name: "Dismiss all" }).click()
+  await expect(suggested(page)).toHaveCount(0)
+  const made = await download(page)
+  expect(made.got.fields).toEqual([
+    "Address",
+    "Agree",
+    "Comments",
+    "Existing",
+    "Name",
+  ])
+  expect(made.form.getTextField("Comments").isMultiline()).toBe(true)
+  expect(made.form.getCheckBox("Agree").isChecked()).toBe(false)
+  // The form made from them can be filled in.
+  await open(
+    page,
+    {
+      name: "made.pdf",
+      mimeType: "application/pdf",
+      buffer: Buffer.from(made.bytes),
+    },
+    "/dashboard/fill-pdf-form/"
+  )
+  const name = page
+    .locator('[data-testid=editor-field][data-name="Name"]')
+    .locator("input")
+  await name.fill("Ada Lovelace")
+  await name.press("Tab")
+  const filled = await download(page)
+  expect(filled.form.getTextField("Name").getText()).toBe("Ada Lovelace")
+})
+
+test("suggestions stay accessible and fit a phone", async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: "reduce" })
+  await open(page, await paper())
+  await pick(page, "Suggest fields").click()
+  await expect(suggested(page)).toHaveCount(5)
+  const scan = async () =>
+    (
+      await new AxeBuilder({ page })
+        .include("[role=dialog]")
+        .withTags(["wcag2a", "wcag2aa", "wcag21aa"])
+        .analyze()
+    ).violations
+  expect(await scan()).toEqual([])
+  await page.emulateMedia({ colorScheme: "dark", reducedMotion: "reduce" })
+  expect(await scan()).toEqual([])
+  await page.setViewportSize({ width: 320, height: 740 })
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth
+    )
+  ).toBe(true)
+  // From the keyboard: a suggestion is a button that adds it.
+  await suggested(page).first().focus()
+  await page.keyboard.press("Enter")
+  await changed(page, 1)
 })
