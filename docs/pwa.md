@@ -43,7 +43,7 @@ Both files in `service-worker/` are plain JavaScript with JSDoc types, because t
   - link-preview images, which only other sites read
   - copies a file-syncing program leaves beside a file in `public/` ("guide 2.svg"), which Git ignores and which exist on one machine only
   - the data Next.js fetches for page transitions, whose file names only exist after the build
-  - what recognises words (OCR): Tesseract's worker, cores and language data, about 7 MB, which only some visitors need. They are served from `/ocr/<version>/` and kept in a cache of their own, `keepsimp-kept-on-use`, the first time they are used, so OCR works offline from then on. That cache is not one release's: a new release does not delete it, since the files' address names their version, and saving a file of a new version deletes the older version's files in the same folder.
+  - what recognises words (OCR): Tesseract's worker and cores (about 4 MB kept, 1.1 MB downloaded) and the data of each language read (0.4 to 3.7 MB each, 31 languages), which only some visitors need, each language only when it is chosen. They are served from `/ocr/<version>/` and kept in a cache of their own, `keepsimp-kept-on-use`, the first time they are used, so OCR works offline from then on. That cache is not one release's: a new release does not delete it, since the files' address names their version, and saving a file of a new version deletes the older version's files in the same folder.
 
 Because page data is not saved, following a link offline loads the page in full from the saved copy instead of swapping it in place. When a video cannot load, the player says so and points at the written steps.
 

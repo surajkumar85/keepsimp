@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest"
 import {
   cleanWord,
   hexOf,
+  inDrawnOrder,
+  spaced,
   layerOf,
   LONGEST_SIDE,
   LONGEST_WORD,
@@ -395,5 +397,76 @@ describe("what a run says", () => {
     })
     expect(doubt.good).toBe(false)
     expect(doubt.text).toContain("not to be relied on")
+  })
+})
+
+describe("scripts", () => {
+  it("writes a right-to-left word in the order its letters stand, and leaves others as they are", () => {
+    expect(inDrawnOrder("שלום")).toBe("םולש")
+    // A mark is turned round with its letter, as readers turn them back.
+    expect(inDrawnOrder("ضوبّيا")).toBe("ايّبوض")
+    expect(inDrawnOrder("Straße")).toBe("Straße")
+    expect(inDrawnOrder("4821")).toBe("4821")
+  })
+
+  it("puts no space between words of scripts that are written together, nor before a mark", () => {
+    expect(spaced("Hello", "world")).toBe(true)
+    expect(spaced("发票", "已经")).toBe(false)
+    expect(spaced("これ", "は")).toBe(false)
+    expect(spaced("นี", "คือ")).toBe(false)
+    expect(spaced("ค", "\u0E37อ")).toBe(false)
+    // Korean is written with spaces; a Latin word beside Chinese gets one.
+    expect(spaced("한국어", "문서")).toBe(true)
+    expect(spaced("PDF", "文件")).toBe(true)
+    expect(spaced("", "a")).toBe(true)
+    expect(spaced("a", "")).toBe(true)
+  })
+
+  it("joins a mark that was read as a word of its own to the word before it", () => {
+    const read = readingOf(
+      blocks({
+        bbox: box(0, 0, 100, 20),
+        words: [
+          ["ค", box(0, 2, 10, 20), 90],
+          ["\u0E37", box(6, 0, 12, 8), 50],
+          ["อ", box(14, 2, 24, 20), 90],
+        ],
+      }),
+      1
+    )
+    expect(read.lines[0].words).toEqual([
+      { text: "ค\u0E37", x: 0, width: 12 },
+      { text: "อ", x: 14, width: 10 },
+    ])
+    expect(read.words).toBe(2)
+    expect(read.unsure).toBe(1)
+  })
+
+  it("writes words written together up to the next, and never into it", () => {
+    const written = layerOf(
+      [
+        {
+          x: 0,
+          y: 100,
+          size: 10,
+          slope: 0,
+          words: [
+            // Tesseract gave the first the width of the whole line.
+            { text: "请求", x: 0, width: 100 },
+            { text: "书", x: 22, width: 10 },
+            { text: "OK", x: 40, width: 10 },
+            { text: "go", x: 30, width: 10 },
+          ],
+        },
+      ],
+      "F",
+      [1, 0, 0, 1, 0, 0]
+    )
+    // 请求 reaches to 书, 22 wide for two letters of 5 each: 220%.
+    expect(written).toContain("220 Tz <8bf76c42> Tj\n1 0 0 -1 22 100 Tm")
+    // 书 is followed by a Latin word: its own width, and a space up to it.
+    expect(written).toContain("200 Tz <4e66> Tj\n160 Tz <0020> Tj")
+    // A word that lies back over the one before keeps its own width.
+    expect(written).toContain("1 0 0 -1 40 100 Tm\n100 Tz <004f004b> Tj")
   })
 })

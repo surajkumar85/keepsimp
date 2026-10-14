@@ -128,10 +128,27 @@ export function readingOf(
   for (const block of blocks ?? [])
     for (const paragraph of block.paragraphs)
       for (const line of paragraph.lines) {
-        const kept = line.words
+        const kept: typeof line.words = []
+        for (const word of line.words
           .map((word) => ({ ...word, text: cleanWord(word.text) }))
           .filter((word) => word.text && word.bbox.x1 > word.bbox.x0)
-          .sort((a, b) => a.bbox.x0 - b.bbox.x0)
+          .sort((a, b) => a.bbox.x0 - b.bbox.x0)) {
+          // A mark that Tesseract gives as a word of its own (a Thai vowel,
+          // say) belongs to the letter before it.
+          const before = kept[kept.length - 1]
+          if (before && /^\p{M}/u.test(word.text)) {
+            kept[kept.length - 1] = {
+              text: cleanWord(before.text + word.text),
+              confidence: Math.min(before.confidence, word.confidence),
+              bbox: {
+                x0: before.bbox.x0,
+                y0: Math.min(before.bbox.y0, word.bbox.y0),
+                x1: Math.max(before.bbox.x1, word.bbox.x1),
+                y1: Math.max(before.bbox.y1, word.bbox.y1),
+              },
+            }
+          } else kept.push(word)
+        }
         if (!kept.length || lines.length >= MOST_LINES) continue
         const { bbox, baseline } = line
         const run = baseline.x1 - baseline.x0
@@ -225,6 +242,38 @@ export const hexOf = (text: string) =>
     text.charCodeAt(at).toString(16).padStart(4, "0")
   ).join("")
 
+/** Letters of the scripts written from right to left. */
+const RIGHT_TO_LEFT =
+  /[\p{Script=Arabic}\p{Script=Hebrew}\p{Script=Syriac}\p{Script=Thaana}\p{Script=Nko}]/u
+
+/**
+ * A word's letters in the order they stand on the page, from the left. A
+ * reader takes the letters of a page in that order and turns a run of
+ * right-to-left letters round itself, one character at a time (marks
+ * included), so such a word is written the other way round in the same way.
+ */
+export function inDrawnOrder(text: string) {
+  if (!RIGHT_TO_LEFT.test(text)) return text
+  return Array.from(text).reverse().join("")
+}
+
+/** Letters of the scripts written without spaces between words, and marks that belong to the letter before them. */
+const UNSPACED =
+  /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Thai}\p{Script=Lao}\p{Script=Khmer}\p{Script=Myanmar}\p{Script=Tibetan}\u3000-\u303F\u30FC\uFF00-\uFFEF]/u
+
+/**
+ * Whether two words that follow each other on a line are written with a
+ * space between them. Tesseract parts Chinese, Japanese and Thai into words
+ * that the languages write together, and a search for two of them together
+ * must find them; a word that begins with a mark belongs to the one before.
+ */
+export function spaced(before: string, after: string) {
+  const last = Array.from(before).pop() ?? ""
+  const first = Array.from(after)[0] ?? ""
+  if (/^\p{M}/u.test(first)) return false
+  return !(UNSPACED.test(last) && UNSPACED.test(first))
+}
+
 /** How wide one letter of the font that draws nothing is, for each point of its size. */
 export const LETTER_WIDTH = 0.5
 
@@ -250,19 +299,28 @@ export function layerOf(
     // Tz is a share of the letters' own width: this much for one point.
     const stretch = (length: number, letters: number) =>
       number((100 * length) / (LETTER_WIDTH * line.size * letters))
+    // Words are written from the left, as they stand, whichever way they
+    // read: readers put a line of right-to-left words in order themselves.
     line.words.forEach((word, index) => {
+      const next = line.words[index + 1]
+      const apart = !next || spaced(word.text, next.text)
+      // A word never reaches into the next (Tesseract sometimes gives one the
+      // width of its line), and words written together reach to the next, so
+      // that no reader sees room between them.
+      const room = next ? next.x - word.x : Infinity
+      const width =
+        room <= 0 ? word.width : apart ? Math.min(word.width, room) : room
       const place = concat(
         [along.x, along.y, along.y, -along.x, word.x, at(word.x)],
         toPage
       )
       out.push(
         `${place.map(number).join(" ")} Tm`,
-        `${stretch(word.width * across, word.text.length)} Tz <${hexOf(word.text)}> Tj`
+        `${stretch(width * across, word.text.length)} Tz <${hexOf(inDrawnOrder(word.text))}> Tj`
       )
-      const next = line.words[index + 1]
-      if (next) {
-        const room = Math.max(next.x - word.x - word.width, line.size / 100)
-        out.push(`${stretch(room * across, 1)} Tz <0020> Tj`)
+      if (next && apart) {
+        const gap = Math.max(next.x - word.x - width, line.size / 100)
+        out.push(`${stretch(gap * across, 1)} Tz <0020> Tj`)
       }
     })
   }

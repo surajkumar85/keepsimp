@@ -1,6 +1,6 @@
 # PDF editor: what is left, and how to build it
 
-This is a working brief for whoever builds phases 8 to 10 of the PDF editor. Phases 1 to 8 and phase 9, part 1 are live. `AGENTS.md` holds the rules, `docs/pdf-editor.md` says what is built and how, and this file says what is left and the way of working that got the first seven phases shipped without regressions. Follow it step by step. Do not skip the proving steps: every one of them caught a real fault.
+This is a working brief for whoever builds phases 8 to 10 of the PDF editor. Phases 1 to 8 and phase 9, parts 1 and 2 are live. `AGENTS.md` holds the rules, `docs/pdf-editor.md` says what is built and how, and this file says what is left and the way of working that got the first seven phases shipped without regressions. Follow it step by step. Do not skip the proving steps: every one of them caught a real fault.
 
 ## The way of working (do this for every part)
 
@@ -81,7 +81,13 @@ Words are recognised on the device and laid unseen under the picture, so a scan 
 
 English OCR with the OCR PDF door: see "Recognising words on scans" in `docs/pdf-editor.md`. What the proof found: our MuPDF build has no OCR ("No OCR support in this build"), so Tesseract runs through tesseract.js 7 (Apache 2.0) in its own worker. Words written as Tesseract writes them (one empty shape for every letter, each word stretched with `Tz`) line up with Tesseract's line boxes within 0.02 pt for nine words in ten (`pdftotext -bbox`), and the page renders pixel for pixel as before. In Node on an M-series Mac a dense letter-size page takes 7 to 8 s at 300 dots to the inch; a phone takes longer. On the benchmark: the phone scan (IRS letter pages, 4 pages) gave 5,364 words at 86 to 89% confidence, all read back from the result, `qpdf` clean, every page the same in Poppler. The archive scan is Alice in Wonderland in Gregg shorthand: most of its pages already carry the archive's own OCR text and are skipped, and the others read at 23 to 33% confidence, which the panel now calls not to be relied on. In Firefox and WebKit, Tesseract let go of in the middle of a page never answers: Stop is raced against the page, never waited for.
 
-Next: part 2, other languages. Each language is an npm package of `@tesseract.js-data/<code>` (or the tessdata `best_int` files), served by the same route under the versioned folder, loaded only when chosen, and kept by the service worker once used. The font that draws nothing already serves every script; check right-to-left (Arabic, Hebrew) and vertical CJK with pdf.js and `pdftotext` before offering them.
+### Part 2: built
+
+31 languages: see "Recognising words in other languages" in `docs/pdf-editor.md`. Probe any script you add with a fixture in `tests/fixtures/ocr/` and read it back with pdf.js, `pdftotext` and MuPDF: right-to-left words and scripts written without spaces each needed a change before readers found them.
+
+Next: part 3, tutorial videos recorded from the real app, a shortcut sheet, and the benchmark beside other editors. Earlier notes on part 2 follow.
+
+Earlier: part 2, other languages. Each language is an npm package of `@tesseract.js-data/<code>` (or the tessdata `best_int` files), served by the same route under the versioned folder, loaded only when chosen, and kept by the service worker once used. The font that draws nothing already serves every script; check right-to-left (Arabic, Hebrew) and vertical CJK with pdf.js and `pdftotext` before offering them.
 
 ## Phase 10: certificate signatures
 

@@ -63,10 +63,10 @@ export default function PrivacyPage() {
           connection. That copy contains none of your files or text. It is
           replaced when a new version is published, and you can remove it
           through your browser’s site-data settings. What recognises the words
-          of scanned pages (about 7 MB) is not part of it until you first
-          recognise text; it is then kept the same way. It too holds none of
-          your files, and the words it finds go only into the PDF you are
-          editing.
+          of scanned pages (about 1 MB, and a few megabytes for each language)
+          is not part of it until you first recognise text in that language; it
+          is then kept the same way. It too holds none of your files, and the
+          words it finds go only into the PDF you are editing.
         </p>
         <h2>Keep the limits in mind.</h2>
         <p>

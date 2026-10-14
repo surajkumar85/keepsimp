@@ -3,7 +3,9 @@
  * Reading scanned pages with the real engine and the real Tesseract, as
  * the editor does; what is laid on the page is read back by pdf.js.
  */
+import { readFile } from "node:fs/promises"
 import { join } from "node:path"
+import { PDFDocument } from "@cantoo/pdf-lib"
 import * as mupdf from "mupdf"
 import { createWorker, OEM, type Worker } from "tesseract.js"
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
@@ -21,7 +23,7 @@ import {
   type EditSession,
 } from "./mupdf-edit"
 import { applyOcr, ocrPicture } from "./mupdf-ocr"
-import { readingOf, type OcrOp, type TesseractBlock } from "./ocr"
+import { readingOf, spaced, type OcrOp, type TesseractBlock } from "./ocr"
 
 let tesseract: Worker
 
@@ -209,4 +211,89 @@ describe("laying words", () => {
     expect(historyOf(session).steps).toEqual([])
     stopEditing(session)
   })
+})
+
+describe("other languages and scripts", () => {
+  /** A scan of words drawn in a script: a picture from `tests/fixtures/ocr/`, alone on a page. */
+  async function scanOf(code: string) {
+    const png = await readFile(join("tests/fixtures/ocr", `${code}.png`))
+    const doc = await PDFDocument.create()
+    const picture = await doc.embedPng(png)
+    const width = picture.width * 0.36
+    const height = picture.height * 0.36
+    doc
+      .addPage([width, height])
+      .drawImage(picture, { x: 0, y: 0, width, height })
+    return doc.save()
+  }
+
+  /** Words together as a script writes them: with spaces, or without for those written together. */
+  const together = (words: string[]) =>
+    words.reduce(
+      (all, word, at) =>
+        at && spaced(words[at - 1], word) ? `${all} ${word}` : all + word,
+      ""
+    )
+
+  it.each([
+    ["deu", "Grüße"],
+    ["rus", "документ"],
+    ["ara", "الفاتورة"],
+    ["heb", "החשבונית"],
+    ["chi_sim", "今天"],
+    ["jpn", "今日"],
+    ["hin", "भुगतान"],
+    ["tha", "เอกสาร"],
+  ])(
+    "lays words read in %s so that other software reads them as they were read",
+    async (code, word) => {
+      const reader = await createWorker(code, OEM.LSTM_ONLY, {
+        langPath: join(
+          process.cwd(),
+          `node_modules/@tesseract.js-data/${code}/4.0.0_best_int`
+        ),
+        cacheMethod: "none",
+      })
+      const session = startEditing(mupdf, await scanOf(code))
+      try {
+        const picture = ocrPicture(mupdf, session, 0)
+        const { data } = await reader.recognize(
+          Buffer.from(picture.png),
+          {},
+          { blocks: true, text: false }
+        )
+        const reading = readingOf(
+          data.blocks as unknown as TesseractBlock[],
+          picture.scale
+        )
+        expect(reading.confidence).toBeGreaterThan(75)
+        applyOcr(mupdf, session, {
+          label: "Recognise text",
+          ops: [{ page: 0, lines: reading.lines }],
+        })
+        const { bytes } = await exportEdited(mupdf, session)
+        expect(await danglingRefs(bytes)).toEqual([])
+        const [text] = await texts(bytes)
+        const bare = (value: string) => value.replace(/\s+/g, "")
+        expect(bare(text)).toContain(word)
+        // pdf.js reads each line's letters as Tesseract read them. Where it
+        // sees room between words written together it puts a space, and it
+        // keeps the order of a right-to-left line's words as they stand.
+        for (const line of reading.lines) {
+          // Kept as they stand from the left; a right-to-left line reads from its right end.
+          const standing = line.words.map((one) => one.text)
+          const words = code === "heb" ? standing.reverse() : standing
+          if (code === "ara")
+            for (const one of words) expect(text).toContain(one)
+          else expect(bare(text)).toContain(bare(together(words)))
+          if (["deu", "rus", "hin", "heb"].includes(code))
+            expect(text).toContain(together(words))
+        }
+      } finally {
+        stopEditing(session)
+        await reader.terminate()
+      }
+    },
+    60_000
+  )
 })

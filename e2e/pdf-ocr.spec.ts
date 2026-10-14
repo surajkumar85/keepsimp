@@ -1,4 +1,5 @@
 import { test, expect, type Page } from "@playwright/test"
+import { readFile } from "node:fs/promises"
 import AxeBuilder from "@axe-core/playwright"
 import { PDFDocument } from "@cantoo/pdf-lib"
 import { danglingRefs, readPdf } from "../tests/pdf-reader"
@@ -60,7 +61,8 @@ test("recognises the words of a scan on this device, and the download can be sea
   await open(page, await scan({ turned: true }), "/dashboard/ocr-pdf/")
   // The door opens with its panel.
   await expect(panel(page)).toBeVisible()
-  await expect(page.getByTestId("ocr-language")).toHaveText("English")
+  // The language the browser says its user reads.
+  await expect(page.getByTestId("ocr-language")).toHaveValue("eng")
   await expect(page.getByTestId("ocr-toggle")).toHaveAttribute(
     "aria-pressed",
     "true"
@@ -208,4 +210,53 @@ test("the door's sample is a scan as it comes, and its words are read", async ({
   const [text] = await download(page)
   expect(text).toContain("Rental agreement")
   expect(text).toContain("Harbour Street")
+})
+
+test("reads a scan in the language chosen, with a second one, loading each from this site", async ({
+  page,
+}) => {
+  test.setTimeout(180_000)
+  const asked: string[] = []
+  page.on("request", (request) => {
+    if (request.url().includes("traineddata")) asked.push(request.url())
+  })
+  const doc = await PDFDocument.create()
+  const picture = await doc.embedPng(
+    await readFile("tests/fixtures/ocr/deu.png")
+  )
+  const width = picture.width * 0.36
+  const height = picture.height * 0.36
+  doc.addPage([width, height]).drawImage(picture, { x: 0, y: 0, width, height })
+  await open(
+    page,
+    {
+      name: "brief.pdf",
+      mimeType: "application/pdf",
+      buffer: Buffer.from(await doc.save()),
+    },
+    "/dashboard/ocr-pdf/"
+  )
+  await panel(page).getByLabel("Language").selectOption("deu")
+  await expect(panel(page).getByLabel("Language")).toContainText(
+    "German (Deutsch)"
+  )
+  // The second language cannot be the first one again.
+  const also = panel(page).getByLabel("Also written in")
+  await expect(also.locator('option[value="deu"]')).toHaveCount(0)
+  await also.selectOption("eng")
+  await panel(page)
+    .getByRole("button", { name: "Recognise text on 1 page" })
+    .click()
+  await expect(said(page)).toContainText("Words were recognised on page 1", {
+    timeout: 120_000,
+  })
+  await changes(page, 1)
+  const [text] = await download(page)
+  expect(text).toContain("Grüße aus München")
+  expect(text).toContain("Straße")
+  expect(
+    asked.map((url) => new URL(url).pathname.split("/").pop()).sort()
+  ).toEqual(["deu.traineddata.gz", "eng.traineddata.gz"])
+  for (const url of asked)
+    expect(new URL(url).origin).toBe(new URL(page.url()).origin)
 })

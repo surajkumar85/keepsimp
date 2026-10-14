@@ -60,7 +60,7 @@ const content: TutorialContent = {
     {
       term: "Recognise text",
       detail:
-        "For scanned pages, whose words are a picture (OCR). A panel opens beside the pages: choose the pages (leave it empty for all) and press Recognise text. Each page is read on your device and its words are laid unseen over it, each where it is seen, so the page can be searched, selected, copied, and redacted by search; it looks just as it did. A page that already has text is left alone unless “Pages that have text too” is on. The first time, about 4 MB is loaded from this site and kept for working offline. English only for now. Stop keeps the pages read so far; one undo takes all of a run away.",
+        "For scanned pages, whose words are a picture (OCR). A panel opens beside the pages: choose the pages (leave it empty for all) and press Recognise text. Each page is read on your device and its words are laid unseen over it, each where it is seen, so the page can be searched, selected, copied, and redacted by search; it looks just as it did. A page that already has text is left alone unless “Pages that have text too” is on. Choose the language the pages are written in, from 31, and a second one for pages that mix two; the language your browser says you read comes first. The first time a language is read, a few megabytes are loaded from this site and kept for working offline. Stop keeps the pages read so far; one undo takes all of a run away.",
     },
     {
       term: "Details and bookmarks",
@@ -726,12 +726,12 @@ const recognising: TutorialContent = {
     {
       term: "Language",
       detail:
-        "English for now. More languages are planned, each loaded from this site only when you choose it.",
+        "Choose the language the pages are written in: 31 are offered, among them Arabic, Chinese, Hindi, Japanese, Russian and Thai, as well as most languages of Europe. The language your browser says you read comes first. “Also written in” adds a second for pages that mix two; reading then takes longer. Arabic and Hebrew are read right to left, and Chinese, Japanese and Thai words are written together, as those languages write them. Text that runs down the page is not read.",
     },
     {
       term: "Working offline",
       detail:
-        "What recognises words is about 4 MB. It is loaded from this site the first time you recognise text, not before, and then kept on this device, so it works offline afterwards.",
+        "What recognises words is about 1 MB, and each language between 0.4 and 3.7 MB; the panel says how much the languages chosen take. It is loaded from this site the first time you recognise text in a language, not before, and then kept on this device, so it works offline afterwards.",
     },
     {
       term: "Undo",

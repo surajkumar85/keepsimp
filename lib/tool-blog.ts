@@ -1392,6 +1392,7 @@ export const ocrPost: BlogPost = {
     "copy text from scanned PDF",
     "PDF text recognition",
     "OCR without upload",
+    "OCR Arabic Chinese Japanese PDF",
   ],
   category: "A little know-how",
   readingTime: "4 min read",
@@ -1414,7 +1415,7 @@ export const ocrPost: BlogPost = {
       id: "how",
       title: "How to do it.",
       paragraphs: [
-        "Open the scanned PDF in OCR PDF. Leave Pages empty to read them all, or type the ones you want, such as 1-3 or odd. Press Recognise text. Each page takes a few seconds, longer on a phone, and Stop keeps what has been read so far. The first time, about 4 MB of the recogniser is loaded from this site; it is then kept, so it works offline afterwards.",
+        "Open the scanned PDF in OCR PDF. Leave Pages empty to read them all, or type the ones you want, such as 1-3 or odd. Choose the language the pages are written in, and press Recognise text. Each page takes a few seconds, longer on a phone, and Stop keeps what has been read so far. The first time, the recogniser (about 1 MB) and the language (a few megabytes) are loaded from this site; they are then kept, so they work offline afterwards.",
         "A page that already has text is left as it is: it was read before, or it was never a scan. The panel names such pages, and a switch reads them anyway. When the run is done, the panel says how many words were found and how sure the recogniser was of them on average. One undo takes all of them away.",
       ],
       links: [{ label: "Open OCR PDF", href: "/dashboard/ocr-pdf/" }],
@@ -1424,7 +1425,7 @@ export const ocrPost: BlogPost = {
       title: "What it gets wrong.",
       paragraphs: [
         "Clean, straight scans of printed pages read well. Faint photocopies, small print, handwriting, and photographs of a page taken at an angle read worse: a 1 can come out as an l, a name can lose a letter. The recogniser says how sure it is of every word, and the panel counts the words it was unsure of. Search for the names and numbers that matter before you rely on them.",
-        "Only English is read for now. A page in another language is read as if it were English, which gives poor text; more languages are planned, each loaded only when chosen.",
+        "Choose the language the pages are written in: 31 are offered, from Arabic, Chinese and Hindi to Russian, Thai and most languages of Europe, and the one your browser says you read comes first. A page read in the wrong language comes out as poor text, so pick the right one; a second language helps pages that mix two. Arabic and Hebrew are written right to left and Chinese, Japanese and Thai without spaces, as they should be, so a search for a phrase finds it.",
       ],
     },
     {

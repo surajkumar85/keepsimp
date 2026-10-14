@@ -408,7 +408,7 @@ const OCR_ABILITIES = [
   {
     icon: IconLock,
     title: "Nothing is uploaded",
-    text: "The words are read on your device. English is loaded from this site the first time (about 4 MB) and kept for working offline.",
+    text: "The words are read on your device, in any of 31 languages. Each is loaded from this site the first time it is used (a few megabytes) and kept for working offline.",
   },
 ]
 

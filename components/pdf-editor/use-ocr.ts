@@ -9,7 +9,12 @@ import {
   type OcrOp,
   type TesseractBlock,
 } from "@/lib/pdf-editor/ocr"
-import { OCR_BASE } from "@/lib/pdf-editor/ocr-files"
+import {
+  OCR_BASE,
+  OCR_ENGINE_SIZE,
+  OCR_LANGUAGES,
+  preferredLanguage,
+} from "@/lib/pdf-editor/ocr-files"
 import type { Comments } from "./use-comments"
 import type { Described } from "./use-described"
 import type { Editor } from "./use-editor"
@@ -43,7 +48,7 @@ const emptyTally = {
 
 /** Said when the files that recognise words cannot be loaded. */
 export const OCR_UNAVAILABLE =
-  "The files that recognise words could not be loaded. Go online once and try again: they are kept on this device for working offline afterwards."
+  "What recognises words in the languages chosen could not be loaded. Go online once and try again: it is kept on this device for working offline afterwards."
 
 /**
  * Recognising words on scanned pages (OCR): whether its panel is shown,
@@ -72,6 +77,17 @@ export function useOcr(
   const on = wanted && !other
   const [range, setRange] = useState("")
   const [alsoText, setAlsoText] = useState(false)
+  // The language its user reads, as the browser says, when it is offered.
+  const [language, setLanguage] = useState(() =>
+    typeof navigator === "undefined"
+      ? "eng"
+      : preferredLanguage(navigator.languages ?? [navigator.language])
+  )
+  /** A second language the pages are written in as well; empty for none. */
+  const [also, setAlso] = useState("")
+  const languages = [...new Set([language, also].filter(Boolean))]
+  /** The languages Tesseract was started with. */
+  const startedFor = useRef("")
   const [run, setRun] = useState<OcrRun | null>(null)
   const [said, setSaid] = useState<{ text: string; good: boolean } | null>(null)
   const stopped = useRef(false)
@@ -97,10 +113,13 @@ export function useOcr(
   useEffect(() => letGo, [letGo])
 
   /** Tesseract, loaded from this site the first time it is wanted. */
-  const engine = () =>
-    (tesseract.current ??= (async () => {
+  const engine = (langs: string) => {
+    // Other languages are read by a Tesseract started for them.
+    if (startedFor.current !== langs) letGo()
+    startedFor.current = langs
+    return (tesseract.current ??= (async () => {
       const { createWorker, OEM } = await import("tesseract.js")
-      return createWorker("eng", OEM.LSTM_ONLY, {
+      return createWorker(langs, OEM.LSTM_ONLY, {
         workerPath: `${OCR_BASE}/worker.min.js`,
         corePath: OCR_BASE,
         langPath: OCR_BASE,
@@ -113,6 +132,7 @@ export function useOcr(
         },
       })
     })())
+  }
 
   const setListed = comments.setListed
   const setPages = pages.setOn
@@ -152,7 +172,7 @@ export function useOcr(
     setRun({ done: 0, total, page: target[0], share: 0, loading: true })
     let worker: Tesseract
     try {
-      const loaded = await Promise.race([engine(), promise])
+      const loaded = await Promise.race([engine(languages.join("+")), promise])
       if (!loaded) {
         setRun(null)
         setSaid(ocrSummary({ ...emptyTally, stopped: true }))
@@ -268,6 +288,20 @@ export function useOcr(
       setSaid(null)
     },
     alsoText,
+    language,
+    setLanguage: (next: string) => {
+      setLanguage(next)
+      if (also === next) setAlso("")
+    },
+    also,
+    setAlso,
+    /** What is downloaded the first time these languages are read, at most, in bytes. */
+    download:
+      OCR_ENGINE_SIZE +
+      OCR_LANGUAGES.filter(({ code }) => languages.includes(code)).reduce(
+        (sum, { size }) => sum + size,
+        0
+      ),
     setAlsoText,
     target,
     problem,

@@ -5,7 +5,16 @@ import { IconAlertCircle, IconX } from "@tabler/icons-react"
 import { Button } from "@/components/ui/button"
 import { ToggleRow } from "@/components/image-batch/controls"
 import { cn } from "cn"
+import {
+  OCR_LANGUAGES,
+  sizeSaid,
+  type OcrLanguage,
+} from "@/lib/pdf-editor/ocr-files"
 import type { Ocr } from "./use-ocr"
+
+/** A language as it is offered: its English name, its own where that differs, and what it downloads. */
+const named = (language: OcrLanguage) =>
+  `${language.name}${language.own === language.name ? "" : ` (${language.own})`} · ${sizeSaid(language.size)}`
 
 const field =
   "h-11 w-full min-w-0 rounded-md border bg-background px-2 text-base text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring md:h-9 md:text-sm"
@@ -81,9 +90,53 @@ export function OcrPanel({ ocr }: { ocr: Ocr }) {
           </p>
         </div>
         <div className="space-y-1">
-          <p className="text-xs text-muted-foreground">Language</p>
-          <p className="text-sm" data-testid="ocr-language">
-            English
+          <label
+            htmlFor={`${ids}-language`}
+            className="block text-xs text-muted-foreground"
+          >
+            Language
+          </label>
+          <select
+            id={`${ids}-language`}
+            value={ocr.language}
+            onChange={(event) => ocr.setLanguage(event.target.value)}
+            disabled={Boolean(run)}
+            className={field}
+            data-testid="ocr-language"
+          >
+            {OCR_LANGUAGES.map((one) => (
+              <option key={one.code} value={one.code}>
+                {named(one)}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="space-y-1">
+          <label
+            htmlFor={`${ids}-also`}
+            className="block text-xs text-muted-foreground"
+          >
+            Also written in
+          </label>
+          <select
+            id={`${ids}-also`}
+            value={ocr.also}
+            onChange={(event) => ocr.setAlso(event.target.value)}
+            aria-describedby={`${ids}-also-hint`}
+            disabled={Boolean(run)}
+            className={field}
+          >
+            <option value="">No other language</option>
+            {OCR_LANGUAGES.filter((one) => one.code !== ocr.language).map(
+              (one) => (
+                <option key={one.code} value={one.code}>
+                  {named(one)}
+                </option>
+              )
+            )}
+          </select>
+          <p id={`${ids}-also-hint`} className="text-xs text-muted-foreground">
+            For pages that mix two languages. Reading takes longer.
           </p>
         </div>
         <ToggleRow
@@ -156,10 +209,10 @@ export function OcrPanel({ ocr }: { ocr: Ocr }) {
           </p>
         )}
         <p className="text-xs text-muted-foreground">
-          Reading takes a few seconds a page, longer on a phone. The first time,
-          about 4 MB is loaded from this site; it is then kept for working
-          offline. Recognition can misread a word, so check names and numbers
-          that matter.
+          Reading takes a few seconds a page, longer on a phone. The first time
+          a language is read, up to {sizeSaid(ocr.download)} is loaded from this
+          site; it is then kept for working offline. Recognition can misread a
+          word, so check names and numbers that matter.
         </p>
       </form>
     </aside>
