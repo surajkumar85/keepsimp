@@ -1,0 +1,23 @@
+KeepSimp PDF editor: third-party components for text recognition and signing
+===========================================================================
+
+These run in your browser. They are loaded from this site only when you recognise
+text in a scan (Tesseract) or sign with a certificate (node-forge, PKI.js, ASN1.js).
+
+Component                 Version  Licence                 Source
+------------------------  -------  ----------------------  -----------------------------------------
+tesseract.js              7.0.0    Apache-2.0              https://github.com/naptha/tesseract.js
+tesseract.js-core         7.0.0    Apache-2.0              https://github.com/naptha/tesseract.js-core
+Tesseract language data   4.0.0    Apache-2.0              https://github.com/tesseract-ocr/tessdata_best
+  (packaged as @tesseract.js-data/*, MIT)                  https://github.com/naptha/tessdata
+GlyphLessFont             -        Apache-2.0              https://github.com/tesseract-ocr/tesseract
+  (the font that draws nothing, from Tesseract's src/api/pdf_ttf.h)
+node-forge                1.4.0    BSD-3-Clause (chosen)   https://github.com/digitalbazaar/forge
+pkijs                     3.4.1    BSD-3-Clause            https://github.com/PeculiarVentures/PKI.js
+asn1js                    3.0.10   BSD-3-Clause            https://github.com/PeculiarVentures/ASN1.js
+
+Apache License 2.0: https://www.apache.org/licenses/LICENSE-2.0
+BSD 3-Clause License: https://opensource.org/license/bsd-3-clause
+MIT License: https://opensource.org/license/mit
+
+Each component is distributed WITHOUT ANY WARRANTY, as its licence says.

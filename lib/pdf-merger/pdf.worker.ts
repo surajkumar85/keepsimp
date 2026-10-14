@@ -59,6 +59,7 @@ import {
 } from "@/lib/pdf-editor/mupdf-redact"
 import { suggestOn } from "@/lib/pdf-editor/mupdf-form-suggest"
 import { applyOcr, ocrPicture } from "@/lib/pdf-editor/mupdf-ocr"
+import { readCertifyOptions } from "@/lib/pdf-editor/certify"
 import {
   readClean,
   readSought,
@@ -1215,10 +1216,34 @@ async function editExport(
             clean: readClean(request.clean),
             checkpoint,
           })
-    const out = result.bytes.buffer as ArrayBuffer
-    post({ type: "edit-exported", job, bytes: out, report: result.report }, [
-      out,
-    ])
+    let { bytes, report } = result
+    if (request.certify) {
+      await checkpoint()
+      const options = readCertifyOptions(request.certify.options)
+      if (!options) throw new Error(EXPORT_FAILED)
+      // Loaded only when a file is signed: the cryptography is large.
+      const [{ readIdentity }, { certify }] = await Promise.all([
+        import("@/lib/pdf-editor/certificate"),
+        import("@/lib/pdf-editor/mupdf-certify"),
+      ])
+      const identity = await readIdentity(
+        request.certify.file,
+        request.certify.password
+      )
+      const signed = await certify(await engine, bytes, identity, options)
+      bytes = signed.bytes
+      report = {
+        ...report,
+        certified: {
+          signer: signed.checked.signer ?? identity.signer,
+          field: signed.field,
+          page: signed.page,
+          intact: signed.checked.intact,
+        },
+      }
+    }
+    const out = bytes.buffer as ArrayBuffer
+    post({ type: "edit-exported", job, bytes: out, report }, [out])
   } catch (error) {
     if (error instanceof Cancelled) post({ type: "cancelled", job })
     else
@@ -1227,6 +1252,39 @@ async function editExport(
         job,
         message: readable(error, EXPORT_FAILED),
       })
+  }
+}
+
+async function editCertificate(
+  request: Extract<PdfRequest, { type: "edit-certificate" }>
+) {
+  const session = editing.get(request.id)
+  let places: string[] = []
+  try {
+    const { emptyPlaces } = await import("@/lib/pdf-editor/mupdf-certify")
+    if (session) places = [...emptyPlaces(session.doc).keys()]
+  } catch {
+    places = []
+  }
+  try {
+    const { readIdentity } = await import("@/lib/pdf-editor/certificate")
+    const { validityProblem } = await import("@/lib/pdf-editor/certify")
+    const { signer } = await readIdentity(request.file, request.password)
+    post({
+      type: "edit-certificate",
+      request: request.request,
+      signer,
+      problem: validityProblem(signer, new Date()),
+      places,
+    })
+  } catch (error) {
+    post({
+      type: "edit-certificate",
+      request: request.request,
+      signer: null,
+      problem: readable(error, "This certificate file cannot be read."),
+      places,
+    })
   }
 }
 
@@ -1518,6 +1576,7 @@ self.onmessage = (event: MessageEvent<PdfRequest>) => {
     void editSuggestFields(request)
   else if (request.type === "edit-ocr-picture") void editOcrPicture(request)
   else if (request.type === "edit-ocr") void editOcr(request)
+  else if (request.type === "edit-certificate") void editCertificate(request)
   else if (request.type === "edit-insert") void editInsert(request)
   else if (request.type === "edit-page-link")
     enqueue({ run: () => editPageLink(request) })

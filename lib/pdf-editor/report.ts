@@ -66,7 +66,8 @@ export function checkLines(report: ExportReport): CheckLine[] {
     report.redaction.places === 0 &&
     report.redaction.waiting === 0 &&
     !report.formEdits &&
-    !report.ocr
+    !report.ocr &&
+    !report.certified
   )
     lines.push({
       text: "Nothing was added. The file was written again as it is.",
@@ -281,6 +282,28 @@ export function checkLines(report: ExportReport): CheckLine[] {
       text: `Form fields were added, moved, resized, renamed or deleted in ${report.formEdits.toLocaleString("en")} step${report.formEdits === 1 ? "" : "s"}.${report.signature ? " Earlier fields and names remain in the signed part of the file." : ""} A signature place is only a place; it proves nothing about who signed.`,
       good: true,
     })
+  const certified = report.certified
+  if (certified) {
+    const { signer } = certified
+    const by = signer.selfSigned
+      ? `${signer.name}, which signed itself`
+      : `${signer.name}, issued by ${signer.issuer}`
+    const where =
+      certified.page === null
+        ? "It is not shown on a page"
+        : `It shows on page ${(certified.page + 1).toLocaleString("en")}`
+    lines.push(
+      certified.intact
+        ? {
+            text: `Signed with the certificate of ${by}, as “${certified.field}”. ${where}. The signature was read back from the result and covers all of it. Whether to trust the certificate is for the program that opens the file, which knows the issuers it trusts${signer.selfSigned ? "; most will say they do not know this signer" : ""}.`,
+            good: true,
+          }
+        : {
+            text: "The signature could not be read back from the result. Do not send it as signed.",
+            good: false,
+          }
+    )
+  }
   const ocr = report.ocr
   if (ocr) {
     const words = `${ocr.words.toLocaleString("en")} word${ocr.words === 1 ? "" : "s"}`

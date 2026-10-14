@@ -58,6 +58,7 @@ import {
   type Plan,
 } from "./pages"
 import type { OcrChange } from "./ocr"
+import type { Signer } from "./certificate"
 import { appliedIn, cleans, type Clean, type RedactChange } from "./redact"
 import { isOurs, type TextChange } from "./retext"
 import { BASELINE, combStarts, lineStart } from "./text-layout"
@@ -1278,6 +1279,17 @@ export interface ExportReport {
    * changed or taken out afterwards), and how many of those were read back.
    */
   ocr?: { pages: number; words: number; checked: number; found: number }
+  /**
+   * Only when the file was signed with a certificate at download: who
+   * signed, the signature's field, the page it shows on (null for none),
+   * and whether it was read back intact.
+   */
+  certified?: {
+    signer: Signer
+    field: string
+    page: number | null
+    intact: boolean
+  }
   /**
    * How many fields the form had, what became of them, and what the written
    * file says when it is read again: how many hold what they held (kept),

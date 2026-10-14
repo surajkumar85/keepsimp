@@ -817,7 +817,7 @@ export const signPost: BlogPost = {
       title: "What kind of signature is this?",
       paragraphs: [
         "It is the electronic equivalent of signing paper: your mark, placed on the page by you. For letters, consent forms, applications and most agreements between people, that is what is being asked for.",
-        "It is not a certificate signature, the kind made with a digital certificate that proves who signed and that the file has not been changed since. Some filings and regulated contracts require that. If yours does, this is not it; a later version of the editor will sign with certificates. Whether a signature is enough for a particular document depends on the document and where you are, so ask whoever is receiving it when it matters.",
+        "It is not a certificate signature, the kind made with a digital certificate that proves who signed and that the file has not been changed since. Some filings and regulated contracts require that. If yours does, the editor can do that too: turn on “Sign with a certificate” when you download, choose your certificate file and type its password. It is read on your device and never kept. Whether a signature is enough for a particular document depends on the document and where you are, so ask whoever is receiving it when it matters.",
       ],
     },
     {
@@ -943,7 +943,7 @@ export const formPost: BlogPost = {
       title: "What it does not do.",
       paragraphs: [
         "A form can carry small programs that work out a total or tidy a phone number as you type. KeepSimp never runs anything a file brings with it, so those fields hold what you typed and a total stays as it was: fill it in yourself. The editor tells you when a form has such fields.",
-        "A few forms, mostly from governments, are of a kind called XFA that only Adobe's programs can fill in. The editor says so when it meets one. And a place for a certificate signature is left alone: that kind of signing comes in a later version.",
+        "A few forms, mostly from governments, are of a kind called XFA that only Adobe's programs can fill in. The editor says so when it meets one. A place for a certificate signature is left alone while you fill in the form; to sign into it with your own certificate, turn on “Sign with a certificate” when you download.",
       ],
     },
     {
@@ -1548,7 +1548,7 @@ export const createFormPost: BlogPost = {
       title: "Try your form before you share it.",
       paragraphs: [
         "Download with fields kept as fields. Open that PDF in Fill PDF form, enter a name, tick a checkbox, choose a radio option and use the lists. Download that filled copy too. The values and appearances are in the file, and the fields can still be filled again. Making fields part of the page on download takes that ability away.",
-        "PDF viewers differ, so check your result in the programs the people receiving it use. This version creates ordinary AcroForm fields. It does not create XFA forms, calculations or automatic field suggestions. Dates carry a fixed formatting action for external readers, which KeepSimp reads as text and never runs. An empty signature place is not a certificate signature.",
+        "PDF viewers differ, so check your result in the programs the people receiving it use. This version creates ordinary AcroForm fields. It does not create XFA forms or calculations, and suggested fields are judged by the lines and boxes a page draws, so check each before you add it. Dates carry a fixed formatting action for external readers, which KeepSimp reads as text and never runs. An empty signature place is only a place: it can be signed into with a certificate at download, here or in another program.",
       ],
       links: [
         { label: "Fill PDF form", href: "/dashboard/fill-pdf-form/" },

@@ -82,6 +82,42 @@ it("says what recognising laid on pages, and when words could not be read back",
   ])
 })
 
+it("says who signed with a certificate, where it shows, and that trust is the reader's to judge", () => {
+  const signer = {
+    name: "Sam Example",
+    email: "",
+    organisation: "",
+    issuer: "KeepSimp Test Authority",
+    selfSigned: false,
+    validFrom: "2026-01-01T00:00:00.000Z",
+    validTo: "2046-01-01T00:00:00.000Z",
+    key: "RSA 2048",
+  }
+  const said = (certified: ExportReport["certified"]) =>
+    everyLine(report({ added: 0, certified }))
+  expect(said({ signer, field: "Signature", page: 1, intact: true })).toEqual([
+    {
+      text: "Signed with the certificate of Sam Example, issued by KeepSimp Test Authority, as “Signature”. It shows on page 2. The signature was read back from the result and covers all of it. Whether to trust the certificate is for the program that opens the file, which knows the issuers it trusts.",
+      good: true,
+    },
+  ])
+  const own = said({
+    signer: { ...signer, selfSigned: true, issuer: "Sam Example" },
+    field: "Approver",
+    page: null,
+    intact: true,
+  })[0].text
+  expect(own).toContain("Sam Example, which signed itself")
+  expect(own).toContain("It is not shown on a page")
+  expect(own).toContain("most will say they do not know this signer")
+  expect(said({ signer, field: "S", page: null, intact: false })).toEqual([
+    {
+      text: "The signature could not be read back from the result. Do not send it as signed.",
+      good: false,
+    },
+  ])
+})
+
 describe("partName", () => {
   it("names some pages of a file as a file of their own", () => {
     expect(partName("Plan 2026.pdf", [2])).toBe("Plan 2026-page-3.pdf")

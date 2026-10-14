@@ -38,7 +38,9 @@ export default function PrivacyPage() {
           you used one, and your changes) is kept when you switch on “Keep a
           draft on this device”, until you close the file, throw the draft away
           or switch it off. Do not turn these on at a computer other people use.
-          You can also remove them through your browser’s site-data settings.
+          A certificate you sign a PDF with, and its password, are read on this
+          device for that download only: they are never stored or sent. You can
+          also remove them through your browser’s site-data settings.
         </p>
         <h2>The website still loads from a host.</h2>
         <p>

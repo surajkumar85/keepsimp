@@ -83,6 +83,8 @@ import { FormDesignPanel } from "./form-design-panel"
 import { FORM_HINT, useMakeForm } from "./use-make-form"
 import { REDACT_HINT, useRedact } from "./use-redact"
 import { useOcr } from "./use-ocr"
+import { useCertify } from "./use-certify"
+import { CertifyFields } from "./certify-fields"
 import { useRepeat } from "./use-repeat"
 import { usePages } from "./use-pages"
 import { PageLayer } from "./page-layer"
@@ -858,8 +860,15 @@ function Workspace({
     [window_, name, doc.id, editor.sizes, editor.bookmarks, versions]
   )
 
+  const certify = useCertify(client, doc.id)
   // Written after a signed file, nothing else is chosen: no lock to be wrong about.
-  const problem = after ? "" : extrasProblem(extras)
+  // A file that is locked, by the lock chosen or as it came, cannot be signed here.
+  const problem =
+    (after ? "" : extrasProblem(extras)) ||
+    certify.problemFor(
+      pages,
+      after ? Boolean(doc.password) : lockOf(extras, () => "") !== null
+    )
   /** What a result is made from, at a number of changes; anything else makes it out of date. */
   const keyAt = (position: number) =>
     JSON.stringify([
@@ -876,6 +885,15 @@ function Workspace({
             extras.allowPrint,
             extras.allowCopy,
             extras.allowChanges,
+          ]
+        : null,
+      certify.on
+        ? [
+            certify.file?.name,
+            certify.where,
+            certify.page,
+            certify.reason,
+            certify.location,
           ]
         : null,
     ])
@@ -908,6 +926,7 @@ function Workspace({
         after,
         lock,
         clean: after ? CLEAN_NOTHING : clean,
+        certify: certify.request(pages),
       })
       cancel.current = job.cancel
       const made = await job.promise
@@ -1580,6 +1599,7 @@ function Workspace({
               ))}
             </fieldset>
           )}
+          <CertifyFields certify={certify} pages={pages} />
           {!after && (
             <LockFields
               settings={extras}

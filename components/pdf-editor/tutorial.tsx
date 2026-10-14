@@ -149,6 +149,11 @@ const content: TutorialContent = {
         "Highlight, underline, strike out and squiggle are laid on words by dragging across them; the highlighter pen marks anything, also on a scan. A note is placed with one press and typed in the list of comments, where every comment of the file can be read, answered and deleted, the ones it came with included. On download they are kept as comments, drawn into the page, or left out.",
     },
     {
+      term: "Sign with a certificate",
+      detail:
+        "A digital signature made with your certificate (a .p12 or .pfx file, such as an e-ID, a company certificate or one your own software made) is added at download: turn on “Sign with a certificate”, choose the file, type its password and press Open to see who it names. It can show nowhere, in a box at the foot of a page, or in one of the file's empty places for a signature. It is added last, as an update after the file, so it covers everything, and it is read back before you download. A file that was signed before keeps that signature valid. The certificate and its password are read on this device and are never kept or sent. Programs that check signatures say whether the file changed since; whether to trust the certificate is theirs to say, from the issuers they know. A certificate that has expired, a file locked with a password, and keys other than RSA and elliptic-curve (P-256, P-384, P-521) are not signed with.",
+    },
+    {
       term: "Undo and redo",
       detail:
         "Everything can be undone, back to the file as you opened it, with Ctrl or ⌘ Z, and done again with Ctrl or ⌘ Shift Z. The buttons say what they would undo.",
@@ -314,7 +319,12 @@ const signing: TutorialContent = {
     {
       term: "What kind of signature this is",
       detail:
-        "A picture or drawing of your signature placed on the page, as you would sign paper. That is what most forms and letters ask for. It is not a digital signature made with a certificate, which proves who signed and that the file has not changed since; that is planned for a later version.",
+        "A picture or drawing of your signature placed on the page, as you would sign paper. That is what most forms and letters ask for. It is not a digital signature made with a certificate; for that, see below.",
+    },
+    {
+      term: "Signing with a certificate",
+      detail:
+        "A digital signature made with your certificate (a .p12 or .pfx file, such as an e-ID, a company certificate or one your own software made) is added at download: turn on “Sign with a certificate”, choose the file, type its password and press Open to see who it names. It can show nowhere, in a box at the foot of a page, or in one of the file's empty places for a signature. It is added last, as an update after the file, so it covers everything, and it is read back before you download. A file that was signed before keeps that signature valid. The certificate and its password are read on this device and are never kept or sent. Programs that check signatures say whether the file changed since; whether to trust the certificate is theirs to say, from the issuers they know. A certificate that has expired, a file locked with a password, and keys other than RSA and elliptic-curve (P-256, P-384, P-521) are not signed with.",
     },
     {
       term: "Ticks, crosses and dots",
@@ -830,7 +840,7 @@ export function PdfCreateFormTutorial() {
           {
             term: "Signature places",
             detail:
-              "An empty place for a signature is not a certificate and does not prove who signed. Filled certificate signature fields are left alone. Use Sign PDF to add a drawn or typed mark on the page.",
+              "An empty place for a signature is only a place. Someone can sign into it with a certificate (in KeepSimp, “Sign with a certificate” at download, or in another program), or draw a signature over it with Sign PDF. Filled certificate signature fields are left alone.",
           },
           {
             term: "Limits",

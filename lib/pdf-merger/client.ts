@@ -3,6 +3,8 @@
 import type { Suggestion } from "@/lib/pdf-editor/form-suggest"
 import type { OcrPicture } from "@/lib/pdf-editor/mupdf-ocr"
 import type { OcrChange } from "@/lib/pdf-editor/ocr"
+import type { Signer } from "@/lib/pdf-editor/certificate"
+import type { CertifyOptions } from "@/lib/pdf-editor/certify"
 import type { MakeFieldChange } from "@/lib/pdf-editor/form-fields"
 import { poolSize } from "@/lib/image-batch/pool"
 import type { Size } from "@/lib/image-compressor/geometry"
@@ -182,6 +184,14 @@ export class PdfClient {
     number,
     (marks: RedactMark[] | null) => void
   >()
+  private readonly certificates = new Map<
+    number,
+    (answer: {
+      signer: Signer | null
+      problem: string
+      places: string[]
+    }) => void
+  >()
   private readonly ocrPictures = new Map<
     number,
     (picture: OcrPicture | null) => void
@@ -300,6 +310,10 @@ export class PdfClient {
     } else if (message.type === "edit-fields-suggested") {
       this.fieldsSuggested.get(message.request)?.(message.suggestions)
       this.fieldsSuggested.delete(message.request)
+    } else if (message.type === "edit-certificate") {
+      const { signer, problem, places } = message
+      this.certificates.get(message.request)?.({ signer, problem, places })
+      this.certificates.delete(message.request)
     } else if (message.type === "edit-ocr-picture") {
       this.ocrPictures.get(message.request)?.(message.picture)
       this.ocrPictures.delete(message.request)
@@ -489,6 +503,9 @@ export class PdfClient {
     this.redactFound.clear()
     for (const done of this.fieldsSuggested.values()) done(null)
     this.fieldsSuggested.clear()
+    for (const done of this.certificates.values())
+      done({ signer: null, problem: "The editor stopped.", places: [] })
+    this.certificates.clear()
     for (const done of this.ocrPictures.values()) done(null)
     this.ocrPictures.clear()
     for (const done of this.editLines.values()) done(null)
@@ -691,6 +708,19 @@ export class PdfClient {
     })
   }
 
+  /** Open a certificate file to sign with: who it names, what stands in the way, and the file's empty places for a signature. */
+  certificate(id: string, file: Uint8Array, password: string) {
+    return new Promise<{
+      signer: Signer | null
+      problem: string
+      places: string[]
+    }>((resolve) => {
+      const request = ++this.requests
+      this.certificates.set(request, resolve)
+      this.send({ type: "edit-certificate", id, request, file, password })
+    })
+  }
+
   /** A page drawn in grey for its words to be recognised; null when it could not be drawn. */
   ocrPicture(id: string, page: number) {
     return new Promise<OcrPicture | null>((resolve) => {
@@ -830,6 +860,12 @@ export class PdfClient {
       clean?: Clean
       /** Only these pages, counted from 0, as a file of their own. */
       only?: number[]
+      /** Sign the written file with a certificate (see the protocol). */
+      certify?: {
+        file: Uint8Array
+        password: string
+        options: CertifyOptions
+      }
     }
   ) {
     const job = ++this.jobs

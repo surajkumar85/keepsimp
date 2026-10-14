@@ -40,6 +40,8 @@ import type { FileFacts } from "./files"
 import type { Suggestion } from "@/lib/pdf-editor/form-suggest"
 import type { OcrPicture } from "@/lib/pdf-editor/mupdf-ocr"
 import type { OcrChange } from "@/lib/pdf-editor/ocr"
+import type { Signer } from "@/lib/pdf-editor/certificate"
+import type { CertifyOptions } from "@/lib/pdf-editor/certify"
 import type { Bookmark, BookmarkPolicy } from "./outline"
 import type { PictureMargin, PicturePage } from "./picture"
 import type { FooterPlace, NumberStyle, SheetChoice } from "./print"
@@ -308,6 +310,20 @@ export type PdfRequest =
       clean?: Clean
       /** Only these pages, counted from 0, as a file of their own. */
       only?: number[]
+      /**
+       * Sign the written file with a certificate, as an update after it:
+       * the certificate file and its password, which are not kept, and
+       * where the signature shows.
+       */
+      certify?: { file: Uint8Array; password: string; options: CertifyOptions }
+    }
+  /** Open a certificate file to sign with: who it names, and the file's empty places for a signature. */
+  | {
+      type: "edit-certificate"
+      id: string
+      request: number
+      file: Uint8Array
+      password: string
     }
   /** One end of a line to a helper that runs the picture codecs on a core of its own. */
   | { type: "helper"; port: MessagePort }
@@ -490,6 +506,14 @@ export type PdfResponse =
     }
   /** `marks` is null when the page could not be read. */
   | { type: "edit-redact-marks"; request: number; marks: RedactMark[] | null }
+  /** `signer` is null when the certificate cannot sign, and `problem` says why. */
+  | {
+      type: "edit-certificate"
+      request: number
+      signer: Signer | null
+      problem: string
+      places: string[]
+    }
   /** `picture` is null when the page could not be drawn. */
   | { type: "edit-ocr-picture"; request: number; picture: OcrPicture | null }
   /** `suggestions` is null when the page could not be read. */

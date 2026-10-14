@@ -97,6 +97,12 @@ Earlier: part 2, other languages. Each language is an npm package of `@tesseract
 
 Sign with a `.p12`/`.pfx` on the device, with a visible signature or none, and show whether a file's signatures are intact and what changed since. The engine does not sign: prove a way first (a CMS made in the browser, written into a `/Sig` field with a `ByteRange`) and check every result with Poppler's `pdfsig` and `qpdf`. The certificate and its password never leave the device and are never kept. This is the only signature that may be called a certificate signature; the drawn one from phase 3 stays "a mark on the page".
 
+### Part 1: built
+
+Signing at download: see "Signing with a certificate" in `docs/pdf-editor.md`. What the proof found: MuPDF's WASM build has no signing; written as an update, its placeholders (`[0/**********/**********/**********]` and a hex `/Contents` of zeros) land uncompressed and can be filled in place. node-forge opens every .p12 the test set has (AES and the legacy 3DES/RC2), but only parses RSA keys: an EC key comes back as its PKCS #8 ASN.1, which WebCrypto takes. MuPDF's quick page text leaves out widgets: read a signature's look through `toDisplayList(true)`. Keep pages through `withPage`, or a page the engine holds does not know the widget just added to it.
+
+Next: part 2, a panel that reads every signature a file has (`signatures.ts` checks one), says whether each is intact and covers the whole file, and what changed after it (compare the revision the signature covers with the file: pages, comments, fields). Check it against `pdfsig` on the files part 1 signs and on `makeSignedPdf`.
+
 ## When a part is done, report
 
 What was built, which files, the test counts, what was checked on the live site and with which real files, what CI says, and what is not done or not checked. If something failed, say so with the output.
