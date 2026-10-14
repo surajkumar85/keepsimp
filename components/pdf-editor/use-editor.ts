@@ -51,6 +51,7 @@ import {
 } from "@/lib/pdf-editor/own-font"
 import type { OwnFile } from "@/lib/pdf-editor/draft-store"
 import type { Query } from "@/lib/pdf-editor/find"
+import type { OcrChange } from "@/lib/pdf-editor/ocr"
 import type { LinkOp, PageLink } from "@/lib/pdf-editor/links"
 import type { DocumentOp } from "@/lib/pdf-editor/document"
 import type {
@@ -822,6 +823,31 @@ export function useEditor(
       return (await client.current?.suggestFields(file, page)) ?? null
     },
     [client, file, flush]
+  )
+
+  /** A page drawn in grey for its words to be recognised; null when it could not be drawn. */
+  const ocrPicture = useCallback(
+    async (page: number) => {
+      flush()
+      await queue.current
+      return (await client.current?.ocrPicture(file, page)) ?? null
+    },
+    [client, file, flush]
+  )
+
+  /** Lay recognised words on pages, unseen, as one step: whether they were laid. */
+  const recognised = useCallback(
+    async (change: OcrChange) => {
+      flush()
+      let laid = false
+      await enqueue(async (worker) => {
+        const news = await worker.editOcr(file, change)
+        laid = Boolean(news)
+        return news
+      })
+      return laid
+    },
+    [flush, enqueue, file]
   )
 
   /** Where some words, or things of a kind, are on the pages; null when the file could not be looked through. */
@@ -1613,6 +1639,8 @@ export function useEditor(
     changeRedact,
     findToRedact,
     suggestFields,
+    ocrPicture,
+    recognised,
     makeFields,
     formNames,
     newId,

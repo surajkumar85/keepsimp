@@ -1,6 +1,8 @@
 "use client"
 
 import type { Suggestion } from "@/lib/pdf-editor/form-suggest"
+import type { OcrPicture } from "@/lib/pdf-editor/mupdf-ocr"
+import type { OcrChange } from "@/lib/pdf-editor/ocr"
 import type { MakeFieldChange } from "@/lib/pdf-editor/form-fields"
 import { poolSize } from "@/lib/image-batch/pool"
 import type { Size } from "@/lib/image-compressor/geometry"
@@ -180,6 +182,10 @@ export class PdfClient {
     number,
     (marks: RedactMark[] | null) => void
   >()
+  private readonly ocrPictures = new Map<
+    number,
+    (picture: OcrPicture | null) => void
+  >()
   private readonly fieldsSuggested = new Map<
     number,
     (suggestions: Suggestion[] | null) => void
@@ -294,6 +300,9 @@ export class PdfClient {
     } else if (message.type === "edit-fields-suggested") {
       this.fieldsSuggested.get(message.request)?.(message.suggestions)
       this.fieldsSuggested.delete(message.request)
+    } else if (message.type === "edit-ocr-picture") {
+      this.ocrPictures.get(message.request)?.(message.picture)
+      this.ocrPictures.delete(message.request)
     } else if (message.type === "edit-redact-found") {
       this.redactFound.get(message.request)?.(
         message.found && { found: message.found, more: message.more }
@@ -480,6 +489,8 @@ export class PdfClient {
     this.redactFound.clear()
     for (const done of this.fieldsSuggested.values()) done(null)
     this.fieldsSuggested.clear()
+    for (const done of this.ocrPictures.values()) done(null)
+    this.ocrPictures.clear()
     for (const done of this.editLines.values()) done(null)
     this.editLines.clear()
     for (const done of this.pagePicturesAsked.values()) done(null)
@@ -677,6 +688,24 @@ export class PdfClient {
       const request = ++this.requests
       this.redactMarksAsked.set(request, resolve)
       this.send({ type: "edit-redact-marks", id, request, page })
+    })
+  }
+
+  /** A page drawn in grey for its words to be recognised; null when it could not be drawn. */
+  ocrPicture(id: string, page: number) {
+    return new Promise<OcrPicture | null>((resolve) => {
+      const request = ++this.requests
+      this.ocrPictures.set(request, resolve)
+      this.send({ type: "edit-ocr-picture", id, request, page })
+    })
+  }
+
+  /** Lay recognised words on pages, unseen, as one step. */
+  editOcr(id: string, change: OcrChange) {
+    return new Promise<EditNews>((resolve, reject) => {
+      const request = ++this.requests
+      this.editNews.set(request, { resolve, reject })
+      this.send({ type: "edit-ocr", id, request, change })
     })
   }
 

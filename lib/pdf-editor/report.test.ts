@@ -60,6 +60,28 @@ it("reports field creation and changes even when the last field was deleted", ()
   ).toBe(true)
 })
 
+it("says what recognising laid on pages, and when words could not be read back", () => {
+  const said = (ocr: ExportReport["ocr"]) =>
+    everyLine(report({ added: 0, ocr }))
+  const all = said({ pages: 3, words: 1200, checked: 1200, found: 1200 })
+  expect(all).toEqual([
+    {
+      text: "Words were recognised on 3 pages (1,200 words) and lie unseen over them, so they can be searched, selected and copied; every one was read back from the result. Recognition can misread a word: check what matters.",
+      good: true,
+    },
+  ])
+  // A page whose words were taken out afterwards is not checked.
+  expect(said({ pages: 1, words: 1, checked: 0, found: 0 })[0].text).toBe(
+    "Words were recognised on 1 page (1 word) and lie unseen over them, so they can be searched, selected and copied. Recognition can misread a word: check what matters."
+  )
+  expect(said({ pages: 2, words: 10, checked: 10, found: 7 })).toEqual([
+    {
+      text: "Words were recognised on 2 pages (10 words), but 3 of them could not be read back from the result. Search it before you rely on it.",
+      good: false,
+    },
+  ])
+})
+
 describe("partName", () => {
   it("names some pages of a file as a file of their own", () => {
     expect(partName("Plan 2026.pdf", [2])).toBe("Plan 2026-page-3.pdf")

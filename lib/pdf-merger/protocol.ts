@@ -38,6 +38,8 @@ import type { HalveChoice } from "@/lib/pdf-splitter/halves"
 import type { Area } from "@/lib/pdf-splitter/text-rule"
 import type { FileFacts } from "./files"
 import type { Suggestion } from "@/lib/pdf-editor/form-suggest"
+import type { OcrPicture } from "@/lib/pdf-editor/mupdf-ocr"
+import type { OcrChange } from "@/lib/pdf-editor/ocr"
 import type { Bookmark, BookmarkPolicy } from "./outline"
 import type { PictureMargin, PicturePage } from "./picture"
 import type { FooterPlace, NumberStyle, SheetChoice } from "./print"
@@ -254,6 +256,10 @@ export type PdfRequest =
   | { type: "edit-redact-find"; id: string; request: number; sought: Sought }
   /** The fields a page seems to ask for, from the lines and boxes it draws. Nothing is changed. */
   | { type: "edit-suggest-fields"; id: string; request: number; page: number }
+  /** A page drawn in grey for its words to be recognised. */
+  | { type: "edit-ocr-picture"; id: string; request: number; page: number }
+  /** Lay recognised words on pages, unseen, as one step. */
+  | { type: "edit-ocr"; id: string; request: number; change: OcrChange }
   /** Change the file's bookmarks, its details or its own page numbers, as one step. */
   | {
       type: "edit-document"
@@ -484,6 +490,8 @@ export type PdfResponse =
     }
   /** `marks` is null when the page could not be read. */
   | { type: "edit-redact-marks"; request: number; marks: RedactMark[] | null }
+  /** `picture` is null when the page could not be drawn. */
+  | { type: "edit-ocr-picture"; request: number; picture: OcrPicture | null }
   /** `suggestions` is null when the page could not be read. */
   | {
       type: "edit-fields-suggested"

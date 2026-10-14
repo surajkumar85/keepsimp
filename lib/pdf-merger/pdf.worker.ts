@@ -58,6 +58,7 @@ import {
   redactMarksOn,
 } from "@/lib/pdf-editor/mupdf-redact"
 import { suggestOn } from "@/lib/pdf-editor/mupdf-form-suggest"
+import { applyOcr, ocrPicture } from "@/lib/pdf-editor/mupdf-ocr"
 import {
   readClean,
   readSought,
@@ -696,6 +697,54 @@ async function editMakeFields(
       news: null,
       message: readable(error, EDIT_FAILED),
     })
+  }
+}
+
+async function editOcr(request: Extract<PdfRequest, { type: "edit-ocr" }>) {
+  const session = editing.get(request.id)
+  try {
+    if (!session) throw new Error(EDIT_FAILED)
+    const pages = applyOcr(await engine, session, request.change)
+    post({
+      type: "edit-news",
+      request: request.request,
+      news: newsOf(session, pages),
+    })
+  } catch (error) {
+    post({
+      type: "edit-news",
+      request: request.request,
+      news: null,
+      message: readable(error, EDIT_FAILED),
+    })
+  }
+}
+
+async function editOcrPicture(
+  request: Extract<PdfRequest, { type: "edit-ocr-picture" }>
+) {
+  const session = editing.get(request.id)
+  try {
+    if (
+      !session ||
+      !Number.isInteger(request.page) ||
+      request.page < 0 ||
+      request.page >= session.doc.countPages()
+    )
+      throw new Error(EDIT_FAILED)
+    const picture = ocrPicture(await engine, session, request.page)
+    // A copy of its own, to be handed over rather than copied again.
+    const png = picture.png.slice()
+    post(
+      {
+        type: "edit-ocr-picture",
+        request: request.request,
+        picture: { ...picture, png },
+      },
+      [png.buffer]
+    )
+  } catch {
+    post({ type: "edit-ocr-picture", request: request.request, picture: null })
   }
 }
 
@@ -1467,6 +1516,8 @@ self.onmessage = (event: MessageEvent<PdfRequest>) => {
   else if (request.type === "edit-redact-find") editRedactFind(request)
   else if (request.type === "edit-suggest-fields")
     void editSuggestFields(request)
+  else if (request.type === "edit-ocr-picture") void editOcrPicture(request)
+  else if (request.type === "edit-ocr") void editOcr(request)
   else if (request.type === "edit-insert") void editInsert(request)
   else if (request.type === "edit-page-link")
     enqueue({ run: () => editPageLink(request) })

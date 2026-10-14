@@ -21,10 +21,12 @@ import {
   IconCrop,
   IconDroplet,
   IconEraser,
+  IconEye,
   IconLock,
   IconNumber123,
   IconPlayerStop,
   IconShieldCheck,
+  IconTextRecognition,
   IconTypography,
   IconX,
 } from "@tabler/icons-react"
@@ -72,12 +74,14 @@ import { cn } from "cn"
 import { CommentsPanel } from "./comments-panel"
 import { PagesPanel } from "./pages-panel"
 import { DocumentPanel } from "./document-panel"
+import { OcrPanel } from "./ocr-panel"
 import { RepeatPanel } from "./repeat-panel"
 import { useCrop } from "./use-crop"
 import { useDescribed } from "./use-described"
 import { FormDesignPanel } from "./form-design-panel"
 import { FORM_HINT, useMakeForm } from "./use-make-form"
 import { REDACT_HINT, useRedact } from "./use-redact"
+import { useOcr } from "./use-ocr"
 import { useRepeat } from "./use-repeat"
 import { usePages } from "./use-pages"
 import { PageLayer } from "./page-layer"
@@ -96,6 +100,8 @@ const ACCEPT = "application/pdf,.pdf"
 const SAMPLE = "keepsimp-handbook.pdf"
 /** A form with fields of every kind, for the page that fills forms in. */
 const FORM_SAMPLE = "keepsimp-form.pdf"
+/** A scan as it comes, with no words of its own, for the page that recognises them. */
+const SCAN_SAMPLE = "keepsimp-scanned-letter.pdf"
 
 /** The file that is open, and how far opening it has come. */
 interface OpenFile {
@@ -183,6 +189,7 @@ export type EditorMode =
   | "watermark"
   | "redact"
   | "create-form"
+  | "ocr"
 
 /** The doors that open the editor for a job on the pages themselves. */
 const PAGE_JOBS: readonly EditorMode[] = ["crop", "numbers", "watermark"]
@@ -382,6 +389,29 @@ const REDACT_ABILITIES = [
   },
 ]
 
+const OCR_ABILITIES = [
+  {
+    icon: IconTextRecognition,
+    title: "Scans you can search",
+    text: "The words of scanned pages are recognised and laid unseen over them, each where it is seen. Search, select and copy them, or find and redact names and numbers.",
+  },
+  {
+    icon: IconEye,
+    title: "The pages look the same",
+    text: "Nothing is drawn: the picture of each page is left as it was. Pages that already have text are left alone unless you ask for them too.",
+  },
+  {
+    icon: IconShieldCheck,
+    title: "Read back before download",
+    text: "How sure the reading was is said for every run, and the words laid are read back from the file before you download it. Undo takes them all away.",
+  },
+  {
+    icon: IconLock,
+    title: "Nothing is uploaded",
+    text: "The words are read on your device. English is loaded from this site the first time (about 4 MB) and kept for working offline.",
+  },
+]
+
 /** What a download can leave out besides: things that tell more than the pages do. */
 const CLEAN_CHOICES: readonly {
   key: keyof Clean
@@ -453,6 +483,10 @@ const SIGN_ABILITIES = [
 
 /** The words of the page before a file is opened, for each thing the editor is opened for. */
 const DOORS: Record<EditorMode, { heading: string; body: string }> = {
+  ocr: {
+    heading: "Drop a scanned PDF to make it searchable",
+    body: "Its words are recognised on your device and laid unseen over the pages, so you can search, select, copy and redact them. The pages look just as they did. You can also paste a file with ⌘V or Ctrl+V.",
+  },
   "create-form": {
     heading: "Drop a PDF to make a fillable form",
     body: "Add text fields, checkboxes, radio groups, dropdowns, lists, dates and empty signature places. Move, resize and name them, then download a form others can fill in. Everything stays on your device.",
@@ -493,6 +527,7 @@ const DOORS: Record<EditorMode, { heading: string; body: string }> = {
 
 /** What a page opened for one job says it is, with a way to the whole editor. */
 const FOCUSED: Partial<Record<EditorMode, string>> = {
+  ocr: ", opened for recognising the words of scanned pages. Its other tools (text, pictures, shapes, highlights, redaction) are behind “All tools”.",
   "create-form":
     ", opened for making fillable form fields. The other tools are behind “All tools”.",
   annotate:
@@ -682,6 +717,16 @@ function Workspace({
     repeat,
     described,
     mode === "create-form"
+  )
+  const ocr = useOcr(
+    editor,
+    comments,
+    pageList,
+    repeat,
+    described,
+    makeForm,
+    // A page opened for reading scans begins with its panel.
+    mode === "ocr"
   )
   /** The page shown on the card while the window is closed. */
   const [previewAt, setPreviewPage] = useState(0)
@@ -1117,6 +1162,8 @@ function Workspace({
         />
       ) : repeat.on ? (
         <RepeatPanel repeat={repeat} />
+      ) : ocr.on ? (
+        <OcrPanel ocr={ocr} />
       ) : described.on ? (
         <DocumentPanel
           editor={editor}
@@ -1153,6 +1200,7 @@ function Workspace({
           described={described}
           redact={redact}
           makeForm={makeForm}
+          ocr={ocr}
           first={mode === "annotate" ? "comments" : "things"}
           focus={
             allTools
@@ -1167,7 +1215,9 @@ function Workspace({
                       ? "forms"
                       : mode === "redact"
                         ? "redact"
-                        : null
+                        : mode === "ocr"
+                          ? "ocr"
+                          : null
           }
           onAllTools={() => setAllTools(true)}
           onSign={() => setSigning(true)}
@@ -1807,7 +1857,8 @@ export function PdfEditor({ mode = "edit" }: { mode?: EditorMode }) {
 
   async function loadSample() {
     try {
-      const sample = mode === "fill" ? FORM_SAMPLE : SAMPLE
+      const sample =
+        mode === "fill" ? FORM_SAMPLE : mode === "ocr" ? SCAN_SAMPLE : SAMPLE
       const response = await fetch(`/samples/${sample}`)
       if (!response.ok) throw new Error()
       const blob = await response.blob()
@@ -1966,23 +2017,25 @@ export function PdfEditor({ mode = "edit" }: { mode?: EditorMode }) {
         <div className="space-y-4 rounded-xl border bg-card p-4 sm:p-5">
           <h2 className="section-title">What you can do</h2>
           <ul className="space-y-3 text-sm">
-            {(mode === "create-form"
-              ? CREATE_FORM_ABILITIES
-              : mode === "redact"
-                ? REDACT_ABILITIES
-                : mode === "crop"
-                  ? CROP_ABILITIES
-                  : mode === "numbers"
-                    ? NUMBER_ABILITIES
-                    : mode === "watermark"
-                      ? WATERMARK_ABILITIES
-                      : mode === "fill"
-                        ? FILL_ABILITIES
-                        : mode === "sign"
-                          ? SIGN_ABILITIES
-                          : mode === "annotate"
-                            ? ANNOTATE_ABILITIES
-                            : ABILITIES
+            {(mode === "ocr"
+              ? OCR_ABILITIES
+              : mode === "create-form"
+                ? CREATE_FORM_ABILITIES
+                : mode === "redact"
+                  ? REDACT_ABILITIES
+                  : mode === "crop"
+                    ? CROP_ABILITIES
+                    : mode === "numbers"
+                      ? NUMBER_ABILITIES
+                      : mode === "watermark"
+                        ? WATERMARK_ABILITIES
+                        : mode === "fill"
+                          ? FILL_ABILITIES
+                          : mode === "sign"
+                            ? SIGN_ABILITIES
+                            : mode === "annotate"
+                              ? ANNOTATE_ABILITIES
+                              : ABILITIES
             ).map((item) => (
               <li key={item.title} className="flex gap-3">
                 <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
@@ -2057,6 +2110,13 @@ export function PdfEditor({ mode = "edit" }: { mode?: EditorMode }) {
                   className="underline underline-offset-4 hover:text-foreground"
                 >
                   Redact PDF
+                </Link>
+                . Scans are made searchable in{" "}
+                <Link
+                  href="/dashboard/ocr-pdf/"
+                  className="underline underline-offset-4 hover:text-foreground"
+                >
+                  OCR PDF
                 </Link>
                 .
               </>

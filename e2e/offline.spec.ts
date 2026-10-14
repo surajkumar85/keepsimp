@@ -4,6 +4,7 @@ import { join, relative, sep } from "node:path"
 import { test, expect, type Download, type Page } from "@playwright/test"
 import sharp from "sharp"
 import { embeddedFonts, readPdf } from "../tests/pdf-reader"
+import { scannedPdf } from "../tests/pdf-scan"
 import { serveExport, type Site } from "./static-server"
 
 // The other suites block service workers; these journeys are about the worker.
@@ -104,6 +105,8 @@ test("every tool works offline after one visit", async ({ page }) => {
     /(^|\/)[^/]* [2-9](?:\.|$)/,
     /^videos\/.*\.mp4$/,
     /^images\/social\//,
+    // What recognises words is kept once it is first used, not before.
+    /^ocr\//,
     /^(robots\.txt|sitemap\.xml|\.gitkeep)$/,
     // Not-found pages, and the data Next.js fetches for page transitions.
     /^(404\.html|404\/|_not-found\/)/,
@@ -421,6 +424,43 @@ test("every tool works offline after one visit", async ({ page }) => {
   await expect(page.getByRole("heading", { level: 1 })).toBeVisible()
   // A page that was never saved is not invented.
   await expect(page.goto(`${site.origin}/not-a-page/`)).rejects.toThrow()
+})
+
+test("recognising words works offline once it has been used online", async ({
+  page,
+}) => {
+  await install(page)
+  const recognise = async () => {
+    await page.goto(`${site.origin}/dashboard/ocr-pdf/`)
+    await page.locator("#editor-file").setInputFiles({
+      name: "scan.pdf",
+      mimeType: "application/pdf",
+      buffer: Buffer.from(await scannedPdf()),
+    })
+    const panel = page.getByTestId("editor-ocr")
+    await panel
+      .getByRole("button", { name: "Recognise text on 1 page" })
+      .click()
+    await expect(page.getByTestId("ocr-said")).toContainText(
+      "Words were recognised on page 1",
+      { timeout: 120_000 }
+    )
+  }
+  // Nothing of it is in the offline copy until it is used.
+  const before = await offlineCopy(page)
+  expect(before.saved.some((path) => path.startsWith("/ocr/"))).toBe(false)
+  await recognise()
+  const kept = await page.evaluate(async () =>
+    (await (await caches.open("keepsimp-kept-on-use")).keys()).map((request) =>
+      new URL(request.url).pathname.split("/").pop()
+    )
+  )
+  expect(kept).toContain("worker.min.js")
+  expect(kept).toContain("eng.traineddata.gz")
+  expect(kept.some((name) => name?.startsWith("tesseract-core-"))).toBe(true)
+
+  await site.stop()
+  await recognise()
 })
 
 test("shows the latest page online and the saved one when the network fails", async ({

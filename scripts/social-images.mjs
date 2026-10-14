@@ -169,6 +169,12 @@ const cards = [
     "/images/pdf-create-form-guide.svg",
   ],
   [
+    "make-a-scanned-pdf-searchable",
+    "A scan you can search.",
+    "Words recognised on your device, under the page.",
+    "/images/pdf-ocr-guide.svg",
+  ],
+  [
     "redact-a-pdf-without-uploading",
     "A black box is not a redaction.",
     "Take text and pictures out of a PDF for good.",

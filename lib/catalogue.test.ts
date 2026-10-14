@@ -20,6 +20,7 @@ describe("doors", () => {
       "watermark-pdf",
       "redact-pdf",
       "create-pdf-form",
+      "ocr-pdf",
     ])
     expect(listed).toHaveLength(tools.length - doors.length)
     expect(listed.some((tool) => tool.partOf)).toBe(false)
@@ -55,6 +56,9 @@ describe("doors", () => {
     ])
     expect(filterTools("blackout", "all").map((tool) => tool.id)).toEqual([
       "redact-pdf",
+    ])
+    expect(filterTools("scanned", "all").map((tool) => tool.id)).toEqual([
+      "ocr-pdf",
     ])
   })
 })

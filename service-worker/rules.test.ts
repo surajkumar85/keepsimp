@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest"
-import { isImmutable, pageOfData, routeFor, shouldPrecache } from "./rules.js"
+import {
+  isImmutable,
+  isKeptOnUse,
+  pageOfData,
+  routeFor,
+  shouldPrecache,
+} from "./rules.js"
 
 describe("shouldPrecache", () => {
   it("keeps images, icons, posters, captions and licences", () => {
@@ -130,6 +136,23 @@ describe("routeFor", () => {
     expect(route("/dashboard/index.txt?_rsc=1a2b3")).toEqual({ kind: "data" })
     expect(route("/__next._tree.txt")).toEqual({ kind: "data" })
     expect(route("/pricing/index.txt")).toEqual({ kind: "network" })
+  })
+
+  it("keeps what recognises words once it is first used, whatever its version", () => {
+    expect(isKeptOnUse("/ocr/7.0.0-6.1.2-eng4.0.0/eng.traineddata.gz")).toBe(
+      true
+    )
+    expect(isKeptOnUse("/ocr/")).toBe(false)
+    expect(isKeptOnUse("/ocr/worker.min.js")).toBe(false)
+    expect(isKeptOnUse("/blog/ocr/a/b")).toBe(false)
+    expect(route("/ocr/v1/worker.min.js?x=1")).toEqual({
+      kind: "kept",
+      key: "/ocr/v1/worker.min.js",
+    })
+    // Range requests are never sliced from a kept copy.
+    expect(route("/ocr/v1/worker.min.js", { range: true })).toEqual({
+      kind: "network",
+    })
   })
 
   it("stays out of the way of everything else", () => {

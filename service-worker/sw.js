@@ -12,6 +12,9 @@ const worker = /** @type {ServiceWorkerGlobalScope} */ (
 const PREFIX = "keepsimp-offline-"
 // One cache per release: a copy of the site as it was built.
 const CACHE = PREFIX + VERSION
+// Files saved when they are first used. Not one release's: they are kept
+// across releases, so this name does not start with PREFIX.
+const KEPT = "keepsimp-kept-on-use"
 // Spelled the way the browser spells the address of a request.
 const saved = new Set(
   PRECACHE.map((path) => new URL(path, worker.location.origin).pathname)
@@ -112,6 +115,30 @@ async function fresh(request, key) {
 }
 
 /**
+ * The saved copy; the network the first time, when what it answers is saved.
+ * A file of another version in the same folder is let go of then.
+ * @param {Request} request
+ * @param {string} key
+ */
+async function kept(request, key) {
+  const cache = await caches.open(KEPT)
+  const copy = await cache.match(key, lookup)
+  if (copy) return request.destination === "worker" ? unaddressed(copy) : copy
+  const response = await fetch(request)
+  if (response.ok && !response.redirected) {
+    await cache.put(key, response.clone())
+    const folder = key.slice(0, key.lastIndexOf("/") + 1)
+    const kind = folder.slice(0, folder.slice(0, -1).lastIndexOf("/") + 1)
+    for (const old of await cache.keys()) {
+      const path = new URL(old.url).pathname
+      if (path.startsWith(kind) && !path.startsWith(folder))
+        await cache.delete(old)
+    }
+  }
+  return response
+}
+
+/**
  * Page data is not saved. When it cannot arrive, say so promptly: the page
  * then loads in full instead, and that load can use the saved copy.
  * @param {Request} request
@@ -158,6 +185,8 @@ worker.addEventListener("fetch", (event) => {
       ? immutable(request, route.key)
       : route.kind === "fresh"
         ? fresh(request, route.key)
-        : data(request)
+        : route.kind === "kept"
+          ? kept(request, route.key)
+          : data(request)
   )
 })

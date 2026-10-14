@@ -22,6 +22,7 @@ import {
   IconPlayerTrackNext,
   IconForms,
   IconSignature,
+  IconTextRecognition,
   IconTransform,
   IconWaveSine,
 } from "@tabler/icons-react"
@@ -52,6 +53,7 @@ const icons: Record<string, typeof IconBraces> = {
   "watermark-pdf": IconDroplet,
   "redact-pdf": IconEraser,
   "create-pdf-form": IconFilePlus,
+  "ocr-pdf": IconTextRecognition,
   "json-formatter": IconBraces,
   "color-utility": IconPalette,
 }

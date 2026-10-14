@@ -374,6 +374,27 @@ export const tools: readonly Tool[] = [
     status: "available",
   },
   {
+    id: "ocr-pdf",
+    name: "OCR PDF",
+    description:
+      "Make a scanned PDF searchable: its words are recognised on your device.",
+    partOf: "pdf-editor",
+    category: "document",
+    keywords: [
+      "pdf",
+      "ocr",
+      "scan",
+      "scanned",
+      "searchable",
+      "recognise text",
+      "recognize text",
+      "text recognition",
+      "image to text",
+      "copy text",
+    ],
+    status: "available",
+  },
+  {
     id: "color-utility",
     name: "Color utility",
     description:

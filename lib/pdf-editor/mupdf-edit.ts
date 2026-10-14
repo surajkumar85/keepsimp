@@ -57,6 +57,7 @@ import {
   type PagesChange,
   type Plan,
 } from "./pages"
+import type { OcrChange } from "./ocr"
 import { appliedIn, cleans, type Clean, type RedactChange } from "./redact"
 import { isOurs, type TextChange } from "./retext"
 import { BASELINE, combStarts, lineStart } from "./text-layout"
@@ -95,6 +96,7 @@ export interface Done {
     | "document"
     | "redact"
     | "make-fields"
+    | "ocr"
   change: unknown
 }
 
@@ -1271,6 +1273,12 @@ export interface ExportReport {
    */
   signature?: { intact: boolean }
   /**
+   * Only when words were recognised: on how many pages, how many words,
+   * how many of them were checked (those on pages whose text was not
+   * changed or taken out afterwards), and how many of those were read back.
+   */
+  ocr?: { pages: number; words: number; checked: number; found: number }
+  /**
    * How many fields the form had, what became of them, and what the written
    * file says when it is read again: how many hold what they held (kept),
    * and how many are still fields (drawn in, none should be).
@@ -1514,6 +1522,9 @@ export async function exportEdited(
     // Lines of the page's own text that were changed, as they should now read.
     const rewritten: { page: number; box: Box; text: string }[] = []
     let retexts = 0
+    // Words that recognising laid on pages, as they should now read: those
+    // of a page whose text was changed or taken out afterwards are not checked.
+    const laid: { page: number; words: string[]; checked: boolean }[] = []
     for (const [at, step] of inForce.entries()) {
       // Lines that were written follow their pages; those of a page that was taken out are no more.
       for (const plan of plans.get(at) ?? []) {
@@ -1522,7 +1533,23 @@ export async function exportEdited(
           const page = now.get(line.page)
           if (page !== undefined) rewritten.push({ ...line, page })
         }
+        for (const one of laid.splice(0)) {
+          const page = now.get(one.page)
+          if (page !== undefined) laid.push({ ...one, page })
+        }
       }
+      if (step.done.kind === "text" || step.done.kind === "redact")
+        for (const one of laid)
+          if (step.touched.includes(one.page)) one.checked = false
+      if (step.done.kind === "ocr")
+        for (const op of (step.done.change as OcrChange).ops)
+          laid.push({
+            page: op.page,
+            words: op.lines.flatMap((line) =>
+              line.words.map((word) => word.text)
+            ),
+            checked: true,
+          })
       if (step.done.kind !== "text") continue
       retexts++
       const change = step.done.change as TextChange
@@ -1658,6 +1685,14 @@ export async function exportEdited(
         pageLetters.set(page, textOf(doc, page).replace(/\s+/g, ""))
       if (pageLetters.get(page)!.includes(text.replace(/\s+/g, ""))) reread++
     }
+    let ocrFound = 0
+    for (const { page, words, checked } of laid) {
+      if (!checked) continue
+      if (!pageLetters.has(page))
+        pageLetters.set(page, textOf(doc, page).replace(/\s+/g, ""))
+      const letters = pageLetters.get(page)!
+      for (const word of words) if (letters.includes(word)) ocrFound++
+    }
     const untouched = { checked: 0, differ: [] as number[] }
     // Each is compared with the page of the file as it came that it is,
     // wherever it lies now.
@@ -1750,6 +1785,18 @@ export async function exportEdited(
               formEdits: inForce.filter(
                 (step) => step.done.kind === "make-fields"
               ).length,
+            }
+          : null),
+        ...(laid.length
+          ? {
+              ocr: {
+                pages: new Set(laid.map((one) => one.page)).size,
+                words: laid.reduce((sum, one) => sum + one.words.length, 0),
+                checked: laid
+                  .filter((one) => one.checked)
+                  .reduce((sum, one) => sum + one.words.length, 0),
+                found: ocrFound,
+              },
             }
           : null),
         added: things.length,

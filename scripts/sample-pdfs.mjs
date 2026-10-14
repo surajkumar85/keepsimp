@@ -510,9 +510,10 @@ async function brochure() {
  * A page as a scanner hands it over: a letter drawn at 150 dots per inch
  * on cream paper that darkens towards one side, a little
  * soft, with grain and a red stamp. The words are laid over it unseen, as a
- * text recogniser leaves them.
+ * text recogniser leaves them; without them, it is a scan as it comes, for
+ * the page that recognises words.
  */
-async function scan() {
+async function scan(recognised = true) {
   // The page that was "scanned": a letter with a heading and a column of text.
   const letter = await PDFDocument.create()
   const heading = await letter.embedFont(StandardFonts.TimesRomanBold)
@@ -611,13 +612,14 @@ async function scan() {
   drawn.destroy()
   source.destroy()
   page.drawImage(image, { x: 0, y: 0, width, height })
-  page.drawText("Rental agreement. Flat 4, 12 Harbour Street.", {
-    x: 56,
-    y: height - 110,
-    size: 12,
-    font: plain,
-    opacity: 0,
-  })
+  if (recognised)
+    page.drawText("Rental agreement. Flat 4, 12 Harbour Street.", {
+      x: 56,
+      y: height - 110,
+      size: 12,
+      font: plain,
+      opacity: 0,
+    })
   return doc.save()
 }
 
@@ -770,6 +772,7 @@ async function form() {
 await writeFile("public/samples/keepsimp-form.pdf", await form())
 await writeFile("public/samples/keepsimp-brochure.pdf", await brochure())
 await writeFile("public/samples/keepsimp-scan.pdf", await scan())
+await writeFile("public/samples/keepsimp-scanned-letter.pdf", await scan(false))
 console.log(
-  "Wrote public/samples/keepsimp-report.pdf, keepsimp-appendix.pdf, keepsimp-handbook.pdf, keepsimp-form.pdf, keepsimp-brochure.pdf and keepsimp-scan.pdf"
+  "Wrote public/samples/keepsimp-report.pdf, keepsimp-appendix.pdf, keepsimp-handbook.pdf, keepsimp-form.pdf, keepsimp-brochure.pdf, keepsimp-scan.pdf and keepsimp-scanned-letter.pdf"
 )

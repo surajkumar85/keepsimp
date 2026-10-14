@@ -18,6 +18,7 @@ import { isOwn } from "./own-font"
 import { readLinkOp } from "./links"
 import { readPictureOp, type PictureOp } from "./page-pictures"
 import { readLost, readPageOp, type PagesChange } from "./pages"
+import { readOcrOp } from "./ocr"
 import { readApplied, readRedactOp } from "./redact"
 import { readTextChange, readWrote } from "./paragraphs"
 import type { Op } from "./tools"
@@ -76,6 +77,7 @@ const readers = {
   pages: readPageOp,
   document: readDocumentOp,
   redact: readRedactOp,
+  ocr: readOcrOp,
 } as const
 
 /** A step as it comes out of storage, with every change in it checked, or null when it is not one. */

@@ -65,7 +65,8 @@ export function checkLines(report: ExportReport): CheckLine[] {
     !report.document.labels &&
     report.redaction.places === 0 &&
     report.redaction.waiting === 0 &&
-    !report.formEdits
+    !report.formEdits &&
+    !report.ocr
   )
     lines.push({
       text: "Nothing was added. The file was written again as it is.",
@@ -280,6 +281,23 @@ export function checkLines(report: ExportReport): CheckLine[] {
       text: `Form fields were added, moved, resized, renamed or deleted in ${report.formEdits.toLocaleString("en")} step${report.formEdits === 1 ? "" : "s"}.${report.signature ? " Earlier fields and names remain in the signed part of the file." : ""} A signature place is only a place; it proves nothing about who signed.`,
       good: true,
     })
+  const ocr = report.ocr
+  if (ocr) {
+    const words = `${ocr.words.toLocaleString("en")} word${ocr.words === 1 ? "" : "s"}`
+    const pages = `${ocr.pages.toLocaleString("en")} page${ocr.pages === 1 ? "" : "s"}`
+    const missed = ocr.checked - ocr.found
+    lines.push(
+      missed > 0
+        ? {
+            text: `Words were recognised on ${pages} (${words}), but ${missed.toLocaleString("en")} of them could not be read back from the result. Search it before you rely on it.`,
+            good: false,
+          }
+        : {
+            text: `Words were recognised on ${pages} (${words}) and lie unseen over them, so they can be searched, selected and copied${ocr.checked ? "; every one was read back from the result" : ""}. Recognition can misread a word: check what matters.`,
+            good: true,
+          }
+    )
+  }
   const fields = (count: number) =>
     `${count.toLocaleString("en")} field${count === 1 ? "" : "s"}`
   if (form.had > 0) {

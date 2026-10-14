@@ -25,6 +25,7 @@ import {
   PdfFormTutorial,
   PdfNumbersTutorial,
   PdfRedactTutorial,
+  PdfOcrTutorial,
   PdfCreateFormTutorial,
   PdfWatermarkTutorial,
   PdfSignerTutorial,
@@ -106,6 +107,12 @@ export async function generateMetadata({
     return pageMetadata(
       "Create a fillable PDF form online for free",
       "Add text fields, checkboxes, radio groups, dropdowns, lists, dates and signature places to a PDF. Move, resize and name fields locally in your browser. No uploads.",
+      `/dashboard/${id}/`
+    )
+  if (id === "ocr-pdf")
+    return pageMetadata(
+      "OCR a PDF online for free: make a scan searchable",
+      "Recognise the words of a scanned PDF in your browser and lay them unseen over the pages, so you can search, select and copy them. The pages look the same. No account, no file uploads.",
       `/dashboard/${id}/`
     )
   if (id === "redact-pdf")
@@ -226,6 +233,8 @@ export default async function ToolPage({
         <PdfEditor mode="create-form" />
       ) : id === "redact-pdf" ? (
         <PdfEditor mode="redact" />
+      ) : id === "ocr-pdf" ? (
+        <PdfEditor mode="ocr" />
       ) : (
         <JsonTool />
       )}
@@ -263,6 +272,8 @@ export default async function ToolPage({
         <PdfCreateFormTutorial />
       ) : id === "redact-pdf" ? (
         <PdfRedactTutorial />
+      ) : id === "ocr-pdf" ? (
+        <PdfOcrTutorial />
       ) : (
         <JsonTutorial />
       )}

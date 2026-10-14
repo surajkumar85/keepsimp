@@ -56,6 +56,16 @@ const DOORS = [
     focused: "opened for taking things out for good",
     name: "Redact PDF",
   },
+  {
+    route: "/dashboard/ocr-pdf/",
+    title: /OCR a PDF online for free/,
+    drop: "Drop a scanned PDF to make it searchable",
+    ability: "Scans you can search",
+    guide: "/blog/make-a-scanned-pdf-searchable/",
+    article: "A scan you can search.",
+    focused: "opened for recognising the words of scanned pages",
+    name: "OCR PDF",
+  },
 ] as const
 
 async function open(page: Page, route: string) {

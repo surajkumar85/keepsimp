@@ -169,6 +169,14 @@ export const overviewPost: BlogPost = {
           label: "Guide: redact a PDF so that it stays redacted",
           href: "/blog/redact-a-pdf-without-uploading/",
         },
+        {
+          label: "A scan you cannot search? Open it as OCR PDF",
+          href: "/dashboard/ocr-pdf/",
+        },
+        {
+          label: "Guide: make a scanned PDF searchable",
+          href: "/blog/make-a-scanned-pdf-searchable/",
+        },
       ],
     },
     {
@@ -1365,6 +1373,107 @@ export const redactPost: BlogPost = {
     {
       title: "Luhn algorithm, the check figure of a card number, Wikipedia",
       url: "https://en.wikipedia.org/wiki/Luhn_algorithm",
+    },
+  ],
+}
+
+export const ocrPost: BlogPost = {
+  slug: "make-a-scanned-pdf-searchable",
+  title: "A scan you can search.",
+  searchTitle: "How to OCR a PDF online for free and make a scan searchable",
+  description:
+    "How to make a scanned PDF searchable in your browser: its words are recognised on your device and laid unseen over the pages, which look the same. What OCR misreads, and how to check.",
+  keywords: [
+    "OCR PDF",
+    "OCR PDF online free",
+    "make scanned PDF searchable",
+    "searchable PDF",
+    "scanned PDF to text",
+    "copy text from scanned PDF",
+    "PDF text recognition",
+    "OCR without upload",
+  ],
+  category: "A little know-how",
+  readingTime: "4 min read",
+  image: "/images/pdf-ocr-guide.svg",
+  imageAlt:
+    "A scanned page with the word invoice found by a search on two of its lines, beside a panel that says 1,204 words were recognised on 3 pages, 94% sure on average",
+  tool: "ocr-pdf",
+  intro:
+    "A scanner hands over pictures of pages. They look like text, but a search finds nothing, a word cannot be selected or copied, and a screen reader has nothing to read. OCR, optical character recognition, reads the words in the picture and puts them in the file. Here is how to do it on your own device, without sending a contract or a bank statement to someone else's server.",
+  sections: [
+    {
+      id: "what",
+      title: "What OCR adds to a file.",
+      paragraphs: [
+        "Each page is drawn as a picture and read by Tesseract, an open-source recogniser that runs here in your browser. It finds the lines, the words in them and where each word stands. Those words are then written into the page in a font that draws nothing, each one stretched to the width it has in the picture.",
+        "So the page looks exactly as it did, pixel for pixel, and under the picture lies text in the right places. Search finds a word and shows it where you see it; dragging across a line selects it; copying gives you the words. Any PDF reader can do this with the result, not only this one.",
+      ],
+    },
+    {
+      id: "how",
+      title: "How to do it.",
+      paragraphs: [
+        "Open the scanned PDF in OCR PDF. Leave Pages empty to read them all, or type the ones you want, such as 1-3 or odd. Press Recognise text. Each page takes a few seconds, longer on a phone, and Stop keeps what has been read so far. The first time, about 4 MB of the recogniser is loaded from this site; it is then kept, so it works offline afterwards.",
+        "A page that already has text is left as it is: it was read before, or it was never a scan. The panel names such pages, and a switch reads them anyway. When the run is done, the panel says how many words were found and how sure the recogniser was of them on average. One undo takes all of them away.",
+      ],
+      links: [{ label: "Open OCR PDF", href: "/dashboard/ocr-pdf/" }],
+    },
+    {
+      id: "misreads",
+      title: "What it gets wrong.",
+      paragraphs: [
+        "Clean, straight scans of printed pages read well. Faint photocopies, small print, handwriting, and photographs of a page taken at an angle read worse: a 1 can come out as an l, a name can lose a letter. The recogniser says how sure it is of every word, and the panel counts the words it was unsure of. Search for the names and numbers that matter before you rely on them.",
+        "Only English is read for now. A page in another language is read as if it were English, which gives poor text; more languages are planned, each loaded only when chosen.",
+      ],
+    },
+    {
+      id: "check",
+      title: "Checked before you download.",
+      paragraphs: [
+        "When you download, the words that were laid are read back out of the written file, and the check says whether every one was found. Pages you did not read are compared with the original, so nothing else changed. Open the result in any PDF reader and search it: the words are there.",
+      ],
+    },
+    {
+      id: "redact",
+      title: "Then redact by search.",
+      paragraphs: [
+        "A scan's words cannot be found by a search, so redacting a scan used to mean dragging boxes over everything by hand. Once its words are recognised, Mark all and the buttons for e-mail addresses, phone numbers and card numbers find them in the scan too. Applying the marks takes the recognised words out and blanks the pixels of the picture under each mark. A misread word is a word the search misses, so look the pages over as well.",
+      ],
+      links: [
+        { label: "Open Redact PDF", href: "/dashboard/redact-pdf/" },
+        {
+          label: "Guide: redact a PDF so that it stays redacted",
+          href: "/blog/redact-a-pdf-without-uploading/",
+        },
+      ],
+    },
+    {
+      id: "private",
+      title: "Your file stays with you.",
+      paragraphs: [
+        "The file is opened, read and changed on your own device and is never uploaded: not the pages, not the words found in them. There is no account and no limit on pages.",
+      ],
+      links: [
+        {
+          label: "Every KeepSimp tool in one place",
+          href: "/blog/free-online-tools-no-upload/",
+        },
+      ],
+    },
+  ],
+  sources: [
+    {
+      title: "Optical character recognition, Wikipedia",
+      url: "https://en.wikipedia.org/wiki/Optical_character_recognition",
+    },
+    {
+      title: "Tesseract, the open-source OCR engine",
+      url: "https://github.com/tesseract-ocr/tesseract",
+    },
+    {
+      title: "Tesseract.js, Tesseract in the browser",
+      url: "https://github.com/naptha/tesseract.js",
     },
   ],
 }

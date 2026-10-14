@@ -12,11 +12,13 @@
  * @typedef {{ kind: "network" }
  *   | { kind: "immutable", key: string }
  *   | { kind: "fresh", key: string }
- *   | { kind: "data" }} Route
+ *   | { kind: "data" }
+ *   | { kind: "kept", key: string }} Route
  * - network: not ours to answer; the browser handles it as if there were no worker.
  * - immutable: a hashed build file; the saved copy first.
  * - fresh: a page or asset that can change; the network first, the saved copy when it fails.
  * - data: the data a page transition asks for; the network, without waiting on a stalled one.
+ * - kept: a large file that only some visitors need; saved the first time it is used, then the saved copy first.
  */
 
 /** Left out of the offline copy. */
@@ -38,6 +40,17 @@ const SKIPPED = [
  */
 export function shouldPrecache(file) {
   return !SKIPPED.some((pattern) => pattern.test(file))
+}
+
+/**
+ * Files that are not in the offline copy until they are first used, and are
+ * then kept: what recognises words (OCR), which only some visitors need. The
+ * folder they are in is named for their version, so a saved copy never goes
+ * stale either.
+ * @param {string} path
+ */
+export function isKeptOnUse(path) {
+  return /^\/ocr\/[^/]+\/[^/]+$/.test(path)
 }
 
 /**
@@ -72,6 +85,7 @@ export function routeFor(request, origin, saved) {
     return { kind: "network" }
   // The query is ignored: page data is requested with a cache-busting one.
   const path = url.pathname
+  if (isKeptOnUse(path)) return { kind: "kept", key: path }
   if (isImmutable(path))
     return saved(path) ? { kind: "immutable", key: path } : { kind: "network" }
   // "/dashboard" is served as "/dashboard/".

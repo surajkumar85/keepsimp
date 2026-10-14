@@ -58,6 +58,11 @@ const content: TutorialContent = {
         "For what must not be in the file at all. Drag over an area, or choose Words and drag across words; type a name and press Mark all to mark it on every page; or mark every e-mail address, phone number or card number. A mark is a red frame and takes nothing out: press it to take it away again. Apply removes what is under every mark, the letters, the pixels of pictures and the drawings, and puts a black box there. Each place is looked at afterwards, and the download warns when a mark was never applied. The download can also leave out the file's details, attached files and scripts.",
     },
     {
+      term: "Recognise text",
+      detail:
+        "For scanned pages, whose words are a picture (OCR). A panel opens beside the pages: choose the pages (leave it empty for all) and press Recognise text. Each page is read on your device and its words are laid unseen over it, each where it is seen, so the page can be searched, selected, copied, and redacted by search; it looks just as it did. A page that already has text is left alone unless “Pages that have text too” is on. The first time, about 4 MB is loaded from this site and kept for working offline. English only for now. Stop keeps the pages read so far; one undo takes all of a run away.",
+    },
+    {
       term: "Details and bookmarks",
       detail:
         "For the file as a whole. Details are its title, author, subject and keywords: type them and save; an emptied field takes that detail out. Bookmarks: click a name to choose one and to rename it; the buttons above the list add a bookmark for the page you are reading, move the chosen one up and down, put it beneath the one above, lead it to the page you are reading, or delete it. Page numbers are the numbers the file gives its own pages, which a program shows in its page box: runs such as i, ii, iii and then 1, 2, 3. They are not written on the pages; Numbers and watermarks does that.",
@@ -649,7 +654,7 @@ const redacting: TutorialContent = {
     {
       term: "Scanned pages",
       detail:
-        "A scan is a picture, so its words cannot be found by searching. Mark them as areas: the pixels under each mark are blanked in the picture itself. A picture that was a JPEG is saved as a JPEG again, about as large as it was, so the file does not grow.",
+        "A scan is a picture, so its words cannot be found by searching until they are recognised: open Recognise text (or OCR PDF) first, and Mark all and the buttons then find them. Or mark them as areas. Either way, the pixels under each mark are blanked in the picture itself, and words recognised there go too. Recognition can misread a word, so look a scan over for what a search missed. A picture that was a JPEG is saved as a JPEG again, about as large as it was, so the file does not grow.",
     },
     {
       term: "What is not on a page",
@@ -668,6 +673,82 @@ const redacting: TutorialContent = {
     },
   ],
   guideHref: "/blog/redact-a-pdf-without-uploading/",
+}
+
+const recognising: TutorialContent = {
+  name: "How to make a scanned PDF searchable with KeepSimp",
+  description:
+    "Recognise the words of scanned pages in your browser (OCR) and lay them unseen over the pages, so they can be searched, selected and copied. Nothing is uploaded.",
+  intro: "Follow the steps below. Every option is explained underneath.",
+  steps: [
+    {
+      title: "Open the scan",
+      text: "Drop the PDF, choose it from your device or paste it. A locked file asks for its password. The panel for recognising text is open from the start.",
+    },
+    {
+      title: "Choose the pages",
+      text: "Leave Pages empty to read every page, or type pages such as 1-3, 7 or odd. Pages that already have text are left as they are, unless you turn on “Pages that have text too”.",
+    },
+    {
+      title: "Recognise the text",
+      text: "Press Recognise text. Each page is read in turn on your device, a few seconds a page, longer on a phone; Stop keeps the pages read so far. The panel then says how many words were found and how sure the reading was.",
+    },
+    {
+      title: "Search and check",
+      text: "Search the file or select its words: they lie where they are seen. Names and numbers that matter are worth a look, since a word can be misread.",
+    },
+    {
+      title: "Download",
+      text: "Press Download. The words laid are read back from the file first, and the check says so. The result is searchable in any PDF reader.",
+    },
+  ],
+  options: [
+    {
+      term: "What recognising does",
+      detail:
+        "Each page is drawn as a picture and read by Tesseract, an open-source recogniser, running in your browser. The words it finds are written into the page in a font that draws nothing, each stretched to the width it has on the page. The picture is not changed, so the page looks exactly as it did, and nothing is uploaded.",
+    },
+    {
+      term: "How sure it was",
+      detail:
+        "Tesseract says how sure it is of every word. The panel gives the average and how many words it was unsure of. Clean, straight scans at 300 dots to the inch read best; handwriting, faint copies and photographs of pages at an angle read worse, and are read all the same.",
+    },
+    {
+      term: "Pages that have text",
+      detail:
+        "A page that already has text, from a recogniser that ran before or because it was never a scan, is left as it is, and the panel names it. Turn on “Pages that have text too” to read it anyway; its words are then in the file twice.",
+    },
+    {
+      term: "Turned pages",
+      detail:
+        "A page that is turned to be shown upright is read as it is shown, and its words run the way you see them.",
+    },
+    {
+      term: "Language",
+      detail:
+        "English for now. More languages are planned, each loaded from this site only when you choose it.",
+    },
+    {
+      term: "Working offline",
+      detail:
+        "What recognises words is about 4 MB. It is loaded from this site the first time you recognise text, not before, and then kept on this device, so it works offline afterwards.",
+    },
+    {
+      term: "Undo",
+      detail:
+        "A run is one step: one undo takes away every word it laid, and the page is as it was.",
+    },
+    {
+      term: "All tools",
+      detail:
+        "This page is the PDF editor, opened for recognising text. All tools shows the rest: text, pictures, shapes, highlights, and redaction, which can now find the words of the scan.",
+    },
+  ],
+  guideHref: "/blog/make-a-scanned-pdf-searchable/",
+}
+
+export function PdfOcrTutorial() {
+  return <ToolTutorial content={recognising} />
 }
 
 export function PdfRedactTutorial() {
@@ -722,6 +803,16 @@ export function PdfCreateFormTutorial() {
               "Dates are written as yyyy-mm-dd. The file carries only a fixed date-format action for other programs. KeepSimp reads it as text and never executes a script.",
           },
           {
+            term: "Suggested fields",
+            detail:
+              "Suggest fields reads the page in view and offers a field for each line to write on, empty box, small square and run of underscores, named after its label. Each is shown dashed; add the ones you want, one by one or all at once, and dismiss the rest. Nothing is added unless you add it.",
+          },
+          {
+            term: "Lining up and tab order",
+            detail:
+              "Shift and a click picks several fields on a page: line them up, space them evenly or give them one size. Tab order lists the page's fields in the order the Tab key goes through them; move one earlier or later, or put them in order by rows. Copy to pages puts a copy of a field on other pages, each with a name of its own.",
+          },
+          {
             term: "Signature places",
             detail:
               "An empty place for a signature is not a certificate and does not prove who signed. Filled certificate signature fields are left alone. Use Sign PDF to add a drawn or typed mark on the page.",
@@ -729,7 +820,7 @@ export function PdfCreateFormTutorial() {
           {
             term: "Limits",
             detail:
-              "No calculated fields, arbitrary scripts, XFA forms, automatic field detection, alignment tools or tab-order controls. Lists use the editor's own appearance in Helvetica; unsupported letters may be missing from that appearance while their values stay in the file.",
+              "No calculated fields, arbitrary scripts or XFA forms. Suggested fields are judged by the lines and boxes a page draws and can be wrong: check each before you add it. Lists use the editor's own appearance in Helvetica; unsupported letters may be missing from that appearance while their values stay in the file.",
           },
         ],
         guideHref: "/blog/create-a-fillable-pdf-form/",

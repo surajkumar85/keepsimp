@@ -34,6 +34,7 @@ import {
   IconFiles,
   IconMessages,
   IconNumber123,
+  IconTextRecognition,
   IconResize,
   IconNote,
   IconPencil,
@@ -134,6 +135,7 @@ import {
   type MakeKind,
 } from "@/lib/pdf-editor/form-fields"
 import type { Redact } from "./use-redact"
+import type { Ocr } from "./use-ocr"
 import type { Repeat } from "./use-repeat"
 import { PARAGRAPH_HINT, RETEXT_HINT, type Retext } from "./use-retext"
 import type { Editor } from "./use-editor"
@@ -1501,6 +1503,7 @@ export function EditorToolbar({
   described,
   redact,
   makeForm,
+  ocr,
 }: {
   editor: Editor
   comments: Comments
@@ -1523,6 +1526,8 @@ export function EditorToolbar({
   /** Taking things out of the file for good. */
   redact: Redact
   makeForm: MakeForm
+  /** Recognising the words of scanned pages. */
+  ocr: Ocr
   /** Which tools come first in the row: those that add things, or those that comment. */
   first?: "things" | "comments"
   /**
@@ -1530,7 +1535,7 @@ export function EditorToolbar({
    * up, or signing and filling in), with a button for the rest. A tool that
    * is in hand is always shown.
    */
-  focus?: "comments" | "signing" | "pages" | "redact" | "forms" | null
+  focus?: "comments" | "signing" | "pages" | "redact" | "forms" | "ocr" | null
   onAllTools?: () => void
   /** Open the window a signature is made in. */
   onSign: () => void
@@ -1833,7 +1838,8 @@ export function EditorToolbar({
               creatingForm
             ) : focus === "redact" ? (
               redacting
-            ) : (
+            ) : focus === "ocr" ? null : (
+              // Recognising has no group here: its button is with the panels', which are always shown.
               marks
             )}
             <Rule />
@@ -1904,6 +1910,19 @@ export function EditorToolbar({
           data-testid="repeat-toggle"
         >
           <IconNumber123 aria-hidden="true" />
+        </Button>
+        <Button
+          type="button"
+          variant={ocr.on ? "secondary" : "ghost"}
+          size="icon"
+          aria-pressed={ocr.on}
+          aria-label="Recognise text"
+          title="Recognise text: make scanned pages searchable (OCR)"
+          onClick={() => ocr.setOn(!ocr.on)}
+          className="shrink-0"
+          data-testid="ocr-toggle"
+        >
+          <IconTextRecognition aria-hidden="true" />
         </Button>
         <Button
           type="button"

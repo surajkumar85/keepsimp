@@ -13,7 +13,7 @@ export default function PrivacyPage() {
         A straightforward approach to privacy.
       </h1>
       <p className="mt-4 text-sm text-muted-foreground">
-        Updated 12 October 2026
+        Updated 14 October 2026
       </p>
       <div className="article-copy">
         <h2>Files and text stay in your browser.</h2>
@@ -62,7 +62,11 @@ export default function PrivacyPage() {
           pages, scripts, fonts and codecs, about 37 MB, so they work without a
           connection. That copy contains none of your files or text. It is
           replaced when a new version is published, and you can remove it
-          through your browser’s site-data settings.
+          through your browser’s site-data settings. What recognises the words
+          of scanned pages (about 7 MB) is not part of it until you first
+          recognise text; it is then kept the same way. It too holds none of
+          your files, and the words it finds go only into the PDF you are
+          editing.
         </p>
         <h2>Keep the limits in mind.</h2>
         <p>
