@@ -99,9 +99,7 @@ test("the focused door creates, moves, resizes, renames and deletes a field with
   )
   await settings(page)
   await panel(page).getByLabel("Field name", { exact: true }).fill("Applicant")
-  await panel(page)
-    .getByLabel("Field tooltip", { exact: true })
-    .fill("Your full name")
+  await panel(page).getByLabel("Hint", { exact: true }).fill("Your full name")
   await panel(page).getByLabel("Required field", { exact: true }).check()
   await panel(page)
     .getByLabel("Maximum characters (0 means unlimited)")
@@ -399,4 +397,107 @@ test("form design stays accessible in both themes, fits 320px and sends no file 
   await expect(frame(page, "Accessible name")).toHaveCount(1)
   expect(requests).toEqual([])
   expect(errors).toEqual([])
+})
+
+const boxOf = async (page: Page, name: string) =>
+  (await frame(page, name).first().getAttribute("data-box"))!
+    .split(",")
+    .map(Number)
+const order = (got: Awaited<ReturnType<typeof download>>["got"]) =>
+  got.pages[0].fields.map((field) => field.split("=")[0])
+
+test("lines up, spaces and sizes picked fields, and sets the order of the Tab key", async ({
+  page,
+}) => {
+  test.setTimeout(120000)
+  await open(page)
+  for (const name of ["a", "b", "c"]) await add(page, "text", name)
+  await moveTo(page, "a", 30, 100)
+  await moveTo(page, "b", 90, 160)
+  await moveTo(page, "c", 60, 300)
+  // The last is made narrower: 180 - 30 = 150 points wide.
+  let before = await count(page)
+  await frame(page, "c").focus()
+  for (let i = 0; i < 3; i++) await page.keyboard.press("Alt+Shift+ArrowLeft")
+  await changed(page, before + 1)
+  // Picked: one with a click, two more with Shift.
+  await frame(page, "a").click()
+  await frame(page, "b").click({ modifiers: ["Shift"] })
+  await frame(page, "c").click({ modifiers: ["Shift"] })
+  const arrange = page.getByTestId("form-arrange")
+  await expect(arrange).toContainText("3 fields picked on page 1")
+  before = await count(page)
+  await arrange.getByRole("button", { name: "Align left edges" }).click()
+  await changed(page, before + 1)
+  await expect(page.getByTestId("editor-undo")).toHaveAttribute(
+    "aria-label",
+    "Undo: Align left edges"
+  )
+  for (const name of ["a", "b", "c"])
+    expect((await boxOf(page, name))[0]).toBe(30)
+  // 100 to 324 holds three fields 24 high: 76 points of room between each two.
+  await arrange.getByRole("button", { name: "Space evenly down" }).click()
+  await changed(page, before + 2)
+  expect((await boxOf(page, "b"))[1]).toBe(200)
+  await arrange.getByRole("button", { name: "Same width" }).click()
+  await changed(page, before + 3)
+  for (const name of ["a", "b", "c"])
+    expect((await boxOf(page, name))[2]).toBe(150)
+
+  // The Tab key goes a, b, c (shown by their names made readable); c is moved to the front.
+  const tabs = page.getByTestId("form-tab-order")
+  await expect(tabs.getByRole("listitem")).toHaveText(["1A", "2B", "3C"])
+  await tabs.getByRole("button", { name: "Move C earlier" }).click()
+  await changed(page, before + 4)
+  await tabs.getByRole("button", { name: "Move C earlier" }).click()
+  await changed(page, before + 5)
+  await expect(tabs.getByRole("listitem")).toHaveText(["1C", "2A", "3B"])
+  // By rows puts them back in reading order; then c goes to the front again.
+  await tabs.getByRole("button", { name: "By rows" }).click()
+  await changed(page, before + 6)
+  await expect(tabs.getByRole("listitem")).toHaveText(["1A", "2B", "3C"])
+  for (const step of [7, 8]) {
+    await tabs.getByRole("button", { name: "Move C earlier" }).click()
+    await changed(page, before + step)
+  }
+  const made = await download(page)
+  expect(order(made.got)).toEqual(["c", "a", "b"])
+  for (const name of ["a", "b", "c"]) {
+    const [rect] = made.form.getTextField(name).acroField.getWidgets()
+    expect(rect.getRectangle().x).toBeCloseTo(30, 0)
+    expect(rect.getRectangle().width).toBeCloseTo(150, 0)
+  }
+})
+
+test("copies a field to other pages, each with a name of its own", async ({
+  page,
+}) => {
+  await open(
+    page,
+    await pdf("three.pdf", "three", { pages: 3, size: () => [400, 600] })
+  )
+  await add(page, "text", "Name")
+  await moveTo(page, "Name", 40, 80)
+  await settings(page)
+  const before = await count(page)
+  await panel(page).getByLabel("Copy to pages").fill("2-3")
+  await panel(page).getByRole("button", { name: "Copy", exact: true }).click()
+  await changed(page, before + 1)
+  await expect(page.getByTestId("editor-undo")).toHaveAttribute(
+    "aria-label",
+    "Undo: Copy a field to 2 pages"
+  )
+  // A page that is not in the file is said to be so.
+  await panel(page).getByLabel("Copy to pages").fill("9")
+  await panel(page).getByRole("button", { name: "Copy", exact: true }).click()
+  await expect(
+    page.getByText("This file has 3 pages", { exact: false }).first()
+  ).toBeVisible()
+  const made = await download(page)
+  expect(made.got.fields).toEqual(["Name", "Name_p2", "Name_p3"])
+  for (const name of ["Name_p2", "Name_p3"]) {
+    const [rect] = made.form.getTextField(name).acroField.getWidgets()
+    expect(rect.getRectangle().x).toBeCloseTo(40, 0)
+    expect(rect.getRectangle().width).toBeCloseTo(180, 0)
+  }
 })

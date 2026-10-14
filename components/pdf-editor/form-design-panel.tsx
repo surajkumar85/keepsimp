@@ -1,6 +1,21 @@
 "use client"
 import { useId, useState } from "react"
-import { IconX } from "@tabler/icons-react"
+import {
+  IconArrowDown,
+  IconArrowUp,
+  IconCopy,
+  IconLayoutAlignBottom,
+  IconLayoutAlignCenter,
+  IconLayoutAlignLeft,
+  IconLayoutAlignMiddle,
+  IconLayoutAlignRight,
+  IconLayoutAlignTop,
+  IconLayoutDistributeHorizontal,
+  IconLayoutDistributeVertical,
+  IconSortAscending,
+  IconX,
+} from "@tabler/icons-react"
+import type { ReactNode } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import {
@@ -10,7 +25,12 @@ import {
   validName,
   type MakeKind,
 } from "@/lib/pdf-editor/form-fields"
-import type { FormField } from "@/lib/pdf-editor/forms"
+import {
+  EDGE_NAMES,
+  FEWEST_TO_SPREAD,
+  type Edge,
+} from "@/lib/pdf-editor/form-layout"
+import { labelOf, type FormField } from "@/lib/pdf-editor/forms"
 import type { Editor } from "./use-editor"
 import type { MakeForm } from "./use-make-form"
 const SELECT =
@@ -26,7 +46,11 @@ function Properties({
 }) {
   const ids = useId(),
     [name, setName] = useState(field.name.split(".").at(-1)!),
-    [tooltip, setTooltip] = useState(field.label),
+    // The label is the field's name made readable when it has no hint: that is no hint to keep.
+    [tooltip, setTooltip] = useState(
+      field.label === labelOf(field.name) ? "" : field.label
+    ),
+    [copyPages, setCopyPages] = useState(""),
     [required, setRequired] = useState(field.required),
     [limit, setLimit] = useState(String(field.maxLength))
   if (field.signed)
@@ -69,7 +93,7 @@ function Properties({
         keeps its parent.
       </p>
       <label className="block space-y-1 text-xs" htmlFor={`${ids}-hint`}>
-        <span>Field tooltip</span>
+        <span>Hint</span>
         <Input
           id={`${ids}-hint`}
           value={tooltip}
@@ -112,6 +136,39 @@ function Properties({
           Delete field
         </Button>
       </div>
+      {field.kind !== "radio" && (
+        <div className="space-y-1">
+          <label className="block space-y-1 text-xs" htmlFor={`${ids}-copy`}>
+            <span>Copy to pages</span>
+            <div className="flex gap-2">
+              <Input
+                id={`${ids}-copy`}
+                value={copyPages}
+                placeholder="2-5, or all"
+                maxLength={200}
+                onChange={(e) => setCopyPages(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key !== "Enter") return
+                  e.preventDefault()
+                  void makeForm.copyTo(copyPages)
+                }}
+              />
+              <Button
+                type="button"
+                variant="outline"
+                disabled={busy || !copyPages.trim()}
+                onClick={() => void makeForm.copyTo(copyPages)}
+              >
+                <IconCopy aria-hidden="true" /> Copy
+              </Button>
+            </div>
+          </label>
+          <p className="text-xs text-muted-foreground">
+            Each copy is a field of its own at the same place, with its own
+            name, so it is filled in on its own.
+          </p>
+        </div>
+      )}
       {field.kind === "radio" && (
         <p className="text-xs text-muted-foreground">
           A name, tooltip or requirement belongs to the whole group. Delete
@@ -121,6 +178,173 @@ function Properties({
     </form>
   )
 }
+const EDGE_ICONS: Record<Edge, ReactNode> = {
+  left: <IconLayoutAlignLeft aria-hidden="true" />,
+  centre: <IconLayoutAlignCenter aria-hidden="true" />,
+  right: <IconLayoutAlignRight aria-hidden="true" />,
+  top: <IconLayoutAlignTop aria-hidden="true" />,
+  middle: <IconLayoutAlignMiddle aria-hidden="true" />,
+  bottom: <IconLayoutAlignBottom aria-hidden="true" />,
+}
+
+/** Lining up, spacing and sizing the picked fields of a page. */
+function Arrange({ makeForm, busy }: { makeForm: MakeForm; busy: boolean }) {
+  const count = makeForm.together.length
+  const icon = (
+    label: string,
+    onPress: () => void,
+    children: ReactNode,
+    off = false
+  ) => (
+    <Button
+      key={label}
+      type="button"
+      variant="outline"
+      size="icon"
+      aria-label={label}
+      title={label}
+      disabled={busy || off}
+      onClick={onPress}
+    >
+      {children}
+    </Button>
+  )
+  return (
+    <section
+      className="space-y-2"
+      aria-labelledby="form-arrange-title"
+      data-testid="form-arrange"
+    >
+      <h3 id="form-arrange-title" className="font-heading text-sm font-medium">
+        {count.toLocaleString("en")} fields picked on page{" "}
+        {(makeForm.togetherPage + 1).toLocaleString("en")}
+      </h3>
+      <div role="group" aria-label="Line up" className="flex flex-wrap gap-1">
+        {(Object.keys(EDGE_ICONS) as Edge[]).map((edge) =>
+          icon(
+            EDGE_NAMES[edge],
+            () => void makeForm.arrange({ align: edge }),
+            EDGE_ICONS[edge]
+          )
+        )}
+      </div>
+      <div
+        role="group"
+        aria-label="Space and size"
+        className="flex flex-wrap gap-1"
+      >
+        {icon(
+          "Space evenly across",
+          () => void makeForm.arrange({ spread: "across" }),
+          <IconLayoutDistributeHorizontal aria-hidden="true" />,
+          count < FEWEST_TO_SPREAD
+        )}
+        {icon(
+          "Space evenly down",
+          () => void makeForm.arrange({ spread: "down" }),
+          <IconLayoutDistributeVertical aria-hidden="true" />,
+          count < FEWEST_TO_SPREAD
+        )}
+        <Button
+          type="button"
+          variant="outline"
+          disabled={busy}
+          onClick={() => void makeForm.arrange({ size: "width" })}
+        >
+          Same width
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          disabled={busy}
+          onClick={() => void makeForm.arrange({ size: "height" })}
+        >
+          Same height
+        </Button>
+      </div>
+      <p className="text-xs text-muted-foreground">
+        Fields line up along the edge of the space they take together. Same
+        width and height take the size of the field picked last. Spacing needs
+        three fields or more.
+      </p>
+    </section>
+  )
+}
+
+/** The order the Tab key goes through the fields of a page. */
+function TabOrder({
+  makeForm,
+  editor,
+  page,
+  busy,
+}: {
+  makeForm: MakeForm
+  editor: Editor
+  page: number
+  busy: boolean
+}) {
+  const fields = editor.fields[page] ?? []
+  if (fields.length < 2) return null
+  return (
+    <section
+      className="space-y-2"
+      aria-labelledby="form-order-title"
+      data-testid="form-tab-order"
+    >
+      <div className="flex items-center justify-between gap-2">
+        <h3 id="form-order-title" className="font-heading text-sm font-medium">
+          Tab order, page {(page + 1).toLocaleString("en")}
+        </h3>
+        <Button
+          type="button"
+          variant="outline"
+          disabled={busy}
+          onClick={() => makeForm.byRows(page)}
+        >
+          <IconSortAscending aria-hidden="true" /> By rows
+        </Button>
+      </div>
+      <ol className="space-y-1">
+        {fields.map((field, at) => (
+          <li key={field.id} className="flex items-center gap-1">
+            <span className="w-6 shrink-0 text-right font-mono text-xs text-muted-foreground">
+              {at + 1}
+            </span>
+            <span className="min-w-0 flex-1 truncate text-sm">
+              {field.label}
+            </span>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              aria-label={`Move ${field.label} earlier`}
+              disabled={busy || at === 0}
+              onClick={() => makeForm.nudge(page, field.id, -1)}
+            >
+              <IconArrowUp aria-hidden="true" />
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              aria-label={`Move ${field.label} later`}
+              disabled={busy || at === fields.length - 1}
+              onClick={() => makeForm.nudge(page, field.id, 1)}
+            >
+              <IconArrowDown aria-hidden="true" />
+            </Button>
+          </li>
+        ))}
+      </ol>
+      <p className="text-xs text-muted-foreground">
+        The Tab key goes through the fields of a page in this order, in this
+        editor and in other PDF programs that follow it. By rows puts them in
+        reading order, top to bottom and left to right.
+      </p>
+    </section>
+  )
+}
+
 export function FormDesignPanel({
   makeForm,
   editor,
@@ -158,6 +382,9 @@ export function FormDesignPanel({
           <p role="alert" className="text-sm text-destructive">
             XFA forms cannot be changed here. Use a PDF with ordinary fields.
           </p>
+        )}
+        {makeForm.together.length > 1 && (
+          <Arrange makeForm={makeForm} busy={editor.busy || editor.form.xfa} />
         )}
         {makeForm.field && (
           <Properties
@@ -206,7 +433,7 @@ export function FormDesignPanel({
             className="block space-y-1 text-xs"
             htmlFor={`${ids}-new-hint`}
           >
-            <span>New field tooltip</span>
+            <span>New field hint</span>
             <Input
               id={`${ids}-new-hint`}
               value={spec.tooltip}
@@ -287,10 +514,22 @@ export function FormDesignPanel({
             Add field to page
           </Button>
         </form>
+        {makeForm.chosen && (
+          <TabOrder
+            makeForm={makeForm}
+            editor={editor}
+            page={makeForm.chosen.page}
+            busy={editor.busy || editor.form.xfa}
+          />
+        )}
         <section className="space-y-1">
           <h3 className="font-heading text-sm font-medium">
             Fields in this file
           </h3>
+          <p className="text-xs text-muted-foreground">
+            Shift and a click picks several fields of one page, here or on the
+            page, to line them up.
+          </p>
           {editor.fields
             .flatMap((fields, page) =>
               fields.map((field) => (
@@ -298,11 +537,16 @@ export function FormDesignPanel({
                   key={`${page}/${field.id}`}
                   variant="ghost"
                   className="h-auto min-h-11 w-full justify-start text-left whitespace-normal md:min-h-9"
-                  aria-pressed={
-                    makeForm.chosen?.id === field.id &&
-                    makeForm.chosen.page === page
+                  aria-pressed={makeForm.picked.some(
+                    (one) => one.id === field.id && one.page === page
+                  )}
+                  onClick={(e) =>
+                    makeForm.pick(
+                      page,
+                      field.id,
+                      e.shiftKey || e.metaKey || e.ctrlKey
+                    )
                   }
-                  onClick={() => makeForm.setChosen({ page, id: field.id })}
                 >
                   {field.label} · page {page + 1}
                 </Button>

@@ -1,6 +1,7 @@
 /** AcroForm fields, written into the document itself as replayable steps. */
 import type * as MuPDF from "mupdf"
 import {
+  copyName,
   DATE_ACTION,
   fitField,
   nameTaken,
@@ -10,7 +11,7 @@ import {
 } from "./form-fields"
 import type { Box } from "./geometry"
 import { canDo, inStep, turnOf, withPage, type EditSession } from "./mupdf-edit"
-import { drawList } from "./mupdf-forms"
+import { drawList, fieldsOn } from "./mupdf-forms"
 import { dropWidget } from "./mupdf-pages"
 import { inverse, type Matrix } from "./retext"
 type Engine = typeof MuPDF
@@ -476,6 +477,101 @@ function add(
   form.get("Fields").push(field)
   refresh(mupdf, session, pageIndex, numbers)
 }
+/**
+ * Put some fields of a page in the order the Tab key goes through them. A
+ * viewer goes through a page's fields in the order its list of annotations
+ * has them: the fields named take the places in that list that they held
+ * between them, in the order given, and everything else stays where it was.
+ * A page that asks for rows or columns instead is told to follow the list.
+ */
+function order(doc: Doc, pageIndex: number, ids: readonly string[]) {
+  const pageObject = doc.findPage(pageIndex)
+  const notes = pageObject.get("Annots")
+  const wanted = new Set(ids)
+  const byId = new Map<string, Obj>()
+  const slots: number[] = []
+  if (notes.isArray())
+    for (let at = 0; at < notes.length; at++) {
+      const note = notes.get(at)
+      const id = note.isIndirect() ? `f${note.asIndirect()}` : ""
+      if (!wanted.has(id)) continue
+      byId.set(id, note)
+      slots.push(at)
+    }
+  if (byId.size !== wanted.size)
+    throw new Error("That field is no longer on this page.")
+  const next = doc.newArray()
+  let taken = 0
+  for (let at = 0; at < notes.length; at++)
+    next.push(slots[taken] === at ? byId.get(ids[taken++])! : notes.get(at))
+  pageObject.put("Annots", next)
+  const tabs = pageObject.get("Tabs")
+  if (tabs.isName() && (tabs.asName() === "R" || tabs.asName() === "C"))
+    pageObject.delete("Tabs")
+}
+
+/**
+ * Make a field of its own like one of a page's on other pages, at the same
+ * place, each with a name of its own. It takes the field's kind, hint,
+ * whether it must be filled in, its limit of letters and its choices, and
+ * not what it holds. A group of round buttons is not copied: its choices
+ * belong together on one page.
+ * @returns The pages fields were put on.
+ */
+function copy(
+  mupdf: Engine,
+  session: EditSession,
+  pageIndex: number,
+  id: string,
+  to: readonly number[]
+) {
+  const { doc } = session
+  const source = fieldsOn(session, pageIndex).find((one) => one.id === id)
+  if (!source) throw new Error("That field is no longer on this page.")
+  if (source.kind === "radio")
+    throw new Error(
+      "A group of round buttons cannot be copied. Add a new group on the other page."
+    )
+  if (source.signed || source.kind === "button")
+    throw new Error("That kind of field cannot be changed here.")
+  const place = doc.newIndirect(Number(id.slice(1)))
+  const field = holderOf(place)
+  const hint = field.get("TU")
+  const tooltip =
+    hint.isString() &&
+    hint.asString().length <= 300 &&
+    !/\p{Cc}/u.test(hint.asString())
+      ? hint.asString()
+      : ""
+  const flags = flagsOf(field)
+  const kind: FieldSpec["kind"] =
+    source.kind !== "text"
+      ? source.kind
+      : source.date
+        ? "date"
+        : source.multiline
+          ? "multiline"
+          : "text"
+  const options = kind === "choice" || kind === "list" ? source.shown : []
+  const made: number[] = []
+  const pages = doc.countPages()
+  for (const page of to) {
+    if (page >= pages) throw new Error("That page is not in this file.")
+    const name = copyName(source.name.split(".").at(-1)!, page, fieldNames(doc))
+    add(mupdf, session, page, source.box, {
+      kind,
+      name,
+      tooltip,
+      required: (flags & 2) !== 0,
+      maxLength: kind === "text" || kind === "multiline" ? source.maxLength : 0,
+      options: [...new Set(options)],
+      multiple: kind === "list" && source.multiple,
+    })
+    made.push(page)
+  }
+  return made
+}
+
 export function applyMakeFields(
   mupdf: Engine,
   session: EditSession,
@@ -503,6 +599,11 @@ export function applyMakeFields(
           touch(op.page)
           continue
         }
+        if (op.do === "order") {
+          order(doc, op.page, op.ids)
+          touch(op.page)
+          continue
+        }
         const found = withPage(doc, op.page, (page) => {
           const widget = page
             .getWidgets()
@@ -523,6 +624,11 @@ export function applyMakeFields(
           throw new Error(
             "A certificate signature field cannot be changed here."
           )
+        if (op.do === "copy") {
+          for (const page of copy(mupdf, session, op.page, op.id, op.to))
+            touch(page)
+          continue
+        }
         const places = placesOf(doc, field)
         if (op.do === "delete") {
           for (const here of places) {

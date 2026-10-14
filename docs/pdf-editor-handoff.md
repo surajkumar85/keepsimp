@@ -23,7 +23,7 @@ Traps that cost time: `get()` on a missing engine object throws (ask with one pa
 
 Say only what a tool does. If something cannot be done well, leave it out and say so in the limits; never ship a control that pretends.
 
-## Phase 8: make forms (part 1 built; part 2 next)
+## Phase 8: make forms (parts 1 and 2 built; part 3 next)
 
 Goal: a person turns any PDF into a form others can fill in, in this editor and in Acrobat, Preview, Chrome and Firefox. Door: **Create a fillable PDF form** at `/dashboard/create-pdf-form/`.
 
@@ -84,3 +84,9 @@ Sign with a `.p12`/`.pfx` on the device, with a visible signature or none, and s
 ## When a part is done, report
 
 What was built, which files, the test counts, what was checked on the live site and with which real files, what CI says, and what is not done or not checked. If something failed, say so with the output.
+
+## Phase 8, part 2: built
+
+Picking several fields, lining up, spacing evenly, one size, tab order (with "By rows") and copying to other pages: see "Laying out form fields" in `docs/pdf-editor.md`. Part 1's empty text fields, dates and drop-downs had no look of their own and were invisible in Preview and in print; that is mended. When you check a form, render it with `qlmanage -t -s 700 -o . file.pdf` (macOS's own engine) as well as Poppler: Poppler draws missing looks itself and hides that fault.
+
+Next is part 3, suggestions.

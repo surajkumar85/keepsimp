@@ -45,6 +45,10 @@ export type MakeFieldOp =
       maxLength: number
     }
   | { do: "delete"; page: number; id: string }
+  /** The order the Tab key goes through these fields of a page, first to last. */
+  | { do: "order"; page: number; ids: string[] }
+  /** A field of its own, like this one, at the same place on each of these pages. */
+  | { do: "copy"; page: number; id: string; to: number[] }
 export interface MakeFieldChange {
   label: string
   ops: MakeFieldOp[]
@@ -52,6 +56,10 @@ export interface MakeFieldChange {
 export const MIN_FIELD = 8
 export const MOST_CHOICES = 100
 export const MAX_LENGTH = 100_000
+/** The most fields one change puts in order, or pages one field is copied to. */
+export const MOST_IN_ONE = 5000
+const isFieldId = (value: unknown): value is string =>
+  typeof value === "string" && /^f\d+$/.test(value)
 /** Dots name levels of a field tree; a name here is one flat part of it. */
 export const validName = (value: unknown): value is string =>
   typeof value === "string" &&
@@ -133,8 +141,30 @@ export function readMakeFieldOp(value: unknown): MakeFieldOp | null {
       field = readFieldSpec(v.field)
     return box && field ? { do: "add", page, box, field } : null
   }
-  if (typeof v.id !== "string" || !/^f\d+$/.test(v.id)) return null
+  if (v.do === "order") {
+    const ids = v.ids
+    return Array.isArray(ids) &&
+      ids.length > 0 &&
+      ids.length <= MOST_IN_ONE &&
+      ids.every(isFieldId) &&
+      new Set(ids).size === ids.length
+      ? { do: "order", page, ids: [...ids] }
+      : null
+  }
+  if (!isFieldId(v.id)) return null
   const id = v.id
+  if (v.do === "copy") {
+    const to = v.to
+    return Array.isArray(to) &&
+      to.length > 0 &&
+      to.length <= MOST_IN_ONE &&
+      to.every(
+        (one) => Number.isInteger(one) && (one as number) >= 0 && one !== page
+      ) &&
+      new Set(to).size === to.length
+      ? { do: "copy", page, id, to: [...(to as number[])] }
+      : null
+  }
   if (v.do === "delete") return { do: "delete", page, id }
   if (v.do === "reshape") {
     const box = readFieldBox(v.box)
@@ -171,6 +201,15 @@ export const nameTaken = (
         other.startsWith(`${name}.`) ||
         name.startsWith(`${other}.`))
   )
+/** A name for a copy of a field on another page: its own name and that page's number. */
+export function copyName(name: string, page: number, names: readonly string[]) {
+  const stem = name.slice(0, 90)
+  let candidate = `${stem}_p${page + 1}`
+  for (let n = 2; nameTaken(names, candidate); n++)
+    candidate = `${stem}_p${page + 1}_${n}`
+  return candidate
+}
+
 export function offeredName(kind: MakeKind, names: readonly string[]) {
   const stem = KIND_NAMES[kind].replace(/ /g, "_")
   let n = 1

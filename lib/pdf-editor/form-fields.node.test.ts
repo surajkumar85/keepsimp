@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { PDFDocument } from "@cantoo/pdf-lib"
+import { PDFDocument, PDFName } from "@cantoo/pdf-lib"
 import * as mupdf from "mupdf"
 import { expect, it } from "vitest"
 import { makeFormPdf, makePdf } from "@/tests/pdf-fixtures"
@@ -396,5 +396,125 @@ it("a remaining radio choice still exports its own label after another choice is
   ])
   expect(out.form.getRadioGroup("Radio_group_1").getSelected()).toBe("Option 2")
   expect(out.got.pages[0].fields).toEqual(["Radio_group_1=Option 2"])
+  stopEditing(session)
+})
+
+it("puts a page's fields in the order the Tab key follows, and keeps it through undo and redo", async () => {
+  // A page that asks viewers to go by rows is told to follow its list instead.
+  const rows = await PDFDocument.load(await base())
+  rows.getPage(0).node.set(PDFName.of("Tabs"), PDFName.of("R"))
+  const session = startEditing(mupdf, await rows.save())
+  for (const [at, name] of ["First", "Second", "Third"].entries())
+    change(session, {
+      do: "add",
+      page: 0,
+      box: { ...box, y: 300 + at * 40 },
+      field: { ...defaultSpec("text"), name },
+    })
+  const ids = fieldsOn(session, 0).map((field) => field.id)
+  change(session, { do: "order", page: 0, ids: [ids[2], ids[0], ids[1]] })
+  expect(fieldsOn(session, 0).map((field) => field.name)).toEqual([
+    "Third",
+    "First",
+    "Second",
+  ])
+  const out = await read(session)
+  const doc = await PDFDocument.load(out.bytes)
+  const page = doc.getPage(0).node
+  expect(page.get(PDFName.of("Tabs"))).toBeUndefined()
+  // Other software sees the same order, and the page's link is where it was.
+  expect(
+    out.got.pages[0].fields
+      .map((field: string) => field.split("=")[0])
+      .filter((name: string) => ["First", "Second", "Third"].includes(name))
+  ).toEqual(["Third", "First", "Second"])
+  expect(out.got.pages[0].links).toEqual([2])
+  stepBack(session)
+  expect(fieldsOn(session, 0).map((field) => field.name)).toEqual([
+    "First",
+    "Second",
+    "Third",
+  ])
+  stepForward(session)
+  expect(fieldsOn(session, 0).map((field) => field.name)).toEqual([
+    "Third",
+    "First",
+    "Second",
+  ])
+  // A field that is not on the page changes nothing.
+  expect(() =>
+    change(session, { do: "order", page: 1, ids: [ids[0]] })
+  ).toThrow("That field is no longer on this page.")
+  stopEditing(session)
+})
+
+it("copies a field to other pages with its kind, hint, limits and choices, and a name of its own", async () => {
+  const session = startEditing(
+    mupdf,
+    await makePdf("copy", { pages: 3, size: () => [400, 600] })
+  )
+  const fields = [
+    {
+      ...defaultSpec("text"),
+      name: "Name",
+      tooltip: "Your full name",
+      required: true,
+      maxLength: 40,
+    },
+    { ...defaultSpec("date"), name: "Signed_on" },
+    { ...defaultSpec("choice"), name: "Colour", options: ["Red", "Blue"] },
+    { ...defaultSpec("check"), name: "Agree" },
+    { ...defaultSpec("radio"), name: "Size" },
+  ]
+  for (const [at, field] of fields.entries())
+    change(session, {
+      do: "add",
+      page: 0,
+      box: {
+        ...box,
+        y: 60 + at * 70,
+        height: field.kind === "radio" ? 50 : 24,
+      },
+      field,
+    })
+  const placed = fieldsOn(session, 0)
+  const idOf = (name: string) => placed.find((one) => one.name === name)!.id
+  for (const name of ["Name", "Signed_on", "Colour", "Agree"])
+    change(session, { do: "copy", page: 0, id: idOf(name), to: [1, 2] })
+  expect(() =>
+    change(session, { do: "copy", page: 0, id: idOf("Size"), to: [1] })
+  ).toThrow("A group of round buttons cannot be copied.")
+  const copies = fieldsOn(session, 2)
+  expect(copies.map((one) => one.name)).toEqual([
+    "Name_p3",
+    "Signed_on_p3",
+    "Colour_p3",
+    "Agree_p3",
+  ])
+  // Each copy is where the field was on its page.
+  for (const one of copies) {
+    const was = placed.find((field) => `${field.name}_p3` === one.name)!
+    expect(one.box.x).toBeCloseTo(was.box.x, 1)
+    expect(one.box.y).toBeCloseTo(was.box.y, 1)
+  }
+  expect(
+    fieldsOn(session, 1).find((one) => one.name === "Signed_on_p2")!.date
+  ).toBe("yyyy-mm-dd")
+  const out = await read(session)
+  const form = out.form
+  const name = form.getTextField("Name_p2")
+  expect(name.getMaxLength()).toBe(40)
+  expect(name.isRequired()).toBe(true)
+  expect(form.getDropdown("Colour_p3").getOptions()).toEqual(["Red", "Blue"])
+  expect(form.getCheckBox("Agree_p2").isChecked()).toBe(false)
+  expect(out.got.fields).toContain("Name_p3")
+  // The hint is the field's, not its name.
+  expect(
+    fieldsOn(session, 1).find((one) => one.name === "Name_p2")!.label
+  ).toBe("Your full name")
+  // Every copy has a look of its own.
+  for (const field of form.getFields())
+    for (const widget of field.acroField.getWidgets())
+      expect(widget.getNormalAppearance()).toBeDefined()
   stopEditing(session)
 })

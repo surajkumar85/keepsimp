@@ -1,7 +1,20 @@
 "use client"
 import { useCallback, useState } from "react"
 import {
+  aligned,
+  EDGE_NAMES,
+  nudged,
+  readingOrder,
+  sized,
+  spread,
+  type Axis,
+  type Dimension,
+  type Edge,
+} from "@/lib/pdf-editor/form-layout"
+import { parseRanges } from "@/lib/pdf-merger/ranges"
+import {
   defaultSpec,
+  fitField,
   initialField,
   KIND_NAMES,
   readFieldSpec,
@@ -42,8 +55,42 @@ export function useMakeForm(
   const [spec, setSpec] = useState<FieldSpec>(() =>
     defaultSpec("text", editor.formNames)
   )
-  const [chosen, setChosen] = useState<{ page: number; id: string } | null>(
-    null
+  const [chosen, choose] = useState<{ page: number; id: string } | null>(null)
+  /** The fields picked to be laid out together, all on one page; the chosen one is among them. */
+  const [picked, setPicked] = useState<{ page: number; id: string }[]>([])
+  /** Choose one field; it stays among those picked when it already is. */
+  const setChosen = useCallback((next: { page: number; id: string } | null) => {
+    choose(next)
+    setPicked((was) =>
+      !next
+        ? []
+        : was.some((one) => one.page === next.page && one.id === next.id)
+          ? was
+          : [next]
+    )
+  }, [])
+  /**
+   * Pick a field, alone or as one more of several (Shift, Ctrl or ⌘). Fields
+   * are laid out together only on one page: a pick on another starts anew.
+   */
+  const pick = useCallback(
+    (page: number, id: string, more: boolean) => {
+      const one = { page, id }
+      if (!more) {
+        choose(one)
+        setPicked([one])
+        return
+      }
+      const here = picked.filter((other) => other.page === page)
+      const next = here.some((other) => other.id === id)
+        ? here.filter((other) => other.id !== id)
+        : [...here, one]
+      setPicked(next)
+      choose(next.at(-1) ?? null)
+      // Several fields are picked to be laid out, which the panel does.
+      if (next.length > 1) setPanel(true)
+    },
+    [picked]
   )
   const [fresh, setFresh] = useState<string | null>(null)
   const [note, setNote] = useState("")
@@ -105,6 +152,7 @@ export function useMakeForm(
       if (!next) setChosen(null)
     },
     [
+      setChosen,
       clearComments,
       clearRetext,
       clearInpage,
@@ -163,6 +211,95 @@ export function useMakeForm(
       "Field added. Drag it or use the arrow keys to put it where it belongs."
     )
   }
+  /** The picked fields as they are now, on the page they are on. */
+  const together = picked
+    .map(({ page, id }) => editor.fields[page]?.find((one) => one.id === id))
+    .filter((one) => one !== undefined)
+  const togetherPage = picked[0]?.page ?? 0
+  /** Move the picked fields as one step: lined up, spaced, or of one size. */
+  const arrange = async (
+    how: { align: Edge } | { spread: Axis } | { size: Dimension }
+  ) => {
+    const placed = together.map(({ id, box }) => ({ id, box }))
+    const size = sizes[togetherPage]
+    if (placed.length < 2 || !size) return
+    const moved =
+      "align" in how
+        ? aligned(placed, how.align)
+        : "spread" in how
+          ? spread(placed, how.spread)
+          : sized(placed, chosen?.id ?? placed[0].id, how.size)
+    const label =
+      "align" in how
+        ? EDGE_NAMES[how.align]
+        : "spread" in how
+          ? how.spread === "across"
+            ? "Space evenly across"
+            : "Space evenly down"
+          : how.size === "width"
+            ? "Same width"
+            : how.size === "height"
+              ? "Same height"
+              : "Same size"
+    if (!moved.length) {
+      setNote("The fields are like that already.")
+      return
+    }
+    setNote("")
+    await makeFields(
+      label,
+      ...moved.map(({ id, box }) => ({
+        do: "reshape" as const,
+        page: togetherPage,
+        id,
+        box: fitField(box, size),
+      }))
+    )
+  }
+  /** Put a page's fields in another order for the Tab key, as one step. */
+  const putInOrder = (page: number, ids: string[]) =>
+    makeFields("Change the tab order", { do: "order", page, ids })
+  const nudge = (page: number, id: string, by: -1 | 1) => {
+    const ids = (editor.fields[page] ?? []).map((one) => one.id)
+    const next = nudged(ids, id, by)
+    if (next.join() !== ids.join()) void putInOrder(page, next)
+  }
+  const byRows = (page: number) => {
+    const here = editor.fields[page] ?? []
+    const next = readingOrder(here.map(({ id, box }) => ({ id, box })))
+    if (next.join() === here.map((one) => one.id).join()) {
+      setNote("The fields of this page are in reading order already.")
+      return
+    }
+    setNote("")
+    void putInOrder(page, next)
+  }
+  /** Copy the chosen field to the pages typed, such as "2-5" or "all". */
+  const copyTo = async (text: string) => {
+    if (!chosen) return
+    const read = parseRanges(text, sizes.length)
+    if ("problem" in read) {
+      setNote(read.problem)
+      return
+    }
+    const to = [...new Set(read.pages)].filter((page) => page !== chosen.page)
+    if (!to.length) {
+      setNote("Name pages other than the field's own.")
+      return
+    }
+    const news = await makeFields(
+      to.length === 1
+        ? `Copy a field to page ${to[0] + 1}`
+        : `Copy a field to ${to.length} pages`,
+      { do: "copy", ...chosen, to }
+    )
+    if (news)
+      setNote(
+        to.length === 1
+          ? `Copied to page ${to[0] + 1}, with a name of its own.`
+          : `Copied to ${to.length} pages, each with a name of its own.`
+      )
+  }
   const reshape = useCallback(
     (page: number, id: string, box: Box) =>
       makeFields("Move or resize a field", { do: "reshape", page, id, box }),
@@ -203,6 +340,14 @@ export function useMakeForm(
     kind,
     chosen,
     setChosen,
+    picked,
+    pick,
+    together,
+    togetherPage,
+    arrange,
+    nudge,
+    byRows,
+    copyTo,
     field,
     fresh,
     setFresh,

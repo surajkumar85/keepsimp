@@ -11,6 +11,8 @@ import {
   readFieldSpec,
   readMakeFieldOp,
   validName,
+  copyName,
+  MOST_IN_ONE,
 } from "./form-fields"
 
 const box = { x: 10, y: 20, width: 180, height: 24 }
@@ -135,5 +137,47 @@ describe("checked form creation", () => {
       )
     ).toEqual({ x: 0, y: 392, width: 300, height: 8 })
     expect(fitField(box, { width: 300, height: 400 })).toEqual(box)
+  })
+})
+
+describe("putting fields in order and copying them", () => {
+  it("reads an order of a page's fields, and nothing else", () => {
+    expect(
+      readMakeFieldOp({ do: "order", page: 1, ids: ["f3", "f1"], more: 1 })
+    ).toEqual({ do: "order", page: 1, ids: ["f3", "f1"] })
+    for (const ids of [
+      [],
+      ["f1", "f1"],
+      ["x1"],
+      "f1",
+      Array.from({ length: MOST_IN_ONE + 1 }, (_, at) => `f${at}`),
+    ])
+      expect(readMakeFieldOp({ do: "order", page: 0, ids })).toBeNull()
+  })
+
+  it("reads a copy to other pages, never to its own page", () => {
+    expect(
+      readMakeFieldOp({ do: "copy", page: 0, id: "f4", to: [2, 1] })
+    ).toEqual({ do: "copy", page: 0, id: "f4", to: [2, 1] })
+    for (const to of [[], [0], [1, 1], [-1], [1.5], "1"])
+      expect(readMakeFieldOp({ do: "copy", page: 0, id: "f4", to })).toBeNull()
+    expect(
+      readMakeFieldOp({
+        do: "copy",
+        page: 0,
+        id: "f4",
+        to: Array.from({ length: MOST_IN_ONE + 1 }, (_, at) => at + 1),
+      })
+    ).toBeNull()
+    expect(
+      readMakeFieldOp({ do: "copy", page: 0, id: "x", to: [1] })
+    ).toBeNull()
+  })
+
+  it("names a copy by its page, and never as a name that is taken", () => {
+    expect(copyName("Name", 2, [])).toBe("Name_p3")
+    expect(copyName("Name", 2, ["Name_p3"])).toBe("Name_p3_2")
+    expect(copyName("Name", 2, ["Name_p3", "Name_p3_2.part"])).toBe("Name_p3_3")
+    expect(copyName("a".repeat(120), 0, []).length).toBeLessThanOrEqual(100)
   })
 })

@@ -113,6 +113,11 @@ export function FormDesignSpots({
     event.preventDefault()
     event.stopPropagation()
     put()
+    // With Shift, Ctrl or ⌘ a field is picked as one more, to be laid out with the others.
+    if (!handle && (event.shiftKey || event.metaKey || event.ctrlKey)) {
+      makeForm.pick(page, id, true)
+      return
+    }
     makeForm.setChosen({ page, id })
     event.currentTarget.setPointerCapture(event.pointerId)
     drag.current = {
@@ -149,6 +154,11 @@ export function FormDesignSpots({
       {fields.map((field) => {
         const selected =
           makeForm.chosen?.page === page && makeForm.chosen.id === field.id
+        const among =
+          makeForm.picked.length > 1 &&
+          makeForm.picked.some(
+            (one) => one.page === page && one.id === field.id
+          )
         const box = preview?.id === field.id ? preview.box : field.box
         return (
           <div
@@ -172,13 +182,17 @@ export function FormDesignSpots({
                 .map(Math.round)
                 .join(",")}
               aria-label={`Form field: ${field.label}`}
-              aria-pressed={selected}
+              aria-pressed={selected || among}
               title={`${field.label}: drag to move, Alt and arrow keys to resize`}
               className={cn(
                 "pointer-events-auto absolute inset-0 size-full cursor-move touch-none border border-primary bg-primary/10 outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                selected && "border-2 bg-primary/20"
+                (selected || among) && "border-2 bg-primary/20"
               )}
-              onFocus={() => makeForm.setChosen({ page, id: field.id })}
+              onFocus={(e) => {
+                // A press chooses in its own way (and Shift may have taken it out of the picked ones).
+                if (e.currentTarget.matches(":focus-visible"))
+                  makeForm.setChosen({ page, id: field.id })
+              }}
               onPointerDown={(e) => down(e, field.id, box)}
               onPointerMove={move}
               onPointerUp={up}
@@ -188,7 +202,16 @@ export function FormDesignSpots({
                 setPreview(null)
               }}
               onClick={(e) => e.stopPropagation()}
-              onKeyDown={(e) => key(e, field.id, box)}
+              onKeyDown={(e) => {
+                // Shift and Enter picks it as one more, as Shift and a click does.
+                if (e.key === "Enter" && e.shiftKey) {
+                  e.preventDefault()
+                  e.stopPropagation()
+                  makeForm.pick(page, field.id, true)
+                  return
+                }
+                key(e, field.id, box)
+              }}
               onBlur={() => {
                 if (timer.current) put()
               }}
