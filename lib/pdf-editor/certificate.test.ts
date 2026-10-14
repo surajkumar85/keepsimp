@@ -40,7 +40,7 @@ function opensslVerifies(signature: Uint8Array, content: Uint8Array) {
         "-content",
         join(folder, "content.bin"),
         "-CAfile",
-        "tests/fixtures/certificates/ca.pem",
+        "tests/fixtures/certificates/test-authority.crt",
         "-purpose",
         "any",
         "-out",
