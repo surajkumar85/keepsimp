@@ -7,7 +7,13 @@ import { createCipheriv, createHmac, pbkdf2Sync } from "node:crypto"
 import * as asn1js from "asn1js"
 import { describe, expect, it } from "vitest"
 import { CERTIFICATE_PASSWORD, certificateFile } from "@/tests/pdf-certificates"
-import { bmpPassword, pkcs12Key, Pkcs12Problem, readPkcs12 } from "./pkcs12"
+import {
+  bmpPassword,
+  pbkdf2,
+  pkcs12Key,
+  Pkcs12Problem,
+  readPkcs12,
+} from "./pkcs12"
 
 const WRONG = "That password does not open this certificate file."
 const UNREADABLE =
@@ -464,5 +470,29 @@ describe("files of the wrong shape", () => {
       keys: [],
       certificates: [CERT],
     })
+  })
+})
+
+describe("pbkdf2", () => {
+  it("gives what Node gives, with a password and with none, in one block or more", async () => {
+    const salt = new Uint8Array(16).fill(7)
+    for (const [hash, node] of [
+      ["SHA-1", "sha1"],
+      ["SHA-256", "sha256"],
+      ["SHA-512", "sha512"],
+    ] as const)
+      for (const password of ["", "secret"])
+        for (const length of [16, 70])
+          expect(
+            Buffer.from(
+              await pbkdf2(
+                new TextEncoder().encode(password),
+                salt,
+                3,
+                hash,
+                length
+              )
+            ).toString("hex")
+          ).toBe(pbkdf2Sync(password, salt, 3, length, node).toString("hex"))
   })
 })

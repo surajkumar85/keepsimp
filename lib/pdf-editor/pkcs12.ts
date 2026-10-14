@@ -181,6 +181,79 @@ export async function pkcs12Key(
   return out
 }
 
+/** The block size of each hash, in bytes, for HMAC. */
+const BLOCKS: Record<string, number> = {
+  "SHA-1": 64,
+  "SHA-256": 64,
+  "SHA-384": 128,
+  "SHA-512": 128,
+}
+
+/** HMAC (RFC 2104) with an empty key, made of the browser's hashes: the key is a block of zeros. */
+async function emptyHmac(hash: string, message: Uint8Array) {
+  const block = BLOCKS[hash]
+  const inner = new Uint8Array(
+    await crypto.subtle.digest(
+      hash,
+      buffer(concat([new Uint8Array(block).fill(0x36), message]))
+    )
+  )
+  return new Uint8Array(
+    await crypto.subtle.digest(
+      hash,
+      buffer(concat([new Uint8Array(block).fill(0x5c), inner]))
+    )
+  )
+}
+
+/**
+ * PBKDF2 (RFC 8018). The browser does it, except with an empty password,
+ * which WebKit on Linux refuses as key material; it is then done here, with
+ * HMAC made of the browser's hashes.
+ */
+export async function pbkdf2(
+  password: Uint8Array,
+  salt: Uint8Array,
+  iterations: number,
+  hash: string,
+  length: number
+) {
+  if (password.length) {
+    const base = await crypto.subtle.importKey(
+      "raw",
+      buffer(password),
+      "PBKDF2",
+      false,
+      ["deriveBits"]
+    )
+    return new Uint8Array(
+      await crypto.subtle.deriveBits(
+        { name: "PBKDF2", salt: buffer(salt), iterations, hash },
+        base,
+        length * 8
+      )
+    )
+  }
+  const out = new Uint8Array(length)
+  for (let block = 1, made = 0; made < length; block++) {
+    const index = Uint8Array.of(
+      block >>> 24,
+      (block >>> 16) & 255,
+      (block >>> 8) & 255,
+      block & 255
+    )
+    let u = await emptyHmac(hash, concat([salt, index]))
+    const t = u.slice()
+    for (let round = 1; round < iterations; round++) {
+      u = await emptyHmac(hash, u)
+      for (let at = 0; at < t.length; at++) t[at] ^= u[at]
+    }
+    out.set(t.subarray(0, Math.min(t.length, length - made)), made)
+    made += t.length
+  }
+  return out
+}
+
 /** Take PKCS #7 padding off, or say the password does not open it. */
 function unpad(bytes: Uint8Array, block: number) {
   const pad = bytes[bytes.length - 1]
@@ -234,24 +307,12 @@ async function decrypt(
     const cipher = oidOf(cipherId)
     const length = cipher === DES_EDE3_CBC ? 24 : AES[cipher]
     if (!hash || !length) throw new Pkcs12Problem(UNSUPPORTED)
-    const base = await crypto.subtle.importKey(
-      "raw",
+    const key = await pbkdf2(
       new TextEncoder().encode(password),
-      "PBKDF2",
-      false,
-      ["deriveBits"]
-    )
-    const key = new Uint8Array(
-      await crypto.subtle.deriveBits(
-        {
-          name: "PBKDF2",
-          salt: buffer(octets(salt)),
-          iterations: numberOf(count),
-          hash,
-        },
-        base,
-        length * 8
-      )
+      octets(salt),
+      numberOf(count),
+      hash,
+      length
     )
     // Triple DES is not the browser's to decrypt: it is done here.
     if (cipher === DES_EDE3_CBC)
