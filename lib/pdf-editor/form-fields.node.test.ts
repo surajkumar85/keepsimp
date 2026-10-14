@@ -1,5 +1,4 @@
 // @vitest-environment node
-import { writeFile } from "node:fs/promises"
 import { PDFDocument } from "@cantoo/pdf-lib"
 import * as mupdf from "mupdf"
 import { expect, it } from "vitest"
@@ -86,7 +85,14 @@ it("creates every field kind with real appearances, names, labels, requirements,
   expect(out.got.attachments).toEqual(["keep.txt"])
   expect(out.got.pages[1].notes).toEqual(["Keep this"])
   expect(out.got.pages[0].links).toEqual([2])
-  await writeFile("/tmp/keepsimp-created-form.pdf", out.bytes)
+  // Every place has a look of its own, empty or not: a viewer that does not
+  // build looks itself (Preview, printing) otherwise shows no field at all.
+  for (const field of out.form.getFields())
+    for (const widget of field.acroField.getWidgets())
+      expect(
+        widget.getNormalAppearance(),
+        `${field.getName()} has a look`
+      ).toBeDefined()
   stopEditing(session)
 })
 it("fills all new fields through the existing filler and other software reads the exact values", async () => {
@@ -145,7 +151,6 @@ it("fills all new fields through the existing filler and other software reads th
   expect((await read(session)).form.getRadioGroup("radio").getSelected()).toBe(
     "Option 2"
   )
-  await writeFile("/tmp/keepsimp-created-form-filled.pdf", out.bytes)
   stopEditing(session)
 })
 it("moves, resizes, renames and deletes fields without losing the other pages, values or radio widgets", async () => {

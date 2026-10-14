@@ -205,6 +205,66 @@ function buttonLooks(
     }
   }
 }
+/**
+ * The look of a field that holds nothing yet: its background and its frame,
+ * as its MK says. The engine writes no look for an empty text field or
+ * drop-down, and a viewer that does not build looks itself (Preview, the
+ * Files app, printing) then shows no field at all.
+ */
+function emptyLooks(
+  mupdf: Engine,
+  page: MuPDF.PDFPage,
+  widget: MuPDF.PDFWidget
+) {
+  // Measured as the signature place's look is: the engine turns it with the page.
+  const [x0, y0, x1, y1] = widget.getBounds()
+  const width = x1 - x0
+  const height = y1 - y0
+  const list = new mupdf.DisplayList([0, 0, width, height])
+  const device = new mupdf.DisplayListDevice(list)
+  const ground = new mupdf.Path()
+  const frame = new mupdf.Path()
+  const stroke = new mupdf.StrokeState({
+    lineWidth: 1,
+    lineCap: "Butt",
+    lineJoin: "Miter",
+    miterLimit: 10,
+  })
+  try {
+    ground.rect(0, 0, width, height)
+    device.fillPath(
+      ground,
+      false,
+      mupdf.Matrix.identity,
+      mupdf.ColorSpace.DeviceRGB,
+      [1, 1, 1],
+      1
+    )
+    frame.rect(0.5, 0.5, width - 0.5, height - 0.5)
+    device.strokePath(
+      frame,
+      stroke,
+      mupdf.Matrix.identity,
+      mupdf.ColorSpace.DeviceRGB,
+      [0, 0, 0],
+      1
+    )
+    device.close()
+    widget.setAppearanceFromDisplayList(
+      "N",
+      null,
+      mupdf.Matrix.rotate(turnOf(page.getObject())),
+      list
+    )
+  } finally {
+    stroke.destroy()
+    frame.destroy()
+    ground.destroy()
+    device.destroy()
+    list.destroy()
+  }
+}
+
 function signatureLooks(
   mupdf: Engine,
   page: MuPDF.PDFPage,
@@ -292,7 +352,11 @@ function refresh(
       else if (kind === "checkbox" || kind === "radiobutton")
         buttonLooks(mupdf, page, widget, kind === "radiobutton")
       else if (kind === "signature") signatureLooks(mupdf, page, widget)
-      else widget.update()
+      else {
+        widget.update()
+        if (!widget.getObject().get("AP").isDictionary())
+          emptyLooks(mupdf, page, widget)
+      }
     }
   })
 }
