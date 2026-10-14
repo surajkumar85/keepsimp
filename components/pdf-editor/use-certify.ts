@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, type RefObject } from "react"
+import { useRef, useState, type RefObject } from "react"
 import type { Signer } from "@/lib/pdf-editor/certificate"
 import type { CertifyOptions, SignPlace } from "@/lib/pdf-editor/certify"
 import type { PdfClient } from "@/lib/pdf-merger/client"
@@ -36,25 +36,36 @@ export function useCertify(client: RefObject<PdfClient | null>, id: string) {
   const [page, setPage] = useState("1")
   const [reason, setReason] = useState("")
   const [location, setLocation] = useState("")
+  /**
+   * Counts up whenever the file or its password changes: an answer about
+   * an earlier one is dropped, however late it comes.
+   */
+  const asked = useRef(0)
 
   /** Read a chosen certificate file; what was opened before no longer counts. */
   const choose = async (chosen: File) => {
+    const now = ++asked.current
+    // The file before is let go of at once: it cannot be opened meanwhile.
+    setFile(null)
     setOpened(null)
     setUnread("")
-    setFile({
-      name: chosen.name,
-      bytes: new Uint8Array(await chosen.arrayBuffer()),
-    })
+    const bytes = new Uint8Array(await chosen.arrayBuffer())
+    if (asked.current !== now) return
+    // An answer asked for before this file was read is not about it.
+    asked.current++
+    setFile({ name: chosen.name, bytes })
   }
 
   /** Open the certificate with its password, to see who it names. */
   const open = async () => {
     const worker = client.current
     if (!worker || !file || opening) return
+    const now = asked.current
     setOpening(true)
     setUnread("")
     try {
       const answer = await worker.certificate(id, file.bytes.slice(), password)
+      if (asked.current !== now) return
       if (answer.signer)
         setOpened({
           signer: answer.signer,
@@ -126,6 +137,7 @@ export function useCertify(client: RefObject<PdfClient | null>, id: string) {
     choose,
     password,
     setPassword: (next: string) => {
+      asked.current++
       setPassword(next)
       setOpened(null)
       setUnread("")

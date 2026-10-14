@@ -38,6 +38,10 @@ async function openCertificate(
     mimeType: "application/x-pkcs12",
     buffer: Buffer.from(certificateFile(name)),
   })
+  // As a person does: the file is seen to be there before its password is typed.
+  await expect(
+    card(page).getByText(`${name}.p12`, { exact: true })
+  ).toBeVisible()
   await card(page).getByLabel("The certificate's password").fill(password)
   await card(page).getByRole("button", { name: "Open" }).click()
 }
