@@ -5,6 +5,7 @@
  * `mupdf-signatures.ts` and checked in `signatures.ts`.
  */
 import type { Signer } from "./certificate"
+import type { Trust } from "./trust"
 
 /** What was added to a file after a signature, against the file as it was signed. */
 export interface Changes {
@@ -29,7 +30,14 @@ export interface Changes {
 
 /** How a signature was checked: what it found, or why it was not checked. */
 export type Verdict =
-  | { checked: true; intact: boolean; signer: Signer | null; problem: string }
+  | {
+      checked: true
+      intact: boolean
+      signer: Signer | null
+      problem: string
+      /** Whether a certificate the person trusts vouches for the signer; null when they trust none. */
+      trust: Trust | null
+    }
   | { checked: false; why: string }
 
 /** A signature a file carries, as it was found and checked. */
@@ -155,12 +163,21 @@ export function signerSaid(found: FoundSignature): string[] {
   const { verdict } = found
   if (!verdict.checked || !verdict.signer)
     return found.name ? [`It gives the name ${found.name}.`] : []
-  const { signer } = verdict
+  const { signer, trust } = verdict
   const lines = [
-    signer.selfSigned
-      ? `Signed with the certificate of ${signer.name}, which signed itself: nobody vouches for that name.`
-      : `Signed with the certificate of ${signer.name}, issued by ${signer.issuer}.`,
+    !signer.selfSigned
+      ? `Signed with the certificate of ${signer.name}, issued by ${signer.issuer}.`
+      : trust?.trusted
+        ? `Signed with the certificate of ${signer.name}, which signed itself.`
+        : `Signed with the certificate of ${signer.name}, which signed itself: nobody vouches for that name.`,
   ]
+  if (trust?.trusted)
+    lines.push(
+      trust.itself
+        ? "It is a certificate you trust."
+        : `It goes back to “${trust.by}”, a certificate you trust.`
+    )
+  else if (trust) lines.push(trust.why)
   if (found.time) {
     const at = Date.parse(found.time)
     if (at < Date.parse(signer.validFrom) || at > Date.parse(signer.validTo))

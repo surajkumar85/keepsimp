@@ -1,10 +1,12 @@
 // @vitest-environment node
+import { readFileSync } from "node:fs"
 import * as asn1js from "asn1js"
 import * as pkijs from "pkijs"
 import { describe, expect, it } from "vitest"
 import { CERTIFICATE_PASSWORD, certificateFile } from "@/tests/pdf-certificates"
 import { readIdentity, signatureFor } from "./certificate"
 import { checkSignature, verdictOf } from "./signatures"
+import { readTrusted } from "./trust"
 import { coveredBy } from "./sign-bytes"
 
 /** A file of some bytes with room for a signature in its middle, and a signature over the rest. */
@@ -58,6 +60,7 @@ describe("checkSignature", () => {
       intact: false,
       signer: null,
       problem: "This signature cannot be read.",
+      trust: null,
     })
     for (const bad of [
       [0, 12, 18],
@@ -113,6 +116,43 @@ describe("checkSignature", () => {
       intact: false,
       signer: null,
     })
+  })
+})
+
+describe("trust", () => {
+  it("says whether the signer goes back to a certificate trusted, at the time the signature gives", async () => {
+    const authority = new Uint8Array(
+      readFileSync("tests/fixtures/certificates/test-authority.crt")
+    )
+    const [trusted] = await readTrusted(authority)
+    const { file, ranges, room } = await signedFile()
+    const at = new Date("2026-10-15T12:00:00Z")
+    expect(
+      await checkSignature(file, ranges, room, false, {
+        trusted: [trusted.der],
+        at,
+      })
+    ).toMatchObject({
+      intact: true,
+      trust: { trusted: true, by: "KeepSimp Test Authority", itself: false },
+    })
+    expect(
+      await verdictOf(file, "ETSI.CAdES.detached", ranges, room, {
+        trusted: [trusted.der],
+        at,
+      })
+    ).toMatchObject({ trust: { trusted: true } })
+    // Trusting none, or a signature that does not hold: nothing is said of trust.
+    expect((await checkSignature(file, ranges, room)).trust).toBeNull()
+    const changed = file.slice()
+    changed[3] = 120
+    expect(
+      (
+        await checkSignature(changed, ranges, room, false, {
+          trusted: [trusted.der],
+        })
+      ).trust
+    ).toBeNull()
   })
 })
 

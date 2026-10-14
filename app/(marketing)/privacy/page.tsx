@@ -28,7 +28,7 @@ export default function PrivacyPage() {
         </p>
         <h2>What is kept only when you ask.</h2>
         <p>
-          The PDF editor can keep three things in this browser’s own storage, on
+          The PDF editor can keep four things in this browser’s own storage, on
           this device. Each is kept only after you turn it on or type it, and
           none is sent anywhere. The name you sign your comments with is kept
           once you type one. A signature or your initials are kept when you
@@ -37,10 +37,13 @@ export default function PrivacyPage() {
           you placed, another PDF whose pages you added, a font of your own if
           you used one, and your changes) is kept when you switch on “Keep a
           draft on this device”, until you close the file, throw the draft away
-          or switch it off. Do not turn these on at a computer other people use.
-          A certificate you sign a PDF with, and its password, are read on this
-          device for that download only: they are never stored or sent. You can
-          also remove them through your browser’s site-data settings.
+          or switch it off. The certificates you add as ones you trust, to check
+          signatures against, are kept when you switch on “Remember them on this
+          device”, until you switch it off. Do not turn these on at a computer
+          other people use. A certificate you sign a PDF with, and its password,
+          are read on this device for that download only: they are never stored
+          or sent. You can also remove them through your browser’s site-data
+          settings.
         </p>
         <h2>The website still loads from a host.</h2>
         <p>

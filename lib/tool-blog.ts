@@ -1518,7 +1518,7 @@ export const verifyPost: BlogPost = {
       title: "What a signature proves, and what it does not.",
       paragraphs: [
         "When a file is signed, a fingerprint of its bytes is sealed with the signer's private key. Checking it means working out the fingerprint again and opening the seal with the certificate that travels with it. If even one byte that was signed has changed since, the two no longer agree, and the signature does not hold.",
-        "What it cannot tell you by itself is whether the name on the certificate is true. Anybody can make a certificate in any name. A certificate is believed because someone you trust issued it: a company's own authority, or one of the issuers Adobe's programs list. KeepSimp shows who issued it, and says plainly when a certificate signed itself, but it keeps no list of whom to trust. That judgement is yours.",
+        "What it cannot tell you by itself is whether the name on the certificate is true. Anybody can make a certificate in any name. A certificate is believed because someone you trust issued it: a company's own authority, or one of the issuers Adobe's programs list. KeepSimp shows who issued it, and says plainly when a certificate signed itself. It keeps no list of whom to trust of its own: you add the certificates of the issuers you trust, such as your company's, and each signature says whether its certificate goes back to one of them, through certificates that each issued the next. Add only a certificate you got from someone you trust, never one taken from the file you are checking.",
       ],
     },
     {

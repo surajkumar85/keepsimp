@@ -1,14 +1,16 @@
 /**
  * Checking a signature a PDF carries: whether the bytes it covers are
  * those it was made over, and who made it. Who issued the certificate is
- * said, but not judged: there is no list of authorities to trust here, so
- * whether the signer is who the certificate says is not known.
+ * said; whether it goes back to a certificate the person trusts is judged
+ * only against the ones they added (`trust.ts`): there is no list of
+ * authorities here of our own.
  */
 import * as asn1js from "asn1js"
 import * as pkijs from "pkijs"
 import { readyWebCrypto, signerOf, type Signer } from "./certificate"
 import type { Verdict } from "./signature-report"
 import { coveredBy } from "./sign-bytes"
+import { trustOf, type Trust } from "./trust"
 
 /** What a check of one signature found. */
 export interface Checked {
@@ -18,6 +20,16 @@ export interface Checked {
   signer: Signer | null
   /** Why it is not intact, in words; "" when it is. */
   problem: string
+  /** Whether a certificate the person trusts vouches for the signer; null when they trust none, or it is not intact. */
+  trust: Trust | null
+}
+
+/** What a signature is checked against besides its bytes. */
+export interface CheckOptions {
+  /** The certificates the person trusts (DER). */
+  trusted?: readonly Uint8Array[]
+  /** The moment the signature gives, against which certificates must be valid; now when it gives none. */
+  at?: Date
 }
 
 /** The bytes of an OCTET STRING, written in one piece or in parts; undefined when there is none. */
@@ -68,7 +80,8 @@ export async function checkSignature(
    * `adbe.pkcs7.sha1`: the signature is over the SHA-1 digest of the bytes
    * covered, which it carries inside itself, rather than over the bytes.
    */
-  encapsulated = false
+  encapsulated = false,
+  { trusted = [], at = new Date() }: CheckOptions = {}
 ): Promise<Checked> {
   readyWebCrypto()
   const [start, first, second, last] = ranges
@@ -84,6 +97,7 @@ export async function checkSignature(
       intact: false,
       signer: null,
       problem: "What the signature says it covers is not in this file.",
+      trust: null,
     }
   if (!onlyRoom(file.subarray(first, second)))
     return {
@@ -91,6 +105,7 @@ export async function checkSignature(
       signer: null,
       problem:
         "It leaves out more of the file than the room for the signature itself, so what it leaves out could have been changed.",
+      trust: null,
     }
   let data: pkijs.SignedData
   try {
@@ -106,6 +121,7 @@ export async function checkSignature(
       intact: false,
       signer: null,
       problem: "This signature cannot be read.",
+      trust: null,
     }
   }
   const [info] = data.signerInfos
@@ -141,12 +157,19 @@ export async function checkSignature(
   } catch {
     intact = false
   }
+  const carried = (data.certificates ?? []).filter(
+    (one): one is pkijs.Certificate => one instanceof pkijs.Certificate
+  )
   return {
     intact,
     signer,
     problem: intact
       ? ""
       : "The file was changed in what the signature covers, or the signature does not fit its certificate.",
+    trust:
+      intact && certificate && trusted.length
+        ? await trustOf(certificate, carried, trusted, at)
+        : null,
   }
 }
 
@@ -158,7 +181,8 @@ export async function verdictOf(
   file: Uint8Array,
   kind: string,
   ranges: readonly number[],
-  signature: Uint8Array
+  signature: Uint8Array,
+  options: CheckOptions = {}
 ): Promise<Verdict> {
   if (kind === "ETSI.RFC3161")
     return {
@@ -174,7 +198,8 @@ export async function verdictOf(
     file,
     ranges,
     signature,
-    kind === "adbe.pkcs7.sha1"
+    kind === "adbe.pkcs7.sha1",
+    options
   )
   return { checked: true, ...checked }
 }

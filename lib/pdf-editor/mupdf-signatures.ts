@@ -235,20 +235,37 @@ export function changesSince(
 /** What a signature says of itself, which an update after it could write anew. */
 const DETAILS = ["time", "name", "reason", "location"] as const
 
+/** What a file's signatures are checked against, and what was found of them before. */
+export interface SignatureOptions {
+  /** The certificates the person trusts (DER). */
+  trusted?: readonly Uint8Array[]
+  /**
+   * What was found of the same file's signatures before: what changed
+   * after each is taken from it rather than worked out again, when only
+   * the certificates trusted have changed.
+   */
+  known?: readonly FoundSignature[]
+}
+
 /** The signatures a file carries, each checked, with what changed after it. */
 export async function signaturesOf(
   mupdf: Engine,
   bytes: Uint8Array,
-  password?: string
+  password?: string,
+  { trusted = [], known }: SignatureOptions = {}
 ): Promise<FoundSignature[]> {
   const found: FoundSignature[] = []
-  for (const raw of rawSignatures(mupdf, bytes, password)) {
-    const verdict = await verdictOf(bytes, raw.kind, raw.ranges, raw.contents)
+  const raws = rawSignatures(mupdf, bytes, password)
+  for (const [index, raw] of raws.entries()) {
     const end = (raw.ranges[2] ?? 0) + (raw.ranges[3] ?? 0)
     const whole = end === bytes.length
     let changes: Changes | null = null
     let shown = raw
-    if (!whole && end > 0 && end < bytes.length)
+    const before = known?.length === raws.length ? known[index] : undefined
+    if (before) {
+      changes = before.changes
+      shown = { ...raw, ...pick(before) }
+    } else if (!whole && end > 0 && end < bytes.length)
       try {
         // What it said when it was signed: the same signature in the file as it was then.
         const signed = rawSignatures(mupdf, bytes.slice(0, end), password).find(
@@ -263,6 +280,10 @@ export async function signaturesOf(
       } catch {
         changes = null
       }
+    const verdict = await verdictOf(bytes, raw.kind, raw.ranges, raw.contents, {
+      trusted,
+      at: shown.time ? new Date(shown.time) : new Date(),
+    })
     found.push({
       field: shown.field,
       page: shown.page,
@@ -280,7 +301,7 @@ export async function signaturesOf(
   return found
 }
 
-const pick = (raw: RawSignature) =>
+const pick = (raw: Pick<RawSignature, (typeof DETAILS)[number]>) =>
   Object.fromEntries(DETAILS.map((key) => [key, raw[key]])) as Pick<
     RawSignature,
     (typeof DETAILS)[number]

@@ -718,12 +718,12 @@ export class PdfClient {
     })
   }
 
-  /** The signatures the file came with, each checked; null when they could not be read. */
-  signatures(id: string) {
+  /** The signatures the file came with, each checked against the certificates trusted; null when they could not be read. */
+  signatures(id: string, trusted: Uint8Array[] = []) {
     return new Promise<FoundSignature[] | null>((resolve) => {
       const request = ++this.requests
       this.signaturesAsked.set(request, resolve)
-      this.send({ type: "edit-signatures", id, request })
+      this.send({ type: "edit-signatures", id, request, trusted })
     })
   }
 

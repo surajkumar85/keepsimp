@@ -84,7 +84,7 @@ function nameValue(name: pkijs.RelativeDistinguishedNames, type: string) {
 }
 
 /** A name as it is said: its common name, or else its organisation. */
-const nameSaid = (name: pkijs.RelativeDistinguishedNames) =>
+export const nameSaid = (name: pkijs.RelativeDistinguishedNames) =>
   nameValue(name, OID.commonName) ||
   nameValue(name, OID.organisation) ||
   "Unnamed"

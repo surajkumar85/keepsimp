@@ -5,6 +5,7 @@
  * signed (written after it, as the editor does), signed again by us, and
  * changed where its signature covers it.
  */
+import { readFileSync } from "node:fs"
 import { PDFDocument } from "@cantoo/pdf-lib"
 import * as mupdf from "mupdf"
 import { describe, expect, it } from "vitest"
@@ -23,6 +24,7 @@ import { startEditing, stopEditing, type EditSession } from "./mupdf-edit"
 import { applyFields, fieldsOn } from "./mupdf-forms"
 import { exportAfter } from "./mupdf-signed"
 import { signaturesOf } from "./mupdf-signatures"
+import { readTrusted } from "./trust"
 
 const field = (session: EditSession, name: string) =>
   fieldsOn(session, 0).find((one) => one.name === name)!
@@ -170,6 +172,49 @@ describe("reading a file's signatures", () => {
       verdict: { checked: true, intact: true },
       changes: { detailsChanged: true, fieldsChanged: [], pagesChanged: [] },
     })
+  })
+
+  it("checks again against certificates trusted, keeping what it found changed", async () => {
+    const twice = await certify(
+      mupdf,
+      await makeSignedPdf({ plain: true }),
+      await readIdentity(certificateFile("ec-aes"), CERTIFICATE_PASSWORD),
+      { place: { kind: "none" }, reason: "", location: "" },
+      new Date("2026-12-01T12:00:00Z")
+    )
+    const known = await signaturesOf(mupdf, twice.bytes)
+    expect(known.map((one) => one.verdict)).toMatchObject([
+      { trust: null },
+      { trust: null },
+    ])
+    const [authority] = await readTrusted(
+      new Uint8Array(
+        readFileSync("tests/fixtures/certificates/test-authority.crt")
+      )
+    )
+    // What changed is taken from what was found, not worked out again.
+    const marked = known.map((one) =>
+      one.changes ? { ...one, changes: { ...one.changes, updates: 7 } } : one
+    )
+    const [first, second] = await signaturesOf(mupdf, twice.bytes, undefined, {
+      trusted: [authority.der],
+      known: marked,
+    })
+    expect(first.changes?.updates).toBe(7)
+    expect(first.verdict).toMatchObject({
+      trust: {
+        trusted: false,
+        why: "It goes back to “KeepSimp Test Signer”, which is not among the certificates you trust.",
+      },
+    })
+    expect(second.verdict).toMatchObject({
+      trust: { trusted: true, by: "KeepSimp Test Authority" },
+    })
+    // Found for another file, it is not taken.
+    const [again] = await signaturesOf(mupdf, twice.bytes, undefined, {
+      known: [marked[0]],
+    })
+    expect(again.changes?.updates).toBe(1)
   })
 
   it("finds a signature broken when what it covers was changed", async () => {

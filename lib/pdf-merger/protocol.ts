@@ -319,7 +319,13 @@ export type PdfRequest =
       certify?: { file: Uint8Array; password: string; options: CertifyOptions }
     }
   /** The signatures the file being edited came with, each checked, with what changed after it. */
-  | { type: "edit-signatures"; id: string; request: number }
+  | {
+      type: "edit-signatures"
+      id: string
+      request: number
+      /** The certificates the person trusts (DER). */
+      trusted: Uint8Array[]
+    }
   /** Open a certificate file to sign with: who it names, and the file's empty places for a signature. */
   | {
       type: "edit-certificate"

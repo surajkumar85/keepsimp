@@ -1,3 +1,4 @@
+import type { Trust } from "./trust"
 import { describe, expect, it } from "vitest"
 import {
   changesSaid,
@@ -28,7 +29,7 @@ const found = (change: Partial<FoundSignature> = {}): FoundSignature => ({
   reason: "",
   location: "",
   whole: true,
-  verdict: { checked: true, intact: true, signer, problem: "" },
+  verdict: { checked: true, intact: true, signer, problem: "", trust: null },
   changes: null,
   ...change,
 })
@@ -120,6 +121,7 @@ describe("verdictSaid and signerSaid", () => {
             intact: false,
             signer,
             problem: "It was changed.",
+            trust: null,
           },
         })
       )
@@ -146,6 +148,7 @@ describe("verdictSaid and signerSaid", () => {
             intact: true,
             signer: { ...signer, selfSigned: true },
             problem: "",
+            trust: null,
           },
         })
       )[0]
@@ -163,9 +166,47 @@ describe("verdictSaid and signerSaid", () => {
     expect(
       signerSaid(
         found({
-          verdict: { checked: true, intact: false, signer: null, problem: "" },
+          verdict: {
+            checked: true,
+            intact: false,
+            signer: null,
+            problem: "",
+            trust: null,
+          },
         })
       )
     ).toEqual([])
+  })
+
+  it("says whether a certificate the person trusts vouches for the signer", () => {
+    const trusting = (trust: Trust, selfSigned = false) =>
+      signerSaid(
+        found({
+          time: null,
+          verdict: {
+            checked: true,
+            intact: true,
+            signer: { ...signer, selfSigned },
+            problem: "",
+            trust,
+          },
+        })
+      )
+    expect(
+      trusting({ trusted: true, by: "KeepSimp Test Authority", itself: false })
+    ).toEqual([
+      "Signed with the certificate of Sam Example, issued by KeepSimp Test Authority.",
+      "It goes back to “KeepSimp Test Authority”, a certificate you trust.",
+    ])
+    expect(
+      trusting({ trusted: true, by: "Sam Example", itself: true }, true)
+    ).toEqual([
+      "Signed with the certificate of Sam Example, which signed itself.",
+      "It is a certificate you trust.",
+    ])
+    expect(trusting({ trusted: false, why: "Not yours." }, true)).toEqual([
+      "Signed with the certificate of Sam Example, which signed itself: nobody vouches for that name.",
+      "Not yours.",
+    ])
   })
 })

@@ -1,12 +1,14 @@
 "use client"
 
-import { useId } from "react"
+import { useId, useRef } from "react"
 import {
   IconAlertCircle,
   IconCircleCheck,
+  IconFileUpload,
   IconHelpCircle,
   IconX,
 } from "@tabler/icons-react"
+import { ToggleRow } from "@/components/image-batch/controls"
 import { Button } from "@/components/ui/button"
 import {
   changesSaid,
@@ -16,6 +18,7 @@ import {
 } from "@/lib/pdf-editor/signature-report"
 import { cn } from "cn"
 import type { Signatures } from "./use-signatures"
+import type { Trusted } from "./use-trusted"
 
 /** When a signature says it was made, as it is said. */
 const whenSaid = (iso: string) =>
@@ -118,6 +121,116 @@ function One({
   )
 }
 
+/** A day, as it is said. */
+const daySaid = (iso: string) =>
+  new Date(iso).toLocaleDateString("en-GB", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  })
+
+/** A fingerprint as it is shown: its first eight bytes, in pairs. */
+const fingerprintSaid = (fingerprint: string) =>
+  fingerprint
+    .slice(0, 16)
+    .toUpperCase()
+    .replace(/(..)(?!$)/g, "$1:")
+
+/** The certificates the person trusts: added from files, removed, and remembered on this device when asked. */
+function TrustedList({ trusted }: { trusted: Trusted }) {
+  const ids = useId()
+  const picker = useRef<HTMLInputElement>(null)
+  return (
+    <section
+      aria-labelledby={`${ids}-title`}
+      className="space-y-3 border-t pt-3"
+      data-testid="trusted-certificates"
+    >
+      <h3 id={`${ids}-title`} className="text-sm font-medium">
+        Certificates you trust
+      </h3>
+      <p className="text-xs text-muted-foreground">
+        Add the certificate of an issuer you trust, such as your company&apos;s
+        or one an authority gave you, and each signature says whether it goes
+        back to it. Add only a certificate you got from someone you trust, never
+        one taken from the file you are checking.
+      </p>
+      {trusted.list.length ? (
+        <ul className="space-y-2" aria-label="Certificates you trust">
+          {trusted.list.map((one) => (
+            <li
+              key={one.fingerprint}
+              className="flex items-start justify-between gap-2 rounded-md border p-2 text-sm"
+              data-testid="trusted-certificate"
+            >
+              <div className="min-w-0">
+                <p className="font-medium break-words">{one.name}</p>
+                <p className="text-xs text-muted-foreground">
+                  {one.issuer === one.name
+                    ? "Signed by itself"
+                    : `Issued by ${one.issuer}`}
+                  {" · "}until {daySaid(one.validTo)}
+                </p>
+                <p className="font-mono text-xs break-all text-muted-foreground">
+                  {fingerprintSaid(one.fingerprint)}
+                </p>
+              </div>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                aria-label={`Stop trusting ${one.name}`}
+                title="Stop trusting it"
+                onClick={() => trusted.remove(one.fingerprint)}
+              >
+                <IconX aria-hidden="true" />
+              </Button>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="text-sm text-muted-foreground">
+          You have added no certificates.
+        </p>
+      )}
+      <input
+        ref={picker}
+        type="file"
+        accept=".cer,.crt,.der,.pem,application/pkix-cert,application/x-x509-ca-cert"
+        className="sr-only"
+        tabIndex={-1}
+        aria-hidden="true"
+        data-testid="trusted-file"
+        onChange={(event) => {
+          const chosen = event.target.files?.[0]
+          if (chosen) void trusted.add(chosen)
+          event.target.value = ""
+        }}
+      />
+      <Button
+        type="button"
+        variant="outline"
+        disabled={trusted.adding}
+        onClick={() => picker.current?.click()}
+      >
+        <IconFileUpload aria-hidden="true" />
+        Add a certificate you trust
+      </Button>
+      {trusted.problem && (
+        <p role="alert" className="text-sm text-destructive">
+          {trusted.problem}
+        </p>
+      )}
+      <ToggleRow
+        label="Remember them on this device"
+        hint="Kept in this browser until you switch this off. Nothing is sent anywhere."
+        checked={trusted.remember}
+        onCheckedChange={trusted.setRemember}
+      />
+    </section>
+  )
+}
+
 /** The panel that lists the signatures the file came with, each checked. */
 export function SignaturesPanel({
   signatures,
@@ -174,11 +287,13 @@ export function SignaturesPanel({
           </ul>
         )}
         <p className="text-xs text-muted-foreground">
-          This is the file as it was opened, checked on your device. Whether to
-          trust a certificate is not judged here: KeepSimp has no list of
-          trusted issuers, which a program such as Acrobat has. Changes you make
-          now are written after the signatures, with “Keep it valid”.
+          This is the file as it was opened, checked on your device. KeepSimp
+          has no list of trusted issuers of its own, as a program such as
+          Acrobat has: it judges trust only by the certificates you add below.
+          Changes you make now are written after the signatures, with “Keep it
+          valid”.
         </p>
+        <TrustedList trusted={signatures.trusted} />
       </div>
     </aside>
   )

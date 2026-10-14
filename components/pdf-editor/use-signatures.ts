@@ -9,6 +9,7 @@ import type { MakeForm } from "./use-make-form"
 import type { Ocr } from "./use-ocr"
 import type { Pages } from "./use-pages"
 import type { Repeat } from "./use-repeat"
+import type { Trusted } from "./use-trusted"
 
 /**
  * The signatures the file came with: read and checked once it is open,
@@ -24,6 +25,8 @@ export function useSignatures(
   described: Described,
   makeForm: MakeForm,
   ocr: Ocr,
+  /** The certificates the person trusts, which each signature is checked against. */
+  trusted: Trusted,
   /** Whether the panel is shown from the start. */
   begun = false
 ) {
@@ -44,15 +47,22 @@ export function useSignatures(
   /** Undefined while they are read; null when they could not be. */
   const found = read?.id === id ? read.found : undefined
 
+  // Read again when the certificates trusted change: only the checks are made again.
+  const { list } = trusted
   useEffect(() => {
     let live = true
-    void client.current?.signatures(id).then((answer) => {
-      if (live) setRead({ id, found: answer })
-    })
+    void client.current
+      ?.signatures(
+        id,
+        list.map((one) => one.der)
+      )
+      .then((answer) => {
+        if (live) setRead({ id, found: answer })
+      })
     return () => {
       live = false
     }
-  }, [client, id])
+  }, [client, id, list])
 
   const setListed = comments.setListed
   const setPages = pages.setOn
@@ -75,7 +85,7 @@ export function useSignatures(
     [setListed, setPages, setRepeat, setDescribed, setForm, setOcr]
   )
 
-  return { on, setOn, found }
+  return { on, setOn, found, trusted }
 }
 
 export type Signatures = ReturnType<typeof useSignatures>

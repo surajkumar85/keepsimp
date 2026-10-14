@@ -105,7 +105,7 @@ Signing at download: see "Signing with a certificate" in `docs/pdf-editor.md`. W
 
 Reading the signatures a file carries, with the Verify a PDF signature door: see "Reading signatures" in `docs/pdf-editor.md`. What it found: PKI.js writes a signature's encapsulated content as a constructed octet string, so read it in pieces (`octetsOf`); what a signature says of itself (time, reason, place) is outside what it covers, so read it from the file as it was signed; a gap in the ranges wider than the signature's own `<hex>` room is refused. The door's sample must be dated inside its test certificate's dates, or the list rightly says the certificate was not valid then. Every check was set against `pdfsig`.
 
-The ten phases are complete. What could come after, if asked: time stamps from a time-stamping authority and revocation data (both need the network, so they need the user's say), a list of trusted issuers the user can add to, and typing in scripts that need shaping.
+The ten phases are complete. After them the user chose "Certificates you trust" (built: see that bullet in `docs/pdf-editor.md`). What could come after, if asked: time stamps from a time-stamping authority and revocation data (both need the network, so they need the user's say), and typing in scripts that need shaping.
 
 ## When a part is done, report
 

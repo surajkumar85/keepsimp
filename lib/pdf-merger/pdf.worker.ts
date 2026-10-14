@@ -1,6 +1,7 @@
 /// <reference lib="webworker" />
 import { decodeImageFile, TOO_MANY_PIXELS } from "@/lib/image-compressor/decode"
 import { sniffFormat } from "@/lib/image-compressor/formats"
+import type { FoundSignature } from "@/lib/pdf-editor/signature-report"
 import {
   bookmarksOf,
   closePdf,
@@ -1255,6 +1256,9 @@ async function editExport(
   }
 }
 
+/** What was found of each open file's signatures, so that a change of the certificates trusted does not draw every page again. */
+const signaturesFound = new WeakMap<object, FoundSignature[]>()
+
 async function editSignatures(
   request: Extract<PdfRequest, { type: "edit-signatures" }>
 ) {
@@ -1267,8 +1271,10 @@ async function editSignatures(
     const signatures = await signaturesOf(
       await engine,
       session.original,
-      session.password
+      session.password,
+      { trusted: request.trusted, known: signaturesFound.get(session) }
     )
+    signaturesFound.set(session, signatures)
     post({ type: "edit-signatures", request: request.request, signatures })
   } catch {
     post({

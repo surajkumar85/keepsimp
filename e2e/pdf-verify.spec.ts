@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs"
 import { test, expect, type Page } from "@playwright/test"
 import AxeBuilder from "@axe-core/playwright"
 import { makeSignedPdf, SIGNER } from "../tests/pdf-signing"
@@ -132,6 +133,90 @@ test("in the whole editor, a signed file shows its signatures; one filled in her
   await expect(one.getByTestId("signature-changes")).toContainText(
     "a field was filled in or changed (“name”)"
   )
+})
+
+test("checks signatures against the certificates you trust, remembered only when asked", async ({
+  page,
+}) => {
+  const fixture = (path: string) => ({
+    name: path.split("/").pop()!,
+    mimeType: "application/octet-stream",
+    buffer: readFileSync(path),
+  })
+  const sample = async () => {
+    await page.goto(ROUTE)
+    await page.getByRole("button", { name: "Try a sample" }).click()
+    await readerReady(page)
+    await expect(listed(page)).toHaveCount(1)
+  }
+  const trustedList = () => page.getByTestId("trusted-certificate")
+  const goesBack =
+    "It goes back to “KeepSimp Test Authority”, a certificate you trust."
+  await sample()
+  const one = listed(page).first()
+  await expect(panel(page)).toContainText("You have added no certificates.")
+  await expect(one).not.toContainText("a certificate you trust")
+
+  // A certificate of another authority: the signature does not go back to it.
+  await page
+    .getByTestId("trusted-file")
+    .setInputFiles(fixture("tests/fixtures/trust/root.crt"))
+  await expect(trustedList()).toHaveCount(1)
+  await expect(one).toContainText(
+    // The signature carries the authority's certificate, which signed itself.
+    "It goes back to “KeepSimp Test Authority”, which is not among the certificates you trust."
+  )
+  // The authority that issued it.
+  await page
+    .getByTestId("trusted-file")
+    .setInputFiles(fixture("tests/fixtures/certificates/test-authority.crt"))
+  await expect(trustedList()).toHaveCount(2)
+  await expect(one).toContainText(goesBack)
+  await expect(trustedList().nth(1)).toContainText("KeepSimp Test Authority")
+  await expect(trustedList().nth(1)).toContainText("Signed by itself")
+  // Added twice, or a file that is not a certificate: said, and nothing added.
+  await page
+    .getByTestId("trusted-file")
+    .setInputFiles(fixture("tests/fixtures/certificates/test-authority.crt"))
+  await expect(panel(page).getByRole("alert")).toHaveText(
+    "You trust this certificate already."
+  )
+  await page
+    .getByTestId("trusted-file")
+    .setInputFiles(fixture("tests/fixtures/certificates/rsa-aes.p12"))
+  await expect(panel(page).getByRole("alert")).toContainText(
+    "not a .p12 or .pfx"
+  )
+  await expect(trustedList()).toHaveCount(2)
+
+  // Not kept unless asked: a new visit trusts nothing.
+  await sample()
+  await expect(trustedList()).toHaveCount(0)
+  await page
+    .getByTestId("trusted-file")
+    .setInputFiles(fixture("tests/fixtures/certificates/test-authority.crt"))
+  await expect(listed(page).first()).toContainText(goesBack)
+  await page
+    .getByRole("switch", { name: "Remember them on this device" })
+    .click()
+  await sample()
+  await expect(trustedList()).toHaveCount(1)
+  await expect(listed(page).first()).toContainText(goesBack)
+  await expect(
+    page.getByRole("switch", { name: "Remember them on this device" })
+  ).toBeChecked()
+  // Stopping trusting it takes it off the list, and from what is kept.
+  await page
+    .getByRole("button", { name: "Stop trusting KeepSimp Test Authority" })
+    .click()
+  await expect(trustedList()).toHaveCount(0)
+  await expect(listed(page).first()).not.toContainText(goesBack)
+  await page
+    .getByRole("switch", { name: "Remember them on this device" })
+    .click()
+  expect(
+    await page.evaluate(() => localStorage.getItem("keepsimp.trusted"))
+  ).toBeNull()
 })
 
 test("stays accessible, local and responsive", async ({ page }) => {

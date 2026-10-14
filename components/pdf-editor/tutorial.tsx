@@ -151,7 +151,7 @@ const content: TutorialContent = {
     {
       term: "Signatures",
       detail:
-        "A file that carries digital signatures has a Signatures button. It lists each one: whether it still holds over what it signed, whose certificate made it and who issued that, the time it gives, and what was added to the file after it. Whom to trust is for you to judge; no list of issuers is kept here.",
+        "A file that carries digital signatures has a Signatures button. It lists each one: whether it still holds over what it signed, whose certificate made it and who issued that, the time it gives, and what was added to the file after it. Add the certificates of the issuers you trust, and each signature says whether it goes back to one of them.",
     },
     {
       term: "Sign with a certificate",
@@ -814,7 +814,7 @@ const verifying: TutorialContent = {
     {
       term: "Whom to trust",
       detail:
-        "A signature is made with a certificate, and a certificate names a person or a company. Whether that name can be believed depends on who issued the certificate. KeepSimp says who did, or that the certificate signed itself, but keeps no list of trusted issuers: Adobe's programs and your company may. A certificate that signed itself vouches for nobody.",
+        "A signature is made with a certificate, and a certificate names a person or a company. Whether that name can be believed depends on who issued the certificate. KeepSimp says who did, or that the certificate signed itself, and keeps no list of trusted issuers of its own, as Adobe's programs do. Under “Certificates you trust” you can add the certificate of an issuer you trust, such as your company's, from a .cer, .crt, .der or .pem file; each signature then says whether its certificate goes back to it, through certificates that each issued the next and were valid at the time it gives. Add only a certificate you got from someone you trust, never one from the file you are checking. The list lasts while the page is open, or stays on this device when “Remember them on this device” is on. A certificate that signed itself vouches for nobody unless you trust it.",
     },
     {
       term: "The time a signature gives",

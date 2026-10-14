@@ -86,6 +86,7 @@ import { FORM_HINT, useMakeForm } from "./use-make-form"
 import { REDACT_HINT, useRedact } from "./use-redact"
 import { useOcr } from "./use-ocr"
 import { useSignatures } from "./use-signatures"
+import { useTrusted } from "./use-trusted"
 import { SignaturesPanel } from "./signatures-panel"
 import { useCertify } from "./use-certify"
 import { CertifyFields } from "./certify-fields"
@@ -409,7 +410,7 @@ const VERIFY_ABILITIES = [
   {
     icon: IconCertificate,
     title: "Who, and when",
-    text: "The certificate that signed, who issued it or that it signed itself, and the time the signature gives. Whom to trust is yours to judge: no list of issuers is kept here.",
+    text: "The certificate that signed, who issued it or that it signed itself, and the time the signature gives. Add the issuers you trust, and each signature says whether it goes back to one.",
   },
   {
     icon: IconFileInfo,
@@ -770,6 +771,7 @@ function Workspace({
     // A page opened for reading scans begins with its panel.
     mode === "ocr"
   )
+  const trusted = useTrusted()
   const signatures = useSignatures(
     client,
     doc.id,
@@ -779,6 +781,7 @@ function Workspace({
     described,
     makeForm,
     ocr,
+    trusted,
     // A page opened for checking signatures begins with their list.
     mode === "verify"
   )
