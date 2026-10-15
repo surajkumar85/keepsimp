@@ -2,7 +2,7 @@ import { pageMetadata } from "@/lib/site"
 
 export const metadata = pageMetadata(
   "Privacy — How your files are handled",
-  "Understand how KeepSimp processes files locally, stores display preferences, and separates browser tools from website hosting.",
+  "Understand how KeepSimp processes files locally, stores display preferences, and uses aggregate website analytics.",
   "/privacy/"
 )
 export default function PrivacyPage() {
@@ -13,7 +13,7 @@ export default function PrivacyPage() {
         A straightforward approach to privacy.
       </h1>
       <p className="mt-4 text-sm text-muted-foreground">
-        Updated 14 October 2026
+        Updated 15 October 2026
       </p>
       <div className="article-copy">
         <h2>Files and text stay in your browser.</h2>
@@ -51,8 +51,19 @@ export default function PrivacyPage() {
           host, Vercel. A host receives ordinary request information such as an
           IP address, the requested URL and browser headers. Browser-local
           processing does not mean website visits are invisible to the hosting
-          infrastructure. This application does not include advertising scripts
-          or analytics trackers.
+          infrastructure. This application does not include advertising scripts.
+        </p>
+        <h2>Website traffic, without analytics cookies.</h2>
+        <p>
+          On the production site, Vercel Web Analytics counts visits and page
+          views without analytics cookies. It sends page URLs, referrers and
+          basic browser, device and approximate location information to Vercel
+          for aggregate traffic statistics. We do not send custom events, file
+          contents, pasted text, passwords or memory readings to analytics. See{" "}
+          <a href="https://vercel.com/docs/analytics/privacy-policy">
+            Vercel’s Web Analytics privacy details
+          </a>
+          .
         </p>
         <h2>A couple of display preferences.</h2>
         <p>
