@@ -8,7 +8,7 @@ import type * as Mediabunny from "mediabunny"
 import type { Container } from "./formats"
 import { lameTagged, mp3Gapless, mp3Kept } from "./gapless"
 import { withEditList } from "./mp4-edit"
-import { opusPreSkip, withOpusEnd } from "./ogg-end"
+import { withOpusEnd } from "./ogg-end"
 import { PeakBuilder, type Peaks } from "./peaks"
 import type { Plan, SourceFacts } from "./settings"
 import type { Heard } from "./check"
@@ -439,108 +439,6 @@ async function tryAac(
   }
 }
 
-/**
- * How far `heard` is shifted from `played`, either way: positive when it
- * starts later (it has samples first), negative when it starts sooner.
- */
-export function signedLag(
-  played: Float32Array,
-  heard: Float32Array,
-  most: number
-) {
-  let best = 0
-  let bestScore = -Infinity
-  const length = Math.min(played.length - most, heard.length - 2 * most)
-  for (let lag = -most; lag <= most; lag++) {
-    let score = 0
-    for (let index = 0; index < length; index++)
-      score += played[most + index] * heard[most + index + lag]
-    if (score > bestScore) {
-      bestScore = score
-      best = lag
-    }
-  }
-  return best
-}
-
-/** The browser's Opus encoder's real delay, by channels. */
-const opusDelays = new Map<number, Promise<number | null>>()
-
-/**
- * The real delay of the browser's Opus encoder, measured as for AAC. An
- * Ogg file says how many samples to skip; most encoders put 312 first and
- * say so, but WebKit on Linux puts none and says 312, so players would cut
- * the start of the sound. Null when this browser cannot decode what it wrote.
- */
-export function opusDelay(
-  engine: Engine,
-  channels: number,
-  bitrate: number
-): Promise<number | null> {
-  let measured = opusDelays.get(channels)
-  if (!measured) {
-    measured = (async () => {
-      try {
-        const frames = 9600
-        const noise = new Float32Array(frames * channels)
-        let seed = 54321
-        for (let index = 0; index < noise.length; index++) {
-          seed = (seed * 1103515245 + 12345) >>> 0
-          noise[index] = (seed / 2 ** 32 - 0.5) * 0.5
-        }
-        const target = new engine.BufferTarget()
-        const output = new engine.Output({
-          format: new engine.OggOutputFormat(),
-          target,
-        })
-        const source = new engine.AudioSampleSource({
-          codec: "opus",
-          quality: new engine.Quality({ bitrate }),
-        })
-        output.addAudioTrack(source)
-        await output.start()
-        const sample = new engine.AudioSample({
-          data: noise,
-          format: "f32",
-          numberOfChannels: channels,
-          sampleRate: 48000,
-          timestamp: 0,
-        })
-        await source.add(sample)
-        sample.close()
-        await output.finalize()
-        const bytes = new Uint8Array(target.buffer!)
-        const declared = opusPreSkip(bytes)
-        if (declared === null) return null
-        const heard: Float32Array[] = []
-        for await (const chunk of soundOf(
-          engine,
-          new Blob([bytes as BlobPart]),
-          null
-        ))
-          heard.push(chunk.planes[0])
-        const all = new Float32Array(
-          heard.reduce((sum, one) => sum + one.length, 0)
-        )
-        let at = 0
-        for (const one of heard) {
-          all.set(one, at)
-          at += one.length
-        }
-        const first = new Float32Array(frames)
-        for (let index = 0; index < frames; index++)
-          first[index] = noise[index * channels]
-        // What the decoder skipped, plus how far the sound still lies off.
-        return Math.max(0, declared + signedLag(first, all, 1024))
-      } catch {
-        return null
-      }
-    })()
-    opusDelays.set(channels, measured)
-  }
-  return measured
-}
-
 /** The AAC encoder chosen for each rate and channels, by its priming. */
 const aacChoices = new Map<string, Promise<number>>()
 
@@ -685,18 +583,8 @@ export async function convertAudio(
     const samples = Math.round(facts.duration * plan.sampleRate)
     if (plan.copy) return written
     if (plan.codec === "mp3") return lameTagged(written, samples)
-    if (plan.codec === "opus") {
-      const delay = await opusDelay(
-        engine,
-        plan.channels,
-        plan.bitrate ?? 96_000
-      )
-      return withOpusEnd(
-        written,
-        Math.round(facts.duration * 48000),
-        delay ?? undefined
-      )
-    }
+    if (plan.codec === "opus")
+      return withOpusEnd(written, Math.round(facts.duration * 48000))
     if (priming) return withEditList(written, priming, samples)
     return written
   } finally {

@@ -42,10 +42,7 @@ function pageSize(bytes: Uint8Array, at: number) {
 
 /** The file with the pre-skip its first page declares set, and that page's checksum written again. */
 function withPreSkip(bytes: Uint8Array, head: number, preSkip: number) {
-  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength)
   const size = pageSize(bytes, 0)
-  if (view.getUint16(head + 10, true) === preSkip || !size || head > size)
-    return bytes
   const out = bytes.slice()
   const write = new DataView(out.buffer)
   write.setUint16(head + 10, preSkip, true)
@@ -73,35 +70,45 @@ export function opusPreSkip(bytes: Uint8Array): number | null {
 }
 
 /**
- * An Ogg Opus file that skips `preSkip` samples at the start (the
- * encoder's real delay, when it is not what the file says) and ends after
- * `samples` samples at 48 kHz. Returned as it was when it is not one, or
- * when there is nothing to change.
+ * An Ogg Opus file that ends after `samples` samples at 48 kHz, and skips
+ * no more at the start than its encoder can have put there. An encoder
+ * that puts samples before the sound writes that many more than it was
+ * given; one that wrote no more than it was given put none, whatever the
+ * file says (WebKit on Linux declares 312 and puts none, so players cut
+ * the start of the sound). Returned as it was when it is not Ogg Opus or
+ * there is nothing to change.
  */
-export function withOpusEnd(
-  bytes: Uint8Array,
-  samples: number,
-  preSkip = opusPreSkip(bytes) ?? 0
-): Uint8Array {
+export function withOpusEnd(bytes: Uint8Array, samples: number): Uint8Array {
   const head = find(bytes.subarray(0, 4096), "OpusHead")
-  if (head < 0 || !isPage(bytes, 0)) return bytes
-  bytes = withPreSkip(bytes, head, preSkip)
-  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength)
-  // The last page: walk the pages from the start, as their lengths say.
-  let last = -1
-  for (let at = 0; at + 27 <= bytes.length && isPage(bytes, at);) {
+  // The header must lie whole in the first page, whose checksum is written again.
+  if (head < 0 || !isPage(bytes, 0) || head + 12 > pageSize(bytes, 0))
+    return bytes
+  // The last page: walk the pages from the first, which is whole, as their lengths say.
+  let last = 0
+  for (
+    let at = pageSize(bytes, 0);
+    at + 27 <= bytes.length && isPage(bytes, at);
+  ) {
     const size = pageSize(bytes, at)
     if (!size) break
     last = at
     at += size
   }
-  if (last < 0) return bytes
-  const end = BigInt(preSkip + samples)
-  if (view.getBigInt64(last + 6, true) <= end) return bytes
-  const size = pageSize(bytes, last)
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength)
+  const written = Number(view.getBigInt64(last + 6, true))
+  const declared = view.getUint16(head + 10, true)
+  // Fewer samples than the sound means some were lost at the end, which
+  // says nothing of the start: the file's own word stands then.
+  const preSkip =
+    written >= samples ? Math.min(declared, written - samples) : declared
+  // Skipping less ends the sound exactly where the file does.
+  if (preSkip !== declared) return withPreSkip(bytes, head, preSkip)
+  const end = preSkip + samples
+  if (written <= end) return bytes
   const out = bytes.slice()
   const write = new DataView(out.buffer)
-  write.setBigInt64(last + 6, end, true)
+  const size = pageSize(out, last)
+  write.setBigInt64(last + 6, BigInt(end), true)
   write.setUint32(last + 22, 0, true)
   write.setUint32(last + 22, oggCrc(out.subarray(last, last + size)), true)
   return out

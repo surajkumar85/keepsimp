@@ -39,7 +39,7 @@ describe("withOpusEnd", () => {
     ).toBe("")
   })
 
-  it("sets the pre-skip to the encoder's real delay, with the first page's checksum", () => {
+  it("skips nothing at the start when the encoder wrote no more samples than it was given", () => {
     const opus = fixture("tone.opus")
     expect(opusPreSkip(opus)).toBe(312)
     const pcm = (bytes: Uint8Array, name: string) => {
@@ -52,14 +52,13 @@ describe("withOpusEnd", () => {
       )
     }
     const own = pcm(opus, "own.opus")
-    // Skipping nothing: the encoder's 312 samples come first, then the same sound.
-    const none = withOpusEnd(opus, 24000, 0)
+    // FFmpeg's file holds 24,312 samples: as though all of them were the sound.
+    const none = withOpusEnd(opus, 24312)
     expect(opusPreSkip(none)).toBe(0)
     const played = pcm(none, "none.opus")
-    expect(played.length / 2).toBe(24000)
-    expect(
-      played.subarray(312 * 2).equals(own.subarray(0, (24000 - 312) * 2))
-    ).toBe(true)
+    expect(played.length / 2).toBe(24312)
+    // Its 312 samples of priming come first, then the very same sound.
+    expect(played.subarray(312 * 2).equals(own)).toBe(true)
     expect(opusPreSkip(new Uint8Array(10))).toBeNull()
   })
 
