@@ -22,13 +22,13 @@ test("landing CTA opens the working dashboard", async ({ page }) => {
     .first()
     .click()
   await expect(page).toHaveURL(/\/dashboard\/$/)
-  await expect(page.getByTestId("tool-card")).toHaveCount(15)
+  await expect(page.getByTestId("tool-card")).toHaveCount(14)
   await expect(
     page.getByTestId("tools-ready").getByTestId("tool-card")
   ).toHaveCount(11)
   await expect(
     page.getByTestId("tools-planned").getByTestId("tool-card")
-  ).toHaveCount(4)
+  ).toHaveCount(3)
   await page.getByRole("link", { name: "JSON formatter", exact: true }).click()
   await expect(page.getByLabel("Your JSON", { exact: true })).toBeVisible()
 })

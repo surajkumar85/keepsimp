@@ -5,7 +5,9 @@ import {
   audioState,
   audioTotals,
   droppedUrls,
+  itemKey,
   nextAudioJob,
+  stepsOf,
   type AudioItem,
   type AudioResult,
 } from "./queue"
@@ -110,6 +112,66 @@ describe("audioReducer", () => {
   })
 })
 
+describe("edits", () => {
+  it("keeps each file's changes, undoes and redoes them whole, and keys its result by them", () => {
+    let items = audioReducer(added(), {
+      type: "facts",
+      id: "a",
+      facts: facts(),
+    })
+    const cut = { do: "cut", from: 1, to: 2 } as const
+    const keep = { do: "keep", from: 0, to: 1 } as const
+    const fade = {
+      do: "fade",
+      from: 0,
+      to: 1,
+      direction: "in",
+      curve: "linear",
+    } as const
+    const plain = itemKey("s", items[0])
+    items = audioReducer(items, { type: "change", id: "a", steps: [cut] })
+    items = audioReducer(items, {
+      type: "change",
+      id: "a",
+      steps: [keep, fade],
+    })
+    expect(stepsOf(items[0])).toEqual([cut, keep, fade])
+    expect(stepsOf(items[1])).toEqual([])
+    expect(itemKey("s", items[0])).not.toBe(plain)
+    expect(itemKey("s", items[1])).toBe(plain)
+    expect(itemKey(null, items[0])).toBeNull()
+    // Two steps made as one change are undone as one.
+    items = audioReducer(items, { type: "undo", id: "a" })
+    expect(items[0]).toMatchObject({ changes: [[cut]], redo: [[keep, fade]] })
+    items = audioReducer(items, { type: "redo", id: "a" })
+    expect(stepsOf(items[0])).toEqual([cut, keep, fade])
+    expect(items[0].redo).toEqual([])
+    // Nothing to redo or undo: the file stays as it is.
+    expect(audioReducer(items, { type: "redo", id: "a" })[0]).toBe(items[0])
+    items = audioReducer(items, { type: "undo", id: "a" })
+    // A new change forgets what was undone.
+    items = audioReducer(items, { type: "change", id: "a", steps: [fade] })
+    expect(items[0].redo).toEqual([])
+    items = audioReducer(items, { type: "reset", id: "a" })
+    expect(items[0]).toMatchObject({ changes: [], redo: [] })
+    expect(itemKey("s", items[0])).toBe(plain)
+    expect(audioReducer(items, { type: "undo", id: "a" })[0]).toBe(items[0])
+    expect(audioReducer(items, { type: "undo", id: "b" })[1]).toBe(items[1])
+    expect(audioReducer(items, { type: "redo", id: "b" })[1]).toBe(items[1])
+    // Lists that were never made count as empty.
+    const bare: AudioItem = { id: "c", file: file("c"), status: "ready" }
+    expect(
+      audioReducer([{ ...bare, changes: [[cut]] }], {
+        type: "undo",
+        id: "c",
+      })[0]
+    ).toMatchObject({ changes: [], redo: [[cut]] })
+    expect(
+      audioReducer([{ ...bare, redo: [[cut]] }], { type: "redo", id: "c" })[0]
+    ).toMatchObject({ changes: [[cut]], redo: [] })
+  })
+})
+
 describe("droppedUrls", () => {
   it("names the results a step let go of", () => {
     const before: AudioItem[] = [
@@ -134,23 +196,23 @@ describe("nextAudioJob", () => {
   it("reads new files first, then writes the selected one, then the first waiting", () => {
     const unread: AudioItem = { id: "n", file: file("n"), status: "reading" }
     const items = [ready("a"), ready("b"), unread]
-    expect(nextAudioJob(items, "k", new Set(), "b")).toMatchObject({
+    expect(nextAudioJob(items, () => "k", new Set(), "b")).toMatchObject({
       item: { id: "n" },
       job: "read",
     })
-    expect(nextAudioJob(items, "k", new Set(["n"]), "b")).toMatchObject({
+    expect(nextAudioJob(items, () => "k", new Set(["n"]), "b")).toMatchObject({
       item: { id: "b" },
       job: "convert",
     })
-    expect(nextAudioJob(items, "k", new Set(["n"]), null)).toMatchObject({
+    expect(nextAudioJob(items, () => "k", new Set(["n"]), null)).toMatchObject({
       item: { id: "a" },
     })
   })
 
   it("skips files in flight, written ones, and everything when settings cannot be used", () => {
     const items = [ready("a", "k"), ready("b")]
-    expect(nextAudioJob(items, "k", new Set(["b"]), null)).toBeNull()
-    expect(nextAudioJob(items, null, new Set(), null)).toBeNull()
+    expect(nextAudioJob(items, () => "k", new Set(["b"]), null)).toBeNull()
+    expect(nextAudioJob(items, () => null, new Set(), null)).toBeNull()
     // Read but waiting for the page to decode it: nothing to do yet.
     const waiting: AudioItem = {
       id: "w",
@@ -158,7 +220,7 @@ describe("nextAudioJob", () => {
       status: "reading",
       facts: facts(false),
     }
-    expect(nextAudioJob([waiting], "k", new Set(), null)).toBeNull()
+    expect(nextAudioJob([waiting], () => "k", new Set(), null)).toBeNull()
   })
 })
 
@@ -176,7 +238,7 @@ describe("audioTotals", () => {
       { id: "b", file: file("b"), status: "reading" },
       { id: "c", file: file("c"), status: "error" },
     ]
-    expect(audioTotals(items, "k")).toEqual({
+    expect(audioTotals(items, () => "k")).toEqual({
       images: 3,
       done: 1,
       pending: 1,
@@ -185,6 +247,6 @@ describe("audioTotals", () => {
       outputBytes: 40,
       settled: false,
     })
-    expect(audioTotals(items.slice(0, 1), "k").settled).toBe(true)
+    expect(audioTotals(items.slice(0, 1), () => "k").settled).toBe(true)
   })
 })

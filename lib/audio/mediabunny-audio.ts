@@ -10,8 +10,10 @@ import { lameTagged, mp3Gapless, mp3Kept } from "./gapless"
 import { withEditList } from "./mp4-edit"
 import { withOpusEnd } from "./ogg-end"
 import { PeakBuilder, type Peaks } from "./peaks"
+import { peakCount } from "./view"
 import type { Plan, SourceFacts } from "./settings"
 import type { Heard } from "./check"
+import { editedBy, gainAt, lengthOf, type Edited, type Step } from "./edits"
 
 type Engine = typeof Mediabunny
 
@@ -40,9 +42,6 @@ export interface ReadFacts extends SourceFacts {
 
 /** What is wrong with a file that cannot be used, in a sentence. */
 export class AudioProblem extends Error {}
-
-/** How many peaks a file's overview waveform has. */
-export const OVERVIEW_PEAKS = 2000
 
 const input = (engine: Engine, file: Blob) =>
   new engine.Input({
@@ -232,7 +231,7 @@ export async function peaksOf(
 ): Promise<Peaks> {
   const builder = new PeakBuilder(
     Math.round(facts.duration * facts.sampleRate),
-    OVERVIEW_PEAKS
+    peakCount(facts.duration)
   )
   for await (const chunk of soundOf(engine, file, facts.kept, signal))
     builder.push(chunk.planes)
@@ -321,6 +320,56 @@ export function firstFrames(
   })
   sample.close()
   return made
+}
+
+/**
+ * The frames of a sample the edits keep, at the loudness they give them,
+ * as one sample at `timestamp`; null when they keep none. `at` is the
+ * source time of the sample's first frame.
+ */
+export function shaped(
+  engine: Engine,
+  sample: Mediabunny.AudioSample,
+  edited: Edited,
+  at: number,
+  timestamp: number
+): Mediabunny.AudioSample | null {
+  const frames = sample.numberOfFrames
+  const channels = sample.numberOfChannels
+  const rate = sample.sampleRate
+  if (!frames) {
+    sample.close()
+    return null
+  }
+  const planes = Array.from({ length: channels }, (_, channel) => {
+    const plane = new Float32Array(frames)
+    sample.copyTo(plane, { planeIndex: channel, format: "f32-planar" })
+    return plane
+  })
+  sample.close()
+  const kept = planes.map(() => new Float32Array(frames))
+  let count = 0
+  for (let index = 0; index < frames; index++) {
+    const source = at + index / rate
+    if (!edited.segments.some(([from, to]) => source >= from && source < to))
+      continue
+    const gain = gainAt(edited, source)
+    for (let channel = 0; channel < channels; channel++)
+      kept[channel][count] = planes[channel][index] * gain
+    count++
+  }
+  if (!count) return null
+  const data = new Float32Array(count * channels)
+  kept.forEach((plane, channel) =>
+    data.set(plane.subarray(0, count), channel * count)
+  )
+  return new engine.AudioSample({
+    data,
+    format: "f32-planar",
+    numberOfChannels: channels,
+    sampleRate: rate,
+    timestamp,
+  })
 }
 
 /** Our own encoders, once registered in this worker: Mediabunny prefers them to the browser's. */
@@ -488,8 +537,14 @@ export async function convertAudio(
     tags?: Mediabunny.MetadataTags
     onProgress?: (fraction: number) => void
     signal?: AbortSignal
+    /** Edits to make while writing (see `edits.ts`); none when left out. */
+    edits?: readonly Step[]
   }
 ): Promise<Uint8Array> {
+  const edits = options.edits ?? []
+  const edited = editedBy(facts.duration, edits)
+  /** How long the sound written is, in seconds. */
+  const length = edits.length ? lengthOf(edited) : facts.duration
   // AAC is written by an encoder chosen first; its priming is known after.
   const priming =
     !plan.copy && plan.codec === "aac"
@@ -506,25 +561,35 @@ export async function convertAudio(
   // A WAV over 4 GB needs the RF64 form.
   const longWav =
     plan.format === "wav" &&
-    facts.duration * plan.sampleRate * plan.channels * 4 > 3.9e9
+    length * plan.sampleRate * plan.channels * 4 > 3.9e9
   const output = new engine.Output({
     format: outputFormat(engine, plan, longWav),
     target,
   })
   try {
+    // Where the sound starts in the decoder's time: an MP3's delay comes first.
+    const soundStart = facts.kept ? facts.kept.start / facts.sampleRate : 0
+    const first = edits.length ? (edited.segments[0]?.[0] ?? 0) : 0
+    const last = edits.length
+      ? (edited.segments[edited.segments.length - 1]?.[1] ?? 0)
+      : null
     const trim = plan.copy
       ? undefined
-      : facts.kept
-        ? {
-            start: facts.kept.start / facts.sampleRate,
-            end:
-              facts.kept.length === null
-                ? undefined
-                : (facts.kept.start + facts.kept.length) / facts.sampleRate,
-          }
-        : { start: 0, end: facts.duration }
-    const expected = Math.round(facts.duration * plan.sampleRate)
+      : {
+          start: soundStart + first,
+          end:
+            last !== null
+              ? soundStart + last
+              : facts.kept
+                ? facts.kept.length === null
+                  ? undefined
+                  : (facts.kept.start + facts.kept.length) / facts.sampleRate
+                : facts.duration,
+        }
+    const expected = Math.round(length * plan.sampleRate)
     let made = 0
+    /** Frames seen so far at the rate written, counted from the trim's start. */
+    let seen = 0
     const conversion = await engine.Conversion.init({
       input: source,
       output,
@@ -539,7 +604,16 @@ export async function convertAudio(
               ? { quality: new engine.Quality({ bitrate: plan.bitrate }) }
               : {}),
             ...(plan.sampleFormat === "f32" ? { sampleFormat: "f32" } : {}),
-            process: (sample: Mediabunny.AudioSample) => {
+            process: (incoming: Mediabunny.AudioSample) => {
+              let sample: Mediabunny.AudioSample | null = incoming
+              if (edits.length) {
+                // Frames are counted, so the source time of each is exact.
+                const rate = incoming.sampleRate
+                const at = first + seen / rate
+                seen += incoming.numberOfFrames
+                sample = shaped(engine, incoming, edited, at, made / rate)
+                if (!sample) return null
+              }
               // Exactly as many samples as the sound has: a resampler can make one more.
               const room = expected - made
               if (room <= 0) {
@@ -580,11 +654,11 @@ export async function convertAudio(
     }
     const written = new Uint8Array(target.buffer!)
     // Say in the file how many samples are the sound, so it plays without gaps.
-    const samples = Math.round(facts.duration * plan.sampleRate)
+    const samples = Math.round(length * plan.sampleRate)
     if (plan.copy) return written
     if (plan.codec === "mp3") return lameTagged(written, samples)
     if (plan.codec === "opus")
-      return withOpusEnd(written, Math.round(facts.duration * 48000))
+      return withOpusEnd(written, Math.round(length * 48000))
     if (priming) return withEditList(written, priming, samples)
     return written
   } finally {

@@ -53,7 +53,7 @@ export const tools: readonly Tool[] = [
     id: "audio-editor",
     name: "Audio editor",
     description:
-      "Convert sound between formats and take it out of videos, many files at once, on your device.",
+      "Trim, fade and convert sound, make ringtones and take it out of videos, many files at once, on your device.",
     category: "audio",
     keywords: [
       "audio",
@@ -69,6 +69,10 @@ export const tools: readonly Tool[] = [
       "aiff",
       "ringtone",
       "extract",
+      "trim",
+      "cut",
+      "fade",
+      "volume",
     ],
     status: "available",
   },
@@ -118,10 +122,40 @@ export const tools: readonly Tool[] = [
   {
     id: "audio-trimmer",
     name: "Audio trimmer",
-    description: "Get straight to the good part.",
+    description:
+      "Cut sound to the part you want, to the millisecond, with fades, on your device.",
+    partOf: "audio-editor",
     category: "audio",
-    keywords: ["cut", "trim", "sound"],
-    status: "planned",
+    keywords: [
+      "cut",
+      "trim",
+      "trim mp3",
+      "cut audio",
+      "audio cutter",
+      "mp3 cutter",
+      "fade in",
+      "fade out",
+      "sound",
+    ],
+    status: "available",
+  },
+  {
+    id: "ringtone-maker",
+    name: "Ringtone maker",
+    description:
+      "Make an iPhone (M4R) or Android ringtone from any song, on your device.",
+    partOf: "audio-editor",
+    category: "audio",
+    keywords: [
+      "ringtone",
+      "m4r",
+      "iphone ringtone",
+      "android ringtone",
+      "alert tone",
+      "text tone",
+      "mp3 to m4r",
+    ],
+    status: "available",
   },
   {
     id: "image-compressor",

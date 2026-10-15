@@ -108,6 +108,7 @@ async function convert(job: ConvertJob, stop: AbortController) {
     let last = 0
     const bytes = await convertAudio(mediabunny, wav.file, job.plan, facts, {
       keepTags: job.keepTags,
+      edits: job.edits,
       tags:
         job.tags ??
         (wav.tags

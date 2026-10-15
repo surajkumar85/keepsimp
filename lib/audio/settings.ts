@@ -155,7 +155,12 @@ export function bitrateOf(
 }
 
 /** The plan for writing one file with these settings. */
-export function planFor(settings: AudioSettings, facts: SourceFacts): Plan {
+export function planFor(
+  settings: AudioSettings,
+  facts: SourceFacts,
+  /** The sound was edited: it must be encoded again. `facts.duration` is then the edited length. */
+  edited = false
+): Plan {
   const notes: string[] = []
   let format: WrittenFormat
   let copy = false
@@ -166,13 +171,16 @@ export function planFor(settings: AudioSettings, facts: SourceFacts): Plan {
       format = kept
       const lossless = writtenFormats[kept].lossless
       copy =
+        !edited &&
         settings.sampleRate === "same" &&
         settings.channels === "same" &&
         (settings.depth === "same" || !lossless) &&
         (settings.targetBytes === null || lossless)
       if (!copy)
         notes.push(
-          "The sound is encoded again in its own format, to meet what was chosen."
+          edited
+            ? "The sound is encoded again in its own format, to make the edits."
+            : "The sound is encoded again in its own format, to meet what was chosen."
         )
     } else {
       format = "m4a"

@@ -1,5 +1,6 @@
 import type { MetadataTags } from "mediabunny"
 import type { Heard } from "./check"
+import type { Step } from "./edits"
 import type { Container } from "./formats"
 import type { ReadFacts } from "./mediabunny-audio"
 import type { Peaks } from "./peaks"
@@ -25,7 +26,9 @@ export interface ConvertJob {
   keepTags: boolean
   /** Tags to write in place of the file's own, for a decoded file. */
   tags?: MetadataTags
-  /** Names the settings, so a late result can be told from a current one. */
+  /** The edits made to the sound, in order. */
+  edits: Step[]
+  /** Names the settings and edits, so a late result can be told from a current one. */
   key: string
 }
 

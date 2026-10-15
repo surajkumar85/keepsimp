@@ -187,6 +187,18 @@ const cards = [
     "/images/audio-extract-guide.svg",
   ],
   [
+    "trim-audio-without-uploading",
+    "Just the part you want, with no click at the cut.",
+    "Trim and fade sound to the millisecond, on your device.",
+    "/images/audio-trim-guide.svg",
+  ],
+  [
+    "make-a-ringtone",
+    "Your song, when the phone rings.",
+    "iPhone (M4R) and Android ringtones, on your device.",
+    "/images/audio-ringtone-guide.svg",
+  ],
+  [
     "gapless-mp3-and-aac",
     "Why a converted MP3 starts late, and ours does not.",
     "Gapless MP3 and AAC, checked before download.",

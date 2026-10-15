@@ -117,6 +117,14 @@ describe("planFor", () => {
     )
   })
 
+  it("encodes edited sound again in its own format, saying why", () => {
+    const plan = planFor(settings({ format: "same" }), song, true)
+    expect(plan).toMatchObject({ format: "mp3", codec: "mp3", copy: false })
+    expect(plan.notes).toEqual([
+      "The sound is encoded again in its own format, to make the edits.",
+    ])
+  })
+
   it("writes sound it cannot keep as AAC, and says why", () => {
     const plan = planFor(settings({ format: "same" }), {
       ...film,

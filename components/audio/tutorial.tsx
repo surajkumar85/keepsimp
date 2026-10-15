@@ -1,4 +1,7 @@
 import { ToolTutorial, type TutorialContent } from "@/components/tool-tutorial"
+import { JOIN_FADE, MOST_GAIN } from "@/lib/audio/edits"
+import { RINGTONES } from "@/lib/audio/ringtone"
+import { shortcutGroups } from "@/lib/audio/shortcuts"
 
 const options: TutorialContent["options"] = [
   {
@@ -123,4 +126,162 @@ export function AudioConverterTutorial() {
 
 export function AudioExtractorTutorial() {
   return <ToolTutorial content={extracting} />
+}
+
+/** The keys, as the help says them: made from the list the editor answers to. */
+const keys = shortcutGroups().map((group) => ({
+  term: `Keys: ${group.title.toLowerCase()}`,
+  detail: group.shortcuts
+    .map(
+      (shortcut) =>
+        `${shortcut.ways.map((way) => way.join(" + ")).join(" or ")}: ${shortcut.does}.`
+    )
+    .join(" "),
+}))
+
+const editing: TutorialContent["options"] = [
+  {
+    term: "Choosing a part",
+    detail:
+      "Drag across the waveform, drag a selection's edge to move it, or type its start and end (as 7.25, 1:07.25 or 1:02:03). On the waveform, I and O start and end the selection at the playhead. Zoom in to choose to the millisecond: the buttons, Ctrl or ⌘ with the wheel, or a trackpad's pinch.",
+  },
+  {
+    term: "Keep only this, Cut out",
+    detail: `Keep only this keeps the selection and drops the rest; Cut out takes the selection away and closes the gap. Wherever the sound was cut, it fades out and in over ${JOIN_FADE * 1000} milliseconds, too short to hear as a fade and enough to take away the click a cut can make.`,
+  },
+  {
+    term: "Fades",
+    detail:
+      "Choose the part to fade over and press Fade in or Fade out. Even fades at a steady rate; Smooth keeps more of the sound until late; S-curve starts and ends softly.",
+  },
+  {
+    term: "Silence and volume",
+    detail: `Silence makes the selection silent and keeps its length. Volume makes the selection, or all of it when nothing is chosen, louder or quieter by up to ${MOST_GAIN} dB. Louder can clip: listen before you download. Measuring and matching loudness comes in a later version.`,
+  },
+  {
+    term: "Edits and undo",
+    detail:
+      "Your file is never changed. Each edit is a step in the list; the result is written from your file and the steps, so you can undo, redo or start again at any time. Each file in the list keeps its own edits; the format settings are shared.",
+  },
+  {
+    term: "Playing",
+    detail:
+      "Play and Play the selection play the sound as edited: cut parts are skipped and fades heard. This is a preview played from your file; the file written is exact to the sample and is checked. Loop repeats what is playing.",
+  },
+  {
+    term: "Encoded again",
+    detail:
+      "An edited sound is always encoded again: MP3 and AAC hold sound in blocks of about a fortieth of a second, so copying them could not cut where you chose. FLAC and WAV keep every sample.",
+  },
+  ...keys,
+]
+
+const editor: TutorialContent = {
+  name: "How to edit and convert audio with KeepSimp",
+  description:
+    "Trim, cut, fade and change the volume of sound, convert it between MP3, M4A (AAC), Opus, FLAC and WAV, make ringtones and take the sound out of videos, many files at once, in your browser. Nothing is uploaded.",
+  intro: "Follow the steps below. Every option is explained underneath.",
+  steps: [
+    {
+      title: "Add your files",
+      text: "Drop them, choose them or paste them: MP3, M4A, Opus, Ogg, FLAC, WAV, AIFF, or videos. Up to 50 at once.",
+    },
+    {
+      title: "Edit the sound",
+      text: "Choose a part on the waveform, then keep it, cut it out, silence it, fade it or change its volume. Each file keeps its own edits.",
+    },
+    {
+      title: "Choose the format",
+      text: "MP3, M4A, Opus, FLAC, WAV or an iPhone ringtone, a quality, and if you like a sample rate, mono or stereo, and a file size limit.",
+    },
+    {
+      title: "Listen, check and download",
+      text: "Each file is written as soon as it is read or edited, and checked. Download one, or everything as one ZIP.",
+    },
+  ],
+  options: [...editing, ...options],
+  guideHref: "/blog/trim-audio-without-uploading/",
+}
+
+const trimming: TutorialContent = {
+  name: "How to trim audio with KeepSimp",
+  description:
+    "Cut a song, voice note or podcast to the part you want, to the millisecond, with fades, in your browser. Every edit can be undone. Nothing is uploaded.",
+  intro: "Follow the steps below. Every option is explained underneath.",
+  steps: [
+    {
+      title: "Add the file",
+      text: "Drop it, choose it or paste it: MP3, M4A, Opus, Ogg, FLAC, WAV, AIFF, or a video.",
+    },
+    {
+      title: "Choose the part",
+      text: "Drag across the waveform, or type the start and end. Zoom in to be exact, and play the selection to hear it.",
+    },
+    {
+      title: "Keep it or cut it out",
+      text: "Keep only this, or Cut out, and fade the ends if you like. Undo whenever you change your mind.",
+    },
+    {
+      title: "Download",
+      text: "The result is written in the file's own format, unless you choose another, and checked before you download it.",
+    },
+  ],
+  options: [...editing, ...options],
+  guideHref: "/blog/trim-audio-without-uploading/",
+}
+
+const ringtones: TutorialContent = {
+  name: "How to make a ringtone with KeepSimp",
+  description:
+    "Make an iPhone ringtone (M4R) or an Android ringtone (MP3) from any song in your browser, faded at its end. Nothing is uploaded.",
+  intro: "Follow the steps below. Every option is explained underneath.",
+  steps: [
+    {
+      title: "Add a song",
+      text: "Drop it, choose it or paste it: MP3, M4A, FLAC, WAV or the sound of a video.",
+    },
+    {
+      title: "Choose the part",
+      text: "Drag across the waveform, or put the playhead where the ringtone should start.",
+    },
+    {
+      title: "Make the ringtone",
+      text: `Choose the phone and press Make the ringtone: the part is cut to ${RINGTONES.iphone.seconds} seconds for an iPhone (${RINGTONES.alert.seconds} for an alert tone), faded at its ends and written as M4R, or as MP3 for Android.`,
+    },
+    {
+      title: "Put it on your phone",
+      text: "Download it; the page says how to put it on an iPhone or an Android phone.",
+    },
+  ],
+  options: [
+    {
+      term: "Ringtone lengths",
+      detail: `An iPhone takes a ringtone of at most ${RINGTONES.iphone.seconds} seconds and an alert tone of at most ${RINGTONES.alert.seconds}, as M4R (AAC sound in MP4). An Android phone takes an MP3 of any length; the maker takes ${RINGTONES.android.seconds} seconds.`,
+    },
+    {
+      term: "On an iPhone",
+      detail:
+        "With a Mac, connect the iPhone, open it in Finder and drag the M4R onto its window. With Windows, use iTunes or the Apple Devices app and drag it onto the iPhone under Tones. It then appears in Settings, Sounds & Haptics.",
+    },
+    {
+      term: "On an Android phone",
+      detail:
+        "Copy the MP3 into the phone's Ringtones folder, or open Settings, Sound, Ringtone and add it there. The menus differ a little from one maker to another.",
+    },
+    ...editing,
+    ...options,
+  ],
+  guideHref: "/blog/make-a-ringtone/",
+}
+
+export function AudioEditorTutorial() {
+  return <ToolTutorial content={editor} />
+}
+
+export function AudioTrimmerTutorial() {
+  return <ToolTutorial content={trimming} />
+}
+
+export function RingtoneTutorial() {
+  return <ToolTutorial content={ringtones} />
 }

@@ -250,9 +250,9 @@ export const overviewPost: BlogPost = {
     },
     {
       id: "audio-editor",
-      title: "Audio editor: sound in the format you need.",
+      title: "Audio editor: sound cut, faded and in the format you need.",
       paragraphs: [
-        "Convert many files at once between MP3, M4A (AAC), Opus, FLAC, WAV and iPhone ringtones, or take the sound out of a video, exactly as it is. Tags and cover art come along, MP3 and AAC files are as long as the sound with no gap at the start, and every file is opened again and listened to before you download it.",
+        "Trim to the millisecond on a waveform you can zoom, cut parts out, fade in and out, silence a part or change its volume, with every edit undoable and your file never changed. Convert many files at once between MP3, M4A (AAC), Opus, FLAC, WAV and iPhone ringtones, or take the sound out of a video, exactly as it is. Tags and cover art come along, MP3 and AAC files are as long as the sound with no gap at the start, and every file is opened again and listened to before you download it.",
       ],
       links: [
         {
@@ -278,6 +278,22 @@ export const overviewPost: BlogPost = {
         {
           label: "Guide: take the sound out of a video",
           href: "/blog/extract-audio-from-video/",
+        },
+        {
+          label: "Only a part? Open it as the Audio trimmer",
+          href: "/dashboard/audio-trimmer/",
+        },
+        {
+          label: "Guide: trim audio without uploading it",
+          href: "/blog/trim-audio-without-uploading/",
+        },
+        {
+          label: "A ringtone? Open it as the Ringtone maker",
+          href: "/dashboard/ringtone-maker/",
+        },
+        {
+          label: "Guide: make an iPhone or Android ringtone",
+          href: "/blog/make-a-ringtone/",
         },
       ],
     },
@@ -1901,6 +1917,179 @@ export const audioExtractPost: BlogPost = {
     {
       title: "Mediabunny, reading and writing media in the browser",
       url: "https://mediabunny.dev/",
+    },
+  ],
+}
+
+export const audioTrimPost: BlogPost = {
+  published: "2026-10-15",
+  modified: "2026-10-15",
+  slug: "trim-audio-without-uploading",
+  title: "Just the part you want, with no click at the cut.",
+  searchTitle:
+    "How to trim or cut an MP3 online for free, without uploading it",
+  description:
+    "Cut a song, a voice note or a podcast to the part you want, to the millisecond, with fades in and out, in your browser. Every edit can be undone. Nothing is uploaded.",
+  keywords: [
+    "trim audio",
+    "cut MP3 online",
+    "audio cutter",
+    "MP3 cutter",
+    "trim audio without upload",
+    "fade in fade out",
+    "cut part of a song",
+    "remove part of audio",
+  ],
+  category: "A little know-how",
+  readingTime: "4 min read",
+  image: "/images/audio-trim-guide.svg",
+  imageAlt:
+    "A waveform with a part of it selected between two handles, and buttons to keep it, cut it out or fade it",
+  tool: "audio-trimmer",
+  intro:
+    "A voice note with a minute of fumbling at the start, a song you only need the chorus of, an interview with a cough in the middle. Trimming should take seconds, without uploading the recording or being stopped after a few files a day.",
+  sections: [
+    {
+      id: "how",
+      title: "How to trim.",
+      paragraphs: [
+        "Open the Audio trimmer and drop the file. Drag across the waveform to choose a part, or type its start and end to the millisecond. Keep only this keeps the part and drops the rest; Cut out takes the part away and closes the gap. Play the selection, loop it, zoom in on the waveform to find the very place, then download.",
+        "The trimmer works on MP3, M4A, Opus, Ogg, FLAC, WAV, AIFF and the sound of videos. It writes the result in the file's own format unless you choose another.",
+      ],
+      links: [
+        { label: "Open the Audio trimmer", href: "/dashboard/audio-trimmer/" },
+      ],
+    },
+    {
+      id: "click",
+      title: "Why a cut can click, and why ours does not.",
+      paragraphs: [
+        "Sound is a wave. Cut it at a moment when the wave is far from the middle and the two sides of the cut do not meet: you hear a click. Some editors move each cut to where the wave crosses the middle. This one fades the sound out and in over four thousandths of a second at every place it was cut, which is too short to hear as a fade and enough to take the click away.",
+        "For a gentler start or end, choose a part and press Fade in or Fade out. Even fades at a steady rate, Smooth keeps more of the sound until late, and S-curve starts and ends softly.",
+      ],
+    },
+    {
+      id: "steps",
+      title: "Every edit can be undone.",
+      paragraphs: [
+        "Your file is never changed. Each edit is kept as a step in a list, and the result is written from your file and the steps: undo, redo or start again at any time. Silence a part, or make a part louder or quieter, in the full Audio editor.",
+        "MP3 and AAC store sound in blocks of about a fortieth of a second, so a trimmed file is encoded again to cut it exactly where you chose. FLAC and WAV keep every sample.",
+      ],
+      links: [
+        { label: "Open the Audio editor", href: "/dashboard/audio-editor/" },
+        {
+          label: "Guide: why a converted MP3 starts late, and ours does not",
+          href: "/blog/gapless-mp3-and-aac/",
+        },
+      ],
+    },
+    {
+      id: "private",
+      title: "Your recordings stay with you.",
+      paragraphs: [
+        "Files are read and written in your browser and never uploaded. Each written file is opened again and listened to, and its length held against the length of what you kept, before you download it.",
+      ],
+      links: [
+        {
+          label: "Every KeepSimp tool in one place",
+          href: "/blog/free-online-tools-no-upload/",
+        },
+      ],
+    },
+  ],
+  sources: [
+    {
+      title: "Fade (audio engineering), Wikipedia",
+      url: "https://en.wikipedia.org/wiki/Fade_(audio_engineering)",
+    },
+    {
+      title: "Zero crossing, Wikipedia",
+      url: "https://en.wikipedia.org/wiki/Zero_crossing",
+    },
+  ],
+}
+
+export const ringtonePost: BlogPost = {
+  published: "2026-10-15",
+  modified: "2026-10-15",
+  slug: "make-a-ringtone",
+  title: "Your song, when the phone rings.",
+  searchTitle:
+    "How to make a ringtone for iPhone (M4R) or Android from any song, free",
+  description:
+    "Make an iPhone ringtone (M4R, up to 40 seconds) or an Android ringtone (MP3) from any song in your browser, faded at the end, and put it on your phone. Nothing is uploaded.",
+  keywords: [
+    "ringtone maker",
+    "make iPhone ringtone",
+    "MP3 to M4R",
+    "custom ringtone",
+    "Android ringtone",
+    "iPhone alert tone",
+    "M4R converter",
+  ],
+  category: "A little know-how",
+  readingTime: "3 min read",
+  image: "/images/audio-ringtone-guide.svg",
+  imageAlt:
+    "A phone ringing beside a waveform with forty seconds of it chosen, faded at its end, and a panel that says iPhone ringtone, M4R",
+  tool: "ringtone-maker",
+  intro:
+    "A ringtone is a short piece of a song in the format a phone wants. An iPhone wants an M4R file of at most 40 seconds, or 30 for an alert tone; an Android phone takes an MP3. Here is how to make one from a song you have, on your own device.",
+  sections: [
+    {
+      id: "how",
+      title: "How to make one.",
+      paragraphs: [
+        "Open the Ringtone maker and drop a song. Choose the part you like by dragging across the waveform, or put the playhead where it should start. Choose iPhone ringtone, iPhone alert tone or Android ringtone and press Make the ringtone: the part is kept, cut to the longest the phone takes, faded in briefly at its start and out over two seconds at its end, and written as M4R or MP3.",
+        "Listen to it, move the part or undo and try again, then download it.",
+      ],
+      links: [
+        {
+          label: "Open the Ringtone maker",
+          href: "/dashboard/ringtone-maker/",
+        },
+      ],
+    },
+    {
+      id: "iphone",
+      title: "Putting it on an iPhone.",
+      paragraphs: [
+        "With a Mac, connect the iPhone, open it in Finder and drag the M4R file onto its window. With Windows, use iTunes or the Apple Devices app and drag the file onto the iPhone under Tones. The ringtone then appears in Settings, under Sounds & Haptics. An M4R is AAC sound in the MP4 format, with its own name so that the iPhone offers it as a tone.",
+      ],
+    },
+    {
+      id: "android",
+      title: "Putting it on an Android phone.",
+      paragraphs: [
+        "Copy the MP3 to the phone, into its Ringtones folder, or open Settings, Sound, Ringtone and add it from there. The menus differ a little from one maker to another.",
+      ],
+    },
+    {
+      id: "private",
+      title: "On your device.",
+      paragraphs: [
+        "The song is read and the ringtone written in your browser; nothing is uploaded and there is no account. Use songs you have the right to use.",
+      ],
+      links: [
+        {
+          label: "Guide: trim audio without uploading it",
+          href: "/blog/trim-audio-without-uploading/",
+        },
+        {
+          label: "Every KeepSimp tool in one place",
+          href: "/blog/free-online-tools-no-upload/",
+        },
+      ],
+    },
+  ],
+  sources: [
+    {
+      title: "Ringtone, Wikipedia",
+      url: "https://en.wikipedia.org/wiki/Ringtone",
+    },
+    {
+      title: "MP4 file format, Wikipedia",
+      url: "https://en.wikipedia.org/wiki/MP4_file_format",
     },
   ],
 }

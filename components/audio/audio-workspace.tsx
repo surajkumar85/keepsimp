@@ -12,6 +12,7 @@ import Link from "next/link"
 import {
   IconAlertCircle,
   IconCircleCheck,
+  IconCut,
   IconFileMusic,
   IconFilePlus,
   IconInfoCircle,
@@ -27,6 +28,7 @@ import {
   DropZone,
   type DropZoneCopy,
 } from "@/components/image-compressor/drop-zone"
+import { Button } from "@/components/ui/button"
 import { ChoiceChips } from "@/components/ui/choice-chips"
 import { checkResult } from "@/lib/audio/check"
 import { AudioPool, audioPoolSize, decodeOnPage } from "@/lib/audio/client"
@@ -45,6 +47,7 @@ import {
   rateLabel,
   timeLabel,
 } from "@/lib/audio/labels"
+import { editedBy, lengthOf, type Step } from "@/lib/audio/edits"
 import type { ReadFacts } from "@/lib/audio/mediabunny-audio"
 import { PeakBuilder, peakLevel, type Peaks } from "@/lib/audio/peaks"
 import type { AudioJob, AudioResponse } from "@/lib/audio/protocol"
@@ -53,7 +56,9 @@ import {
   audioState,
   audioTotals,
   droppedUrls,
+  itemKey,
   nextAudioJob,
+  stepsOf,
   type AudioItem,
 } from "@/lib/audio/queue"
 import {
@@ -63,18 +68,32 @@ import {
   settingsProblem,
   type AudioSettings,
 } from "@/lib/audio/settings"
+import { peakCount } from "@/lib/audio/view"
 import { wavFromPlanes } from "@/lib/audio/wav"
 import { sizeLabel } from "@/lib/image-compressor/formats"
 import { savingsPercent } from "@/lib/image-compressor/quality"
 import { uniqueNames } from "@/lib/image-resizer/naming"
 import { createZip } from "@/lib/image-resizer/zip"
 import { SettingsPanel } from "./settings-panel"
+import { SoundEditor, type EditorFocus } from "./sound-editor"
 import { Waveform } from "./waveform"
 
 /** What the workspace is opened for: everything, or one job through a door. */
-export type AudioMode = "editor" | "converter" | "extractor"
+export type AudioMode =
+  "editor" | "converter" | "extractor" | "trimmer" | "ringtone"
+
+/** What the waveform editor is opened for, in each mode; none where it waits to be asked for. */
+const EDITING: Record<AudioMode, EditorFocus | null> = {
+  editor: "edit",
+  trimmer: "trim",
+  ringtone: "ringtone",
+  converter: null,
+  extractor: null,
+}
 
 const INPUT_ID = "audio-file"
+/** One empty list, so a file with no edits hands the editor the same list each time. */
+const NO_CHANGES: Step[][] = []
 const DEBOUNCE_MS = 350
 /** How many files may be added at once, and how large each may be. */
 export const MAX_FILES = 50
@@ -84,7 +103,7 @@ const COPY: Record<AudioMode, DropZoneCopy> = {
   editor: {
     heading: "Drop sound or video files",
     dropping: "Drop to add these files",
-    body: "Convert them, or take the sound out of a video. Many at once, on your device. You can also paste with ⌘V or Ctrl+V.",
+    body: "Trim, fade and change the volume; convert them, or take the sound out of a video. Many at once, on your device. You can also paste with ⌘V or Ctrl+V.",
     inputLabel: "Choose sound or video files",
     action: "Choose files",
     limits: `Stays on your device · up to ${MAX_FILES} files at once`,
@@ -97,6 +116,22 @@ const COPY: Record<AudioMode, DropZoneCopy> = {
     action: "Choose files",
     limits: `Stays on your device · up to ${MAX_FILES} files at once`,
   },
+  trimmer: {
+    heading: "Drop a sound to trim",
+    dropping: "Drop to trim these files",
+    body: "Choose the part to keep, or cut parts out, to the millisecond, with fades so nothing clicks. MP3, M4A, Opus, FLAC, WAV and videos, on your device. You can also paste with ⌘V or Ctrl+V.",
+    inputLabel: "Choose sound files to trim",
+    action: "Choose files",
+    limits: `Stays on your device · up to ${MAX_FILES} files at once`,
+  },
+  ringtone: {
+    heading: "Drop a song to make a ringtone",
+    dropping: "Drop to make a ringtone",
+    body: "Choose the part you like and it becomes an iPhone ringtone (M4R) or an Android one (MP3), faded at its end. On your device. You can also paste with ⌘V or Ctrl+V.",
+    inputLabel: "Choose a song to make a ringtone of",
+    action: "Choose a song",
+    limits: "Stays on your device · no account",
+  },
   extractor: {
     heading: "Drop a video to take its sound out",
     dropping: "Drop to take the sound out",
@@ -108,6 +143,11 @@ const COPY: Record<AudioMode, DropZoneCopy> = {
 }
 
 const ABILITIES = [
+  {
+    icon: IconCut,
+    title: "Trim, fade and change the volume",
+    text: "To the millisecond, on a waveform you can zoom; every edit can be undone, and your file is never changed.",
+  },
   {
     icon: IconTransform,
     title: "Every common format",
@@ -139,6 +179,8 @@ const ABILITIES = [
 const FOCUSED: Partial<Record<AudioMode, string>> = {
   converter: "opened for converting audio",
   extractor: "opened for taking the sound out of videos",
+  trimmer: "opened for trimming",
+  ringtone: "opened for making ringtones",
 }
 
 const SAMPLES: Record<AudioMode, { name: string; type: string }[]> = {
@@ -148,6 +190,17 @@ const SAMPLES: Record<AudioMode, { name: string; type: string }[]> = {
   ],
   converter: [{ name: "keepsimp-tune.flac", type: "audio/flac" }],
   extractor: [{ name: "keepsimp-clip.mp4", type: "video/mp4" }],
+  trimmer: [{ name: "keepsimp-tune.flac", type: "audio/flac" }],
+  ringtone: [{ name: "keepsimp-tune.flac", type: "audio/flac" }],
+}
+
+/** The format each mode writes at first. */
+const FIRST_FORMAT: Record<AudioMode, AudioSettings["format"]> = {
+  editor: "mp3",
+  converter: "mp3",
+  extractor: "same",
+  trimmer: "same",
+  ringtone: "m4r",
 }
 
 /** The tags of a file, to be written into what the page decoded (whose WAV has none). */
@@ -203,7 +256,7 @@ export function AudioWorkspace({ mode = "editor" }: { mode?: AudioMode }) {
   const [items, dispatchRaw] = useReducer(audioReducer, [])
   const [settings, setSettings] = useState<AudioSettings>(() => ({
     ...defaultSettings,
-    format: mode === "extractor" ? "same" : "mp3",
+    format: FIRST_FORMAT[mode],
   }))
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
@@ -213,6 +266,9 @@ export function AudioWorkspace({ mode = "editor" }: { mode?: AudioMode }) {
   >({})
   const [listening, setListening] = useState<"original" | "result">("original")
   const [played, setPlayed] = useState(0)
+  // In the converter and extractor, the editor opens when asked for.
+  const [asked, setAsked] = useState(false)
+  const focus = EDITING[mode] ?? (asked ? "edit" : null)
   const player = useRef<HTMLAudioElement>(null)
   const containers = useRef(new Map<string, Container>())
   const pool = useRef<AudioPool | null>(null)
@@ -225,6 +281,12 @@ export function AudioWorkspace({ mode = "editor" }: { mode?: AudioMode }) {
   useEffect(() => {
     live.current = { items, key, settings, selectedId }
   })
+
+  /** The key a file's result is current for, as things stand now. */
+  const keyFor = useCallback((id: string) => {
+    const item = live.current.items.find((one) => one.id === id)
+    return item ? itemKey(live.current.key, item) : null
+  }, [])
 
   // The pool asks for its next job as soon as a worker answers, before the
   // page has drawn again: it sees each change at once, or it would hand out
@@ -249,7 +311,8 @@ export function AudioWorkspace({ mode = "editor" }: { mode?: AudioMode }) {
       if (!item) return
       try {
         const { planes, sampleRate } = await decodeOnPage(item.file)
-        const builder = new PeakBuilder(planes[0]?.length ?? 0, 2000)
+        const frames = planes[0]?.length ?? 0
+        const builder = new PeakBuilder(frames, peakCount(frames / sampleRate))
         builder.push(planes)
         dispatch({
           type: "decoded",
@@ -276,7 +339,7 @@ export function AudioWorkspace({ mode = "editor" }: { mode?: AudioMode }) {
         dispatch({ type: "facts", id: message.id, facts: message.facts })
         if (!message.facts.decodable) void decodeHere(message.id, message.facts)
       } else if (message.type === "progress") {
-        if (message.key === live.current.key)
+        if (message.key === keyFor(message.id))
           dispatch({
             type: "progress",
             id: message.id,
@@ -287,7 +350,7 @@ export function AudioWorkspace({ mode = "editor" }: { mode?: AudioMode }) {
           dispatch({ type: "peaks", id: message.id, peaks: message.peaks })
       } else if (message.type === "done") {
         const item = live.current.items.find((one) => one.id === message.id)
-        if (!item?.facts || message.key !== live.current.key) return
+        if (!item?.facts || message.key !== keyFor(message.id)) return
         const { plan } = message
         const format = writtenFormats[plan.format]
         const blob = new Blob([message.bytes as BlobPart], {
@@ -312,7 +375,9 @@ export function AudioWorkspace({ mode = "editor" }: { mode?: AudioMode }) {
             problems: message.heard
               ? checkResult(
                   {
-                    duration: item.facts.duration,
+                    duration: lengthOf(
+                      editedBy(item.facts.duration, stepsOf(item))
+                    ),
                     sampleRate: plan.sampleRate,
                     channels: plan.channels,
                     copy: plan.copy,
@@ -335,14 +400,14 @@ export function AudioWorkspace({ mode = "editor" }: { mode?: AudioMode }) {
           message: message.message,
         })
     },
-    [decodeHere, dispatch]
+    [decodeHere, dispatch, keyFor]
   )
 
   const next = useCallback((): AudioJob | null => {
     const current = live.current
     const found = nextAudioJob(
       current.items,
-      current.key,
+      (item) => itemKey(current.key, item),
       pool.current?.inFlight() ?? new Set(),
       current.selectedId
     )
@@ -351,7 +416,12 @@ export function AudioWorkspace({ mode = "editor" }: { mode?: AudioMode }) {
     const container = containers.current.get(item.id)!
     if (job === "read") return { job, id: item.id, file: item.file, container }
     const facts = item.facts!
-    const plan = planFor(current.settings, facts)
+    const edits = stepsOf(item)
+    const plan = planFor(
+      current.settings,
+      { ...facts, duration: lengthOf(editedBy(facts.duration, edits)) },
+      edits.length > 0
+    )
     // Sound the page decoded is written from its WAV; a copy needs no
     // decoding, so it is always taken from the file itself.
     const decoded = plan.copy ? undefined : item.decoded
@@ -364,7 +434,8 @@ export function AudioWorkspace({ mode = "editor" }: { mode?: AudioMode }) {
       plan,
       keepTags: current.settings.keepTags,
       tags: decoded ? tagsOf(facts) : undefined,
-      key: current.key!,
+      edits,
+      key: itemKey(current.key, item)!,
     }
   }, [])
 
@@ -479,6 +550,23 @@ export function AudioWorkspace({ mode = "editor" }: { mode?: AudioMode }) {
     }
   }
 
+  // An edit outdates the file being written; the newest edits win after a pause.
+  const editTimers = useRef(new Map<string, number>())
+  function edit(action: Parameters<typeof audioReducer>[1] & { id: string }) {
+    dispatch(action)
+    const timers = editTimers.current
+    window.clearTimeout(timers.get(action.id))
+    timers.set(
+      action.id,
+      window.setTimeout(() => {
+        timers.delete(action.id)
+        if (pool.current?.inFlight().has(action.id))
+          pool.current.forget(action.id)
+        pool.current?.kick()
+      }, DEBOUNCE_MS)
+    )
+  }
+
   function remove(id: string) {
     pool.current?.forget(id)
     dispatch({ type: "remove", id })
@@ -493,7 +581,10 @@ export function AudioWorkspace({ mode = "editor" }: { mode?: AudioMode }) {
     setNotice(null)
   }
 
-  const totals = useMemo(() => audioTotals(items, key), [items, key])
+  const totals = useMemo(
+    () => audioTotals(items, (item) => itemKey(key, item)),
+    [items, key]
+  )
   // The selected original is played from an object URL, released when it changes.
   const shown = items.find((item) => item.id === selectedId) ?? items[0]
   const originalBlob =
@@ -508,7 +599,9 @@ export function AudioWorkspace({ mode = "editor" }: { mode?: AudioMode }) {
     },
     [originalUrl]
   )
-  const finished = items.filter((item) => audioState(item, key) === "done")
+  const finished = items.filter(
+    (item) => audioState(item, itemKey(key, item)) === "done"
+  )
   const names = uniqueNames(finished.map((item) => item.result!.name))
 
   async function downloadZip() {
@@ -537,7 +630,7 @@ export function AudioWorkspace({ mode = "editor" }: { mode?: AudioMode }) {
   }
 
   const rows: QueueRow[] = items.map((item) => {
-    const state = audioState(item, key)
+    const state = audioState(item, itemKey(key, item))
     const facts = item.facts
     const result = state === "done" ? item.result! : null
     const index = finished.indexOf(item)
@@ -652,10 +745,21 @@ export function AudioWorkspace({ mode = "editor" }: { mode?: AudioMode }) {
     )
 
   const selected = items.find((item) => item.id === selectedId) ?? items[0]
-  const selectedState = audioState(selected, key)
+  const selectedState = audioState(selected, itemKey(key, selected))
   const facts = selected.facts
   const result = selectedState === "done" ? selected.result! : null
-  const plan = facts && !problem ? planFor(settings, facts) : null
+  const selectedSteps = stepsOf(selected)
+  const plan =
+    facts && !problem
+      ? planFor(
+          settings,
+          {
+            ...facts,
+            duration: lengthOf(editedBy(facts.duration, selectedSteps)),
+          },
+          selectedSteps.length > 0
+        )
+      : null
   const playing = listening === "result" && result ? result.url : null
   const source =
     selected.status === "error" || !facts ? null : (playing ?? originalUrl)
@@ -788,53 +892,104 @@ export function AudioWorkspace({ mode = "editor" }: { mode?: AudioMode }) {
                 </dl>
               </div>
 
-              <Waveform
-                peaks={selected.peaks ?? null}
-                progress={played}
-                label={`Waveform of ${selected.file.name}`}
-                onSeek={(fraction) => {
-                  const element = player.current
-                  if (element && Number.isFinite(element.duration))
-                    element.currentTime = fraction * element.duration
-                }}
-              />
-              {result && (
-                <ChoiceChips
-                  label="Listen to"
-                  value={listening}
-                  onValueChange={(value) => {
-                    setListening(value)
-                    setPlayed(0)
-                  }}
-                  options={[
-                    { value: "original", label: "Original" },
-                    { value: "result", label: "Result" },
-                  ]}
-                />
-              )}
-              {source && (
-                <audio
-                  ref={player}
-                  key={source}
-                  src={source}
-                  controls
-                  preload="metadata"
-                  // A fixed height: the player grows when it has read the
-                  // file, which would move everything under it.
-                  className="block h-14 w-full"
-                  data-testid="audio-player"
-                  aria-label={
-                    listening === "result" && result ? "Result" : "Original"
-                  }
-                  onTimeUpdate={(event) => {
-                    const element = event.currentTarget
-                    setPlayed(
-                      Number.isFinite(element.duration) && element.duration > 0
-                        ? element.currentTime / element.duration
-                        : 0
-                    )
-                  }}
-                />
+              {focus ? (
+                <>
+                  <SoundEditor
+                    key={selected.id}
+                    name={selected.file.name}
+                    duration={facts.duration}
+                    peaks={selected.peaks ?? null}
+                    url={originalUrl}
+                    changes={selected.changes ?? NO_CHANGES}
+                    canRedo={Boolean(selected.redo?.length)}
+                    focus={focus}
+                    onChange={(steps: Step[]) =>
+                      edit({ type: "change", id: selected.id, steps })
+                    }
+                    onUndo={() => edit({ type: "undo", id: selected.id })}
+                    onRedo={() => edit({ type: "redo", id: selected.id })}
+                    onReset={() => edit({ type: "reset", id: selected.id })}
+                    onFormat={(format) =>
+                      setSettings((current) => ({ ...current, format }))
+                    }
+                  />
+                  {result && (
+                    <div className="space-y-1">
+                      <p className="text-sm font-medium">
+                        Listen to the result
+                      </p>
+                      <audio
+                        key={result.url}
+                        src={result.url}
+                        controls
+                        preload="metadata"
+                        className="block h-14 w-full"
+                        data-testid="audio-player"
+                        aria-label="Result"
+                      />
+                    </div>
+                  )}
+                </>
+              ) : (
+                <>
+                  <Waveform
+                    peaks={selected.peaks ?? null}
+                    progress={played}
+                    label={`Waveform of ${selected.file.name}`}
+                    onSeek={(fraction) => {
+                      const element = player.current
+                      if (element && Number.isFinite(element.duration))
+                        element.currentTime = fraction * element.duration
+                    }}
+                  />
+                  {result && (
+                    <ChoiceChips
+                      label="Listen to"
+                      value={listening}
+                      onValueChange={(value) => {
+                        setListening(value)
+                        setPlayed(0)
+                      }}
+                      options={[
+                        { value: "original", label: "Original" },
+                        { value: "result", label: "Result" },
+                      ]}
+                    />
+                  )}
+                  {source && (
+                    <audio
+                      ref={player}
+                      key={source}
+                      src={source}
+                      controls
+                      preload="metadata"
+                      // A fixed height: the player grows when it has read the
+                      // file, which would move everything under it.
+                      className="block h-14 w-full"
+                      data-testid="audio-player"
+                      aria-label={
+                        listening === "result" && result ? "Result" : "Original"
+                      }
+                      onTimeUpdate={(event) => {
+                        const element = event.currentTarget
+                        setPlayed(
+                          Number.isFinite(element.duration) &&
+                            element.duration > 0
+                            ? element.currentTime / element.duration
+                            : 0
+                        )
+                      }}
+                    />
+                  )}
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setAsked(true)}
+                  >
+                    <IconCut data-icon="inline-start" aria-hidden="true" />
+                    Trim or edit the sound
+                  </Button>
+                </>
               )}
               {selected.progress !== undefined &&
                 selectedState === "waiting" && (

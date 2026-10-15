@@ -58,3 +58,35 @@ export function bitrateLabel(bitsPerSecond: number) {
 export function averageBitrate(bytes: number, seconds: number) {
   return seconds > 0 ? Math.round((bytes * 8) / seconds) : null
 }
+
+const two = (value: number) => String(value).padStart(2, "0")
+
+/** A moment as the time fields show it, to the millisecond: 0:07.250, 1:02:03.000. */
+export function clockLabel(seconds: number) {
+  const ms = Math.round(Math.max(0, seconds) * 1000)
+  const hours = Math.floor(ms / 3_600_000)
+  const minutes = Math.floor(ms / 60_000) % 60
+  const rest = ((ms % 60_000) / 1000).toFixed(3).padStart(6, "0")
+  return hours ? `${hours}:${two(minutes)}:${rest}` : `${minutes}:${rest}`
+}
+
+/**
+ * A time typed into a field: seconds (7.25), minutes and seconds (1:07.25)
+ * or hours too (1:02:03); a comma may stand for the point. Null when it is
+ * not a time.
+ */
+export function parseClock(text: string): number | null {
+  const parts = text.trim().replace(",", ".").split(":")
+  if (parts.length > 3) return null
+  const last = parts.length - 1
+  let seconds = 0
+  for (const [index, part] of parts.entries()) {
+    const pattern = index === last ? /^(\d+(\.\d*)?|\.\d+)$/ : /^\d+$/
+    if (!pattern.test(part)) return null
+    const value = Number(part)
+    // Minutes and seconds after the first part run to 59.
+    if (index > 0 && value >= 60) return null
+    seconds = seconds * 60 + value
+  }
+  return seconds
+}

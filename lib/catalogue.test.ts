@@ -14,6 +14,8 @@ describe("doors", () => {
     expect(doors.map((tool) => tool.id)).toEqual([
       "audio-converter",
       "audio-extractor",
+      "audio-trimmer",
+      "ringtone-maker",
       "pdf-annotator",
       "sign-pdf",
       "fill-pdf-form",

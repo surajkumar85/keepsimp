@@ -1,12 +1,12 @@
 # Audio workspace
 
-Updated 15 October 2026. Applies to `/dashboard/audio-editor/` and its doors. The workspace is built in eight phases (the plan is at the end). **Phase 1 is built:** converting and taking sound out of videos, many files at once, each file checked before it is offered.
+Updated 15 October 2026. Applies to `/dashboard/audio-editor/` and its doors. The workspace is built in eight phases (the plan is at the end). **Phases 1 and 2 are built:** converting and taking sound out of videos, many files at once, each file checked before it is offered; and the waveform editor, with trimming, cutting, silence, fades, volume and ringtones, as steps that can be undone.
 
 ## What it does (phase 1)
 
-- **One workspace, several doors.** The Audio editor is the tool; the Audio converter (`/dashboard/audio-converter/`) and the Audio extractor (`/dashboard/audio-extractor/`) are doors into it (`partOf: "audio-editor"` in `lib/catalogue.ts`), each with its own title, help and article. The extractor starts on "Same as the file". The Audio trimmer stays a planned card until phase 2.
+- **One workspace, several doors.** The Audio editor is the tool; the Audio converter (`/dashboard/audio-converter/`) and the Audio extractor (`/dashboard/audio-extractor/`) are doors into it (`partOf: "audio-editor"` in `lib/catalogue.ts`), each with its own title, help and article. The extractor starts on "Same as the file". Phase 2 adds the Audio trimmer (`/dashboard/audio-trimmer/`) and the Ringtone maker (`/dashboard/ringtone-maker/`).
 - **Open** up to 50 files at once, by drop, picker, paste or the samples: MP3, M4A/AAC, Opus, Ogg Vorbis, FLAC, WAV, AIFF, and the sound of MP4, MOV, WebM and MKV videos. Files are told apart by their first bytes (`lib/audio/formats.ts`); a file that is not sound or video, or one nothing here can decode, says why and does not hold up the rest.
-- **Each file** shows its kind, codec, length, sample rate, channels, average bitrate, size, tags and cover art, an overview waveform drawn from 2,000 peaks gathered while it is decoded (`lib/audio/peaks.ts`), and a player for the original and the result.
+- **Each file** shows its kind, codec, length, sample rate, channels, average bitrate, size, tags and cover art, a waveform drawn from peaks gathered while it is decoded (200 a second, at least 2,000 and at most a million: `peakCount` in `lib/audio/view.ts`) (`lib/audio/peaks.ts`), and a player for the original and the result.
 - **Formats:** MP3 (LAME, constant bitrate), M4A (AAC), Opus (in Ogg, always 48 kHz), FLAC (16 or 24 bits), WAV (16-bit, 24-bit or 32-bit float), M4R (an iPhone ringtone; at most 40 s, which the page warns of), and "Same as the file".
 - **Quality** presets per codec, stereo then mono, in kbit/s (KeepSimp's own choices): MP3 96/64, 192/96, 320/160; AAC 96/64, 160/96, 256/128; Opus 48/32, 96/64, 160/96. Custom picks from each codec's list. Below 32 kHz an MP3 is MPEG-2, which holds at most 160 kbit/s; the plan says so.
 - **Sample rate and channels:** the file's own or one chosen; the nearest a codec can hold is used and named. Lossy formats here are mono or stereo, so more channels are mixed down, with a note.
@@ -17,6 +17,19 @@ Updated 15 October 2026. Applies to `/dashboard/audio-editor/` and its doors. Th
 - **Offline:** the workspace, its worker and the encoders are build files, so they are in the offline copy; the samples are in `public/samples/`.
 
 Every choice made for the person (a rate a codec cannot hold, a mix-down, a capped bitrate, a fitted size, a copy) is worked out in one place, `planFor` in `lib/audio/settings.ts`, and shown under the player as a sentence.
+
+## The editor (phase 2)
+
+- **Edits are steps, never changes to the file** (`lib/audio/edits.ts`). A step is keep, cut, silence, fade (in or out; even, smooth or S-curve) or volume (at most 24 dB either way), given in the times of the sound as it stood when the step was made, as the person saw it. Since steps only take sound away or change its loudness, never move it, what they do is kept against the source's own times: the parts kept, in order (`segments`), and the changes of loudness over them (`effects`, each a list of pieces with how far through the effect each runs). A later cut cannot disturb an earlier fade, and a fade made across a join is one fade.
+- **Undo** is the list made again without the last change. The queue keeps each file's own list of changes (`changes`, each one or more steps undone together, as a ringtone is) and a redo list (`lib/audio/queue.ts`); a result is current for the settings and that file's steps together (`itemKey`). An edit lets the job writing that file go after a pause, as a change of settings does.
+- **Joins fade.** Wherever the source was cut, the sound fades out and in over 4 ms (`JOIN_FADE`), not at the source's own ends. This takes away the click of a cut at any point, so cuts are not moved to zero crossings.
+- **Writing.** An edited sound is always encoded again (`planFor(…, edited)` says so): MP3 and AAC frames are 20–26 ms, so a copy could not cut where asked. The converter trims to the first and last kept sample and, in Mediabunny's `process` hook, counts frames from the trim's start, keeps those inside a kept part and multiplies each by `gainAt` (`shaped`). Lengths, gapless headers, edit lists and Opus end granules are all for the edited length, which the check holds the result to. `lib/audio/edits.node.test.ts` holds each kind of step to FFmpeg sample by sample in WAV, and an edited MP3 to its exact length.
+- **The waveform** (`components/audio/sound-editor.tsx`) is drawn from the peaks for the part in view, with cut parts closed up and fades, silence and volume at the loudness they give (`columnsOf`); the ruler's marks are at least 80 px apart (`ticksOf`). Zoom with the buttons, the keys, or Ctrl or ⌘ with the wheel (a trackpad's pinch), to 50 ms across; scroll with the slider under it or sideways on the wheel. Dashed lines mark where something was cut.
+- **Choosing a part:** drag across the waveform (an edge within 8 px is moved), type the start and end (7.25, 1:07.25 or 1:02:03; `parseClock`), or use I and O at the playhead. The waveform is a slider for the playhead, with the keys listed once in `lib/audio/shortcuts.ts`, from which the help is made.
+- **Listening** is a preview from the file itself: an `<audio>` element through a gain node (made on the first press, as phones require), moved past what was cut (`playFrom`) and set to `gainAt` every 10 ms. A timer, not animation frames: those stop in a tab that is not shown, and the sound would play on through the cuts. The result has a player of its own.
+- **Ringtones** (`lib/audio/ringtone.ts`): an iPhone ringtone is at most 40 s and an alert tone 30, as M4R; Android takes MP3 of any length, and 30 s is used. The selection is taken, cut to that; with none, that long from the playhead, moved back if it would run past the end. It fades in over 50 ms and out over 2 s (at most a quarter of its length each), and the format is set to M4R or MP3. The page says how to put it on a phone.
+- **In the doors:** the trimmer writes in the file's own format and offers keep, cut and fades; the ringtone maker starts on M4R with the ringtone panel. The converter and the extractor open the editor when asked ("Trim or edit the sound").
+- Not yet: splitting into files (phase 4), loudness and normalising (phase 3).
 
 ## How it is built
 
@@ -56,15 +69,16 @@ Each result is opened again and decoded from start to end (`hearAudio`, with the
 
 ## Tests
 
-- **Unit, 100%:** `formats.test.ts`, `settings.test.ts` (every plan rule), `gapless.test.ts` (headers read and written by hand and from FFmpeg, peaks, the check, size fitting), `wav.test.ts` (AIFF against FFmpeg, WAV writing), `mp4-edit.test.ts` (real M4As judged by FFmpeg, hand-made boxes for 64-bit lists and offsets), `queue.test.ts`.
+- **Unit, 100%:** `formats.test.ts`, `settings.test.ts` (every plan rule), `gapless.test.ts` (headers read and written by hand and from FFmpeg, peaks, the check, size fitting), `wav.test.ts` (AIFF against FFmpeg, WAV writing), `mp4-edit.test.ts` (real M4As judged by FFmpeg, hand-made boxes for 64-bit lists and offsets), `queue.test.ts` (edits, undo and keys too), `edits.test.ts`, `view.test.ts`, `ringtone.test.ts`, `playback.test.ts`, `shortcuts.test.ts`.
 - **Engine in Node** (`audio.node.test.ts`): reading WAV, AIFF and MP3 facts; writing WAV at another depth and rate, FLAC at 16 and 24 bits (FFmpeg decodes the very samples of the source), gapless MP3 at its bitrate (FFmpeg decodes exactly the source's length), tags kept, dropped and given, and copying. Node has no WebCodecs, so AAC and Opus are covered in the browser.
 - **Browser** (`e2e/audio-workspace.spec.ts`, five profiles): the samples to gapless MP3 with tags and cover (exact sample count by FFmpeg) and a ZIP; every format read back by FFprobe and FFmpeg (AAC exact through the edit list, FLAC bit for bit, WAV 24-bit mono at 22.05 kHz exact); the extractor copying a video's AAC packet for packet, then MP3; AIFF, a file that is not sound, tags off and a size limit; axe in both themes, 320 px, the keyboard and no outside requests. `e2e/offline.spec.ts` converts the samples to MP3 with the server stopped.
+- **Browser, the editor** (`e2e/audio-editor.spec.ts`, five profiles): the trimmer keeps 1.5–4 s of the sample as FLAC, exactly 2.5 s, every sample inside the join fades the original's; the editor cuts, silences and fades to an MP3 exactly 7 s long, silent and faded where asked, and a −6.02 dB change halves the peaks; undo, redo, start again and each file's own steps; the ringtone maker's M4R and Android MP3; the keys, a drag and zoom; axe in both themes and 320 px for both doors.
 - Fixtures: `tests/fixtures/audio/make.sh` (FFmpeg); samples: `scripts/sample-audio.sh`.
 
 ## The plan
 
 1. **The workspace, converting and extracting.** Built.
-2. **The waveform editor:** trim, cut, silence, split, fades, volume, as steps with undo; ringtone presets. Doors: Audio trimmer, Ringtone maker.
+2. **The waveform editor:** trim, cut, silence, fades, volume, as steps with undo; ringtone presets. Doors: Audio trimmer, Ringtone maker. Built (splitting moves to phase 4).
 3. **Loudness and dynamics:** BS.1770-5 meter, normalising to named targets with a true-peak limiter, volume boost, compressor, equaliser, silence trimming. Doors: Normalize audio, Volume booster.
 4. **Joining and splitting.** Doors: Join audio, Audio splitter.
 5. **Speed, pitch and channels,** reverse, karaoke (said to be what it is). Door: Change audio speed.

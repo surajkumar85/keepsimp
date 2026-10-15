@@ -8,7 +8,10 @@ import { AnimationConverter } from "@/components/animation-converter/animation-c
 import { AudioWorkspace } from "@/components/audio/audio-workspace"
 import {
   AudioConverterTutorial,
+  AudioEditorTutorial,
   AudioExtractorTutorial,
+  AudioTrimmerTutorial,
+  RingtoneTutorial,
 } from "@/components/audio/tutorial"
 import { AnimationConverterTutorial } from "@/components/animation-converter/tutorial"
 import { ImageCompressor } from "@/components/image-compressor/image-compressor"
@@ -82,13 +85,25 @@ export async function generateMetadata({
   if (id === "audio-editor")
     return pageMetadata(
       "Free audio editor and converter, with no uploads",
-      "Convert MP3, M4A, Opus, FLAC, WAV and AIFF, and take the sound out of videos, many files at once, in your browser. Every file is checked before you download it. No account, no uploads.",
+      "Trim, cut, fade and change the volume of sound; convert MP3, M4A, Opus, FLAC, WAV and AIFF; make ringtones and take the sound out of videos, many files at once, in your browser. Every file is checked before you download it. No account, no uploads.",
       `/dashboard/${id}/`
     )
   if (id === "audio-converter")
     return pageMetadata(
       "Audio converter online for free: MP3, M4A, FLAC, WAV",
       "Convert audio between MP3, M4A (AAC), Opus, FLAC, WAV and iPhone ringtones in your browser, many files at once, keeping tags and cover art. No account, no file uploads.",
+      `/dashboard/${id}/`
+    )
+  if (id === "audio-trimmer")
+    return pageMetadata(
+      "Trim audio online for free: cut MP3, M4A, WAV",
+      "Cut a song, voice note or podcast to the part you want, to the millisecond, with fades in and out, in your browser. Every edit can be undone. No account, no file uploads.",
+      `/dashboard/${id}/`
+    )
+  if (id === "ringtone-maker")
+    return pageMetadata(
+      "Ringtone maker: iPhone (M4R) and Android, free",
+      "Make an iPhone ringtone (M4R, up to 40 seconds) or an Android ringtone (MP3) from any song in your browser, faded at its end. No account, no file uploads.",
       `/dashboard/${id}/`
     )
   if (id === "audio-extractor")
@@ -247,6 +262,10 @@ export default async function ToolPage({
         <AudioWorkspace mode="converter" />
       ) : id === "audio-extractor" ? (
         <AudioWorkspace mode="extractor" />
+      ) : id === "audio-trimmer" ? (
+        <AudioWorkspace mode="trimmer" />
+      ) : id === "ringtone-maker" ? (
+        <AudioWorkspace mode="ringtone" />
       ) : id === "pdf-merger" ? (
         <PdfMerger />
       ) : id === "pdf-splitter" ? (
@@ -288,8 +307,14 @@ export default async function ToolPage({
         <ImageConverterTutorial />
       ) : id === "animation-converter" ? (
         <AnimationConverterTutorial />
-      ) : id === "audio-editor" || id === "audio-converter" ? (
+      ) : id === "audio-editor" ? (
+        <AudioEditorTutorial />
+      ) : id === "audio-converter" ? (
         <AudioConverterTutorial />
+      ) : id === "audio-trimmer" ? (
+        <AudioTrimmerTutorial />
+      ) : id === "ringtone-maker" ? (
+        <RingtoneTutorial />
       ) : id === "audio-extractor" ? (
         <AudioExtractorTutorial />
       ) : id === "pdf-merger" ? (
