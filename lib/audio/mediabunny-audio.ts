@@ -8,6 +8,7 @@ import type * as Mediabunny from "mediabunny"
 import type { Container } from "./formats"
 import { lameTagged, mp3Gapless, mp3Kept } from "./gapless"
 import { withEditList } from "./mp4-edit"
+import { withOpusEnd } from "./ogg-end"
 import { PeakBuilder, type Peaks } from "./peaks"
 import type { Plan, SourceFacts } from "./settings"
 import type { Heard } from "./check"
@@ -497,6 +498,8 @@ export async function convertAudio(
     const samples = Math.round(facts.duration * plan.sampleRate)
     if (plan.copy) return written
     if (plan.codec === "mp3") return lameTagged(written, samples)
+    if (plan.codec === "opus")
+      return withOpusEnd(written, Math.round(facts.duration * 48000))
     if (plan.codec === "aac") {
       const priming = await aacPriming(
         engine,

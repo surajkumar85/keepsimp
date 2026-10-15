@@ -29,6 +29,7 @@ export default defineConfig({
         "lib/audio/check.ts",
         "lib/audio/queue.ts",
         "lib/audio/mp4-edit.ts",
+        "lib/audio/ogg-end.ts",
         "lib/color/core.ts",
         "lib/color/picker.ts",
         "lib/color/palette.ts",
