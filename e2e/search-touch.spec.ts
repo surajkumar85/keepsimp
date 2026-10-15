@@ -177,7 +177,7 @@ test("finger swipes scroll search results without changing selection or moving t
     first.x + first.width / 2,
     first.y + first.height / 2
   )
-  await expect(page).toHaveURL(/\/dashboard\/image-compressor\/$/)
+  await expect(page).toHaveURL(/\/dashboard\/audio-editor\/$/)
   await expect(dialog).toBeHidden()
 })
 

@@ -17,6 +17,9 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
+      # The audio tests read what is written with FFmpeg, never with the
+      # library that wrote it.
+      - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
       - run: npm run audit:production
       - run: npm run check
   # The browser tests, one job for each profile. In one job they came to take
@@ -49,6 +52,7 @@ jobs:
       - run: npm ci
       - run: npm run build
       - run: npx playwright install --with-deps ${{ matrix.engine }}
+      - run: sudo apt-get install -y --no-install-recommends ffmpeg
       - run: npm run test:e2e -- --project=${{ matrix.project }}
       - uses: actions/upload-artifact@v7.0.2
         if: failure()

@@ -65,9 +65,22 @@ function samples(bytes: Uint8Array, name: string, channels = 2) {
 
 /** Wait until every file is written with the current settings. */
 async function settled(page: Page) {
-  await expect(workspace(page)).toHaveAttribute("data-settled", "true", {
-    timeout: 60_000,
-  })
+  try {
+    await expect(workspace(page)).toHaveAttribute("data-settled", "true", {
+      timeout: 60_000,
+    })
+  } catch (error) {
+    // Say what each file shows, so a run elsewhere tells why it stopped.
+    const rows = await page.getByTestId("queue-item").allTextContents()
+    const result = await page
+      .getByTestId("audio-result")
+      .textContent()
+      .catch(() => null)
+    throw new Error(
+      `The files did not finish. Files: ${rows.join(" | ")}. Result: ${result}`,
+      { cause: error }
+    )
+  }
 }
 
 /** The result of one file in the list, downloaded. */
