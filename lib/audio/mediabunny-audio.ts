@@ -323,19 +323,29 @@ export function firstFrames(
   return made
 }
 
-/** Load the encoders this browser lacks, once each, only when a plan needs one. */
+/** Our own encoders, once registered in this worker: Mediabunny prefers them to the browser's. */
+const registered = new Set<string>()
+
+/**
+ * Load our encoders: LAME for MP3 and libFLAC for FLAC always (the main
+ * browsers have none, and WebKit on Linux has its own that lose the end of
+ * the sound), FFmpeg's AAC encoder when the browser's will not do (see
+ * `aacEncoding`).
+ */
 export async function readyEncoder(engine: Engine, codec: string) {
-  if (codec !== "mp3" && codec !== "aac" && codec !== "flac") return
-  if (await engine.canEncodeAudio(codec)) return
+  if (registered.has(codec)) return
   if (codec === "mp3")
     (await import("@mediabunny/mp3-encoder")).registerMp3Encoder()
   else if (codec === "flac")
     (await import("@mediabunny/flac-encoder")).registerFlacEncoder()
-  else (await import("@mediabunny/aac-encoder")).registerAacEncoder()
+  else if (codec === "aac")
+    (await import("@mediabunny/aac-encoder")).registerAacEncoder()
+  else return
+  registered.add(codec)
 }
 
-/** How many samples of priming this browser's AAC encoder puts first, by rate and channels. */
-const primings = new Map<string, Promise<number | null>>()
+/** The samples FFmpeg's AAC encoder, ours, puts before the sound. */
+export const OWN_AAC_PRIMING = 1024
 
 /** Where `heard` lines up with `played`: how many samples later it starts. */
 export function lagOf(played: Float32Array, heard: Float32Array, most: number) {
@@ -355,86 +365,113 @@ export function lagOf(played: Float32Array, heard: Float32Array, most: number) {
 }
 
 /**
- * The priming of this browser's AAC encoder, measured: a short burst of
- * noise is encoded and decoded again, and where it comes back is how many
- * samples the encoder put first. Encoders differ (Apple's puts 2,112,
- * FFmpeg's 1,024), so it is measured rather than assumed; null when this
- * browser cannot decode what it wrote.
+ * The browser's AAC encoder, tried: a short burst of noise is encoded and
+ * decoded again. Where it comes back is the encoder's priming (Apple's puts
+ * 2,112 samples, FFmpeg's 1,024), and all of it must come back; null when
+ * this browser cannot decode what it wrote.
  */
-export function aacPriming(
+async function tryAac(
   engine: Engine,
   sampleRate: number,
   channels: number,
   bitrate: number
-): Promise<number | null> {
-  const key = `${sampleRate}/${channels}`
-  let measured = primings.get(key)
-  if (!measured) {
-    measured = (async () => {
-      try {
-        const frames = 8192
-        const noise = new Float32Array(frames * channels)
-        let seed = 12345
-        for (let index = 0; index < noise.length; index++) {
-          seed = (seed * 1103515245 + 12345) >>> 0
-          noise[index] = (seed / 2 ** 32 - 0.5) * 0.5
-        }
-        const target = new engine.BufferTarget()
-        const output = new engine.Output({
-          format: new engine.Mp4OutputFormat(),
-          target,
-        })
-        const source = new engine.AudioSampleSource({
-          codec: "aac",
-          quality: new engine.Quality({ bitrate }),
-        })
-        output.addAudioTrack(source)
-        await output.start()
-        const sample = new engine.AudioSample({
-          data: noise,
-          format: "f32",
-          numberOfChannels: channels,
-          sampleRate,
-          timestamp: 0,
-        })
-        await source.add(sample)
-        sample.close()
-        await output.finalize()
-        const heard: Float32Array[] = []
-        const opened = input(engine, new Blob([target.buffer!]))
-        try {
-          const track = await opened.getPrimaryAudioTrack()
-          if (!track || !(await track.canDecode())) return null
-          for await (const one of patiently(
-            new engine.AudioSampleSink(track).samples()
-          )) {
-            const plane = new Float32Array(one.numberOfFrames)
-            one.copyTo(plane, { planeIndex: 0, format: "f32-planar" })
-            heard.push(plane)
-            one.close()
-          }
-        } finally {
-          opened.dispose()
-        }
-        const all = new Float32Array(
-          heard.reduce((sum, one) => sum + one.length, 0)
-        )
-        let at = 0
-        for (const one of heard) {
-          all.set(one, at)
-          at += one.length
-        }
-        const first = new Float32Array(frames)
-        for (let index = 0; index < frames; index++)
-          first[index] = noise[index * channels]
-        return lagOf(first.subarray(0, 4096), all, 4096)
-      } catch {
-        return null
+): Promise<{ priming: number; complete: boolean } | null> {
+  try {
+    const frames = 8192
+    const noise = new Float32Array(frames * channels)
+    let seed = 12345
+    for (let index = 0; index < noise.length; index++) {
+      seed = (seed * 1103515245 + 12345) >>> 0
+      noise[index] = (seed / 2 ** 32 - 0.5) * 0.5
+    }
+    const target = new engine.BufferTarget()
+    const output = new engine.Output({
+      format: new engine.Mp4OutputFormat(),
+      target,
+    })
+    const source = new engine.AudioSampleSource({
+      codec: "aac",
+      quality: new engine.Quality({ bitrate }),
+    })
+    output.addAudioTrack(source)
+    await output.start()
+    const sample = new engine.AudioSample({
+      data: noise,
+      format: "f32",
+      numberOfChannels: channels,
+      sampleRate,
+      timestamp: 0,
+    })
+    await source.add(sample)
+    sample.close()
+    await output.finalize()
+    const heard: Float32Array[] = []
+    const opened = input(engine, new Blob([target.buffer!]))
+    try {
+      const track = await opened.getPrimaryAudioTrack()
+      if (!track || !(await track.canDecode())) return null
+      for await (const one of patiently(
+        new engine.AudioSampleSink(track).samples()
+      )) {
+        const plane = new Float32Array(one.numberOfFrames)
+        one.copyTo(plane, { planeIndex: 0, format: "f32-planar" })
+        heard.push(plane)
+        one.close()
       }
-    })()
-    primings.set(key, measured)
+    } finally {
+      opened.dispose()
+    }
+    const all = new Float32Array(
+      heard.reduce((sum, one) => sum + one.length, 0)
+    )
+    let at = 0
+    for (const one of heard) {
+      all.set(one, at)
+      at += one.length
+    }
+    const first = new Float32Array(frames)
+    for (let index = 0; index < frames; index++)
+      first[index] = noise[index * channels]
+    const priming = lagOf(first.subarray(0, 4096), all, 4096)
+    return { priming, complete: all.length - priming >= frames }
+  } catch {
+    return null
   }
-  return measured
+}
+
+/** The AAC encoder chosen for each rate and channels, by its priming. */
+const aacChoices = new Map<string, Promise<number>>()
+
+/**
+ * Make sure AAC is written by an encoder that keeps all of the sound, and
+ * say its priming: the browser's own when its trial gives every sample
+ * back, measured; otherwise ours, whose priming is known.
+ */
+export function aacEncoding(
+  engine: Engine,
+  sampleRate: number,
+  channels: number,
+  bitrate: number
+): Promise<number> {
+  if (registered.has("aac")) return Promise.resolve(OWN_AAC_PRIMING)
+  const key = `${sampleRate}/${channels}`
+  let chosen = aacChoices.get(key)
+  if (!chosen) {
+    chosen = (async () => {
+      const trial = (await engine.canEncodeAudio("aac", {
+        numberOfChannels: channels,
+        sampleRate,
+        bitrate,
+      }))
+        ? await tryAac(engine, sampleRate, channels, bitrate)
+        : null
+      if (trial?.complete && trial.priming > 0) return trial.priming
+      await readyEncoder(engine, "aac")
+      return OWN_AAC_PRIMING
+    })()
+    aacChoices.set(key, chosen)
+  }
+  return chosen
 }
 
 /**
@@ -453,7 +490,17 @@ export async function convertAudio(
     signal?: AbortSignal
   }
 ): Promise<Uint8Array> {
-  if (!plan.copy) await readyEncoder(engine, plan.codec)
+  // AAC is written by an encoder chosen first; its priming is known after.
+  const priming =
+    !plan.copy && plan.codec === "aac"
+      ? await aacEncoding(
+          engine,
+          plan.sampleRate,
+          plan.channels,
+          plan.bitrate ?? 128_000
+        )
+      : null
+  if (!plan.copy && plan.codec !== "aac") await readyEncoder(engine, plan.codec)
   const source = input(engine, file)
   const target = new engine.BufferTarget()
   // A WAV over 4 GB needs the RF64 form.
@@ -538,15 +585,7 @@ export async function convertAudio(
     if (plan.codec === "mp3") return lameTagged(written, samples)
     if (plan.codec === "opus")
       return withOpusEnd(written, Math.round(facts.duration * 48000))
-    if (plan.codec === "aac") {
-      const priming = await aacPriming(
-        engine,
-        plan.sampleRate,
-        plan.channels,
-        plan.bitrate ?? 128_000
-      )
-      if (priming) return withEditList(written, priming, samples)
-    }
+    if (priming) return withEditList(written, priming, samples)
     return written
   } finally {
     source.dispose()

@@ -351,15 +351,19 @@ export function AudioWorkspace({ mode = "editor" }: { mode?: AudioMode }) {
     const container = containers.current.get(item.id)!
     if (job === "read") return { job, id: item.id, file: item.file, container }
     const facts = item.facts!
+    const plan = planFor(current.settings, facts)
+    // Sound the page decoded is written from its WAV; a copy needs no
+    // decoding, so it is always taken from the file itself.
+    const decoded = plan.copy ? undefined : item.decoded
     return {
       job,
       id: item.id,
-      file: item.decoded ?? item.file,
-      container: item.decoded ? "wav" : container,
-      facts: item.decoded ? { ...facts, kept: null } : facts,
-      plan: planFor(current.settings, facts),
+      file: decoded ?? item.file,
+      container: decoded ? "wav" : container,
+      facts: decoded ? { ...facts, kept: null } : facts,
+      plan,
       keepTags: current.settings.keepTags,
-      tags: item.decoded ? tagsOf(facts) : undefined,
+      tags: decoded ? tagsOf(facts) : undefined,
       key: current.key!,
     }
   }, [])

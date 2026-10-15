@@ -233,6 +233,21 @@ describe("writing", () => {
     expect(ffmpegFrames(bytes, "tone-out.mp3", 2)).toBe(11025)
   })
 
+  it("writes M4A with our AAC encoder where the browser has none, with its edit list", async () => {
+    const read = await facts()
+    const plan = planFor(settings({ format: "m4a" }), read)
+    const bytes = await convertAudio(mediabunny, blob(wav), plan, read, {
+      keepTags: true,
+    })
+    const [stream] = probe(bytes, "tone.m4a").streams
+    expect(stream).toMatchObject({ codec_name: "aac", sample_rate: "22050" })
+    expect(Number(stream.duration)).toBe(0.5)
+    // FFmpeg 7 and later end where the edit list ends; older ones play under a frame more.
+    const played = ffmpegFrames(bytes, "tone-out.m4a", 2)
+    expect(played).toBeGreaterThanOrEqual(11025)
+    expect(played - 11025).toBeLessThan(1024)
+  })
+
   it("keeps a file's tags, or writes none", async () => {
     // A WAV with a title, made by FFmpeg.
     const path = join(folder, "titled.wav")
