@@ -4,7 +4,7 @@ import { mkdtempSync, readFileSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { describe, expect, it } from "vitest"
-import { oggCrc, withOpusEnd } from "./ogg-end"
+import { oggCrc, opusPreSkip, withOpusEnd } from "./ogg-end"
 
 const fixture = (name: string) =>
   new Uint8Array(readFileSync(`tests/fixtures/audio/${name}`))
@@ -37,6 +37,30 @@ describe("withOpusEnd", () => {
         stdio: "pipe",
       }).toString()
     ).toBe("")
+  })
+
+  it("sets the pre-skip to the encoder's real delay, with the first page's checksum", () => {
+    const opus = fixture("tone.opus")
+    expect(opusPreSkip(opus)).toBe(312)
+    const pcm = (bytes: Uint8Array, name: string) => {
+      const path = join(folder, name)
+      writeFileSync(path, bytes)
+      return execFileSync(
+        "ffmpeg",
+        ["-v", "error", "-i", path, "-ac", "1", "-f", "s16le", "-"],
+        { maxBuffer: 1 << 30 }
+      )
+    }
+    const own = pcm(opus, "own.opus")
+    // Skipping nothing: the encoder's 312 samples come first, then the same sound.
+    const none = withOpusEnd(opus, 24000, 0)
+    expect(opusPreSkip(none)).toBe(0)
+    const played = pcm(none, "none.opus")
+    expect(played.length / 2).toBe(24000)
+    expect(
+      played.subarray(312 * 2).equals(own.subarray(0, (24000 - 312) * 2))
+    ).toBe(true)
+    expect(opusPreSkip(new Uint8Array(10))).toBeNull()
   })
 
   it("leaves a file that already ends there, or is not Ogg Opus, as it was", () => {

@@ -40,6 +40,20 @@ function pageSize(bytes: Uint8Array, at: number) {
   return at + size > bytes.length ? 0 : size
 }
 
+/** The file with the pre-skip its first page declares set, and that page's checksum written again. */
+function withPreSkip(bytes: Uint8Array, head: number, preSkip: number) {
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength)
+  const size = pageSize(bytes, 0)
+  if (view.getUint16(head + 10, true) === preSkip || !size || head > size)
+    return bytes
+  const out = bytes.slice()
+  const write = new DataView(out.buffer)
+  write.setUint16(head + 10, preSkip, true)
+  write.setUint32(22, 0, true)
+  write.setUint32(22, oggCrc(out.subarray(0, size)), true)
+  return out
+}
+
 /** Where a run of ASCII letters first is, or -1. */
 function find(bytes: Uint8Array, text: string) {
   const codes = Array.from(text, (letter) => letter.charCodeAt(0))
@@ -51,16 +65,28 @@ function find(bytes: Uint8Array, text: string) {
   return -1
 }
 
+/** The pre-skip an Ogg Opus file declares; null when it is not one. */
+export function opusPreSkip(bytes: Uint8Array): number | null {
+  const head = find(bytes.subarray(0, 4096), "OpusHead")
+  if (head < 0 || !isPage(bytes, 0)) return null
+  return new DataView(bytes.buffer, bytes.byteOffset).getUint16(head + 10, true)
+}
+
 /**
- * An Ogg Opus file whose last page ends the sound after `samples` samples
- * at 48 kHz. Returned as it was when it is not one, or when its end is
- * already at or before that.
+ * An Ogg Opus file that skips `preSkip` samples at the start (the
+ * encoder's real delay, when it is not what the file says) and ends after
+ * `samples` samples at 48 kHz. Returned as it was when it is not one, or
+ * when there is nothing to change.
  */
-export function withOpusEnd(bytes: Uint8Array, samples: number): Uint8Array {
-  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength)
+export function withOpusEnd(
+  bytes: Uint8Array,
+  samples: number,
+  preSkip = opusPreSkip(bytes) ?? 0
+): Uint8Array {
   const head = find(bytes.subarray(0, 4096), "OpusHead")
   if (head < 0 || !isPage(bytes, 0)) return bytes
-  const preSkip = view.getUint16(head + 10, true)
+  bytes = withPreSkip(bytes, head, preSkip)
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength)
   // The last page: walk the pages from the start, as their lengths say.
   let last = -1
   for (let at = 0; at + 27 <= bytes.length && isPage(bytes, at);) {

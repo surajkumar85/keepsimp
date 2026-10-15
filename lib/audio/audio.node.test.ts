@@ -19,6 +19,7 @@ import {
   hearAudio,
   patiently,
   peaksOf,
+  signedLag,
   readAudio,
   Stalled,
 } from "./mediabunny-audio"
@@ -88,6 +89,22 @@ describe("patiently", () => {
     ).rejects.toBeInstanceOf(Stalled)
     expect(seen).toEqual([1])
     expect(new Stalled().message).toContain("stopped answering")
+  })
+})
+
+describe("signedLag", () => {
+  it("finds how far a sound came back shifted, later or sooner", () => {
+    const played = new Float32Array(6000)
+    let seed = 7
+    for (let index = 0; index < played.length; index++) {
+      seed = (seed * 1103515245 + 12345) >>> 0
+      played[index] = seed / 2 ** 32 - 0.5
+    }
+    const later = new Float32Array(6312)
+    later.set(played, 312)
+    expect(signedLag(played, later, 1024)).toBe(312)
+    // Started sooner: its first 312 samples were cut off.
+    expect(signedLag(played, played.slice(312), 1024)).toBe(-312)
   })
 })
 
