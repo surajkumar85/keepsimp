@@ -175,6 +175,24 @@ const cards = [
     "/images/pdf-ocr-guide.svg",
   ],
   [
+    "convert-audio-without-uploading",
+    "A new format, with nothing lost on the way.",
+    "MP3, M4A, Opus, FLAC and WAV, on your device.",
+    "/images/audio-convert-guide.svg",
+  ],
+  [
+    "extract-audio-from-video",
+    "Keep the sound, leave the picture.",
+    "Take the sound out of any video, as it is.",
+    "/images/audio-extract-guide.svg",
+  ],
+  [
+    "gapless-mp3-and-aac",
+    "Why a converted MP3 starts late, and ours does not.",
+    "Gapless MP3 and AAC, checked before download.",
+    "/images/audio-gapless-guide.svg",
+  ],
+  [
     "verify-a-pdf-signature",
     "Is the signature still good?",
     "Check a PDF's signatures on your device.",

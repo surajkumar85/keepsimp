@@ -5,6 +5,11 @@ import { tools } from "@/lib/catalogue"
 import { pageMetadata, absoluteUrl } from "@/lib/site"
 import { StructuredData } from "@/components/structured-data"
 import { AnimationConverter } from "@/components/animation-converter/animation-converter"
+import { AudioWorkspace } from "@/components/audio/audio-workspace"
+import {
+  AudioConverterTutorial,
+  AudioExtractorTutorial,
+} from "@/components/audio/tutorial"
 import { AnimationConverterTutorial } from "@/components/animation-converter/tutorial"
 import { ImageCompressor } from "@/components/image-compressor/image-compressor"
 import { ImageCompressorTutorial } from "@/components/image-compressor/tutorial"
@@ -72,6 +77,24 @@ export async function generateMetadata({
     return pageMetadata(
       "Free JSON formatter, validator & viewer",
       "Format, repair, explore and query JSON. Compare documents, apply JSON Patch, validate schemas and convert YAML, CSV or JSON Lines locally. No uploads.",
+      `/dashboard/${id}/`
+    )
+  if (id === "audio-editor")
+    return pageMetadata(
+      "Free audio editor and converter, with no uploads",
+      "Convert MP3, M4A, Opus, FLAC, WAV and AIFF, and take the sound out of videos, many files at once, in your browser. Every file is checked before you download it. No account, no uploads.",
+      `/dashboard/${id}/`
+    )
+  if (id === "audio-converter")
+    return pageMetadata(
+      "Audio converter online for free: MP3, M4A, FLAC, WAV",
+      "Convert audio between MP3, M4A (AAC), Opus, FLAC, WAV and iPhone ringtones in your browser, many files at once, keeping tags and cover art. No account, no file uploads.",
+      `/dashboard/${id}/`
+    )
+  if (id === "audio-extractor")
+    return pageMetadata(
+      "Extract audio from a video online for free",
+      "Take the sound out of an MP4, MOV, WebM or MKV video in your browser: as it is, without losing quality, or as MP3, M4A, FLAC or WAV. No account, no file uploads.",
       `/dashboard/${id}/`
     )
   if (id === "pdf-annotator")
@@ -157,7 +180,9 @@ export default async function ToolPage({
           name: tool.name,
           url: absoluteUrl(`/dashboard/${id}/`),
           applicationCategory:
-            tool.category === "image"
+            tool.category === "image" ||
+            tool.category === "audio" ||
+            tool.category === "video"
               ? "MultimediaApplication"
               : tool.category === "document"
                 ? "BusinessApplication"
@@ -216,6 +241,12 @@ export default async function ToolPage({
         <ImageConverter />
       ) : id === "animation-converter" ? (
         <AnimationConverter />
+      ) : id === "audio-editor" ? (
+        <AudioWorkspace mode="editor" />
+      ) : id === "audio-converter" ? (
+        <AudioWorkspace mode="converter" />
+      ) : id === "audio-extractor" ? (
+        <AudioWorkspace mode="extractor" />
       ) : id === "pdf-merger" ? (
         <PdfMerger />
       ) : id === "pdf-splitter" ? (
@@ -257,6 +288,10 @@ export default async function ToolPage({
         <ImageConverterTutorial />
       ) : id === "animation-converter" ? (
         <AnimationConverterTutorial />
+      ) : id === "audio-editor" || id === "audio-converter" ? (
+        <AudioConverterTutorial />
+      ) : id === "audio-extractor" ? (
+        <AudioExtractorTutorial />
       ) : id === "pdf-merger" ? (
         <PdfMergerTutorial />
       ) : id === "pdf-splitter" ? (

@@ -12,6 +12,8 @@ describe("doors", () => {
   it("lists every tool once, without the pages that open another tool for one job", () => {
     const doors = tools.filter((tool) => tool.partOf)
     expect(doors.map((tool) => tool.id)).toEqual([
+      "audio-converter",
+      "audio-extractor",
       "pdf-annotator",
       "sign-pdf",
       "fill-pdf-form",

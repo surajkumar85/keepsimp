@@ -596,6 +596,9 @@ export const posts: readonly BlogPost[] = [
   createFormPost,
   ocrPost,
   verifyPost,
+  audioConvertPost,
+  audioExtractPost,
+  gaplessPost,
   {
     slug: "format-json-without-losing-precision",
     searchTitle:
@@ -698,6 +701,9 @@ import {
   createFormPost,
   ocrPost,
   verifyPost,
+  audioConvertPost,
+  audioExtractPost,
+  gaplessPost,
   overviewPost,
   resizePost,
   targetSizePost,

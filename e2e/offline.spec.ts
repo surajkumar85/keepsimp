@@ -124,7 +124,7 @@ test("every tool works offline after one visit", async ({ page }) => {
 
   // A full page load, then a move between tools from a link.
   await page.reload()
-  await expect(page.getByTestId("tool-card")).toHaveCount(16)
+  await expect(page.getByTestId("tool-card")).toHaveCount(15)
   await page
     .getByTestId("tool-card")
     .getByRole("link", { name: "Image compressor" })
@@ -309,6 +309,29 @@ test("every tool works offline after one visit", async ({ page }) => {
     expect(encoder(engine!)).toBe(false)
     expect(loaded.filter(encoder).length).toBeGreaterThan(0)
   }
+
+  // Sound is decoded and encoded offline too, MP3 by the LAME encoder that
+  // comes with the page.
+  await page.goto(`${site.origin}/dashboard/audio-editor/`)
+  await page.getByRole("button", { name: "Try a sample" }).click()
+  await expect(page.getByTestId("audio-workspace")).toHaveAttribute(
+    "data-settled",
+    "true",
+    { timeout: 60_000 }
+  )
+  await expect(page.getByTestId("audio-check")).toContainText("as asked")
+  pending = page.waitForEvent("download")
+  await page
+    .getByTestId("queue-item")
+    .filter({ hasText: "keepsimp-tune.flac" })
+    .getByRole("link", { name: /^Download / })
+    .dispatchEvent("click")
+  const sound = await bytesOf(await pending)
+  // An MP3 with its tags and cover first, then the frame with the LAME header.
+  expect(Buffer.from(sound.subarray(0, 3)).toString()).toBe("ID3")
+  expect(Buffer.from(sound.subarray(0, 64 * 1024)).includes("LAME3.100")).toBe(
+    true
+  )
 
   // The PDF editor needs its fonts as well: one is read from the saved copy
   // when text is typed, shown on the screen and put into the file.

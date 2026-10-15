@@ -2,12 +2,12 @@ import type { BlogPost } from "./blog"
 
 /** The post that goes through every tool on the site, with a link to each. */
 export const overviewPost: BlogPost = {
-  modified: "2026-10-13T00:00:00+05:30",
+  modified: "2026-10-15T00:00:00+05:30",
   slug: "free-online-tools-no-upload",
-  title: "Ten free tools that never ask for your files.",
-  searchTitle: "Free PDF, image, JSON and color tools without uploading",
+  title: "Eleven free tools that never ask for your files.",
+  searchTitle: "Free PDF, image, audio, JSON and color tools without uploading",
   description:
-    "Every KeepSimp tool together: edit, annotate, compress, merge and split PDFs, resize and convert images, convert GIFs, format JSON, and work with colors. Free, no sign-up, your files stay with you.",
+    "Every KeepSimp tool: edit, compress, merge and split PDFs, resize and convert images, convert GIFs and audio, format JSON and pick colors. Free, no sign-up, your files stay with you.",
   keywords: [
     "free online tools",
     "no upload",
@@ -21,6 +21,8 @@ export const overviewPost: BlogPost = {
     "resize image",
     "convert image",
     "GIF converter",
+    "audio converter",
+    "extract audio from video",
     "JSON formatter",
     "color converter",
     "privacy",
@@ -243,6 +245,39 @@ export const overviewPost: BlogPost = {
         {
           label: "Guide: GIF, WebP, APNG or video",
           href: "/blog/gif-webp-apng-or-video/",
+        },
+      ],
+    },
+    {
+      id: "audio-editor",
+      title: "Audio editor: sound in the format you need.",
+      paragraphs: [
+        "Convert many files at once between MP3, M4A (AAC), Opus, FLAC, WAV and iPhone ringtones, or take the sound out of a video, exactly as it is. Tags and cover art come along, MP3 and AAC files are as long as the sound with no gap at the start, and every file is opened again and listened to before you download it.",
+      ],
+      links: [
+        {
+          label: "Open the audio editor",
+          href: "/dashboard/audio-editor/",
+        },
+        {
+          label: "Guide: why a converted MP3 starts late, and how to avoid it",
+          href: "/blog/gapless-mp3-and-aac/",
+        },
+        {
+          label: "Audio to convert? Open it as the Audio converter",
+          href: "/dashboard/audio-converter/",
+        },
+        {
+          label: "Guide: convert audio without uploading it",
+          href: "/blog/convert-audio-without-uploading/",
+        },
+        {
+          label: "A video's sound? Open it as the Audio extractor",
+          href: "/dashboard/audio-extractor/",
+        },
+        {
+          label: "Guide: take the sound out of a video",
+          href: "/blog/extract-audio-from-video/",
         },
       ],
     },
@@ -1679,6 +1714,281 @@ export const createFormPost: BlogPost = {
         "Your PDF is opened, changed and downloaded on your device. No account or upload is needed. A draft is saved in this browser only when you turn on Keep a draft on this device. Nothing is kept by default.",
       ],
       links: [{ label: "What stays on your device", href: "/privacy/" }],
+    },
+  ],
+}
+
+export const audioConvertPost: BlogPost = {
+  published: "2026-10-15",
+  modified: "2026-10-15",
+  slug: "convert-audio-without-uploading",
+  title: "A new format, with nothing lost on the way.",
+  searchTitle:
+    "How to convert audio files online for free (MP3, M4A, FLAC, WAV)",
+  description:
+    "Convert audio between MP3, M4A, Opus, FLAC and WAV in your browser, many files at once, with tags and cover art. Which format and bitrate to choose. Nothing is uploaded.",
+  keywords: [
+    "audio converter",
+    "convert audio online free",
+    "WAV to MP3",
+    "FLAC to MP3",
+    "M4A to MP3",
+    "MP3 to WAV",
+    "AIFF to MP3",
+    "convert to Opus",
+    "audio converter no upload",
+  ],
+  category: "A little know-how",
+  readingTime: "4 min read",
+  image: "/images/audio-convert-guide.svg",
+  imageAlt:
+    "A list of three sound files, each converted to MP3 with a tick beside it, and a panel with the formats MP3, M4A, Opus, FLAC and WAV",
+  tool: "audio-converter",
+  intro:
+    "A recording comes off a phone as M4A, an album was ripped to FLAC, a podcast host wants MP3, an editing program wants WAV. Converting is easy to do badly: most sites want the file uploaded, some cap you at a few a day, and many write MP3s with a moment of silence at the start. Here is how to do it on your own device, and how to choose.",
+  sections: [
+    {
+      id: "which",
+      title: "Which format to choose.",
+      paragraphs: [
+        "MP3 plays on everything, from car stereos to old phones: choose it when you do not know where the file will go. M4A (AAC) sounds as good as MP3 in a smaller file and plays on every phone and computer. Opus is the best for its size, voice above all, and plays in browsers, Android, VLC and recent Apple devices.",
+        "FLAC and WAV keep every sample: nothing is thrown away. FLAC is about half the size of WAV and keeps tags; WAV is what editing programs and some hardware expect. Converting a lossy file (MP3, AAC) to FLAC or WAV makes it larger but not better: what was lost stays lost.",
+      ],
+    },
+    {
+      id: "how",
+      title: "How to convert.",
+      paragraphs: [
+        "Open the Audio converter and drop your files: MP3, M4A, Opus, Ogg, FLAC, WAV, AIFF, or videos. Choose a format and a quality. Each file is converted as soon as it is read; listen to the original or the result, and download one file or all of them in a ZIP.",
+        "Balanced is right for most music: 192 kbit/s for MP3, 160 for AAC, 96 for Opus. High keeps more for music you care about; Small is fine for speech. A file size limit makes the converter choose the highest bitrate that fits, and say which.",
+      ],
+      links: [
+        {
+          label: "Open the Audio converter",
+          href: "/dashboard/audio-converter/",
+        },
+      ],
+    },
+    {
+      id: "same",
+      title: "When not to convert at all.",
+      paragraphs: [
+        "“Same as the file” keeps a file's own sound and only changes what holds it: an M4A's AAC stays AAC, an Opus file stays Opus. Nothing is decoded or encoded again, so nothing is lost, and it takes a moment. It is the best way to take the sound out of a video.",
+      ],
+      links: [
+        {
+          label: "Guide: take the sound out of a video",
+          href: "/blog/extract-audio-from-video/",
+        },
+      ],
+    },
+    {
+      id: "checked",
+      title: "Checked before you download.",
+      paragraphs: [
+        "Every file the converter writes is opened again and decoded from beginning to end. Its length, sample rate and channels are held against what you asked, an MP3's size against its bitrate, and a result that came out silent is caught. MP3 and AAC files say in their headers how long the sound is, so they do not start with a gap.",
+      ],
+      links: [
+        {
+          label: "Guide: why a converted MP3 starts late",
+          href: "/blog/gapless-mp3-and-aac/",
+        },
+      ],
+    },
+    {
+      id: "private",
+      title: "Your files stay with you.",
+      paragraphs: [
+        "Files are read and written in your browser and never uploaded. There is no account and no limit on how many you convert.",
+      ],
+      links: [
+        {
+          label: "Every KeepSimp tool in one place",
+          href: "/blog/free-online-tools-no-upload/",
+        },
+      ],
+    },
+  ],
+  sources: [
+    {
+      title: "Web audio codec guide, MDN",
+      url: "https://developer.mozilla.org/en-US/docs/Web/Media/Guides/Formats/Audio_codecs",
+    },
+    {
+      title: "LAME MP3 encoder",
+      url: "https://lame.sourceforge.io/",
+    },
+    {
+      title: "Opus codec",
+      url: "https://opus-codec.org/",
+    },
+  ],
+}
+
+export const audioExtractPost: BlogPost = {
+  published: "2026-10-15",
+  modified: "2026-10-15",
+  slug: "extract-audio-from-video",
+  title: "Keep the sound, leave the picture.",
+  searchTitle: "How to extract audio from a video online for free (MP4 to MP3)",
+  description:
+    "Take the sound out of an MP4, MOV, WebM or MKV video in your browser, exactly as it is, or as MP3, M4A, FLAC or WAV. Nothing is uploaded.",
+  keywords: [
+    "extract audio from video",
+    "MP4 to MP3",
+    "video to audio",
+    "MOV to MP3",
+    "WebM to MP3",
+    "get audio from video",
+    "rip audio from video",
+    "extract audio without upload",
+  ],
+  category: "A little know-how",
+  readingTime: "3 min read",
+  image: "/images/audio-extract-guide.svg",
+  imageAlt:
+    "A video frame with a waveform coming out of it, beside a panel that says the sound was taken out as it is, without being encoded again",
+  tool: "audio-extractor",
+  intro:
+    "A lecture recorded on a phone, a song in a video, an interview you only need to hear. The sound is already inside the video file; taking it out should not cost quality, an upload or a sign-up.",
+  sections: [
+    {
+      id: "as-it-is",
+      title: "As it is: the best way.",
+      paragraphs: [
+        "A video's sound is stored in its own track, usually as AAC in an MP4 or MOV, or Opus in a WebM. The Audio extractor copies that track into a sound file of its own, an M4A for AAC or an Ogg for Opus, without decoding and encoding it again. Nothing is lost, the file is as small as it can be, and it is done in a moment.",
+      ],
+      links: [
+        {
+          label: "Open the Audio extractor",
+          href: "/dashboard/audio-extractor/",
+        },
+      ],
+    },
+    {
+      id: "mp3",
+      title: "When you need MP3.",
+      paragraphs: [
+        "Some players and sites only take MP3. Choose MP3 and the sound is encoded again, at 192 kbit/s by default, which is plenty for speech and fine for music. FLAC or WAV are for editing programs: they are larger, and they cannot bring back what the video's own encoding left out.",
+        "Some films carry sound that phones cannot play, such as AC-3 surround. It is written as AAC, mixed down to stereo, and the page says so.",
+      ],
+      links: [
+        {
+          label: "Guide: convert audio and choose a format",
+          href: "/blog/convert-audio-without-uploading/",
+        },
+      ],
+    },
+    {
+      id: "private",
+      title: "Your video stays with you.",
+      paragraphs: [
+        "The video is read in your browser and never uploaded, however large it is. Many videos can be done at once, and the sound of each is opened again and listened to before you download it.",
+      ],
+      links: [
+        {
+          label: "Every KeepSimp tool in one place",
+          href: "/blog/free-online-tools-no-upload/",
+        },
+      ],
+    },
+  ],
+  sources: [
+    {
+      title: "Media container formats, MDN",
+      url: "https://developer.mozilla.org/en-US/docs/Web/Media/Guides/Formats/Containers",
+    },
+    {
+      title: "Mediabunny, reading and writing media in the browser",
+      url: "https://mediabunny.dev/",
+    },
+  ],
+}
+
+export const gaplessPost: BlogPost = {
+  published: "2026-10-15",
+  modified: "2026-10-15",
+  slug: "gapless-mp3-and-aac",
+  title: "Why a converted MP3 starts late, and ours does not.",
+  searchTitle:
+    "Why does a converted MP3 start with silence? Gapless MP3 and AAC",
+  description:
+    "MP3 and AAC encoders add a few hundredths of a second of silence to every file. Why it happens, when it matters (loops, albums, ringtones), and how files can say how long their sound really is.",
+  keywords: [
+    "MP3 silence at start",
+    "gapless MP3",
+    "gapless playback",
+    "encoder delay",
+    "AAC priming",
+    "LAME header",
+    "audio converter gap",
+  ],
+  category: "A little know-how",
+  readingTime: "4 min read",
+  image: "/images/audio-gapless-guide.svg",
+  imageAlt:
+    "Two waveforms of the same sound, the upper one starting after a short flat line of silence, the lower one starting at once",
+  tool: "audio-editor",
+  intro:
+    "Convert a WAV to MP3 and the MP3 is a little longer than the WAV: a few hundredths of a second of silence at the start, a little more at the end. Most of the time nobody notices. In a loop, between the tracks of a live album, or at the start of a ringtone, everyone does.",
+  sections: [
+    {
+      id: "why",
+      title: "Where the gap comes from.",
+      paragraphs: [
+        "MP3 and AAC encoders work on blocks of samples that overlap. To start cleanly, they put a run of samples before the sound (the encoder delay, or priming), and to end on a whole block they pad the end. LAME, the MP3 encoder, puts 576 samples first, and every MP3 decoder adds 529 more; AAC encoders put 1,024 or 2,112. At 44.1 kHz that is 25 to 50 milliseconds of silence at the start.",
+      ],
+    },
+    {
+      id: "fix",
+      title: "How a file says how long its sound is.",
+      paragraphs: [
+        "An MP3 can carry the delay and the padding in a header in its first frame, the LAME header, which players such as iTunes, foobar2000 and FFmpeg read to play exactly the sound. An AAC file in MP4 or M4A says the same in an edit list: start after the priming, play this many samples.",
+        "Many converters leave both out. The KeepSimp Audio editor writes them into every MP3 and AAC file it makes. Because AAC encoders differ from browser to browser, it measures the priming of the one your browser has, with a short test before the first file, rather than assume it.",
+      ],
+      links: [
+        { label: "Open the audio editor", href: "/dashboard/audio-editor/" },
+      ],
+    },
+    {
+      id: "check",
+      title: "Checked, not hoped.",
+      paragraphs: [
+        "Each file written is opened again and decoded, its delay and padding left out as a player leaves them out, and its length is held against the original's. A file that comes out longer than it should is reported, not handed over in silence.",
+      ],
+      links: [
+        {
+          label: "Guide: convert audio without uploading it",
+          href: "/blog/convert-audio-without-uploading/",
+        },
+      ],
+    },
+    {
+      id: "private",
+      title: "On your device.",
+      paragraphs: [
+        "Files are read and written in your browser and never uploaded. There is no account and no limit on how many you convert.",
+      ],
+      links: [
+        {
+          label: "Every KeepSimp tool in one place",
+          href: "/blog/free-online-tools-no-upload/",
+        },
+      ],
+    },
+  ],
+  sources: [
+    {
+      title: "LAME technical FAQ: encoder delay and padding",
+      url: "https://lame.sourceforge.io/tech-FAQ.txt",
+    },
+    {
+      title: "Audio priming: handling encoder delay in AAC, Apple",
+      url: "https://developer.apple.com/documentation/quicktime-file-format/appendix_g_audio_priming_handling_encoder_delay_in_aac",
+    },
+    {
+      title: "Gapless playback, Wikipedia",
+      url: "https://en.wikipedia.org/wiki/Gapless_playback",
     },
   ],
 }

@@ -61,6 +61,15 @@ export class WorkerPool<
     worker.onmessage = (event: MessageEvent<Message>) => {
       slot.started = true
       const message = event.data
+      // A worker that stopped a job it could not finish cleanly asks to be
+      // replaced: whatever it was waiting on goes with it.
+      if (message.type === "retired") {
+        worker.terminate()
+        const index = this.slots.indexOf(slot)
+        if (index >= 0) this.slots.splice(index, 1)
+        this.kick()
+        return
+      }
       if (FINISHED.includes(message.type)) {
         if (message.type === "open-error") slot.cached = null
         slot.busy = null

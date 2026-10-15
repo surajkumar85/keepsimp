@@ -39,6 +39,7 @@ export function SummaryBar({
   verb,
   noun = "image",
   accept,
+  addIcon: AddIcon = IconPhotoPlus,
 }: {
   totals: BatchTotals
   /** Set when the batch is exactly one file, which downloads directly. */
@@ -57,6 +58,8 @@ export function SummaryBar({
   noun?: string
   /** File types offered by the picker; images by default. */
   accept?: string
+  /** The picture on the button that adds files; a photo by default. */
+  addIcon?: typeof IconPhotoPlus
 }) {
   const { over, handlers } = useDropTarget(onFiles)
   const saved = savingsPercent(totals.originalBytes, totals.outputBytes)
@@ -135,7 +138,7 @@ export function SummaryBar({
               "cursor-pointer peer-focus-visible:ring-3 peer-focus-visible:ring-ring/50"
             )}
           >
-            <IconPhotoPlus aria-hidden="true" /> Add {noun}s
+            <AddIcon aria-hidden="true" /> Add {noun}s
           </label>
         </div>
         <Button variant="ghost" size="lg" onClick={onClear}>
@@ -146,7 +149,7 @@ export function SummaryBar({
         {totals.pending > 0
           ? `${verb} ${totals.pending} ${noun}${totals.pending === 1 ? "" : "s"}…`
           : totals.done > 0
-            ? "All images are ready."
+            ? `All ${noun}s are ready.`
             : ""}
       </p>
     </div>
