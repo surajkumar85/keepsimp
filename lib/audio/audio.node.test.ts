@@ -14,7 +14,14 @@ import * as mediabunny from "mediabunny"
 import { describe, expect, it } from "vitest"
 import { checkResult } from "./check"
 import { sniffContainer } from "./formats"
-import { convertAudio, hearAudio, peaksOf, readAudio } from "./mediabunny-audio"
+import {
+  convertAudio,
+  hearAudio,
+  patiently,
+  peaksOf,
+  readAudio,
+  Stalled,
+} from "./mediabunny-audio"
 import { peakLevel } from "./peaks"
 import { defaultSettings, planFor, type AudioSettings } from "./settings"
 import { wavFromAiff } from "./wav"
@@ -58,6 +65,30 @@ function ffmpegFrames(bytes: Uint8Array, name: string, channels: number) {
 const settings = (change: Partial<AudioSettings>): AudioSettings => ({
   ...defaultSettings,
   ...change,
+})
+
+describe("patiently", () => {
+  it("passes samples on, and gives up on a decoder that stops answering", async () => {
+    async function* answering() {
+      yield 1
+      yield 2
+    }
+    const got: number[] = []
+    for await (const value of patiently(answering(), 50)) got.push(value)
+    expect(got).toEqual([1, 2])
+    async function* silent() {
+      yield 1
+      await new Promise(() => {})
+    }
+    const seen: number[] = []
+    await expect(
+      (async () => {
+        for await (const value of patiently(silent(), 50)) seen.push(value)
+      })()
+    ).rejects.toBeInstanceOf(Stalled)
+    expect(seen).toEqual([1])
+    expect(new Stalled().message).toContain("stopped answering")
+  })
 })
 
 describe("reading", () => {

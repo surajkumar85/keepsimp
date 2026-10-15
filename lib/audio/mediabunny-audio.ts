@@ -50,6 +50,41 @@ const input = (engine: Engine, file: Blob) =>
     formats: engine.ALL_FORMATS,
   })
 
+/** A decoder that gave no samples for this long has stopped answering. */
+export const STALL_MS = 15_000
+
+/** A decoder that stopped answering, in a sentence. */
+export class Stalled extends AudioProblem {
+  constructor() {
+    super(
+      "This browser's decoder stopped answering for this file. Try again, or try another browser."
+    )
+  }
+}
+
+/**
+ * The samples of an iterator, each within `ms` of the one before: some
+ * browsers' decoders stop answering without an error (WebKit on Linux),
+ * which would leave a file waiting for ever.
+ */
+export async function* patiently<T>(
+  samples: AsyncIterable<T>,
+  ms = STALL_MS
+): AsyncGenerator<T> {
+  const iterator = samples[Symbol.asyncIterator]()
+  for (;;) {
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const next = await Promise.race([
+      iterator.next(),
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Stalled()), ms)
+      }),
+    ]).finally(() => clearTimeout(timer))
+    if (next.done) return
+    yield next.value
+  }
+}
+
 /**
  * Whether this browser really decodes a track: some say they can and then
  * fail on the first packet (Safari with FLAC), so its first second is
@@ -59,9 +94,8 @@ async function decodes(engine: Engine, track: Mediabunny.InputAudioTrack) {
   if (!(await track.canDecode())) return false
   try {
     const start = await track.getFirstTimestamp()
-    for await (const sample of new engine.AudioSampleSink(track).samples(
-      start,
-      start + 1
+    for await (const sample of patiently(
+      new engine.AudioSampleSink(track).samples(start, start + 1)
     ))
       sample.close()
     return true
@@ -150,7 +184,9 @@ export async function* soundOf(
     if (!track) return
     const end = await track.computeDuration()
     let decoded = 0
-    for await (const sample of new engine.AudioSampleSink(track).samples()) {
+    for await (const sample of patiently(
+      new engine.AudioSampleSink(track).samples()
+    )) {
       if (signal?.aborted) {
         sample.close()
         return
@@ -369,7 +405,9 @@ export function aacPriming(
         try {
           const track = await opened.getPrimaryAudioTrack()
           if (!track || !(await track.canDecode())) return null
-          for await (const one of new engine.AudioSampleSink(track).samples()) {
+          for await (const one of patiently(
+            new engine.AudioSampleSink(track).samples()
+          )) {
             const plane = new Float32Array(one.numberOfFrames)
             one.copyTo(plane, { planeIndex: 0, format: "f32-planar" })
             heard.push(plane)

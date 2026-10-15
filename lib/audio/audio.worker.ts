@@ -83,7 +83,22 @@ async function convert(job: ConvertJob, stop: AbortController) {
     if (!stop.signal.aborted) post(message, transfer)
   }
   const mediabunny = await engine()
-  const { convertAudio, hearAudio } = await engineFiles()
+  const { convertAudio, hearAudio, STALL_MS, Stalled } = await engineFiles()
+  // A conversion that makes no progress for a while has a decoder or an
+  // encoder that stopped answering: it is reported, and this worker retires.
+  let sign = Date.now()
+  const watch = setInterval(() => {
+    if (stop.signal.aborted) return clearInterval(watch)
+    if (Date.now() - sign < STALL_MS * 2) return
+    clearInterval(watch)
+    send({
+      type: "error",
+      id: job.id,
+      key: job.key,
+      message: new Stalled().message,
+    })
+    if (running?.stop === stop) retire(running)
+  }, 1000)
   try {
     const wav = await asWav(job)
     const facts =
@@ -104,6 +119,7 @@ async function convert(job: ConvertJob, stop: AbortController) {
           : undefined),
       signal: stop.signal,
       onProgress: (fraction) => {
+        sign = Date.now()
         // A message for every whole percent is plenty.
         if (fraction - last < 0.01 && fraction < 1) return
         last = fraction
@@ -114,6 +130,7 @@ async function convert(job: ConvertJob, stop: AbortController) {
       send({ type: "abandoned", id: job.id })
       return
     }
+    sign = Date.now()
     const heard = await hearAudio(mediabunny, bytes, stop.signal)
     if (stop.signal.aborted) {
       send({ type: "abandoned", id: job.id })
@@ -140,6 +157,8 @@ async function convert(job: ConvertJob, stop: AbortController) {
         key: job.key,
         message: said(error, UNWRITTEN),
       })
+  } finally {
+    clearInterval(watch)
   }
 }
 

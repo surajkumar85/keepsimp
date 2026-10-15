@@ -17,13 +17,44 @@ function decoded(bytes: Uint8Array, name: string) {
   return execFileSync("ffmpeg", ["-v", "error", "-i", path, "-f", "s16le", "-"])
 }
 
+/** The length a file declares for its sound, as FFprobe reads it, in seconds. */
+function declared(bytes: Uint8Array, name: string) {
+  const path = join(folder, name)
+  writeFileSync(path, bytes)
+  return Number(
+    execFileSync("ffprobe", [
+      "-v",
+      "error",
+      "-select_streams",
+      "a",
+      "-show_entries",
+      "stream=duration",
+      "-of",
+      "csv=p=0",
+      path,
+    ])
+      .toString()
+      .trim()
+  )
+}
+
+/**
+ * Samples per channel FFmpeg decodes. FFmpeg 7 and later end where the
+ * edit list ends; older ones only start where it starts, and play the
+ * encoder's padding of under one frame (1,024 samples) at the end.
+ */
+const frames = (bytes: Buffer) => bytes.length / 4
+const playedAs = (count: number, length: number) =>
+  count === length || (count > length && count - length < 1024)
+
 describe("withEditList", () => {
   it("makes FFmpeg play exactly the sound of an AAC file that had no edit list", () => {
     const plain = fixture("tone-noedit.m4a")
     // Without one, the encoder's priming and padding are played as sound.
     expect(decoded(plain, "plain.m4a").length / 4).toBeGreaterThan(11025)
     const edited = withEditList(plain, 1024, 11025)
-    expect(decoded(edited, "edited.m4a").length / 4).toBe(11025)
+    expect(declared(edited, "edited.m4a")).toBe(0.5)
+    expect(playedAs(frames(decoded(edited, "edited.m4a")), 11025)).toBe(true)
     // The same samples as FFmpeg's own file, which has the edit list it wrote.
     expect(
       decoded(edited, "edited.m4a").equals(
@@ -35,12 +66,12 @@ describe("withEditList", () => {
   it("replaces an edit list, and moves the chunk offsets when the movie comes first", () => {
     for (const name of ["tone.m4a", "tone-faststart.m4a"]) {
       const shorter = withEditList(fixture(name), 1024, 8000)
-      expect(decoded(shorter, `short-${name}`).length / 4).toBe(8000)
+      expect(declared(shorter, `short-${name}`)).toBeCloseTo(8000 / 22050, 6)
+      const played = decoded(shorter, `short-${name}`)
+      expect(playedAs(frames(played), 8000)).toBe(true)
+      // The samples played are the first of the file's own: it starts where it did.
       const full = decoded(fixture(name), name)
-      // The samples played are the first 8,000 of the file's own.
-      expect(
-        decoded(shorter, `short-${name}`).equals(full.subarray(0, 8000 * 4))
-      ).toBe(true)
+      expect(played.equals(full.subarray(0, played.length))).toBe(true)
     }
   })
 

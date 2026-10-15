@@ -174,10 +174,16 @@ test("writes every format, each read back by FFmpeg as asked", async ({
       label
     ).toMatchObject({ codec_name: codec, sample_rate: rate, channels: 2 })
     const decoded = samples(result.bytes, result.name)
-    // Opus ends where the sound ends at 48 kHz; AAC is gapless through the
-    // edit list written after measuring the encoder.
+    // Opus ends where the sound ends at 48 kHz. AAC is gapless through the
+    // edit list written after measuring the encoder: it declares exactly the
+    // sound's length, and FFmpeg 7 and later play exactly that (older ones
+    // follow only its start, and play under one frame of padding at the end).
     if (codec === "opus") expect(decoded).toBe(8 * 48000)
-    else expect(decoded, label).toBe(original)
+    else if (codec === "aac") {
+      expect(Number(said.format.duration), label).toBeCloseTo(8, 3)
+      expect(decoded - original, label).toBeGreaterThanOrEqual(0)
+      expect(decoded - original, label).toBeLessThan(1024)
+    } else expect(decoded, label).toBe(original)
   }
   // FLAC is lossless: the same samples as the original.
   await chip(page, "FLAC").click()
