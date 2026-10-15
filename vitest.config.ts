@@ -50,6 +50,8 @@ export default defineConfig({
         "lib/image-tools.ts",
         "lib/site.ts",
         "lib/tool-search.ts",
+        "lib/memory.ts",
+        "lib/browser-memory.ts",
         "lib/pwa.ts",
         "lib/offline.ts",
         "lib/pdf-merger/contents.ts",

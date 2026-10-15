@@ -7,6 +7,7 @@ import { usePathname } from "next/navigation"
 import { AppSidebar } from "@/components/app-sidebar"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { ToolSearch } from "@/components/tool-search"
+import { MemoryUsage } from "@/components/memory-usage"
 import {
   SidebarInset,
   SidebarProvider,
@@ -41,7 +42,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <SidebarInset className="min-w-0">
           <header className="flex h-14 shrink-0 items-center gap-2 border-b px-4 sm:gap-3 md:px-6">
             {/* The sides are equally wide from 640px, so the search sits in the middle. */}
-            <div className="flex min-w-0 flex-1 items-center gap-2 sm:basis-0">
+            <div className="flex min-w-0 flex-1 items-center gap-2 sm:min-w-24 sm:basis-0 md:min-w-20">
               <SidebarTrigger />
               <span className="truncate text-sm font-medium">
                 {designPage ? "Design reference" : "Discover tools"}
@@ -50,10 +51,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <div className="flex justify-end sm:w-full sm:max-w-sm sm:justify-center">
               <ToolSearch />
             </div>
-            <div className="flex items-center justify-end gap-3 sm:flex-1 sm:basis-0">
-              <span className="hidden text-xs text-muted-foreground lg:block">
+            <div className="flex items-center justify-end gap-1 sm:flex-1 sm:basis-0 sm:gap-2">
+              <span className="hidden text-xs text-muted-foreground xl:block">
                 Free. Simple. Yours.
               </span>
+              <MemoryUsage />
               <ThemeToggle />
             </div>
           </header>
