@@ -529,6 +529,16 @@ export function AudioWorkspace({ mode = "editor" }: { mode?: AudioMode }) {
   const player = useRef<HTMLAudioElement>(null)
   /** Where to carry on when the other of the original and the result is chosen. */
   const resume = useRef<{ fraction: number; playing: boolean } | null>(null)
+  /** Carry on in a player that has just read its sound, from where the other one was. */
+  const carryOn = (element: HTMLAudioElement, ready: boolean) => {
+    const from = resume.current
+    if (!from || !Number.isFinite(element.duration)) return
+    const at = from.fraction * element.duration
+    if (Math.abs(element.currentTime - at) > 0.05) element.currentTime = at
+    if (ready) resume.current = null
+    // A browser can refuse to play without a press; then it waits where it is.
+    else if (from.playing) void element.play().catch(() => undefined)
+  }
   const containers = useRef(new Map<string, Container>())
   const pool = useRef<AudioPool | null>(null)
   /** The parts asked for each file, and the settings they were asked with. */
@@ -1467,17 +1477,13 @@ export function AudioWorkspace({ mode = "editor" }: { mode?: AudioMode }) {
                       aria-label={
                         listening === "result" && result ? "Result" : "Original"
                       }
-                      onLoadedMetadata={(event) => {
-                        const element = event.currentTarget
-                        const from = resume.current
-                        resume.current = null
-                        if (!from || !Number.isFinite(element.duration)) return
-                        element.currentTime = from.fraction * element.duration
-                        // A browser can refuse to play without a press; then
-                        // it waits where it is.
-                        if (from.playing)
-                          void element.play().catch(() => undefined)
-                      }}
+                      // WebKit with GStreamer can drop a seek made as soon as
+                      // the length is known, so it is made again once the
+                      // sound can play, and only then forgotten.
+                      onLoadedMetadata={(event) =>
+                        carryOn(event.currentTarget, false)
+                      }
+                      onCanPlay={(event) => carryOn(event.currentTarget, true)}
                       onTimeUpdate={(event) => {
                         const element = event.currentTarget
                         setPlayed(
