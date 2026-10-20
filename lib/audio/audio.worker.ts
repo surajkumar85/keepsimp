@@ -18,6 +18,7 @@ import type { Rnnoise } from "./repair"
 import { RNNOISE_URL } from "./rnnoise-files"
 import { needsRnnoise, type SoundSettings } from "./sound"
 import { AiffProblem, wavFromAiff } from "./wav"
+import { keepsKind, retag } from "./retag"
 
 declare const self: DedicatedWorkerGlobalScope
 
@@ -83,7 +84,12 @@ async function read(job: ReadJob, stop: AbortController) {
     const wav = await asWav(job)
     file = wav.file
     facts = await readAudio(mediabunny, file, job.container)
-    if (wav.tags) facts = { ...facts, tags: { ...facts.tags, ...wav.tags } }
+    if (wav.tags) {
+      const { title, artist, comment } = wav.tags
+      facts = { ...facts, tags: { ...facts.tags, title, artist, comment } }
+      for (const field of ["title", "artist", "comment"] as const)
+        if (!facts.tags[field]) delete facts.tags[field]
+    }
   } catch (error) {
     send({ type: "open-error", id: job.id, message: said(error, UNREADABLE) })
     return
@@ -130,6 +136,40 @@ async function convert(job: ConvertJob | SplitJob, stop: AbortController) {
     if (running?.stop === stop) retire(running)
   }, 1000)
   try {
+    // The sound copied into the same kind of file: only its tags are written.
+    if (
+      job.job === "convert" &&
+      job.plan.copy &&
+      !job.facts.hasVideo &&
+      !job.edits.length &&
+      keepsKind(job.container, job.plan.format)
+    ) {
+      const source = new Uint8Array(await job.file.arrayBuffer())
+      const bytes = retag(source, job.container, job.change, job.keepTags)
+      if (bytes) {
+        sign = Date.now()
+        const heard = await hearAudio(mediabunny, bytes, stop.signal)
+        if (stop.signal.aborted) {
+          send({ type: "abandoned", id: job.id })
+          return
+        }
+        send(
+          {
+            type: "done",
+            id: job.id,
+            job: "convert",
+            key: job.key,
+            plan: job.plan,
+            bytes,
+            heard,
+            level: null,
+            inPlace: true,
+          },
+          [bytes.buffer as ArrayBuffer]
+        )
+        return
+      }
+    }
     const wav = await asWav(job)
     const facts =
       job.container === "aiff" || job.tags
@@ -150,6 +190,7 @@ async function convert(job: ConvertJob | SplitJob, stop: AbortController) {
         facts,
         {
           keepTags: job.keepTags,
+          change: job.change,
           edits,
           level: job.level,
           sound: job.sound,
@@ -209,6 +250,7 @@ async function convert(job: ConvertJob | SplitJob, stop: AbortController) {
           key: job.key,
           plan: job.plan,
           ...written[0],
+          inPlace: false,
         },
         transfer
       )

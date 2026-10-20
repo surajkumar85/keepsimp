@@ -11,6 +11,7 @@ import type { Peaks } from "./peaks"
 import type { Plan } from "./settings"
 import type { PartTimes } from "./split"
 import type { Joining } from "./join"
+import type { TagChange } from "./tags"
 
 /** Read a file: its facts first, then its overview waveform. */
 export interface ReadJob {
@@ -32,6 +33,8 @@ export interface ConvertJob {
   keepTags: boolean
   /** Tags to write in place of the file's own, for a decoded file. */
   tags?: MetadataTags
+  /** The changes made to its tags. */
+  change: TagChange
   /** The edits made to the sound, in order. */
   edits: Step[]
   /** How loud the result is to be. */
@@ -112,6 +115,8 @@ export type AudioResponse =
       heard: Heard | null
       /** What was done to its level, and what it measured. */
       level: LevelResult | null
+      /** Only its tags were written: every byte of sound is the file's own. */
+      inPlace: boolean
     }
   | {
       type: "done"

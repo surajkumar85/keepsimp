@@ -235,6 +235,12 @@ const cards = [
     "/images/audio-noise-guide.svg",
   ],
   [
+    "edit-audio-tags-and-cover-art",
+    "The right name on every song, the sound left alone.",
+    "Titles, albums, lyrics and covers, many at once.",
+    "/images/audio-tags-guide.svg",
+  ],
+  [
     "gapless-mp3-and-aac",
     "Why a converted MP3 starts late, and ours does not.",
     "Gapless MP3 and AAC, checked before download.",

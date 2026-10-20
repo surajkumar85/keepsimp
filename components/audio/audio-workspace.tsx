@@ -104,6 +104,15 @@ import {
 } from "@/lib/audio/level"
 import { LoudnessMeter, loudnessOf, SILENT } from "@/lib/audio/loudness"
 import { isPlain } from "@/lib/audio/sound"
+import {
+  changed,
+  isTagChanged,
+  noTagChange,
+  withChange,
+  type Cover,
+  type TagField,
+} from "@/lib/audio/tags"
+import { keepsKind } from "@/lib/audio/retag"
 import { partNames, splitKey, type PartTimes } from "@/lib/audio/split"
 import { peakCount } from "@/lib/audio/view"
 import { wavFromPlanes } from "@/lib/audio/wav"
@@ -114,6 +123,7 @@ import { createZip } from "@/lib/image-resizer/zip"
 import { SettingsPanel } from "./settings-panel"
 import { SoundEditor, type EditorFocus } from "./sound-editor"
 import { SplitPanel } from "./split-panel"
+import { TagPanel, type TagRow } from "./tag-panel"
 import { JoinPanel, type JoinRow } from "./join-panel"
 import { Waveform } from "./waveform"
 
@@ -130,6 +140,7 @@ export type AudioMode =
   | "joiner"
   | "speed"
   | "noise"
+  | "tags"
 
 /** What the waveform editor is opened for, in each mode; none where it waits to be asked for. */
 const EDITING: Record<AudioMode, EditorFocus | null> = {
@@ -144,6 +155,7 @@ const EDITING: Record<AudioMode, EditorFocus | null> = {
   joiner: null,
   speed: null,
   noise: null,
+  tags: null,
 }
 
 const INPUT_ID = "audio-file"
@@ -200,6 +212,14 @@ const COPY: Record<AudioMode, DropZoneCopy> = {
     dropping: "Drop to change these files' speed",
     body: "Faster or slower keeping the pitch, the pitch up or down keeping the length, or both; also backwards, karaoke and the channels swapped. On your device. You can also paste with ⌘V or Ctrl+V.",
     inputLabel: "Choose audio files to change",
+    action: "Choose files",
+    limits: `Stays on your device · up to ${MAX_FILES} files at once`,
+  },
+  tags: {
+    heading: "Drop audio to change its tags",
+    dropping: "Drop to change these files' tags",
+    body: "Title, artist, album, track, genre, lyrics and the cover, for one file or many at once, written into MP3, M4A, FLAC, Ogg, Opus and WAV without touching the sound. On your device. You can also paste with ⌘V or Ctrl+V.",
+    inputLabel: "Choose audio files to tag",
     action: "Choose files",
     limits: `Stays on your device · up to ${MAX_FILES} files at once`,
   },
@@ -295,6 +315,7 @@ const FOCUSED: Partial<Record<AudioMode, string>> = {
   joiner: "opened for joining files",
   speed: "opened for changing speed and pitch",
   noise: "opened for taking away background noise",
+  tags: "opened for changing tags",
 }
 
 const SAMPLES: Record<AudioMode, { name: string; type: string }[]> = {
@@ -318,6 +339,10 @@ const SAMPLES: Record<AudioMode, { name: string; type: string }[]> = {
   ],
   speed: [{ name: "keepsimp-tune.flac", type: "audio/flac" }],
   noise: [{ name: "keepsimp-voice.mp3", type: "audio/mpeg" }],
+  tags: [
+    { name: "keepsimp-tune.flac", type: "audio/flac" },
+    { name: "keepsimp-voice.mp3", type: "audio/mpeg" },
+  ],
 }
 
 /** The format each mode writes at first. */
@@ -333,6 +358,7 @@ const FIRST_FORMAT: Record<AudioMode, AudioSettings["format"]> = {
   joiner: "mp3",
   speed: "same",
   noise: "same",
+  tags: "same",
 }
 
 /** How loud results are at first in each mode. */
@@ -343,20 +369,7 @@ const FIRST_LEVEL: Partial<Record<AudioMode, Partial<Level>>> = {
 
 /** The tags of a file, to be written into what the page decoded (whose WAV has none). */
 function tagsOf(facts: ReadFacts): MetadataTags {
-  const { tags, cover } = facts
-  return {
-    title: tags.title,
-    artist: tags.artist,
-    album: tags.album,
-    albumArtist: tags.albumArtist,
-    genre: tags.genre,
-    trackNumber: tags.trackNumber,
-    comment: tags.comment,
-    date: tags.year ? new Date(Date.UTC(tags.year, 0, 1)) : undefined,
-    images: cover
-      ? [{ data: cover.data, mimeType: cover.mimeType, kind: "coverFront" }]
-      : undefined,
-  }
+  return withChange({}, { fields: facts.tags, cover: facts.cover ?? undefined })
 }
 
 /** A small picture of a file for the list: its cover, or its waveform. */
@@ -711,15 +724,18 @@ export function AudioWorkspace({ mode = "editor" }: { mode?: AudioMode }) {
           type: "done",
           id: message.id,
           key: message.key,
-          result: resultOf(
-            item,
-            message.plan,
-            message,
-            baseName(item.file.name),
-            lengthOf(editedBy(item.facts.duration, stepsOf(item))),
-            // The settings these results were written with are the ones in force.
-            live.current.settings
-          ),
+          result: {
+            ...resultOf(
+              item,
+              message.plan,
+              message,
+              baseName(item.file.name),
+              lengthOf(editedBy(item.facts.duration, stepsOf(item))),
+              // The settings these results were written with are the ones in force.
+              live.current.settings
+            ),
+            inPlace: message.inPlace,
+          },
         })
       } else if (message.type === "open-error")
         dispatch({ type: "failed", id: message.id, message: message.message })
@@ -778,7 +794,9 @@ export function AudioWorkspace({ mode = "editor" }: { mode?: AudioMode }) {
         sound: want.settings.sound,
         changes: want.settings.changes,
         joining: want.joining,
-        tags: want.settings.keepTags ? tagsOf(first) : undefined,
+        tags: want.settings.keepTags
+          ? withChange(tagsOf(first), parts[0].tagChange ?? noTagChange)
+          : undefined,
         chapters:
           want.chapters &&
           !want.settings.changes.reverse &&
@@ -846,6 +864,7 @@ export function AudioWorkspace({ mode = "editor" }: { mode?: AudioMode }) {
       sound: settings.sound,
       changes: settings.changes,
       tags: decoded ? tagsOf(facts) : undefined,
+      change: item.tagChange ?? noTagChange,
       edits,
     }
     if (asked)
@@ -995,6 +1014,17 @@ export function AudioWorkspace({ mode = "editor" }: { mode?: AudioMode }) {
         pool.current?.kick()
       }, DEBOUNCE_MS)
     )
+  }
+
+  // A change of tags outdates the files being written, as an edit does.
+  function retagFiles(
+    ids: string[],
+    change: { fields?: Partial<Record<TagField, string>>; cover?: Cover | null }
+  ) {
+    dispatch({ type: "retag", ids, ...change })
+    for (const id of ids)
+      if (pool.current?.inFlight().has(id)) pool.current.forget(id)
+    pool.current?.kick()
   }
 
   function remove(id: string) {
@@ -1195,6 +1225,23 @@ export function AudioWorkspace({ mode = "editor" }: { mode?: AudioMode }) {
   const selectedSteps = stepsOf(selected)
   const selectedEdited = editedBy(facts?.duration ?? 0, selectedSteps)
   const splits = mode === "editor" || mode === "splitter"
+  const tagging = mode === "editor" || mode === "tags"
+  const tagRows: TagRow[] = items.flatMap((one) =>
+    one.status === "ready" && one.facts
+      ? [
+          {
+            id: one.id,
+            name: one.file.name,
+            values: changed(one.facts.tags, one.tagChange ?? noTagChange),
+            cover:
+              one.tagChange?.cover !== undefined
+                ? one.tagChange.cover
+                : one.facts.cover,
+            changed: isTagChanged(one.tagChange ?? noTagChange),
+          },
+        ]
+      : []
+  )
   // The files that can be joined, in the list's order, as edited.
   const joinable = items.filter((one) => one.status === "ready" && one.facts)
   // As long as each will be, once its speed is changed.
@@ -1544,6 +1591,28 @@ export function AudioWorkspace({ mode = "editor" }: { mode?: AudioMode }) {
             </>
           )}
         </section>
+
+        {tagging && facts && selected.status === "ready" && (
+          <TagPanel
+            rows={tagRows}
+            selectedId={selected.id}
+            keepTags={settings.keepTags}
+            inPlace={Boolean(
+              plan?.copy &&
+              !facts.hasVideo &&
+              !stepsOf(selected).length &&
+              keepsKind(facts.container, plan.format)
+            )}
+            onKeepTags={() =>
+              setSettings((current) => ({ ...current, keepTags: true }))
+            }
+            onChange={retagFiles}
+            onReset={(ids) => {
+              dispatch({ type: "retag-reset", ids })
+              pool.current?.kick()
+            }}
+          />
+        )}
 
         {splits && facts && selected.status !== "error" && (
           <SplitPanel

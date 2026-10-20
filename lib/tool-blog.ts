@@ -344,6 +344,14 @@ export const overviewPost: BlogPost = {
           label: "Guide: remove background noise",
           href: "/blog/remove-background-noise-from-audio/",
         },
+        {
+          label: "Wrong title or no cover? Open it as Edit audio tags",
+          href: "/dashboard/edit-audio-tags/",
+        },
+        {
+          label: "Guide: edit audio tags and cover art",
+          href: "/blog/edit-audio-tags-and-cover-art/",
+        },
       ],
     },
     {
@@ -2628,6 +2636,91 @@ export const noisePost: BlogPost = {
     {
       title: "Utility frequency, Wikipedia",
       url: "https://en.wikipedia.org/wiki/Utility_frequency",
+    },
+  ],
+}
+
+export const tagsPost: BlogPost = {
+  published: "2026-10-21",
+  modified: "2026-10-21",
+  slug: "edit-audio-tags-and-cover-art",
+  title: "The right name on every song, the sound left alone.",
+  searchTitle: "How to edit MP3 tags and add album art for free",
+  description:
+    "Change the title, artist, album, track number, lyrics and cover of MP3, M4A, FLAC, Ogg, Opus and WAV files in your browser, many at once, without encoding the sound again. Nothing is uploaded.",
+  keywords: [
+    "edit mp3 tags",
+    "mp3 tag editor online",
+    "add album art to mp3",
+    "change song title",
+    "id3 tag editor",
+    "edit flac tags",
+    "edit m4a metadata",
+  ],
+  category: "A little know-how",
+  readingTime: "4 min read",
+  image: "/images/audio-tags-guide.svg",
+  imageAlt:
+    "Fields for the title, artist and album of a song beside its cover picture, with a note that the sound is kept byte for byte",
+  tool: "edit-audio-tags",
+  intro:
+    "A song called Track 01 by Unknown artist, an album with no cover, a podcast episode with last week's title. Tags are a small part at the start or end of a file, so changing them should not mean writing the sound again; here it does not, and the files never leave your device.",
+  sections: [
+    {
+      id: "how",
+      title: "How to change the tags.",
+      paragraphs: [
+        "Open Edit audio tags and drop your files. Type in the fields of one file, or choose All files to give a whole album one artist and title at once; fields that differ between files say so and are left as each has them until you type. Choose a picture for the cover, then download each file, or all of them as a ZIP.",
+      ],
+      links: [
+        {
+          label: "Open Edit audio tags",
+          href: "/dashboard/edit-audio-tags/",
+        },
+      ],
+    },
+    {
+      id: "sound",
+      title: "Why the sound is not touched.",
+      paragraphs: [
+        "Each kind of file keeps its tags in its own place: ID3 at the start of an MP3, an item list inside an M4A, comment and picture blocks at the start of a FLAC, a comment header in an Ogg or Opus file, and INFO and id3 chunks in a WAV. Only that part is written. The sound is byte for byte as it was, so nothing is lost, and the page listens to every result before you download it.",
+        "Every tag you do not change stays as it was, including those this page does not show, such as chapters, ReplayGain or an encoder's notes. A field you empty is taken out.",
+      ],
+    },
+    {
+      id: "many",
+      title: "Many files, one album.",
+      paragraphs: [
+        "Choose All files and what you type goes into every file. Give each its own track number afterwards, one file at a time, or leave the numbers they have.",
+      ],
+    },
+    {
+      id: "private",
+      title: "On your device.",
+      paragraphs: [
+        "Files are read and written in your browser and never uploaded. There is no account and no limit on how many you change.",
+      ],
+      links: [
+        {
+          label: "Every KeepSimp tool in one place",
+          href: "/blog/free-online-tools-no-upload/",
+        },
+      ],
+    },
+  ],
+  sources: [
+    {
+      title: "ID3 tag version 2.4.0, main structure",
+      url: "https://id3.org/id3v2.4.0-structure",
+    },
+    {
+      title: "RFC 9639: Free Lossless Audio Codec (FLAC), metadata blocks",
+      url: "https://www.rfc-editor.org/rfc/rfc9639.html",
+    },
+    {
+      title:
+        "RFC 7845: Ogg encapsulation for the Opus audio codec, comment header",
+      url: "https://www.rfc-editor.org/rfc/rfc7845.html",
     },
   ],
 }

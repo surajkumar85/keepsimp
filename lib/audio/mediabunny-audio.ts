@@ -36,6 +36,13 @@ import { Joiner, joinsFor, startsOf, straight, type Joining } from "./join"
 import { Limiter } from "./limiter"
 import { isPlain, SoundShaper, type SoundSettings } from "./sound"
 import type { Rnnoise } from "./repair"
+import {
+  noTagChange,
+  valuesOf,
+  withChange,
+  type TagChange,
+  type TagValues,
+} from "./tags"
 import { Changer, framesAfter, isUnchanged, type Changes } from "./change"
 import {
   integrated,
@@ -49,20 +56,10 @@ import {
 type Engine = typeof Mediabunny
 
 /** The tags shown and kept, as Mediabunny reads them. */
-export interface TagSummary {
-  title?: string
-  artist?: string
-  album?: string
-  albumArtist?: string
-  genre?: string
-  year?: number
-  trackNumber?: number
-  comment?: string
-}
 
 export interface ReadFacts extends SourceFacts {
-  /** The tags it has; cover art apart. */
-  tags: TagSummary
+  /** The tags it has, as text; cover art apart. */
+  tags: TagValues
   /** Its front cover, or first picture. */
   cover: { data: Uint8Array; mimeType: string } | null
   /** Whether this browser can decode its sound (otherwise the page decodes it). */
@@ -178,16 +175,7 @@ export async function readAudio(
       duration:
         kept?.length != null ? kept.length / track.sampleRate : duration,
       hasVideo,
-      tags: {
-        title: read.title,
-        artist: read.artist,
-        album: read.album,
-        albumArtist: read.albumArtist,
-        genre: read.genre,
-        year: read.date?.getFullYear(),
-        trackNumber: read.trackNumber,
-        comment: read.comment,
-      },
+      tags: valuesOf(read),
       cover: image ? { data: image.data, mimeType: image.mimeType } : null,
       decodable: await decodes(engine, track),
       kept,
@@ -680,6 +668,8 @@ async function pass(
   options: {
     keepTags: boolean
     tags?: Mediabunny.MetadataTags
+    /** Changes to make to the tags written. */
+    change?: TagChange
     onProgress?: (fraction: number) => void
     signal?: AbortSignal
     edits: readonly Step[]
@@ -868,8 +858,8 @@ async function pass(
       tags: !options.keepTags
         ? {}
         : options.tags
-          ? options.tags
-          : (tags) => tags,
+          ? withChange(options.tags, options.change ?? noTagChange)
+          : (tags) => withChange(tags, options.change ?? noTagChange),
     })
     if (!conversion.isValid)
       throw new AudioProblem(
@@ -914,6 +904,8 @@ export async function convertAudio(
   options: {
     keepTags: boolean
     tags?: Mediabunny.MetadataTags
+    /** Changes to make to the tags written. */
+    change?: TagChange
     onProgress?: (fraction: number) => void
     signal?: AbortSignal
     /** Edits to make while writing (see `edits.ts`); none when left out. */
@@ -953,7 +945,10 @@ export async function convertAudio(
         sound: options.sound,
         changes,
         rnnoise: options.rnnoise,
-        tags: options.keepTags ? tags : undefined,
+        tags:
+          options.keepTags && tags
+            ? withChange(tags, options.change ?? noTagChange)
+            : undefined,
         chapters: false,
         onProgress: options.onProgress,
         signal: options.signal,
@@ -986,6 +981,7 @@ export async function convertAudio(
   const common = {
     keepTags: options.keepTags,
     tags: options.tags,
+    change: options.change,
     signal: options.signal,
     edits,
     edited,

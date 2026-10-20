@@ -374,3 +374,64 @@ describe("audioTotals", () => {
     expect(audioTotals(items.slice(0, 1), () => "k").settled).toBe(true)
   })
 })
+
+describe("tags", () => {
+  const read = () => {
+    let items = added()
+    items = audioReducer(items, {
+      type: "facts",
+      id: "a",
+      facts: { ...facts(), tags: { title: "Own", artist: "Band" } },
+    })
+    return audioReducer(items, { type: "facts", id: "b", facts: facts() })
+  }
+  const cover = { data: Uint8Array.of(1), mimeType: "image/png" }
+
+  it("keeps each file's change, and drops a field set back to what the file has", () => {
+    let items = read()
+    const plain = itemKey("s", items[0])
+    items = audioReducer(items, {
+      type: "retag",
+      ids: ["a", "b"],
+      fields: { title: "New", album: "One" },
+    })
+    expect(items.map((item) => item.tagChange)).toEqual([
+      { fields: { title: "New", album: "One" } },
+      { fields: { title: "New", album: "One" } },
+    ])
+    expect(itemKey("s", items[0])).not.toBe(plain)
+    // Back to the file's own title: no change of it.
+    items = audioReducer(items, {
+      type: "retag",
+      ids: ["a"],
+      fields: { title: " Own " },
+    })
+    expect(items[0].tagChange).toEqual({ fields: { album: "One" } })
+    // A cover, kept while fields change, then taken away.
+    items = audioReducer(items, { type: "retag", ids: ["b"], cover })
+    items = audioReducer(items, {
+      type: "retag",
+      ids: ["b"],
+      fields: { genre: "Jazz" },
+    })
+    expect(items[1].tagChange).toEqual({
+      fields: { title: "New", album: "One", genre: "Jazz" },
+      cover,
+    })
+    items = audioReducer(items, { type: "retag", ids: ["b"], cover: null })
+    expect(items[1].tagChange?.cover).toBeNull()
+    items = audioReducer(items, { type: "retag-reset", ids: ["a"] })
+    expect(items[0].tagChange).toBeUndefined()
+    expect(itemKey("s", items[0])).toBe(plain)
+    expect(items[1].tagChange).toBeDefined()
+  })
+
+  it("leaves files not yet read as they are", () => {
+    const items = audioReducer(added(), {
+      type: "retag",
+      ids: ["a"],
+      fields: { title: "New" },
+    })
+    expect(items[0].tagChange).toBeUndefined()
+  })
+})

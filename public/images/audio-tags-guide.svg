@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 600" role="img" aria-labelledby="title desc">
+  <title id="title">Edit audio tags and cover art</title><desc id="desc">Fields for the title, artist and album of a song beside its cover picture, with a note that the sound is kept byte for byte.</desc>
+  <rect width="900" height="600" rx="24" fill="#f5f5f0"/>
+  <rect x="70" y="70" width="760" height="460" rx="16" fill="#fff" stroke="#d4d4d4"/>
+  <text x="100" y="116" font-family="sans-serif" font-size="22" font-weight="600" fill="#0a0a0a">Tags</text>
+  <text x="100" y="146" font-family="sans-serif" font-size="14" fill="#525252">Only the tags are written: the sound stays byte for byte as it is.</text>
+  <rect x="100" y="172" width="80" height="30" rx="15" fill="#00786f"/><text x="140" y="192" font-family="sans-serif" font-size="13" fill="#fff" text-anchor="middle">This file</text>
+  <rect x="188" y="172" width="104" height="30" rx="15" fill="#fff" stroke="#d4d4d4"/><text x="240" y="192" font-family="sans-serif" font-size="13" fill="#0a0a0a" text-anchor="middle">All 12 files</text>
+  <text x="100" y="236" font-family="sans-serif" font-size="14" font-weight="600" fill="#0a0a0a">Title</text>
+  <rect x="100" y="246" width="440" height="40" rx="8" fill="#fff" stroke="#d4d4d4"/><text x="114" y="272" font-family="sans-serif" font-size="15" fill="#0a0a0a">Morning in the harbour</text>
+  <text x="100" y="316" font-family="sans-serif" font-size="14" font-weight="600" fill="#0a0a0a">Artist</text>
+  <rect x="100" y="326" width="212" height="40" rx="8" fill="#fff" stroke="#d4d4d4"/><text x="114" y="352" font-family="sans-serif" font-size="15" fill="#0a0a0a">The Lanterns</text>
+  <text x="328" y="316" font-family="sans-serif" font-size="14" font-weight="600" fill="#0a0a0a">Album</text>
+  <rect x="328" y="326" width="212" height="40" rx="8" fill="#fff" stroke="#d4d4d4"/><text x="342" y="352" font-family="sans-serif" font-size="15" fill="#0a0a0a">Tide Tables</text>
+  <text x="100" y="396" font-family="sans-serif" font-size="14" font-weight="600" fill="#0a0a0a">Track</text>
+  <rect x="100" y="406" width="100" height="40" rx="8" fill="#fff" stroke="#d4d4d4"/><text x="114" y="432" font-family="sans-serif" font-size="15" fill="#0a0a0a">3</text>
+  <text x="212" y="396" font-family="sans-serif" font-size="14" font-weight="600" fill="#0a0a0a">Tracks in all</text>
+  <rect x="212" y="406" width="100" height="40" rx="8" fill="#fff" stroke="#d4d4d4"/><text x="226" y="432" font-family="sans-serif" font-size="15" fill="#0a0a0a">12</text>
+  <text x="328" y="396" font-family="sans-serif" font-size="14" font-weight="600" fill="#0a0a0a">Year</text>
+  <rect x="328" y="406" width="100" height="40" rx="8" fill="#fff" stroke="#d4d4d4"/><text x="342" y="432" font-family="sans-serif" font-size="15" fill="#0a0a0a">2024</text>
+  <text x="580" y="236" font-family="sans-serif" font-size="14" font-weight="600" fill="#0a0a0a">Cover</text>
+  <rect x="580" y="246" width="200" height="200" rx="10" fill="#00786f"/>
+  <circle cx="680" cy="330" r="46" fill="#f5f5f0" opacity="0.9"/>
+  <path d="M600 430 L650 380 L690 415 L720 390 L760 430 Z" fill="#f5f5f0" opacity="0.6"/>
+  <rect x="580" y="462" width="200" height="34" rx="8" fill="#fff" stroke="#d4d4d4"/><text x="680" y="484" font-family="sans-serif" font-size="13" fill="#0a0a0a" text-anchor="middle">Choose another picture</text>
+</svg>

@@ -18,6 +18,7 @@ import {
   JoinerTutorial,
   SpeedTutorial,
   NoiseTutorial,
+  TagsTutorial,
 } from "@/components/audio/tutorial"
 import { AnimationConverterTutorial } from "@/components/animation-converter/tutorial"
 import { ImageCompressor } from "@/components/image-compressor/image-compressor"
@@ -116,6 +117,12 @@ export async function generateMetadata({
     return pageMetadata(
       "Change audio speed and pitch online for free",
       "Speed up or slow down MP3, M4A, WAV and more without changing the pitch, or change the pitch keeping the length, in your browser. Also reverse and karaoke. No account, no file uploads.",
+      `/dashboard/${id}/`
+    )
+  if (id === "edit-audio-tags")
+    return pageMetadata(
+      "Edit audio tags online for free: MP3, M4A, FLAC tag editor",
+      "Change the title, artist, album, track, genre, lyrics and cover art of MP3, M4A, FLAC, Ogg, Opus and WAV files, many at once, in your browser, without touching the sound. No account, no file uploads.",
       `/dashboard/${id}/`
     )
   if (id === "remove-background-noise")
@@ -320,6 +327,8 @@ export default async function ToolPage({
         <AudioWorkspace mode="speed" />
       ) : id === "remove-background-noise" ? (
         <AudioWorkspace mode="noise" />
+      ) : id === "edit-audio-tags" ? (
+        <AudioWorkspace mode="tags" />
       ) : id === "pdf-merger" ? (
         <PdfMerger />
       ) : id === "pdf-splitter" ? (
@@ -381,6 +390,8 @@ export default async function ToolPage({
         <SpeedTutorial />
       ) : id === "remove-background-noise" ? (
         <NoiseTutorial />
+      ) : id === "edit-audio-tags" ? (
+        <TagsTutorial />
       ) : id === "audio-extractor" ? (
         <AudioExtractorTutorial />
       ) : id === "pdf-merger" ? (

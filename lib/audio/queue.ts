@@ -12,6 +12,14 @@ import type { LevelResult } from "./level"
 import type { LoudnessMap } from "./loudness"
 import type { Peaks } from "./peaks"
 import type { Plan } from "./settings"
+import {
+  cleaned,
+  noTagChange,
+  tagKey,
+  type Cover,
+  type TagChange,
+  type TagField,
+} from "./tags"
 
 export interface AudioResult {
   blob: Blob
@@ -29,6 +37,8 @@ export interface AudioResult {
   problems: string[]
   /** What was done to its level; null when it was left as it was. */
   level?: LevelResult | null
+  /** Only its tags were written: every byte of sound is the file's own. */
+  inPlace?: boolean
 }
 
 export interface AudioItem {
@@ -59,6 +69,8 @@ export interface AudioItem {
   split?: { key: string; parts: AudioResult[] }
   splitProgress?: number
   splitError?: string
+  /** The changes made to its tags. */
+  tagChange?: TagChange
 }
 
 export type AudioAction =
@@ -85,6 +97,13 @@ export type AudioAction =
   | { type: "split-progress"; id: string; fraction: number }
   | { type: "split-done"; id: string; key: string; parts: AudioResult[] }
   | { type: "split-failed"; id: string; key: string; message: string }
+  | {
+      type: "retag"
+      ids: string[]
+      fields?: Partial<Record<TagField, string>>
+      cover?: Cover | null
+    }
+  | { type: "retag-reset"; ids: string[] }
   | { type: "move"; id: string; by: -1 | 1 }
   | { type: "remove"; id: string }
   | { type: "clear" }
@@ -234,6 +253,27 @@ export function audioReducer(
             }
           : item
       )
+    case "retag":
+      return items.map((item) => {
+        if (!action.ids.includes(item.id) || !item.facts) return item
+        const own = item.facts.tags
+        const fields = { ...item.tagChange?.fields }
+        for (const [field, value] of Object.entries(action.fields ?? {}) as [
+          TagField,
+          string,
+        ][])
+          // A field set back to what the file has is no change.
+          if (cleaned(field, value) === (own[field] ?? "")) delete fields[field]
+          else fields[field] = value
+        const change: TagChange = { fields }
+        const cover = "cover" in action ? action.cover : item.tagChange?.cover
+        if (cover !== undefined) change.cover = cover
+        return { ...item, tagChange: change }
+      })
+    case "retag-reset":
+      return items.map((item) =>
+        action.ids.includes(item.id) ? { ...item, tagChange: undefined } : item
+      )
     case "move": {
       const from = items.findIndex((item) => item.id === action.id)
       const to = from + action.by
@@ -276,7 +316,9 @@ export const stepsOf = (item: AudioItem) => (item.changes ?? []).flat()
 
 /** A file's result key: the settings' and its own edits'; null when the settings cannot be used. */
 export const itemKey = (settings: string | null, item: AudioItem) =>
-  settings === null ? null : `${settings}|${editsKey(stepsOf(item))}`
+  settings === null
+    ? null
+    : `${settings}|${editsKey(stepsOf(item))}|${tagKey(item.tagChange ?? noTagChange)}`
 
 /** What a free worker should do next: read a new file, else write the selected one, else the first waiting. */
 export function nextAudioJob(

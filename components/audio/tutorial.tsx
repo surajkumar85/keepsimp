@@ -226,6 +226,29 @@ const repairing: TutorialContent["options"] = [
   },
 ]
 
+const tagging: TutorialContent["options"] = [
+  {
+    term: "Tags",
+    detail:
+      "Title, artist, album, album artist, year, track and disc (each with how many there are in all), genre, comment and lyrics. A field left empty is taken out of the file; a field you do not touch is kept exactly as the file has it, with every other tag it holds (chapters, an encoder's notes, ReplayGain and the rest).",
+  },
+  {
+    term: "Many files at once",
+    detail:
+      "Choose All files and what you type goes into every file, such as one album and artist for a whole record; fields that differ between files say so and stay as each file has them until you type in them.",
+  },
+  {
+    term: "Cover",
+    detail:
+      "A JPEG or PNG picture, smaller than 16 MB, put in as the front cover. Taking it away takes every picture the file holds.",
+  },
+  {
+    term: "Without touching the sound",
+    detail:
+      "When the result is the same kind of file (Same as the file, with nothing else changed), only the part of the file that holds the tags is written: ID3 in an MP3, the item list in an M4A, the comment and picture blocks in a FLAC, the comment header in an Ogg or Opus file, and INFO with an id3 chunk in a WAV. The sound is byte for byte as it was, and the page checks it by listening to the result. Files of other kinds, or written in another format, get the tags as they are written.",
+  },
+]
+
 const silencing: TutorialContent["options"] = [
   {
     term: "Silence at the ends",
@@ -369,6 +392,7 @@ const editor: TutorialContent = {
     ...combining,
     ...timing,
     ...repairing,
+    ...tagging,
     ...leveling,
     ...shaping,
     ...options,
@@ -643,4 +667,35 @@ const cleaning: TutorialContent = {
 
 export function NoiseTutorial() {
   return <ToolTutorial content={cleaning} />
+}
+
+const tagsHelp: TutorialContent = {
+  name: "How to edit audio tags with KeepSimp",
+  description:
+    "Change the title, artist, album, lyrics and cover art of MP3, M4A, FLAC, Ogg, Opus and WAV files in your browser, many at once, without touching the sound. Nothing is uploaded.",
+  intro: "Follow the steps below. Every option is explained underneath.",
+  steps: [
+    {
+      title: "Add your files",
+      text: "Drop them, choose them or paste them: MP3, M4A, FLAC, Ogg, Opus, WAV and more.",
+    },
+    {
+      title: "Change the tags",
+      text: "Type in the fields of one file, or choose All files to give them all one album or artist.",
+    },
+    {
+      title: "Add a cover",
+      text: "Choose a JPEG or PNG picture, or take the old one away.",
+    },
+    {
+      title: "Download",
+      text: "Each file keeps its own sound, byte for byte, with the new tags. Download one, or all as a ZIP.",
+    },
+  ],
+  options: [...tagging, ...options],
+  guideHref: "/blog/edit-audio-tags-and-cover-art/",
+}
+
+export function TagsTutorial() {
+  return <ToolTutorial content={tagsHelp} />
 }
