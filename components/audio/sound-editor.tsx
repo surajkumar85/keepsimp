@@ -49,7 +49,15 @@ import {
 } from "@/lib/audio/edits"
 import type { OutputFormat } from "@/lib/audio/formats"
 import { clockLabel, parseClock, timeLabel } from "@/lib/audio/labels"
-import { loudnessSaid } from "@/lib/audio/level"
+import { dbLabel, loudnessSaid } from "@/lib/audio/level"
+import {
+  KEPT_PAUSE,
+  PAUSES,
+  shortenPauses,
+  SILENCE_LEVELS,
+  silentRuns,
+  trimEnds,
+} from "@/lib/audio/silence"
 import {
   decibels,
   loudnessOfParts,
@@ -86,6 +94,8 @@ interface Part {
 const GRAB = 8
 /** A press that moves less than this is a click, not a drag. */
 const CLICK = 4
+/** Silence at an end this long or more is offered to trim, in seconds. */
+const ENDS_AT_LEAST = 0.2
 /** How often, while playing, cuts are skipped and loudness followed. */
 const TICK_MS = 10
 /** The narrowest view, in seconds. */
@@ -510,6 +520,19 @@ export function SoundEditor({
     }
     make([{ do: "gain", ...part, db }])
   }
+
+  // Silence, found in the sound as edited.
+  const [silentUnder, setSilentUnder] = useState<number>(-50)
+  const [pauseOver, setPauseOver] = useState<number>(1)
+  const runs = useMemo(
+    () =>
+      peaks && length > 0
+        ? silentRuns(peaks, duration, edited, silentUnder, ENDS_AT_LEAST)
+        : [],
+    [peaks, duration, edited, length, silentUnder]
+  )
+  const ends = trimEnds(runs, length)
+  const pauses = shortenPauses(runs, length, pauseOver)
 
   const makeRingtone = () => {
     const part = ringtonePart(ringtone, playhead, selection, length)
@@ -1130,6 +1153,76 @@ export function SoundEditor({
           </div>
         )}
       </fieldset>
+
+      {focus !== "ringtone" && (
+        <fieldset
+          className="space-y-3 rounded-lg border p-3"
+          data-testid="silence-panel"
+        >
+          <legend className="px-1 text-sm font-medium">Silence</legend>
+          <div className="flex flex-wrap gap-x-6 gap-y-3">
+            <ChoiceChips
+              label="Silent under"
+              value={String(silentUnder)}
+              onValueChange={(value) => setSilentUnder(Number(value))}
+              options={SILENCE_LEVELS.map((level) => ({
+                value: String(level),
+                label: `${dbLabel(level)} dBFS`,
+              }))}
+            />
+            <ChoiceChips
+              label="Pauses longer than"
+              value={String(pauseOver)}
+              onValueChange={(value) => setPauseOver(Number(value))}
+              options={PAUSES.map((pause) => ({
+                value: String(pause),
+                label: `${pause} s`,
+              }))}
+            />
+          </div>
+          <p
+            className="text-sm text-muted-foreground"
+            aria-live="polite"
+            data-testid="silence-found"
+          >
+            {!peaks
+              ? "Looking for silence once the waveform is drawn."
+              : [
+                  ends
+                    ? `Silence at the ends: ${(length - (ends.to - ends.from)).toFixed(1)} s.`
+                    : "No silence at the ends.",
+                  pauses.steps.length
+                    ? `${pauses.steps.length} ${pauses.steps.length === 1 ? "pause" : "pauses"} longer than ${pauseOver} s; shortening ${pauses.steps.length === 1 ? "it" : "them"} to ${KEPT_PAUSE} s takes out ${pauses.removed.toFixed(1)} s.`
+                    : `No pauses longer than ${pauseOver} s.`,
+                ].join(" ")}
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              disabled={!ends}
+              onClick={() =>
+                ends && make([ends], "Trimmed the silence at the ends")
+              }
+            >
+              Trim silence at the ends
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={!pauses.steps.length}
+              onClick={() =>
+                make(
+                  pauses.steps,
+                  `Shortened ${pauses.steps.length} ${pauses.steps.length === 1 ? "pause" : "pauses"}, taking out ${pauses.removed.toFixed(1)} s`
+                )
+              }
+            >
+              Shorten long pauses
+            </Button>
+          </div>
+        </fieldset>
+      )}
 
       {refused && (
         <p role="alert" className="text-sm text-destructive">

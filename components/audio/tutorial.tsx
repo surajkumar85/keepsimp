@@ -1,7 +1,21 @@
 import { ToolTutorial, type TutorialContent } from "@/components/tool-tutorial"
 import { JOIN_FADE, MOST_GAIN } from "@/lib/audio/edits"
 import { MOST_LOUDER, MOST_RAISE, TARGETS } from "@/lib/audio/level"
+import { COMPRESSORS } from "@/lib/audio/dynamics"
 import { LOOKAHEAD, RELEASE } from "@/lib/audio/limiter"
+import {
+  KEPT_EDGE,
+  KEPT_PAUSE,
+  PAUSES,
+  SILENCE_LEVELS,
+} from "@/lib/audio/silence"
+import {
+  BASS_HZ,
+  MID_HZ,
+  MOST_BAND,
+  TONE_PRESETS,
+  TREBLE_HZ,
+} from "@/lib/audio/tone"
 import { RINGTONES } from "@/lib/audio/ringtone"
 import { shortcutGroups } from "@/lib/audio/shortcuts"
 
@@ -166,6 +180,38 @@ const leveling: TutorialContent["options"] = [
   },
 ]
 
+const shaping: TutorialContent["options"] = [
+  {
+    term: "Equaliser",
+    detail: `Raise or lower the bass (a shelf under ${BASS_HZ} Hz), the mid (around ${MID_HZ / 1000} kHz) and the treble (a shelf over ${TREBLE_HZ / 1000} kHz) by up to ${MOST_BAND} dB, and cut rumble under 80 or 120 Hz. Presets: ${Object.values(
+      TONE_PRESETS
+    )
+      .map((preset) => `${preset.label} (${preset.says.replace(/\.$/, "")})`)
+      .join("; ")}. These presets are KeepSimp's own choices.`,
+  },
+  {
+    term: "Compressor",
+    detail: `Turns the loudest moments down so loud and quiet parts sit closer together. ${Object.values(
+      COMPRESSORS
+    )
+      .map((preset) => `${preset.label}: ${preset.says}`)
+      .join(
+        " "
+      )} A compressed sound is quieter, so choose Normalize loudness to bring it back up. When the equaliser or compressor is on and the loudness is left as it is, a limiter keeps peaks under −1 dBTP.`,
+  },
+]
+
+const silencing: TutorialContent["options"] = [
+  {
+    term: "Silence at the ends",
+    detail: `Finds the silence at the start and the end of the sound as edited (under the level chosen, ${SILENCE_LEVELS.map((level) => `${level} dBFS`).join(", ")}) and keeps the sound between, leaving ${KEPT_EDGE} s of each. It is one step, undone like any other.`,
+  },
+  {
+    term: "Long pauses",
+    detail: `Shortens every pause inside the sound longer than the length chosen (${PAUSES.map((pause) => `${pause} s`).join(", ")}) to ${KEPT_PAUSE} s, all in one step. Each cut is faded, so nothing clicks.`,
+  },
+]
+
 const editing: TutorialContent["options"] = [
   {
     term: "Choosing a part",
@@ -226,7 +272,7 @@ const editor: TutorialContent = {
       text: "Each file is written as soon as it is read or edited, and checked. Download one, or everything as one ZIP.",
     },
   ],
-  options: [...editing, ...leveling, ...options],
+  options: [...editing, ...silencing, ...leveling, ...shaping, ...options],
   guideHref: "/blog/trim-audio-without-uploading/",
 }
 
@@ -253,7 +299,7 @@ const trimming: TutorialContent = {
       text: "The result is written in the file's own format, unless you choose another, and checked before you download it.",
     },
   ],
-  options: [...editing, ...options],
+  options: [...editing, ...silencing, ...options],
   guideHref: "/blog/trim-audio-without-uploading/",
 }
 
@@ -336,7 +382,7 @@ const normalizing: TutorialContent = {
       text: "Each file written is measured again; the page says what it reached. Download one, or all as a ZIP.",
     },
   ],
-  options: [...leveling, ...options],
+  options: [...leveling, ...shaping, ...options],
   guideHref: "/blog/normalize-audio-loudness/",
 }
 

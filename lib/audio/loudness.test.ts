@@ -135,7 +135,8 @@ describe("peaks", () => {
     )
     const meter = new LoudnessMeter(rate, 2)
     meter.push([wave, wave])
-    const { truePeak, peak } = peaksIn(meter.result())
+    // Away from its ends, where starting and stopping all at once ring a little.
+    const { truePeak, peak } = peaksIn(meter.result(), 0.2, 0.8)
     expect(decibels(peak)).toBeCloseTo(-9.03, 1)
     expect(Math.abs(decibels(truePeak) - -6.02)).toBeLessThan(0.1)
   })
@@ -146,6 +147,17 @@ describe("peaks", () => {
     expect(oversampling(192000)).toBe(1)
     for (const taps of interpolators(4))
       expect(taps.reduce((sum, tap) => sum + tap, 0)).toBeCloseTo(1, 6)
+    // At 96 kHz, twice: the point half way finds the crest the samples miss.
+    const high = new LoudnessMeter(96000, 1)
+    high.push([
+      Float32Array.from(
+        { length: 96000 },
+        (_, index) => 0.5 * Math.sin(Math.PI / 4 + (Math.PI / 2) * index)
+      ),
+    ])
+    expect(
+      Math.abs(decibels(peaksIn(high.result(), 0.2, 0.8).truePeak) - -6.02)
+    ).toBeLessThan(0.1)
     // At 192 kHz the samples themselves are the peak.
     const meter = new LoudnessMeter(192000, 1)
     meter.push([tone(192000, 0.5, -6)])

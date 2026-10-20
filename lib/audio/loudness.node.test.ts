@@ -99,7 +99,8 @@ describe("the meter against FFmpeg's ebur128", () => {
 describe("true peak, where the samples miss the crests", () => {
   it("finds the crest of a tone at a quarter of the rate, 3 dB above every sample", () => {
     // Samples at 45° from each crest: each is 0.354, the wave reaches 0.5.
-    const wave = "0.5*sin(2*PI*11025*t+PI/4)"
+    // Faded in and out over 50 ms: starting or stopping at once would ring above the crest.
+    const wave = String.raw`0.5*min(min(1\,t/0.05)\,(4-t)/0.05)*sin(2*PI*11025*t+PI/4)`
     const source = `aevalsrc=${wave}|${wave}:s=44100:d=4`
     const measured = ours(source, 44100, "stereo", 2)
     expect(measured.peak).toBeCloseTo(-9.03, 1)

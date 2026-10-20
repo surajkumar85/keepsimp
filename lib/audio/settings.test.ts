@@ -1,4 +1,5 @@
 import { defaultLevel } from "./level"
+import { TONE_PRESETS } from "./tone"
 import { describe, expect, it } from "vitest"
 import {
   bitrateOf,
@@ -129,6 +130,16 @@ describe("planFor", () => {
     expect(plan).toMatchObject({ format: "mp3", copy: false })
     expect(plan.notes).toEqual([
       "The sound is encoded again in its own format, to change its loudness.",
+    ])
+    const shaped = planFor(
+      settings({
+        format: "same",
+        sound: { tone: TONE_PRESETS.voice.tone, compressor: "off" },
+      }),
+      song
+    )
+    expect(shaped.notes).toEqual([
+      "The sound is encoded again in its own format, to change how it sounds.",
     ])
     expect(
       settingsProblem(

@@ -12,6 +12,8 @@ import { join } from "node:path"
 import * as mediabunny from "mediabunny"
 import { describe, expect, it } from "vitest"
 import { defaultLevel, type Level } from "./level"
+import { defaultSound, type SoundSettings } from "./sound"
+import { TONE_PRESETS } from "./tone"
 import { convertAudio, readAudio } from "./mediabunny-audio"
 import type { OutputFormat } from "./formats"
 import { defaultSettings, planFor } from "./settings"
@@ -75,18 +77,60 @@ const steady = source(true)
 async function leveled(
   level: Level,
   format: OutputFormat = "wav",
-  bytes: Uint8Array = wav
+  bytes: Uint8Array = wav,
+  sound: SoundSettings = defaultSound
 ) {
   const blob = new Blob([bytes as BlobPart])
   const facts = await readAudio(mediabunny, blob, "wav")
-  const plan = planFor({ ...defaultSettings, format, level }, facts)
+  const plan = planFor({ ...defaultSettings, format, level, sound }, facts)
   return convertAudio(mediabunny, blob, plan, facts, {
     keepTags: false,
     level,
+    sound,
   })
 }
 
-describe("levels written", () => {
+/** A file FFmpeg makes from a lavfi source, as a 16-bit stereo WAV. */
+function made(name: string, source: string) {
+  const path = join(folder, name)
+  execFileSync("ffmpeg", [
+    "-v",
+    "error",
+    "-y",
+    "-f",
+    "lavfi",
+    "-i",
+    source,
+    "-af",
+    "aformat=channel_layouts=stereo",
+    "-ar",
+    String(RATE),
+    "-c:a",
+    "pcm_s16le",
+    path,
+  ])
+  return new Uint8Array(readFileSync(path))
+}
+
+/** FFmpeg's loudness range of a file, in LU. */
+function rangeOf(bytes: Uint8Array, name: string) {
+  const path = join(folder, name)
+  writeFileSync(path, bytes)
+  const text = execFileSync(
+    "sh",
+    [
+      "-c",
+      `ffmpeg -hide_banner -nostats -i "${path}" -af ebur128 -f null - 2>&1`,
+    ],
+    { encoding: "utf8", maxBuffer: 1 << 28 }
+  )
+  return Number(
+    /LRA:\s+(-?[\d.]+) LU/.exec(text.slice(text.lastIndexOf("Summary:")))![1]
+  )
+}
+
+// Each writes a file up to three times; under coverage that takes a while.
+describe("levels written", { timeout: 120_000 }, () => {
   it("starts quiet, with loud bursts", () => {
     expect(before.integrated).toBeLessThan(-18)
     expect(before.frames).toBe(10 * RATE)
@@ -160,5 +204,46 @@ describe("levels written", () => {
   it("leaves the level alone when asked, and says nothing of it", async () => {
     const { level: result } = await leveled(defaultLevel)
     expect(result).toBeNull()
+  })
+
+  it("cuts rumble: a 40 Hz hum 12 dB down, a 1 kHz tone as it was", async () => {
+    const hum = made("hum.wav", "sine=f=40:d=3")
+    const tone = made("tone.wav", "sine=f=1000:d=3")
+    const rumble = {
+      tone: TONE_PRESETS.rumble.tone,
+      compressor: "off" as const,
+    }
+    const humAfter = await leveled(defaultLevel, "wav", hum, rumble)
+    const toneAfter = await leveled(defaultLevel, "wav", tone, rumble)
+    const level = (bytes: Uint8Array, name: string) =>
+      measured(bytes, name).integrated
+    // K-weighting itself cuts 40 Hz: compare like with like.
+    expect(
+      level(humAfter.bytes, "hum-cut.wav") - level(hum, "hum.wav")
+    ).toBeLessThan(-10)
+    expect(
+      Math.abs(level(toneAfter.bytes, "tone-cut.wav") - level(tone, "tone.wav"))
+    ).toBeLessThan(0.2)
+    // Its level is left as it is: the limiter only stands guard.
+    expect(humAfter.level!.mode).toBe("same")
+    expect(humAfter.level!.db).toBe(0)
+  })
+
+  it("compresses a voice-like recording, then normalises it to −16 LUFS", async () => {
+    const level: Level = { ...defaultLevel, mode: "loudness", target: -16 }
+    const sound: SoundSettings = {
+      tone: TONE_PRESETS.voice.tone,
+      compressor: "voice",
+    }
+    const { bytes, level: result } = await leveled(level, "wav", wav, sound)
+    const after = measured(bytes, "voice.wav")
+    expect(Math.abs(after.integrated - -16)).toBeLessThan(0.5)
+    expect(after.truePeak).toBeLessThanOrEqual(-1 + 0.2)
+    expect(after.frames).toBe(10 * RATE)
+    // Compressed: louder and quieter parts closer together.
+    expect(rangeOf(bytes, "voice-range.wav")).toBeLessThan(
+      rangeOf(wav, "source-range.wav") - 2
+    )
+    expect(result!.compressed).toBeGreaterThan(3)
   })
 })

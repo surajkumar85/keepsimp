@@ -36,6 +36,9 @@ export const TARGETS = [
   { lufs: -24, label: "−24 LUFS", for: "US TV (ATSC A/85)" },
 ] as const
 
+/** The ceiling a sound changed by the equaliser or compressor is kept under when its level is left as it is, in dBTP. */
+export const SAFE_CEILING = -1
+
 /** The most a file is made louder to reach a loudness. */
 export const MOST_RAISE = 30
 /** The loudest target, the lowest, and the bounds of the other figures. */
@@ -141,6 +144,8 @@ export interface LevelResult {
   after: Loudness
   /** The most the limiter took off, in dB (0 when it did nothing or was not used). */
   limited: number
+  /** The most the compressor took off, in dB (0 when it was off). */
+  compressed?: number
   notes: string[]
 }
 
@@ -160,7 +165,11 @@ export function levelSaid(result: LevelResult): string {
     result.limited > 0.05
       ? `; the limiter took at most ${dbLabel(result.limited)} dB off the loudest moments to keep peaks under the ceiling`
       : ""
-  return `${gain}${reach}${limiter}.`
+  const compressor =
+    (result.compressed ?? 0) > 0.05
+      ? ` The compressor turned the loudest moments down by up to ${dbLabel(result.compressed!)} dB.`
+      : ""
+  return `${gain}${reach}${limiter}.${compressor}`
 }
 
 /** A loudness, its range and its peaks, as the meter says them. */

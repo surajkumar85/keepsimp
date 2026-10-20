@@ -9,6 +9,7 @@ import {
   writtenFormats,
   type OutputFormat,
 } from "@/lib/audio/formats"
+import { COMPRESSORS, type CompressorPreset } from "@/lib/audio/dynamics"
 import { rateLabel } from "@/lib/audio/labels"
 import {
   dbLabel,
@@ -27,6 +28,17 @@ import {
   type Lossy,
   type Preset,
 } from "@/lib/audio/settings"
+import type { SoundSettings } from "@/lib/audio/sound"
+import {
+  BASS_HZ,
+  MID_HZ,
+  MOST_BAND,
+  presetOf,
+  TONE_PRESETS,
+  TREBLE_HZ,
+  type Tone,
+  type TonePreset,
+} from "@/lib/audio/tone"
 
 export type Update = (change: Partial<AudioSettings>) => void
 
@@ -107,6 +119,12 @@ export function SettingsPanel({
       <LevelSection
         level={settings.level}
         update={(change) => update({ level: { ...settings.level, ...change } })}
+      />
+
+      <SoundSection
+        sound={settings.sound}
+        leveled={settings.level.mode === "loudness"}
+        update={(change) => update({ sound: { ...settings.sound, ...change } })}
       />
 
       {codec && (
@@ -443,5 +461,116 @@ function NumberField({
         {hint}
       </p>
     </div>
+  )
+}
+
+const BANDS: { key: "bass" | "mid" | "treble"; label: string }[] = [
+  { key: "bass", label: `Bass, under ${BASS_HZ} Hz` },
+  { key: "mid", label: `Mid, around ${MID_HZ / 1000} kHz` },
+  { key: "treble", label: `Treble, over ${TREBLE_HZ / 1000} kHz` },
+]
+
+/** The equaliser and the compressor. */
+function SoundSection({
+  sound,
+  leveled,
+  update,
+}: {
+  sound: SoundSettings
+  leveled: boolean
+  update: (change: Partial<SoundSettings>) => void
+}) {
+  const ids = useId()
+  const named = presetOf(sound.tone)
+  // Custom stays chosen even when its bands match a preset.
+  const [own, setOwn] = useState(named === null)
+  const preset: TonePreset | "custom" = own ? "custom" : (named ?? "custom")
+  const tone = (change: Partial<Tone>) =>
+    update({ tone: { ...sound.tone, ...change } })
+  return (
+    <Section title="Tone and dynamics">
+      <ChoiceChips
+        label="Equaliser"
+        value={preset}
+        onValueChange={(value) => {
+          setOwn(value === "custom")
+          if (value !== "custom") update({ tone: TONE_PRESETS[value].tone })
+        }}
+        options={[
+          ...(Object.keys(TONE_PRESETS) as TonePreset[]).map((value) => ({
+            value,
+            label: TONE_PRESETS[value].label,
+          })),
+          { value: "custom" as const, label: "Custom" },
+        ]}
+        hint={
+          preset === "custom"
+            ? "Raise or lower each band by up to 12 dB."
+            : TONE_PRESETS[preset].says
+        }
+      />
+      {preset === "custom" && (
+        <div className="space-y-3">
+          {BANDS.map((band) => (
+            <div key={band.key}>
+              <div className="mb-1 flex justify-between text-sm">
+                <label htmlFor={`${ids}-${band.key}`} className="font-medium">
+                  {band.label}
+                </label>
+                <span className="font-mono text-muted-foreground">
+                  {dbLabel(sound.tone[band.key], true)} dB
+                </span>
+              </div>
+              <input
+                id={`${ids}-${band.key}`}
+                type="range"
+                min={-MOST_BAND}
+                max={MOST_BAND}
+                step={1}
+                value={sound.tone[band.key]}
+                onChange={(event) =>
+                  tone({ [band.key]: Number(event.target.value) })
+                }
+                className="h-11 w-full accent-primary md:h-9"
+              />
+            </div>
+          ))}
+          <ChoiceChips
+            label="Cut rumble under"
+            value={String(sound.tone.highPass ?? "off")}
+            onValueChange={(value) =>
+              tone({ highPass: value === "off" ? null : Number(value) })
+            }
+            options={[
+              { value: "off", label: "Off" },
+              { value: "80", label: "80 Hz" },
+              { value: "120", label: "120 Hz" },
+            ]}
+          />
+        </div>
+      )}
+      <ChoiceChips
+        label="Compressor"
+        value={sound.compressor}
+        onValueChange={(compressor: CompressorPreset) => update({ compressor })}
+        options={[
+          { value: "off", label: "Off" },
+          ...(
+            Object.keys(COMPRESSORS) as Exclude<CompressorPreset, "off">[]
+          ).map((value) => ({ value, label: COMPRESSORS[value].label })),
+        ]}
+        hint={
+          sound.compressor === "off"
+            ? "Evens out loud and quiet moments when it is on."
+            : `${COMPRESSORS[sound.compressor].says} It makes the loud parts quieter${leveled ? "; the loudness setting brings the level back up." : ": choose Normalize loudness to bring the level back up."}`
+        }
+      />
+      {(sound.compressor !== "off" || preset !== "flat") && (
+        <p className="text-xs text-muted-foreground">
+          A limiter keeps the peaks under the ceiling, or under −1 dBTP when the
+          loudness is left as it is.
+        </p>
+      )}
+    </Section>
   )
 }

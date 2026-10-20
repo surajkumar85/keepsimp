@@ -3,6 +3,7 @@ import type { Heard } from "./check"
 import type { Step } from "./edits"
 import type { Level, LevelResult } from "./level"
 import type { LoudnessMap } from "./loudness"
+import type { SoundSettings } from "./sound"
 import type { Container } from "./formats"
 import type { ReadFacts } from "./mediabunny-audio"
 import type { Peaks } from "./peaks"
@@ -32,6 +33,8 @@ export interface ConvertJob {
   edits: Step[]
   /** How loud the result is to be. */
   level: Level
+  /** The equaliser and compressor. */
+  sound: SoundSettings
   /** Names the settings and edits, so a late result can be told from a current one. */
   key: string
 }

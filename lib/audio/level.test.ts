@@ -148,6 +148,9 @@ describe("levelSaid", () => {
     expect(levelSaid(result({ db: 0.01, mode: "louder" }))).toBe(
       "Its level is left as it is."
     )
+    expect(levelSaid(result({ mode: "same", db: 0, compressed: 7.25 }))).toBe(
+      "Its level is left as it is. The compressor turned the loudest moments down by up to 7.3 dB."
+    )
   })
 
   it("says a loudness, or that there is none to measure", () => {

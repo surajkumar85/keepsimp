@@ -7,7 +7,7 @@
  * short-term loudness and of the loudness range (EBU Tech 3342: gated at
  * −70 LUFS and 20 LU under, from the 10th to the 95th percentile), for all
  * of a file or any part of it. True peak is read by oversampling (four
- * times below 96 kHz), with an interpolating filter of 12 taps per phase.
+ * times below 96 kHz), with an interpolating filter of 24 taps per phase.
  */
 
 /** Segments of a second the map is kept in: 100 ms each, the hop of both block kinds. */
@@ -83,11 +83,25 @@ export const oversampling = (rate: number) =>
   rate < 96_000 ? 4 : rate < 192_000 ? 2 : 1
 
 /** Interpolation reaches this many samples either side of a point. */
-const REACH = 6
+export const REACH = 12
+/** The Kaiser window's shape: flat to within 0.01 dB up to 18 kHz at 44.1 kHz. */
+const BETA = 6
+
+/** The zeroth-order modified Bessel function, for the Kaiser window. */
+function bessel(x: number) {
+  let sum = 1
+  let term = 1
+  for (let k = 1; k < 30; k++) {
+    term *= x / 2 / k
+    sum += term * term
+  }
+  return sum
+}
 
 /**
  * The interpolating filter for each phase between two samples: a sinc
- * under a Blackman window, 12 taps, scaled to pass a constant unchanged.
+ * under a Kaiser window, 24 taps, scaled to pass a constant unchanged; flat
+ * to within 0.01 dB up to 18 kHz at 44.1 kHz, so high peaks are not missed.
  * Phase `p` (1 to factor − 1) gives the value `p / factor` of the way from
  * one sample to the next.
  */
@@ -102,7 +116,7 @@ export function interpolators(factor: number): Float32Array[] {
       const sinc = Math.sin(Math.PI * u) / (Math.PI * u)
       const v = u / REACH
       const window =
-        0.42 + 0.5 * Math.cos(Math.PI * v) + 0.08 * Math.cos(2 * Math.PI * v)
+        bessel(BETA * Math.sqrt(Math.max(0, 1 - v * v))) / bessel(BETA)
       taps[tap] = sinc * window
       sum += taps[tap]
     }
@@ -110,6 +124,29 @@ export function interpolators(factor: number): Float32Array[] {
     phases.push(taps)
   }
   return phases
+}
+
+/** Runs of samples whose loudest stands for them all, when points are ruled out. */
+const RUN_BITS = 4
+const RUN = 1 << RUN_BITS
+
+/**
+ * The most a point can be, in two parts: `near` times the two samples it
+ * lies between, plus `far` times the loudest of the others, over every
+ * phase. Points that cannot reach a level by this need not be worked out.
+ */
+export function boundOf(phases: Float32Array[]) {
+  let near = 0
+  let far = 0
+  for (const taps of phases) {
+    near = Math.max(near, Math.abs(taps[REACH - 1]), Math.abs(taps[REACH]))
+    let rest = 0
+    taps.forEach((tap, index) => {
+      if (index !== REACH - 1 && index !== REACH) rest += Math.abs(tap)
+    })
+    far = Math.max(far, rest)
+  }
+  return { near, far }
 }
 
 /** What a sound measured, 100 ms at a time. */
@@ -153,8 +190,10 @@ export class LoudnessMeter {
   private readonly state: Float64Array[]
   private readonly weights: number[]
   private readonly phases: Float32Array[]
-  /** The most a point between samples can be, over the loudest sample it is made from. */
-  private readonly spread: number
+  /** How far a point between samples can be from the samples it is made from (see `boundOf`). */
+  private readonly bound: { near: number; far: number }
+  /** At four times, the three phases' taps side by side, for one pass. */
+  private readonly fused: Float32Array | null
   /** Each channel's last samples, before the chunk being read. */
   private readonly history: Float32Array[]
   private readonly segments = new Growing()
@@ -170,12 +209,14 @@ export class LoudnessMeter {
     this.state = Array.from({ length: channels }, () => new Float64Array(4))
     this.weights = channelWeights(channels)
     this.phases = interpolators(oversampling(sampleRate))
-    this.spread = Math.max(
-      1,
-      ...this.phases.map((taps) =>
-        taps.reduce((sum, tap) => sum + Math.abs(tap), 0)
-      )
-    )
+    this.bound = boundOf(this.phases)
+    this.fused =
+      this.phases.length === 3
+        ? Float32Array.from(
+            { length: 6 * REACH },
+            (_, index) => this.phases[index % 3][Math.floor(index / 3)]
+          )
+        : null
     this.history = Array.from(
       { length: channels },
       () => new Float32Array(2 * REACH - 1)
@@ -295,60 +336,60 @@ export class LoudnessMeter {
     let segment = this.segmentOf(Math.max(0, origin + from))
     let boundary = this.startOf(segment + 1) - origin
     let high = Math.max(truePeak[segment], peak[segment])
-    // A point is at most `spread` times the loudest sample it is made from:
-    // where no sample near it is that loud, it cannot be the peak, and is
-    // not worked out. `loud` is the last sample that is.
-    const spread = this.spread
+    // A point is at most `near` times the two samples it lies between plus
+    // `far` times the loudest of the others it is made from: where that
+    // cannot reach the peak so far, it is not worked out. The loudest
+    // sample of every run of 16 stands in for the others.
+    const { near, far } = this.bound
     const phases = this.phases
-    let loud = -Infinity
-    const scan = (index: number) => {
-      loud = -Infinity
-      for (let at = index - (REACH - 1); at <= index + REACH; at++)
-        if (Math.abs(joined[at]) * spread > high) loud = at
+    const fused = this.fused
+    const runs = new Float32Array(Math.ceil(joined.length / RUN))
+    for (let at = 0; at < joined.length; at++) {
+      const value = joined[at] < 0 ? -joined[at] : joined[at]
+      if (value > runs[at >> RUN_BITS]) runs[at >> RUN_BITS] = value
     }
-    scan(from)
     for (let index = from; index < to; index++) {
       if (index >= boundary) {
         truePeak[segment] = high
         segment++
         boundary = this.startOf(segment + 1) - origin
         high = Math.max(truePeak[segment], peak[segment])
-        scan(index)
-      } else if (
-        index > from &&
-        Math.abs(joined[index + REACH]) * spread > high
-      )
-        loud = index + REACH
+      }
       const base = index - (REACH - 1)
-      if (loud < base) continue
-      // The twelve samples are read once for every phase.
-      const x0 = joined[base]
-      const x1 = joined[base + 1]
-      const x2 = joined[base + 2]
-      const x3 = joined[base + 3]
-      const x4 = joined[base + 4]
-      const x5 = joined[base + 5]
-      const x6 = joined[base + 6]
-      const x7 = joined[base + 7]
-      const x8 = joined[base + 8]
-      const x9 = joined[base + 9]
-      const x10 = joined[base + 10]
-      const x11 = joined[base + 11]
+      const a = joined[index] < 0 ? -joined[index] : joined[index]
+      const b = joined[index + 1] < 0 ? -joined[index + 1] : joined[index + 1]
+      let others = 0
+      for (
+        let run = base >> RUN_BITS;
+        run <= (base + 2 * REACH - 1) >> RUN_BITS;
+        run++
+      )
+        if (runs[run] > others) others = runs[run]
+      if (near * (a + b) + far * others <= high) continue
+      if (fused) {
+        // Four times: the three phases summed in one pass over the samples.
+        let first = 0
+        let second = 0
+        let third = 0
+        for (let tap = 0, at = base; tap < fused.length; tap += 3, at++) {
+          const x = joined[at]
+          first += fused[tap] * x
+          second += fused[tap + 1] * x
+          third += fused[tap + 2] * x
+        }
+        if (first < 0) first = -first
+        if (second < 0) second = -second
+        if (third < 0) third = -third
+        if (first > high) high = first
+        if (second > high) high = second
+        if (third > high) high = third
+        continue
+      }
       for (let phase = 0; phase < phases.length; phase++) {
-        const t = phases[phase]
-        let value =
-          t[0] * x0 +
-          t[1] * x1 +
-          t[2] * x2 +
-          t[3] * x3 +
-          t[4] * x4 +
-          t[5] * x5 +
-          t[6] * x6 +
-          t[7] * x7 +
-          t[8] * x8 +
-          t[9] * x9 +
-          t[10] * x10 +
-          t[11] * x11
+        const taps = phases[phase]
+        let value = 0
+        for (let tap = 0; tap < taps.length; tap++)
+          value += taps[tap] * joined[base + tap]
         if (value < 0) value = -value
         if (value > high) high = value
       }

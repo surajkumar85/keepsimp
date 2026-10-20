@@ -122,6 +122,7 @@ async function convert(job: ConvertJob, stop: AbortController) {
         keepTags: job.keepTags,
         edits: job.edits,
         level: job.level,
+        sound: job.sound,
         tags:
           job.tags ??
           (wav.tags

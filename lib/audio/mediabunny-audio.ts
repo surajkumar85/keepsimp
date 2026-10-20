@@ -17,6 +17,7 @@ import { editedBy, gainAt, lengthOf, type Edited, type Step } from "./edits"
 import {
   dbLabel,
   defaultLevel,
+  SAFE_CEILING,
   gainFor,
   MOST_RAISE,
   needsMeasure,
@@ -25,6 +26,7 @@ import {
   type LevelResult,
 } from "./level"
 import { Limiter } from "./limiter"
+import { isPlain, SoundShaper, type SoundSettings } from "./sound"
 import {
   integrated,
   LoudnessMeter,
@@ -581,6 +583,8 @@ interface Shaping {
   gain: number
   limiter: Limiter | null
   meter: LoudnessMeter
+  /** The most the compressor turned the sound down, in dB (0 or less), once written. */
+  compressed?: number
 }
 
 /** A decoder gave fewer frames than the sound has: written again to that many. */
@@ -615,9 +619,15 @@ async function pass(
     measure?: LoudnessMeter
     /** The codec and sample format to write, when not the plan's (for measuring). */
     codec?: Mediabunny.AudioCodec
+    /** The equaliser and compressor; none when left out. */
+    sound?: SoundSettings
   }
 ) {
   const { edits, edited, expected, shaping } = options
+  // Made anew for every pass: they keep state from frame to frame.
+  const sound = options.sound
+    ? new SoundShaper(options.sound, plan.sampleRate, plan.channels)
+    : null
   const source = input(engine, file)
   try {
     // Where the sound starts in the decoder's time: an MP3's delay comes first.
@@ -688,8 +698,17 @@ async function pass(
                   ? firstFrames(engine, sample, room)
                   : sample
               made += kept.numberOfFrames
+              // The equaliser and the compressor, before anything else.
+              const shaped_ = sound
+                ? sampleOf(
+                    engine,
+                    sound.process(planesOf(kept)),
+                    rate,
+                    kept.timestamp
+                  )
+                : kept
               if (options.measure) {
-                const planes = planesOf(kept)
+                const planes = planesOf(shaped_)
                 options.measure.push(planes)
                 return sampleOf(
                   engine,
@@ -698,9 +717,9 @@ async function pass(
                   (made - planes[0].length) / rate
                 )
               }
-              if (!shaping) return finish(kept)
+              if (!shaping) return finish(shaped_)
               // Louder or quieter, limited, and measured as it comes out.
-              const planes = planesOf(kept)
+              const planes = planesOf(shaped_)
               if (shaping.gain !== 1)
                 for (const plane of planes)
                   for (let index = 0; index < plane.length; index++)
@@ -743,6 +762,7 @@ async function pass(
     }
     if (shaping?.limiter && made < expected && !options.signal?.aborted)
       throw new EndedEarly(made)
+    if (shaping && sound) shaping.compressed = sound.compressed
   } finally {
     source.dispose()
   }
@@ -768,6 +788,8 @@ export async function convertAudio(
     edits?: readonly Step[]
     /** How loud the result is to be; as it is when left out. */
     level?: Level
+    /** The equaliser and compressor; none when left out. */
+    sound?: SoundSettings
   }
 ): Promise<{ bytes: Uint8Array; level: LevelResult | null }> {
   const edits = options.edits ?? []
@@ -787,12 +809,18 @@ export async function convertAudio(
       : null
   if (!plan.copy && plan.codec !== "aac") await readyEncoder(engine, plan.codec)
   let expected = Math.round(length * plan.sampleRate)
+  // The equaliser and compressor run on every pass, the measuring one too.
+  const sound =
+    !plan.copy && options.sound && !isPlain(options.sound)
+      ? options.sound
+      : undefined
   const common = {
     keepTags: options.keepTags,
     tags: options.tags,
     signal: options.signal,
     edits,
     edited,
+    sound,
   }
 
   // Measured first, as it will be written, when the gain depends on it.
@@ -820,8 +848,13 @@ export async function convertAudio(
     )
     before = loudnessOf(meter.result())
   }
-  const gain = gainFor(level, before)
-  const shaped = !plan.copy && level.mode !== "same"
+  const chosen = gainFor(level, before)
+  // A shaped sound left at its level is still kept from clipping, at −1 dBTP.
+  const gain =
+    level.mode === "same" && sound
+      ? { ...chosen, ceiling: 10 ** (SAFE_CEILING / 20) }
+      : chosen
+  const shaped = !plan.copy && (level.mode !== "same" || sound !== undefined)
 
   /** One write at a gain; the bytes, and what came out. */
   const write = async (db: number) => {
@@ -925,6 +958,7 @@ export async function convertAudio(
           db,
           after: loudnessOf(shaping.meter.result()),
           limited: takenOff(shaping.limiter?.lowest ?? 1),
+          compressed: -(shaping.compressed ?? 0),
           notes,
         }
       : null,

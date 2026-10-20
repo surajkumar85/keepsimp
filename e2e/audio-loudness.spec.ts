@@ -53,6 +53,7 @@ test("normalizes every file to −14 LUFS, then to −23, as FFmpeg measures the
 })
 
 test("a loudness out of bounds is refused and said", async ({ page }) => {
+  test.setTimeout(120_000)
   await withSample(page, NORMALIZE)
   await page
     .getByRole("radiogroup", { name: "Loudness to reach" })
@@ -151,4 +152,45 @@ test("the doors stay accessible and fit a phone", async ({ page }) => {
     await page.goto(guide)
     await expect(page.locator(`a[href="${route}"]`).first()).toBeAttached()
   }
+})
+
+test("the equaliser and compressor shape the sound, and the loudness is still met", async ({
+  page,
+}) => {
+  test.setTimeout(150_000)
+  await withSample(page, EDITOR)
+  await page.getByRole("button", { name: "Preview keepsimp-tune.flac" }).click()
+  await chip(page, "WAV").click()
+  await chip(page, "Normalize loudness").click()
+  await page.getByRole("radio", { name: /−16 LUFS/ }).click()
+  await chip(page, "Voice clarity").click()
+  await page
+    .getByRole("radiogroup", { name: "Compressor" })
+    .getByRole("radio", { name: "Voice" })
+    .click()
+  await expect(page.getByTestId("audio-settings")).toContainText(
+    "Keeps speech at one level"
+  )
+  await settled(page)
+  await expect(page.getByTestId("audio-level")).toContainText(
+    "The compressor turned the loudest moments down by up to"
+  )
+  const shaped = loudnessOf(
+    (await download(page, "keepsimp-tune.flac")).bytes,
+    "shaped.wav"
+  )
+  expect(Math.abs(shaped.integrated - -16)).toBeLessThan(0.5)
+  expect(shaped.truePeak).toBeLessThanOrEqual(-0.8)
+
+  // Its own bands: the bass raised all the way with the keys.
+  await page
+    .getByRole("radiogroup", { name: "Equaliser" })
+    .getByRole("radio", { name: "Custom" })
+    .click()
+  const bass = page.getByLabel("Bass, under 120 Hz")
+  await bass.focus()
+  await page.keyboard.press("End")
+  await expect(page.getByTestId("audio-settings")).toContainText("+12 dB")
+  await settled(page)
+  await expect(page.getByTestId("audio-check")).toContainText("as asked")
 })

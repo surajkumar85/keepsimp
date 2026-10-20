@@ -75,10 +75,12 @@ import {
   dbLabel,
   levelSaid,
   loudnessSaid,
+  SAFE_CEILING,
   type Level,
   type LevelResult,
 } from "@/lib/audio/level"
 import { LoudnessMeter, loudnessOf, SILENT } from "@/lib/audio/loudness"
+import { isPlain } from "@/lib/audio/sound"
 import { peakCount } from "@/lib/audio/view"
 import { wavFromPlanes } from "@/lib/audio/wav"
 import { sizeLabel } from "@/lib/image-compressor/formats"
@@ -428,6 +430,7 @@ export function AudioWorkspace({ mode = "editor" }: { mode?: AudioMode }) {
         const audible = item.peaks ? peakLevel(item.peaks) > 1e-4 : true
         // The level these results were written at is the one in force.
         const level = live.current.settings.level
+        const shapedSound = !isPlain(live.current.settings.sound)
         const lossless = format.lossless
         dispatch({
           type: "done",
@@ -462,8 +465,13 @@ export function AudioWorkspace({ mode = "editor" }: { mode?: AudioMode }) {
                         ? level.target
                         : null,
                     // Lossy encoders raise peaks a little: only lossless is held to the ceiling.
-                    ceiling:
-                      lossless && level.mode !== "same" ? level.ceiling : null,
+                    ceiling: !lossless
+                      ? null
+                      : level.mode !== "same"
+                        ? level.ceiling
+                        : shapedSound
+                          ? SAFE_CEILING
+                          : null,
                   },
                   message.heard
                 )
@@ -514,6 +522,7 @@ export function AudioWorkspace({ mode = "editor" }: { mode?: AudioMode }) {
       plan,
       keepTags: current.settings.keepTags,
       level: current.settings.level,
+      sound: current.settings.sound,
       tags: decoded ? tagsOf(facts) : undefined,
       edits,
       key: itemKey(current.key, item)!,

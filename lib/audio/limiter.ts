@@ -1,7 +1,7 @@
 /**
  * A look-ahead limiter that keeps a sound's true peak under a ceiling. Each
  * frame's level is its loudest sample or point between samples (read as the
- * meter reads true peak, from the twelve samples around it); the gain a
+ * meter reads true peak, from the samples around it); the gain a
  * frame needs is the ceiling over that level. The gain applied is the least
  * any frame needs over the coming 5 ms, released slowly (100 ms) and then
  * averaged over the 5 ms before, so it falls smoothly to what the loudest
@@ -10,15 +10,13 @@
  * it is given, and `flush` gives the rest.
  */
 
-import { interpolators, oversampling } from "./loudness"
+import { boundOf, interpolators, oversampling, REACH } from "./loudness"
 
 /** How far it looks ahead and how slowly it lets go, in seconds. */
 export const LOOKAHEAD = 0.005
 export const RELEASE = 0.1
 /** Under the ceiling by this much, for the small error of a gain that changes. */
 const MARGIN = 10 ** (-0.05 / 20)
-/** Interpolation reaches this many samples either side (as in the meter). */
-const REACH = 6
 
 export class Limiter {
   /** How many frames late the sound comes out. */
@@ -32,8 +30,8 @@ export class Limiter {
   private readonly ahead: number
   private readonly release: number
   private readonly phases: Float32Array[]
-  private readonly spread: number
-  /** Each channel's last twelve samples, twice over, so a window is one run. */
+  private readonly bound: { near: number; far: number }
+  /** Each channel's last samples (a window's worth), twice over, so a window is one run. */
   private readonly windows: Float32Array[]
   private written = 0
   /** Each channel's frames waiting to come out. */
@@ -62,12 +60,7 @@ export class Limiter {
     this.release = 1 - Math.exp(-1 / (RELEASE * sampleRate))
     this.latency = this.ahead + REACH
     this.phases = interpolators(oversampling(sampleRate))
-    this.spread = Math.max(
-      1,
-      ...this.phases.map((taps) =>
-        taps.reduce((sum, tap) => sum + Math.abs(tap), 0)
-      )
-    )
+    this.bound = boundOf(this.phases)
     this.windows = Array.from(
       { length: channels },
       () => new Float32Array(4 * REACH)
@@ -139,7 +132,7 @@ export class Limiter {
     // The level of the frame REACH before this one: its sample and the
     // points between it and the next.
     let level = 0
-    const quiet = this.ceiling / this.spread
+    const { near, far } = this.bound
     for (let channel = 0; channel < this.channels; channel++) {
       const value = planes[channel][index]
       this.delay[channel][slot] = value
@@ -147,20 +140,24 @@ export class Limiter {
       const at = this.written % (2 * REACH)
       window[at] = value
       window[at + 2 * REACH] = value
-      // window[at + 1 .. at + 12] is the last twelve samples, oldest first.
+      // window[at + 1 .. at + 2 × REACH] is the last window of samples, oldest first.
       const start = at + 1
       const sample = window[start + REACH - 1]
       const own = sample < 0 ? -sample : sample
       if (own > level) level = own
-      let loud = false
+      // A point that cannot pass the ceiling is not worked out (see `boundOf`).
+      let others = 0
       for (let tap = 0; tap < 2 * REACH; tap++) {
-        const near = window[start + tap]
-        if ((near < 0 ? -near : near) > quiet) {
-          loud = true
-          break
-        }
+        const value =
+          window[start + tap] < 0 ? -window[start + tap] : window[start + tap]
+        if (value > others) others = value
       }
-      if (!loud) continue
+      const next = window[start + REACH]
+      if (
+        near * (own + (next < 0 ? -next : next)) + far * others <=
+        this.ceiling
+      )
+        continue
       for (const taps of this.phases) {
         let point = 0
         for (let tap = 0; tap < 2 * REACH; tap++)

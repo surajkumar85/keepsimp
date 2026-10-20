@@ -312,3 +312,55 @@ test("the trimmer and ringtone maker stay accessible and fit a phone", async ({
   }
   expect(errors).toEqual([])
 })
+
+test("trims the silence at the ends and shortens a long pause, as steps", async ({
+  page,
+}) => {
+  test.setTimeout(120_000)
+  // 1 s of silence, 2 s of tone, a 2.5 s pause, 2.5 s of tone, 1 s of silence.
+  const path = join(folder, "pauses.wav")
+  execFileSync("ffmpeg", [
+    "-v",
+    "error",
+    "-y",
+    "-f",
+    "lavfi",
+    "-i",
+    "aevalsrc=if(between(t\\,1\\,3)+between(t\\,5.5\\,8)\\,0.3*sin(2*PI*440*t)\\,0):s=44100:d=9",
+    "-ac",
+    "2",
+    "-c:a",
+    "pcm_s16le",
+    path,
+  ])
+  await page.goto(TRIMMER)
+  await page.locator("#audio-file").setInputFiles({
+    name: "pauses.wav",
+    mimeType: "audio/wav",
+    buffer: readFileSync(path),
+  })
+  await settled(page)
+  const found = page.getByTestId("silence-found")
+  await expect(found).toContainText("Silence at the ends: 1.8 s.")
+  await expect(found).toContainText(
+    "1 pause longer than 1 s; shortening it to 0.4 s takes out 2.1 s."
+  )
+  await editor(page)
+    .getByRole("button", { name: "Trim silence at the ends" })
+    .click()
+  await expect(steps(page)).toHaveText(["Kept 0:00.900–0:08.100"])
+  await expect(found).toContainText("No silence at the ends.")
+  await editor(page)
+    .getByRole("button", { name: "Shorten long pauses" })
+    .click()
+  await expect(steps(page)).toHaveCount(2)
+  await expect(page.getByTestId("editor-time")).toContainText("/ 0:05.100")
+  await settled(page)
+  const trimmed = await download(page, "pauses.wav")
+  expect(
+    Math.abs(samples(trimmed.bytes, "pauses-out.wav") - 5.1 * RATE)
+  ).toBeLessThan(2)
+  // One undo brings the pause back.
+  await editor(page).getByRole("button", { name: "Undo" }).click()
+  await expect(page.getByTestId("editor-time")).toContainText("/ 0:07.200")
+})

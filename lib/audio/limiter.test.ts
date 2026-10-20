@@ -32,10 +32,17 @@ function limit(
   return { out: joined, limiter }
 }
 
-const truePeakOf = (planes: Float32Array[], rate = RATE) => {
-  const meter = new LoudnessMeter(rate, planes.length)
+/** The true peak, away from the ends (where stopping all at once rings), unless asked for all. */
+const truePeakOf = (planes: Float32Array[], all = false) => {
+  const meter = new LoudnessMeter(RATE, planes.length)
   meter.push(planes)
-  return decibels(peaksIn(meter.result()).truePeak)
+  const seconds = planes[0].length / RATE
+  return decibels(
+    (all
+      ? peaksIn(meter.result())
+      : peaksIn(meter.result(), 0.1, seconds - 0.1)
+    ).truePeak
+  )
 }
 
 const sine = (

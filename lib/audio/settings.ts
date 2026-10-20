@@ -7,6 +7,13 @@
 import type { Container, OutputFormat, WrittenFormat } from "./formats"
 import { writtenFormats } from "./formats"
 import { defaultLevel, levelKey, levelProblem, type Level } from "./level"
+import {
+  defaultSound,
+  isPlain,
+  soundKey,
+  soundProblem,
+  type SoundSettings,
+} from "./sound"
 import { bitrateForSize, fittedSaid } from "./target-size"
 
 export type Preset = "small" | "balanced" | "high" | "custom"
@@ -28,6 +35,8 @@ export interface AudioSettings {
   targetBytes: number | null
   /** How loud each result is to be. */
   level: Level
+  /** The equaliser and compressor. */
+  sound: SoundSettings
 }
 
 export const defaultSettings: AudioSettings = {
@@ -40,6 +49,7 @@ export const defaultSettings: AudioSettings = {
   keepTags: true,
   targetBytes: null,
   level: defaultLevel,
+  sound: defaultSound,
 }
 
 /** The bitrates (kbit/s) offered under Custom, per codec. */
@@ -175,9 +185,11 @@ export function planFor(
       format = kept
       const lossless = writtenFormats[kept].lossless
       const leveled = settings.level.mode !== "same"
+      const shaped = !isPlain(settings.sound)
       copy =
         !edited &&
         !leveled &&
+        !shaped &&
         settings.sampleRate === "same" &&
         settings.channels === "same" &&
         (settings.depth === "same" || !lossless) &&
@@ -186,9 +198,11 @@ export function planFor(
         notes.push(
           edited
             ? "The sound is encoded again in its own format, to make the edits."
-            : leveled
-              ? "The sound is encoded again in its own format, to change its loudness."
-              : "The sound is encoded again in its own format, to meet what was chosen."
+            : shaped
+              ? "The sound is encoded again in its own format, to change how it sounds."
+              : leveled
+                ? "The sound is encoded again in its own format, to change its loudness."
+                : "The sound is encoded again in its own format, to meet what was chosen."
         )
     } else {
       format = "m4a"
@@ -319,7 +333,7 @@ function wavCodec(settings: AudioSettings, facts: SourceFacts) {
 
 /** Why these settings cannot be used; null when they can. */
 export function settingsProblem(settings: AudioSettings): string | null {
-  const level = levelProblem(settings.level)
+  const level = levelProblem(settings.level) ?? soundProblem(settings.sound)
   if (level) return level
   if (settings.targetBytes !== null && !(settings.targetBytes >= 16 * 1024))
     return "Choose a file size limit of at least 16 KB."
@@ -343,4 +357,5 @@ export const settingsKey = (settings: AudioSettings) =>
     settings.keepTags,
     settings.targetBytes,
     levelKey(settings.level),
+    soundKey(settings.sound),
   ])
