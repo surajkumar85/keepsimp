@@ -148,6 +148,9 @@ export interface LevelResult {
   compressed?: number
   /** For files joined: the gain each was given, in order. */
   each?: number[]
+  /** Clicks drawn over, and the most "s" sounds were turned down, in dB. */
+  clicks?: number
+  deessed?: number
   notes: string[]
 }
 
@@ -176,7 +179,14 @@ export function levelSaid(result: LevelResult): string {
     (result.compressed ?? 0) > 0.05
       ? ` The compressor turned the loudest moments down by up to ${dbLabel(result.compressed!)} dB.`
       : ""
-  return `${gain}${reach}${limiter}.${compressor}`
+  const clicks = result.clicks
+    ? ` ${result.clicks === 1 ? "One click was" : `${result.clicks} clicks were`} drawn over.`
+    : ""
+  const deessed =
+    (result.deessed ?? 0) > 0.05
+      ? ` Harsh "s" sounds were turned down by up to ${dbLabel(result.deessed!)} dB.`
+      : ""
+  return `${gain}${reach}${limiter}.${compressor}${clicks}${deessed}`
 }
 
 /** A loudness, its range and its peaks, as the meter says them. */

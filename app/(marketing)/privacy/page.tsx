@@ -82,7 +82,10 @@ export default function PrivacyPage() {
           of scanned pages (about 1 MB, and a few megabytes for each language)
           is not part of it until you first recognise text in that language; it
           is then kept the same way. It too holds none of your files, and the
-          words it finds go only into the PDF you are editing.
+          words it finds go only into the PDF you are editing. What takes
+          background noise out of sound (about 3 MB) is kept the same way the
+          first time you use it; the sound and its noise are never sent
+          anywhere.
         </p>
         <h2>Keep the limits in mind.</h2>
         <p>

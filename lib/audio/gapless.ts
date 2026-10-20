@@ -7,7 +7,11 @@
  * samples every MP3 decoder adds, come first, and its padding last.
  */
 
-/** Samples an MP3 decoder puts before the encoder's own delay. */
+/**
+ * Samples an MP3 decoder puts before the encoder's own delay, as the
+ * reference decoder and FFmpeg do. Apple's (Safari's) puts none: each
+ * browser's is measured (`mp3DecoderDelay`), and this is only the default.
+ */
 export const MP3_DECODER_DELAY = 529
 
 export interface Mp3Gapless {
@@ -92,11 +96,14 @@ export function mp3Gapless(bytes: Uint8Array): Mp3Gapless | null {
  * Which decoded samples to keep, counted from the first decoded one: from
  * `start`, `length` of them (null for to the end).
  */
-export function mp3Kept(gapless: Mp3Gapless): {
+export function mp3Kept(
+  gapless: Mp3Gapless,
+  decoderDelay = MP3_DECODER_DELAY
+): {
   start: number
   length: number | null
 } {
-  const start = gapless.delay + MP3_DECODER_DELAY
+  const start = gapless.delay + decoderDelay
   return {
     start,
     length:

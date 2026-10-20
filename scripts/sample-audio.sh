@@ -1,7 +1,9 @@
 #!/bin/sh
 # Writes the files behind "Try a sample" in the audio workspace, with FFmpeg:
-# a short tune as FLAC, with tags and the KeepSimp mark as its cover, and a
-# short video with AAC sound to take the sound out of. Run from the repository.
+# a short tune as FLAC, with tags and the KeepSimp mark as its cover, a short
+# video with AAC sound to take the sound out of, and a voice note with
+# background noise and mains hum (eSpeak NG's voice: brew install espeak-ng).
+# Run from the repository.
 set -eu
 out=public/samples
 work=$(mktemp -d)
@@ -19,4 +21,11 @@ ffmpeg -loglevel error -y -i "$work/tune.wav" -i public/icons/icon-192.png \
 ffmpeg -loglevel error -y -f lavfi -i "testsrc2=size=320x180:rate=15:duration=6" \
   -i "$work/tune.wav" -t 6 -c:v libx264 -pix_fmt yuv420p -crf 32 -preset veryslow \
   -c:a aac -b:a 96k -movflags +faststart -shortest "$out/keepsimp-clip.mp4"
-ls -la "$out/keepsimp-tune.flac" "$out/keepsimp-clip.mp4"
+espeak-ng -v en-us -s 150 -p 45 -w "$work/voice.wav" \
+  "This is a voice note recorded in a noisy room, with a hum from the mains. Try taking the noise away, then listen again."
+ffmpeg -loglevel error -y -i "$work/voice.wav" -f lavfi -i "anoisesrc=c=pink:a=0.06:s=11:d=12" \
+  -f lavfi -i "sine=f=50:d=12" -filter_complex \
+  "[0:a]aresample=48000,apad=pad_dur=0.6[v];[2:a]volume=0.04[h];[v][1:a][h]amix=inputs=3:duration=first:normalize=0" \
+  -ac 1 -c:a libmp3lame -b:a 96k -metadata title="A noisy voice note" -metadata artist="KeepSimp" \
+  "$out/keepsimp-voice.mp3"
+ls -la "$out/keepsimp-tune.flac" "$out/keepsimp-clip.mp4" "$out/keepsimp-voice.mp3"

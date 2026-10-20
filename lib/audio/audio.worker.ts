@@ -14,6 +14,9 @@ import type {
   Written,
 } from "./protocol"
 import { partStep } from "./split"
+import type { Rnnoise } from "./repair"
+import { RNNOISE_URL } from "./rnnoise-files"
+import { needsRnnoise, type SoundSettings } from "./sound"
 import { AiffProblem, wavFromAiff } from "./wav"
 
 declare const self: DedicatedWorkerGlobalScope
@@ -38,6 +41,20 @@ const post = (message: AudioResponse, transfer: Transferable[] = []) =>
   self.postMessage(message, transfer)
 
 const engine = () => import("mediabunny")
+
+/** RNNoise, loaded the first time noise is to be taken away, then kept. */
+let rnnoise: Promise<Rnnoise> | null = null
+const denoiser = (sound: SoundSettings) => {
+  if (!needsRnnoise(sound)) return Promise.resolve(undefined)
+  // The build checks it runs in a worker, which this is.
+  // From the site's own address (see rnnoise-files.ts), never bundled.
+  rnnoise ??= (
+    import(
+      /* webpackIgnore: true */ /* turbopackIgnore: true */ RNNOISE_URL
+    ) as Promise<typeof import("@shiguredo/rnnoise-wasm")>
+  ).then(({ Rnnoise }) => Rnnoise.load())
+  return rnnoise
+}
 const engineFiles = () => import("./mediabunny-audio")
 
 /** Our own sentences are passed on; anything else gets a plain one. */
@@ -137,6 +154,7 @@ async function convert(job: ConvertJob | SplitJob, stop: AbortController) {
           level: job.level,
           sound: job.sound,
           changes: job.changes,
+          rnnoise: await denoiser(job.sound),
           tags:
             job.tags ??
             (wav.tags
@@ -252,6 +270,7 @@ async function joined(job: JoinJob, stop: AbortController) {
         level: job.level,
         sound: job.sound,
         changes: job.changes,
+        rnnoise: await denoiser(job.sound),
         tags: job.tags,
         chapters: job.chapters,
         signal: stop.signal,

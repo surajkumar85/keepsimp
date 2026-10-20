@@ -6,6 +6,7 @@ import { LOOKAHEAD, RELEASE } from "@/lib/audio/limiter"
 import { MOST_PARTS } from "@/lib/audio/split"
 import { FASTEST, MOST_PITCH, SLOWEST } from "@/lib/audio/change"
 import { CROSSFADES, GAPS } from "@/lib/audio/join"
+import { HUM_WIDTH, SIBILANCE, SIBILANCE_FROM } from "@/lib/audio/repair"
 import {
   KEPT_EDGE,
   KEPT_PAUSE,
@@ -204,6 +205,27 @@ const shaping: TutorialContent["options"] = [
   },
 ]
 
+const repairing: TutorialContent["options"] = [
+  {
+    term: "Background noise",
+    detail:
+      "Taken away by RNNoise, a small neural network trained on speech (from Xiph.org and Mozilla), run on your device in your browser: hiss, fans, traffic and room noise between and under words. It is made for voices; on music it can take away notes and breaths you want, so listen, and lower the strength if it does. The strength mixes the cleaned sound with the sound as it was: 100% is RNNoise alone. The sound is taken to 48 kHz for it and back. The first time, its file (3.1 MB to download, 4.8 MB in all) comes from this site and is then kept for working offline. Your recording and its noise are never sent anywhere.",
+  },
+  {
+    term: "Mains hum",
+    detail: `The steady buzz of the mains, at 50 Hz in most of the world and 60 Hz in the Americas and parts of Asia, and its harmonics up to 1 kHz: each is notched out ${HUM_WIDTH} Hz wide, so the voice or the music beside it stays as it was.`,
+  },
+  {
+    term: "Clicks",
+    detail:
+      "Short spikes, at most 2 ms long and far louder than the sound just around them, such as a crackle on a record or a bad cable, are drawn over with a smooth curve from the sound on either side. Drum hits and consonants last longer and are left alone. The page says how many clicks were drawn over.",
+  },
+  {
+    term: 'Harsh "s" sounds',
+    detail: `A de-esser: only the sound over ${SIBILANCE_FROM / 1000} kHz is turned down, and only while it is loud, as in a sharp s, sh or t. Gentle turns it down by up to ${-SIBILANCE.gentle.most} dB, strong by up to ${-SIBILANCE.strong.most} dB; the page says how far it went.`,
+  },
+]
+
 const silencing: TutorialContent["options"] = [
   {
     term: "Silence at the ends",
@@ -346,6 +368,7 @@ const editor: TutorialContent = {
     ...splitting,
     ...combining,
     ...timing,
+    ...repairing,
     ...leveling,
     ...shaping,
     ...options,
@@ -589,4 +612,35 @@ const speeding: TutorialContent = {
 
 export function SpeedTutorial() {
   return <ToolTutorial content={speeding} />
+}
+
+const cleaning: TutorialContent = {
+  name: "How to remove background noise from audio with KeepSimp",
+  description:
+    'Take background noise, mains hum, clicks and harsh "s" sounds out of voice recordings in your browser, with RNNoise running on your device. Nothing is uploaded.',
+  intro: "Follow the steps below. Every option is explained underneath.",
+  steps: [
+    {
+      title: "Add your recordings",
+      text: "Drop them, choose them or paste them: MP3, M4A, Opus, FLAC, WAV, AIFF or videos.",
+    },
+    {
+      title: "Choose how much noise to take away",
+      text: "All of it is chosen for you. Lower it if voices start to sound thin or watery.",
+    },
+    {
+      title: "Hum, clicks and harsh s",
+      text: "Turn on what the recording needs: hum at 50 or 60 Hz, clicks, and a gentle or strong de-esser.",
+    },
+    {
+      title: "Listen and download",
+      text: "Each file is written in its own format unless you choose another, checked and ready to download.",
+    },
+  ],
+  options: [...repairing, ...shaping, ...options],
+  guideHref: "/blog/remove-background-noise-from-audio/",
+}
+
+export function NoiseTutorial() {
+  return <ToolTutorial content={cleaning} />
 }

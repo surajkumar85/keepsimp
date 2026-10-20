@@ -229,6 +229,12 @@ const cards = [
     "/images/audio-speed-guide.svg",
   ],
   [
+    "remove-background-noise-from-audio",
+    "The words kept, the noise left behind.",
+    "Noise, hum, clicks and harsh s, on your device.",
+    "/images/audio-noise-guide.svg",
+  ],
+  [
     "gapless-mp3-and-aac",
     "Why a converted MP3 starts late, and ours does not.",
     "Gapless MP3 and AAC, checked before download.",

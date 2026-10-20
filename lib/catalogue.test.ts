@@ -19,6 +19,7 @@ describe("doors", () => {
       "normalize-audio",
       "volume-booster",
       "change-audio-speed",
+      "remove-background-noise",
       "join-audio",
       "split-audio",
       "pdf-annotator",

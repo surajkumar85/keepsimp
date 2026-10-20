@@ -50,6 +50,7 @@
     "@mediabunny/aac-encoder": "^1.61.4",
     "@mediabunny/flac-encoder": "^1.61.4",
     "@mediabunny/mp3-encoder": "^1.61.4",
+    "@shiguredo/rnnoise-wasm": "2025.1.5",
     "@tabler/icons-react": "^3.49.0",
     "@tesseract.js-data/ara": "^1.0.0",
     "@tesseract.js-data/ben": "^1.0.0",

@@ -23,3 +23,8 @@ make tone.m4a -c:a aac -b:a 64k
 make tone.opus -c:a libopus -b:a 48k
 ffmpeg -loglevel error -y -i tone.m4a -c copy -movflags +faststart tone-faststart.m4a
 ffmpeg -loglevel error -y -i tone.m4a -c copy -use_editlist 0 tone-noedit.m4a
+# Speech for noise reduction, from eSpeak NG (brew install espeak-ng); its
+# output is not covered by its licence, unlike the voices macOS comes with.
+espeak-ng -v en-us -s 150 -p 45 -w speech.wav "The quick brown fox jumps over the lazy dog. Recording a voice note in a busy room is hard, so we remove the background noise on your own device."
+ffmpeg -loglevel error -y -i speech.wav -ar 48000 -ac 1 -c:a flac -sample_fmt s16 speech.flac
+rm speech.wav

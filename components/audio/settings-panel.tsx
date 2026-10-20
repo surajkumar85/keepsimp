@@ -18,6 +18,7 @@ import {
   type Changes,
 } from "@/lib/audio/change"
 import { COMPRESSORS, type CompressorPreset } from "@/lib/audio/dynamics"
+import type { Repair, Sibilance } from "@/lib/audio/repair"
 import { rateLabel } from "@/lib/audio/labels"
 import {
   dbLabel,
@@ -75,10 +76,13 @@ export function SettingsPanel({
   settings,
   update,
   problem,
+  repairFirst = false,
 }: {
   settings: AudioSettings
   update: Update
   problem: string | null
+  /** Repair at the top, for the page opened to take noise away. */
+  repairFirst?: boolean
 }) {
   const ids = useId()
   const codec: Lossy | null =
@@ -102,11 +106,26 @@ export function SettingsPanel({
       : "3"
   )
 
+  const repair = (
+    <RepairSection
+      repair={settings.sound.repair}
+      update={(change) =>
+        update({
+          sound: {
+            ...settings.sound,
+            repair: { ...settings.sound.repair, ...change },
+          },
+        })
+      }
+    />
+  )
+
   return (
     <div
       className="space-y-5 rounded-xl border bg-card p-4 sm:p-5"
       data-testid="audio-settings"
     >
+      {repairFirst && repair}
       <Section title="Format">
         <ChoiceChips
           label="Write as"
@@ -135,6 +154,8 @@ export function SettingsPanel({
           update({ changes: { ...settings.changes, ...change } })
         }
       />
+
+      {!repairFirst && repair}
 
       <SoundSection
         sound={settings.sound}
@@ -732,6 +753,79 @@ function ChangesSection({
         hint="The whole sound, from its end to its start."
         checked={changes.reverse}
         onCheckedChange={(reverse) => update({ reverse })}
+      />
+    </Section>
+  )
+}
+
+/** Background noise, hum, clicks and harsh "s" sounds. */
+function RepairSection({
+  repair,
+  update,
+}: {
+  repair: Repair
+  update: (change: Partial<Repair>) => void
+}) {
+  const ids = useId()
+  const strength = Math.round(repair.denoise * 100)
+  return (
+    <Section title="Repair">
+      <div>
+        <div className="mb-1 flex justify-between text-sm">
+          <label htmlFor={`${ids}-noise`} className="font-medium">
+            Take away background noise
+          </label>
+          <span className="font-mono text-muted-foreground">
+            {strength === 0 ? "Off" : `${strength}%`}
+          </span>
+        </div>
+        <input
+          id={`${ids}-noise`}
+          type="range"
+          min={0}
+          max={100}
+          step={5}
+          value={strength}
+          onChange={(event) =>
+            update({ denoise: Number(event.target.value) / 100 })
+          }
+          aria-describedby={`${ids}-noise-hint`}
+          className="h-11 w-full accent-primary md:h-9"
+        />
+        <p id={`${ids}-noise-hint`} className="text-xs text-muted-foreground">
+          RNNoise, a small neural network trained on speech, run on your device.
+          It is made for voices: on music it can take away sounds you want, so
+          listen and lower it if it does. The first time, its model (3.1 MB) is
+          downloaded and then kept for working offline.
+        </p>
+      </div>
+      <ChoiceChips
+        label="Mains hum"
+        value={String(repair.hum)}
+        onValueChange={(value) => update({ hum: Number(value) as 0 | 50 | 60 })}
+        options={[
+          { value: "0", label: "Off" },
+          { value: "50", label: "50 Hz" },
+          { value: "60", label: "60 Hz" },
+        ]}
+        hint="The buzz of the mains and its harmonics, notched out 3 Hz wide each. 50 Hz in most of the world, 60 Hz in the Americas and parts of Asia."
+      />
+      <ToggleRow
+        label="Remove clicks"
+        hint="Short spikes, far louder than the sound around them, drawn over with a smooth curve. Drums and consonants are left as they are."
+        checked={repair.declick}
+        onCheckedChange={(declick) => update({ declick })}
+      />
+      <ChoiceChips
+        label={'Harsh "s" sounds'}
+        value={repair.deess}
+        onValueChange={(deess: Sibilance) => update({ deess })}
+        options={[
+          { value: "off", label: "Off" },
+          { value: "gentle", label: "Gentle" },
+          { value: "strong", label: "Strong" },
+        ]}
+        hint="Turns down only the sound over 5 kHz while it is too loud, as in a sharp s or sh: by up to 6 dB, or 12 when strong."
       />
     </Section>
   )

@@ -106,6 +106,11 @@ describe("mp3Gapless", () => {
       start: 1105,
       length: null,
     })
+    // A decoder that puts nothing first (Safari's): the sound starts at the encoder's delay.
+    expect(mp3Kept(mp3Gapless(header())!, 0)).toEqual({
+      start: 576,
+      length: 100 * 1152 - 576 - 1000,
+    })
     expect(
       mp3Kept({ delay: 576, padding: 9999, frames: 1, frameSamples: 1152 })
     ).toMatchObject({ length: 0 })

@@ -17,6 +17,7 @@ import {
   SplitterTutorial,
   JoinerTutorial,
   SpeedTutorial,
+  NoiseTutorial,
 } from "@/components/audio/tutorial"
 import { AnimationConverterTutorial } from "@/components/animation-converter/tutorial"
 import { ImageCompressor } from "@/components/image-compressor/image-compressor"
@@ -115,6 +116,12 @@ export async function generateMetadata({
     return pageMetadata(
       "Change audio speed and pitch online for free",
       "Speed up or slow down MP3, M4A, WAV and more without changing the pitch, or change the pitch keeping the length, in your browser. Also reverse and karaoke. No account, no file uploads.",
+      `/dashboard/${id}/`
+    )
+  if (id === "remove-background-noise")
+    return pageMetadata(
+      "Remove background noise from audio online for free",
+      'Take background noise, hum, clicks and harsh "s" sounds out of voice recordings in your browser, with RNNoise on your device. MP3, M4A, WAV and more. No account, no file uploads.',
       `/dashboard/${id}/`
     )
   if (id === "join-audio")
@@ -311,6 +318,8 @@ export default async function ToolPage({
         <AudioWorkspace mode="joiner" />
       ) : id === "change-audio-speed" ? (
         <AudioWorkspace mode="speed" />
+      ) : id === "remove-background-noise" ? (
+        <AudioWorkspace mode="noise" />
       ) : id === "pdf-merger" ? (
         <PdfMerger />
       ) : id === "pdf-splitter" ? (
@@ -370,6 +379,8 @@ export default async function ToolPage({
         <JoinerTutorial />
       ) : id === "change-audio-speed" ? (
         <SpeedTutorial />
+      ) : id === "remove-background-noise" ? (
+        <NoiseTutorial />
       ) : id === "audio-extractor" ? (
         <AudioExtractorTutorial />
       ) : id === "pdf-merger" ? (

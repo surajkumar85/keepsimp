@@ -155,6 +155,14 @@ describe("levelSaid", () => {
     expect(levelSaid(result({ mode: "louder", db: 6, each: [6, 6] }))).toBe(
       "Made 6 dB louder."
     )
+    expect(
+      levelSaid(result({ mode: "same", db: 0, clicks: 1, deessed: 4 }))
+    ).toBe(
+      'Its level is left as it is. One click was drawn over. Harsh "s" sounds were turned down by up to 4 dB.'
+    )
+    expect(levelSaid(result({ mode: "same", db: 0, clicks: 3 }))).toBe(
+      "Its level is left as it is. 3 clicks were drawn over."
+    )
     expect(levelSaid(result({ mode: "same", db: 0, compressed: 7.25 }))).toBe(
       "Its level is left as it is. The compressor turned the loudest moments down by up to 7.3 dB."
     )

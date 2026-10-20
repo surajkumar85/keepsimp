@@ -48,6 +48,7 @@ export default defineConfig({
         "lib/audio/change.ts",
         "lib/audio/stretch.ts",
         "lib/audio/resample.ts",
+        "lib/audio/repair.ts",
         "lib/color/core.ts",
         "lib/color/picker.ts",
         "lib/color/palette.ts",

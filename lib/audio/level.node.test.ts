@@ -12,6 +12,7 @@ import { join } from "node:path"
 import * as mediabunny from "mediabunny"
 import { describe, expect, it } from "vitest"
 import { defaultLevel, type Level } from "./level"
+import { noRepair } from "./repair"
 import { defaultSound, type SoundSettings } from "./sound"
 import { TONE_PRESETS } from "./tone"
 import { convertAudio, readAudio } from "./mediabunny-audio"
@@ -212,6 +213,7 @@ describe("levels written", { timeout: 120_000 }, () => {
     const rumble = {
       tone: TONE_PRESETS.rumble.tone,
       compressor: "off" as const,
+      repair: noRepair,
     }
     const humAfter = await leveled(defaultLevel, "wav", hum, rumble)
     const toneAfter = await leveled(defaultLevel, "wav", tone, rumble)
@@ -234,6 +236,7 @@ describe("levels written", { timeout: 120_000 }, () => {
     const sound: SoundSettings = {
       tone: TONE_PRESETS.voice.tone,
       compressor: "voice",
+      repair: noRepair,
     }
     const { bytes, level: result } = await leveled(level, "wav", wav, sound)
     const after = measured(bytes, "voice.wav")

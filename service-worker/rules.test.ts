@@ -142,6 +142,8 @@ describe("routeFor", () => {
     expect(isKeptOnUse("/ocr/7.0.0-6.1.2-eng4.0.0/eng.traineddata.gz")).toBe(
       true
     )
+    expect(isKeptOnUse("/rnnoise/2025.1.5/rnnoise.js")).toBe(true)
+    expect(isKeptOnUse("/rnnoise/rnnoise.js")).toBe(false)
     expect(isKeptOnUse("/ocr/")).toBe(false)
     expect(isKeptOnUse("/ocr/worker.min.js")).toBe(false)
     expect(isKeptOnUse("/blog/ocr/a/b")).toBe(false)

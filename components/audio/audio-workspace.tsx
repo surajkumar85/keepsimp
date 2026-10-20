@@ -129,6 +129,7 @@ export type AudioMode =
   | "splitter"
   | "joiner"
   | "speed"
+  | "noise"
 
 /** What the waveform editor is opened for, in each mode; none where it waits to be asked for. */
 const EDITING: Record<AudioMode, EditorFocus | null> = {
@@ -142,6 +143,7 @@ const EDITING: Record<AudioMode, EditorFocus | null> = {
   splitter: "edit",
   joiner: null,
   speed: null,
+  noise: null,
 }
 
 const INPUT_ID = "audio-file"
@@ -198,6 +200,14 @@ const COPY: Record<AudioMode, DropZoneCopy> = {
     dropping: "Drop to change these files' speed",
     body: "Faster or slower keeping the pitch, the pitch up or down keeping the length, or both; also backwards, karaoke and the channels swapped. On your device. You can also paste with ⌘V or Ctrl+V.",
     inputLabel: "Choose audio files to change",
+    action: "Choose files",
+    limits: `Stays on your device · up to ${MAX_FILES} files at once`,
+  },
+  noise: {
+    heading: "Drop recordings to clean up",
+    dropping: "Drop to take the noise out of these files",
+    body: 'Background noise taken away by RNNoise, a neural network made for voices, and hum, clicks and harsh "s" sounds too. On your device: nothing is uploaded. You can also paste with ⌘V or Ctrl+V.',
+    inputLabel: "Choose audio files to clean up",
     action: "Choose files",
     limits: `Stays on your device · up to ${MAX_FILES} files at once`,
   },
@@ -284,6 +294,7 @@ const FOCUSED: Partial<Record<AudioMode, string>> = {
   splitter: "opened for splitting",
   joiner: "opened for joining files",
   speed: "opened for changing speed and pitch",
+  noise: "opened for taking away background noise",
 }
 
 const SAMPLES: Record<AudioMode, { name: string; type: string }[]> = {
@@ -306,6 +317,7 @@ const SAMPLES: Record<AudioMode, { name: string; type: string }[]> = {
     { name: "keepsimp-clip.mp4", type: "video/mp4" },
   ],
   speed: [{ name: "keepsimp-tune.flac", type: "audio/flac" }],
+  noise: [{ name: "keepsimp-voice.mp3", type: "audio/mpeg" }],
 }
 
 /** The format each mode writes at first. */
@@ -320,6 +332,7 @@ const FIRST_FORMAT: Record<AudioMode, AudioSettings["format"]> = {
   splitter: "same",
   joiner: "mp3",
   speed: "same",
+  noise: "same",
 }
 
 /** How loud results are at first in each mode. */
@@ -494,6 +507,13 @@ export function AudioWorkspace({ mode = "editor" }: { mode?: AudioMode }) {
       mode === "speed"
         ? { ...defaultSettings.changes, tempo: 1.25 }
         : defaultSettings.changes,
+    sound:
+      mode === "noise"
+        ? {
+            ...defaultSettings.sound,
+            repair: { ...defaultSettings.sound.repair, denoise: 1 },
+          }
+        : defaultSettings.sound,
   }))
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
@@ -507,6 +527,8 @@ export function AudioWorkspace({ mode = "editor" }: { mode?: AudioMode }) {
   const [asked, setAsked] = useState(false)
   const focus = EDITING[mode] ?? (asked ? "edit" : null)
   const player = useRef<HTMLAudioElement>(null)
+  /** Where to carry on when the other of the original and the result is chosen. */
+  const resume = useRef<{ fraction: number; playing: boolean } | null>(null)
   const containers = useRef(new Map<string, Container>())
   const pool = useRef<AudioPool | null>(null)
   /** The parts asked for each file, and the settings they were asked with. */
@@ -1408,9 +1430,23 @@ export function AudioWorkspace({ mode = "editor" }: { mode?: AudioMode }) {
                       label="Listen to"
                       value={listening}
                       onValueChange={(value) => {
+                        // Before and after at the same moment: the other one
+                        // carries on from where this one was.
+                        const element = player.current
+                        resume.current =
+                          element &&
+                          Number.isFinite(element.duration) &&
+                          element.duration > 0
+                            ? {
+                                fraction:
+                                  element.currentTime / element.duration,
+                                playing: !element.paused,
+                              }
+                            : null
                         setListening(value)
-                        setPlayed(0)
+                        if (!resume.current) setPlayed(0)
                       }}
+                      hint="Switching carries on from the same moment, to hear before and after."
                       options={[
                         { value: "original", label: "Original" },
                         { value: "result", label: "Result" },
@@ -1431,6 +1467,17 @@ export function AudioWorkspace({ mode = "editor" }: { mode?: AudioMode }) {
                       aria-label={
                         listening === "result" && result ? "Result" : "Original"
                       }
+                      onLoadedMetadata={(event) => {
+                        const element = event.currentTarget
+                        const from = resume.current
+                        resume.current = null
+                        if (!from || !Number.isFinite(element.duration)) return
+                        element.currentTime = from.fraction * element.duration
+                        // A browser can refuse to play without a press; then
+                        // it waits where it is.
+                        if (from.playing)
+                          void element.play().catch(() => undefined)
+                      }}
                       onTimeUpdate={(event) => {
                         const element = event.currentTarget
                         setPlayed(
@@ -1623,6 +1670,7 @@ export function AudioWorkspace({ mode = "editor" }: { mode?: AudioMode }) {
             setSettings((current) => ({ ...current, ...change }))
           }
           problem={problem}
+          repairFirst={mode === "noise"}
         />
       </div>
     </div>

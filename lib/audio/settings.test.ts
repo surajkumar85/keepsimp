@@ -1,3 +1,4 @@
+import { noRepair } from "./repair"
 import { defaultChanges } from "./change"
 import { defaultLevel } from "./level"
 import { TONE_PRESETS } from "./tone"
@@ -135,7 +136,11 @@ describe("planFor", () => {
     const shaped = planFor(
       settings({
         format: "same",
-        sound: { tone: TONE_PRESETS.voice.tone, compressor: "off" },
+        sound: {
+          tone: TONE_PRESETS.voice.tone,
+          compressor: "off",
+          repair: noRepair,
+        },
       }),
       song
     )

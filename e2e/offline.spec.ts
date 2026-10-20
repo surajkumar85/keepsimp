@@ -105,8 +105,9 @@ test("every tool works offline after one visit", async ({ page }) => {
     /(^|\/)[^/]* [2-9](?:\.|$)/,
     /^videos\/.*\.mp4$/,
     /^images\/social\//,
-    // What recognises words is kept once it is first used, not before.
-    /^ocr\//,
+    // What recognises words and takes noise away is kept once it is first
+    // used, not before.
+    /^(ocr|rnnoise)\//,
     /^(robots\.txt|sitemap\.xml|\.gitkeep)$/,
     // Not-found pages, and the data Next.js fetches for page transitions.
     /^(404\.html|404\/|_not-found\/)/,
@@ -484,6 +485,38 @@ test("recognising words works offline once it has been used online", async ({
 
   await site.stop()
   await recognise()
+})
+
+test("taking noise away works offline once it has been used online", async ({
+  page,
+}) => {
+  test.setTimeout(180_000)
+  await install(page)
+  const clean = async () => {
+    await page.goto(`${site.origin}/dashboard/remove-background-noise/`)
+    await page.getByRole("button", { name: "Try a sample" }).click()
+    await expect(page.getByTestId("audio-workspace")).toHaveAttribute(
+      "data-settled",
+      "true",
+      { timeout: 90_000 }
+    )
+    await expect(page.getByTestId("audio-check")).toContainText("as asked")
+  }
+  // Nothing of it is in the offline copy until it is used.
+  const before = await offlineCopy(page)
+  expect(before.saved.some((path) => path.startsWith("/rnnoise/"))).toBe(false)
+  await clean()
+  const kept = await page.evaluate(async () =>
+    (await (await caches.open("keepsimp-kept-on-use")).keys()).map(
+      (request) => new URL(request.url).pathname
+    )
+  )
+  expect(
+    kept.some((path) => /^\/rnnoise\/[^/]+\/rnnoise\.js$/.test(path))
+  ).toBe(true)
+
+  await site.stop()
+  await clean()
 })
 
 test("shows the latest page online and the saved one when the network fails", async ({

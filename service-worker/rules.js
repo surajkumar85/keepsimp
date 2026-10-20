@@ -44,13 +44,14 @@ export function shouldPrecache(file) {
 
 /**
  * Files that are not in the offline copy until they are first used, and are
- * then kept: what recognises words (OCR), which only some visitors need. The
+ * then kept: what recognises words (OCR) and what takes noise out of sound
+ * (RNNoise), which only some visitors need. The
  * folder they are in is named for their version, so a saved copy never goes
  * stale either.
  * @param {string} path
  */
 export function isKeptOnUse(path) {
-  return /^\/ocr\/[^/]+\/[^/]+$/.test(path)
+  return /^\/(ocr|rnnoise)\/[^/]+\/[^/]+$/.test(path)
 }
 
 /**

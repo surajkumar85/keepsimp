@@ -336,6 +336,14 @@ export const overviewPost: BlogPost = {
           label: "Guide: change speed and pitch",
           href: "/blog/change-audio-speed-and-pitch/",
         },
+        {
+          label: "A noisy recording? Open it as Remove background noise",
+          href: "/dashboard/remove-background-noise/",
+        },
+        {
+          label: "Guide: remove background noise",
+          href: "/blog/remove-background-noise-from-audio/",
+        },
       ],
     },
     {
@@ -2534,6 +2542,92 @@ export const speedPost: BlogPost = {
       title:
         "Verhelst and Roelands, an overlap-add technique based on waveform similarity (WSOLA), ICASSP 1993",
       url: "https://ieeexplore.ieee.org/document/319366",
+    },
+  ],
+}
+
+export const noisePost: BlogPost = {
+  published: "2026-10-20",
+  modified: "2026-10-20",
+  slug: "remove-background-noise-from-audio",
+  title: "The words kept, the noise left behind.",
+  searchTitle: "How to remove background noise from audio for free",
+  description:
+    'Take hiss, fans, traffic, mains hum, clicks and harsh "s" sounds out of voice recordings in your browser, with RNNoise running on your device. Nothing is uploaded.',
+  keywords: [
+    "remove background noise from audio",
+    "noise reduction",
+    "denoise audio online",
+    "remove hum from audio",
+    "remove clicks from audio",
+    "de-esser",
+    "RNNoise",
+  ],
+  category: "A little know-how",
+  readingTime: "4 min read",
+  image: "/images/audio-noise-guide.svg",
+  imageAlt:
+    "A voice recording with noise between the words, and the same recording cleaned, quiet between the words, beside a strength slider and chips for mains hum",
+  tool: "remove-background-noise",
+  intro:
+    "A voice note by a busy road, an interview with a fan behind it, a podcast with a buzz from a cable. Most noise removers upload the recording; this one runs a small neural network made for speech in your browser, so the recording and its noise stay on your device.",
+  sections: [
+    {
+      id: "how",
+      title: "How to take the noise out.",
+      paragraphs: [
+        "Open Remove background noise and drop your recordings. All of the noise RNNoise finds is taken away at first; lower the strength if voices start to sound thin or watery. Turn on hum removal, clicks or the de-esser if the recording needs them, listen to the result, and download it in its own format or another.",
+      ],
+      links: [
+        {
+          label: "Open Remove background noise",
+          href: "/dashboard/remove-background-noise/",
+        },
+      ],
+    },
+    {
+      id: "rnnoise",
+      title: "A network that knows what speech sounds like.",
+      paragraphs: [
+        "RNNoise, made by Jean-Marc Valin at Xiph.org and Mozilla, listens to the sound ten milliseconds at a time and judges, band by band, how much of it is voice. What is not is turned down. It was trained on speech, so it is best at voices: on music it can take away notes and breaths you want, and the page says so. The strength mixes its result with the sound as it was.",
+        "Its file is 3.1 MB to download. It comes from this site the first time you use it and is then kept, so it works offline after that.",
+      ],
+    },
+    {
+      id: "repairs",
+      title: "Hum, clicks and harsh s.",
+      paragraphs: [
+        "Mains hum is a steady buzz at 50 Hz (60 Hz in the Americas and parts of Asia) and its harmonics. Each is taken out with a notch 3 Hz wide, so the voice beside it is left as it was.",
+        "Clicks are short spikes, far louder than the sound just around them. Each is drawn over with a smooth curve, and the page says how many there were; drum hits and consonants last longer and are left alone. The de-esser turns down only the sound over 5 kHz, and only while it is too loud, as in a sharp s.",
+      ],
+    },
+    {
+      id: "private",
+      title: "On your device.",
+      paragraphs: [
+        "Files are read, cleaned and written in your browser and never uploaded. Nothing about the noise is sent anywhere, there is no account and no limit on how many you clean.",
+      ],
+      links: [
+        {
+          label: "Every KeepSimp tool in one place",
+          href: "/blog/free-online-tools-no-upload/",
+        },
+      ],
+    },
+  ],
+  sources: [
+    {
+      title: "RNNoise: learning noise suppression, Jean-Marc Valin",
+      url: "https://jmvalin.ca/demo/rnnoise/",
+    },
+    {
+      title:
+        "Valin, a hybrid DSP/deep learning approach to real-time full-band speech enhancement, 2018",
+      url: "https://arxiv.org/abs/1709.08243",
+    },
+    {
+      title: "Utility frequency, Wikipedia",
+      url: "https://en.wikipedia.org/wiki/Utility_frequency",
     },
   ],
 }

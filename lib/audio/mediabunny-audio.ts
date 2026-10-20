@@ -6,7 +6,13 @@
  */
 import type * as Mediabunny from "mediabunny"
 import type { Container } from "./formats"
-import { lameTagged, mp3Gapless, mp3Kept } from "./gapless"
+import {
+  LAME_DELAY,
+  lameTagged,
+  MP3_DECODER_DELAY,
+  mp3Gapless,
+  mp3Kept,
+} from "./gapless"
 import { withEditList } from "./mp4-edit"
 import { withOpusEnd } from "./ogg-end"
 import { PeakBuilder, type Peaks } from "./peaks"
@@ -29,6 +35,7 @@ import { holdsChapters, withMp3Chapters, withMp4Chapters } from "./chapters"
 import { Joiner, joinsFor, startsOf, straight, type Joining } from "./join"
 import { Limiter } from "./limiter"
 import { isPlain, SoundShaper, type SoundSettings } from "./sound"
+import type { Rnnoise } from "./repair"
 import { Changer, framesAfter, isUnchanged, type Changes } from "./change"
 import {
   integrated,
@@ -161,7 +168,7 @@ export async function readAudio(
     if (track.codec === "mp3") {
       const head = new Uint8Array(await file.slice(0, 64 * 1024).arrayBuffer())
       const gapless = mp3Gapless(head)
-      if (gapless) kept = mp3Kept(gapless)
+      if (gapless) kept = mp3Kept(gapless, await mp3DecoderDelay(engine))
     }
     return {
       container,
@@ -455,12 +462,7 @@ async function tryAac(
 ): Promise<{ priming: number; complete: boolean } | null> {
   try {
     const frames = 8192
-    const noise = new Float32Array(frames * channels)
-    let seed = 12345
-    for (let index = 0; index < noise.length; index++) {
-      seed = (seed * 1103515245 + 12345) >>> 0
-      noise[index] = (seed / 2 ** 32 - 0.5) * 0.5
-    }
+    const noise = noiseOf(frames, channels)
     const target = new engine.BufferTarget()
     const output = new engine.Output({
       format: new engine.Mp4OutputFormat(),
@@ -482,30 +484,8 @@ async function tryAac(
     await source.add(sample)
     sample.close()
     await output.finalize()
-    const heard: Float32Array[] = []
-    const opened = input(engine, new Blob([target.buffer!]))
-    try {
-      const track = await opened.getPrimaryAudioTrack()
-      if (!track || !(await track.canDecode())) return null
-      for await (const one of patiently(
-        new engine.AudioSampleSink(track).samples()
-      )) {
-        const plane = new Float32Array(one.numberOfFrames)
-        one.copyTo(plane, { planeIndex: 0, format: "f32-planar" })
-        heard.push(plane)
-        one.close()
-      }
-    } finally {
-      opened.dispose()
-    }
-    const all = new Float32Array(
-      heard.reduce((sum, one) => sum + one.length, 0)
-    )
-    let at = 0
-    for (const one of heard) {
-      all.set(one, at)
-      at += one.length
-    }
+    const all = await firstChannel(engine, target.buffer!)
+    if (!all) return null
     const first = new Float32Array(frames)
     for (let index = 0; index < frames; index++)
       first[index] = noise[index * channels]
@@ -514,6 +494,91 @@ async function tryAac(
   } catch {
     return null
   }
+}
+
+/** Noise, the same every time, as interleaved samples. */
+function noiseOf(frames: number, channels: number) {
+  const noise = new Float32Array(frames * channels)
+  let seed = 12345
+  for (let index = 0; index < noise.length; index++) {
+    seed = (seed * 1103515245 + 12345) >>> 0
+    noise[index] = (seed / 2 ** 32 - 0.5) * 0.5
+  }
+  return noise
+}
+
+/** Every sample of a file's first channel, as this browser decodes it; null when it cannot. */
+async function firstChannel(engine: Engine, bytes: ArrayBuffer) {
+  const heard: Float32Array[] = []
+  const opened = input(engine, new Blob([bytes]))
+  try {
+    const track = await opened.getPrimaryAudioTrack()
+    if (!track || !(await track.canDecode())) return null
+    for await (const one of patiently(
+      new engine.AudioSampleSink(track).samples()
+    )) {
+      const plane = new Float32Array(one.numberOfFrames)
+      one.copyTo(plane, { planeIndex: 0, format: "f32-planar" })
+      heard.push(plane)
+      one.close()
+    }
+  } finally {
+    opened.dispose()
+  }
+  const all = new Float32Array(heard.reduce((sum, one) => sum + one.length, 0))
+  let at = 0
+  for (const one of heard) {
+    all.set(one, at)
+    at += one.length
+  }
+  return all
+}
+
+let mp3Delay: Promise<number> | null = null
+
+/**
+ * The samples this browser's MP3 decoder puts before the encoder's delay:
+ * a burst of noise is written by LAME (whose delay is known) and decoded
+ * again, and where it comes back says. Chrome and Firefox put 529, as the
+ * reference decoder does; Safari's puts none. The default where it cannot
+ * be found out (Node has no MP3 decoder).
+ */
+export function mp3DecoderDelay(engine: Engine): Promise<number> {
+  mp3Delay ??= (async () => {
+    try {
+      await readyEncoder(engine, "mp3")
+      const noise = noiseOf(8192, 1)
+      const target = new engine.BufferTarget()
+      const output = new engine.Output({
+        format: new engine.Mp3OutputFormat(),
+        target,
+      })
+      const source = new engine.AudioSampleSource({
+        codec: "mp3",
+        quality: new engine.Quality({ bitrate: 128_000 }),
+      })
+      output.addAudioTrack(source)
+      await output.start()
+      const sample = new engine.AudioSample({
+        data: noise,
+        format: "f32",
+        numberOfChannels: 1,
+        sampleRate: 44100,
+        timestamp: 0,
+      })
+      await source.add(sample)
+      sample.close()
+      await output.finalize()
+      const heard = await firstChannel(engine, target.buffer!)
+      if (!heard) return MP3_DECODER_DELAY
+      const delay =
+        lagOf(noise.subarray(0, 4096), heard, LAME_DELAY + 1152) - LAME_DELAY
+      return delay >= 0 ? delay : MP3_DECODER_DELAY
+    } catch {
+      return MP3_DECODER_DELAY
+    }
+  })()
+  return mp3Delay
 }
 
 /** The AAC encoder chosen for each rate and channels, by its priming. */
@@ -588,6 +653,9 @@ interface Shaping {
   meter: LoudnessMeter
   /** The most the compressor turned the sound down, in dB (0 or less), once written. */
   compressed?: number
+  /** Clicks drawn over, and the most "s" sounds were turned down (dB, 0 or less). */
+  clicks?: number
+  deessed?: number
 }
 
 /** A decoder gave fewer frames than the sound has: written again to that many. */
@@ -626,6 +694,8 @@ async function pass(
     sound?: SoundSettings
     /** Speed, pitch and channels; none when left out. */
     changes?: Changes
+    /** RNNoise, loaded, when noise is to be taken away. */
+    rnnoise?: Rnnoise
     /** Hand the frames on (made louder or quieter by `gain`) instead of writing them. */
     deliver?: (planes: Float32Array[]) => Promise<void>
     gain?: number
@@ -634,7 +704,12 @@ async function pass(
   const { edits, edited, expected, shaping } = options
   // Made anew for every pass: they keep state from frame to frame.
   const sound = options.sound
-    ? new SoundShaper(options.sound, plan.sampleRate, plan.channels)
+    ? new SoundShaper(
+        options.sound,
+        plan.sampleRate,
+        plan.channels,
+        options.rnnoise ?? null
+      )
     : null
   const changer =
     options.changes && !plan.copy
@@ -721,8 +796,8 @@ async function pass(
               )
                 return finish(kept)
               // The equaliser and the compressor, then speed, pitch and channels.
-              const planes = planesOf(kept)
-              sound?.process(planes)
+              const decoded = planesOf(kept)
+              const planes = sound ? sound.process(decoded, last) : decoded
               const pieces = changer
                 ? [changer.process(planes), ...(last ? [changer.flush()] : [])]
                 : [planes]
@@ -748,7 +823,7 @@ async function pass(
                     token
                       ? sampleOf(
                           engine,
-                          planes.map(() => new Float32Array(1)),
+                          decoded.map(() => new Float32Array(1)),
                           rate,
                           0
                         )
@@ -810,12 +885,16 @@ async function pass(
     }
     // Their last frames never came out: written again to the frames there were.
     if (
-      (shaping?.limiter || changer) &&
+      (shaping?.limiter || changer || sound?.holds) &&
       made < expected &&
       !options.signal?.aborted
     )
       throw new EndedEarly(made)
-    if (shaping && sound) shaping.compressed = sound.compressed
+    if (shaping && sound) {
+      shaping.compressed = sound.compressed
+      shaping.clicks = sound.clicks
+      shaping.deessed = sound.deessed
+    }
   } finally {
     source.dispose()
   }
@@ -845,6 +924,8 @@ export async function convertAudio(
     sound?: SoundSettings
     /** Speed, pitch, direction and channels; none when left out. */
     changes?: Changes
+    /** RNNoise, loaded, when noise is to be taken away. */
+    rnnoise?: Rnnoise
   }
 ): Promise<{ bytes: Uint8Array; level: LevelResult | null }> {
   const changes =
@@ -871,6 +952,7 @@ export async function convertAudio(
         level: options.level ?? defaultLevel,
         sound: options.sound,
         changes,
+        rnnoise: options.rnnoise,
         tags: options.keepTags ? tags : undefined,
         chapters: false,
         onProgress: options.onProgress,
@@ -909,6 +991,7 @@ export async function convertAudio(
     edited,
     sound,
     changes,
+    rnnoise: options.rnnoise,
   }
 
   // Measured first, as it will be written, when the gain depends on it.
@@ -1047,6 +1130,8 @@ export async function convertAudio(
           after: loudnessOf(shaping.meter.result()),
           limited: takenOff(shaping.limiter?.lowest ?? 1),
           compressed: -(shaping.compressed ?? 0),
+          clicks: shaping.clicks ?? 0,
+          deessed: -(shaping.deessed ?? 0),
           notes,
         }
       : null,
@@ -1104,6 +1189,8 @@ export async function joinAudio(
     signal?: AbortSignal
     /** Speed, pitch and channels for every file; backwards for the whole. */
     changes?: Changes
+    /** RNNoise, loaded, when noise is to be taken away. */
+    rnnoise?: Rnnoise
   }
 ): Promise<{ bytes: Uint8Array; level: LevelResult | null; length: number }> {
   const { level } = options
@@ -1161,6 +1248,7 @@ export async function joinAudio(
     changes,
     codec: "pcm-f32" as const,
     onProgress: progress,
+    rnnoise: options.rnnoise,
   })
   const nothing = () =>
     new engine.Output({
@@ -1338,7 +1426,7 @@ export async function hearAudio(
     channels = track.numberOfChannels
     if (track.codec === "mp3") {
       const gapless = mp3Gapless(bytes.subarray(0, 64 * 1024))
-      if (gapless) kept = mp3Kept(gapless)
+      if (gapless) kept = mp3Kept(gapless, await mp3DecoderDelay(engine))
     }
   } catch {
     return null
