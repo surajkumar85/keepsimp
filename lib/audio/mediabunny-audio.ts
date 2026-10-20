@@ -26,9 +26,10 @@ import {
   type LevelResult,
 } from "./level"
 import { holdsChapters, withMp3Chapters, withMp4Chapters } from "./chapters"
-import { Joiner, joinsFor, startsOf, type Joining } from "./join"
+import { Joiner, joinsFor, startsOf, straight, type Joining } from "./join"
 import { Limiter } from "./limiter"
 import { isPlain, SoundShaper, type SoundSettings } from "./sound"
+import { Changer, framesAfter, isUnchanged, type Changes } from "./change"
 import {
   integrated,
   LoudnessMeter,
@@ -623,6 +624,8 @@ async function pass(
     codec?: Mediabunny.AudioCodec
     /** The equaliser and compressor; none when left out. */
     sound?: SoundSettings
+    /** Speed, pitch and channels; none when left out. */
+    changes?: Changes
     /** Hand the frames on (made louder or quieter by `gain`) instead of writing them. */
     deliver?: (planes: Float32Array[]) => Promise<void>
     gain?: number
@@ -633,6 +636,10 @@ async function pass(
   const sound = options.sound
     ? new SoundShaper(options.sound, plan.sampleRate, plan.channels)
     : null
+  const changer =
+    options.changes && !plan.copy
+      ? new Changer(options.changes, plan.sampleRate, plan.channels, expected)
+      : null
   const source = input(engine, file)
   try {
     // Where the sound starts in the decoder's time: an MP3's delay comes first.
@@ -703,62 +710,78 @@ async function pass(
                   ? firstFrames(engine, sample, room)
                   : sample
               made += kept.numberOfFrames
-              // The equaliser and the compressor, before anything else.
-              const shaped_ = sound
-                ? sampleOf(
-                    engine,
-                    sound.process(planesOf(kept)),
-                    rate,
-                    kept.timestamp
-                  )
-                : kept
+              const last = made === expected
+              // Nothing done to the frames: written as they are.
+              if (
+                !sound &&
+                !changer &&
+                !options.deliver &&
+                !options.measure &&
+                !shaping
+              )
+                return finish(kept)
+              // The equaliser and the compressor, then speed, pitch and channels.
+              const planes = planesOf(kept)
+              sound?.process(planes)
+              const pieces = changer
+                ? [changer.process(planes), ...(last ? [changer.flush()] : [])]
+                : [planes]
               if (options.deliver) {
-                const planes = planesOf(shaped_)
                 const gain = options.gain ?? 1
-                if (gain !== 1)
-                  for (const plane of planes)
-                    for (let index = 0; index < plane.length; index++)
-                      plane[index] *= gain
+                for (const piece of pieces)
+                  if (gain !== 1)
+                    for (const plane of piece)
+                      for (let index = 0; index < plane.length; index++)
+                        plane[index] *= gain
                 // The null output still wants one sample, or it will not finish.
                 const token = given++ === 0
-                return options.deliver(planes).then(() =>
-                  token
-                    ? sampleOf(
-                        engine,
-                        planes.map((plane) => plane.subarray(0, 1)),
-                        rate,
-                        0
-                      )
-                    : null
-                )
+                const deliver = options.deliver
+                return pieces
+                  .reduce(
+                    (done, piece) =>
+                      done.then(() =>
+                        piece[0].length ? deliver(piece) : undefined
+                      ),
+                    Promise.resolve()
+                  )
+                  .then(() =>
+                    token
+                      ? sampleOf(
+                          engine,
+                          planes.map(() => new Float32Array(1)),
+                          rate,
+                          0
+                        )
+                      : null
+                  )
               }
               if (options.measure) {
-                const planes = planesOf(shaped_)
-                options.measure.push(planes)
-                return sampleOf(
-                  engine,
-                  planes,
-                  rate,
-                  (made - planes[0].length) / rate
+                const out: Mediabunny.AudioSample[] = []
+                for (const piece of pieces) {
+                  if (!piece[0].length) continue
+                  options.measure.push(piece)
+                  out.push(sampleOf(engine, piece, rate, given / rate))
+                  given += piece[0].length
+                }
+                return out.length ? out : null
+              }
+              const ready: Float32Array[][] = []
+              for (const piece of pieces) {
+                // Louder or quieter, and limited.
+                if (shaping && shaping.gain !== 1)
+                  for (const plane of piece)
+                    for (let index = 0; index < plane.length; index++)
+                      plane[index] *= shaping.gain
+                ready.push(
+                  shaping?.limiter ? shaping.limiter.process(piece) : piece
                 )
               }
-              if (!shaping) return finish(shaped_)
-              // Louder or quieter, limited, and measured as it comes out.
-              const planes = planesOf(shaped_)
-              if (shaping.gain !== 1)
-                for (const plane of planes)
-                  for (let index = 0; index < plane.length; index++)
-                    plane[index] *= shaping.gain
-              const ready = shaping.limiter
-                ? [shaping.limiter.process(planes)]
-                : [planes]
               // The limiter's last frames come out once the sound is all in.
-              if (shaping.limiter && made === expected)
-                ready.push(shaping.limiter.flush())
+              if (shaping?.limiter && last) ready.push(shaping.limiter.flush())
               const out: Mediabunny.AudioSample[] = []
               for (const part of ready) {
                 if (!part[0].length) continue
-                shaping.meter.push(part)
+                shaping?.meter.push(part)
                 out.push(finish(sampleOf(engine, part, rate, given / rate)))
                 given += part[0].length
               }
@@ -785,7 +808,12 @@ async function pass(
     } finally {
       options.signal?.removeEventListener("abort", abort)
     }
-    if (shaping?.limiter && made < expected && !options.signal?.aborted)
+    // Their last frames never came out: written again to the frames there were.
+    if (
+      (shaping?.limiter || changer) &&
+      made < expected &&
+      !options.signal?.aborted
+    )
       throw new EndedEarly(made)
     if (shaping && sound) shaping.compressed = sound.compressed
   } finally {
@@ -815,8 +843,42 @@ export async function convertAudio(
     level?: Level
     /** The equaliser and compressor; none when left out. */
     sound?: SoundSettings
+    /** Speed, pitch, direction and channels; none when left out. */
+    changes?: Changes
   }
 ): Promise<{ bytes: Uint8Array; level: LevelResult | null }> {
+  const changes =
+    options.changes && !isUnchanged(options.changes)
+      ? options.changes
+      : undefined
+  // Backwards needs the whole sound: the joining engine holds it.
+  if (changes?.reverse && !plan.copy) {
+    let tags = options.tags
+    if (options.keepTags && !tags) {
+      const opened = input(engine, file)
+      try {
+        tags = await opened.getMetadataTags()
+      } finally {
+        opened.dispose()
+      }
+    }
+    const { bytes, level } = await joinAudio(
+      engine,
+      [{ file, facts, edits: options.edits ?? [], title: "" }],
+      plan,
+      {
+        joining: straight,
+        level: options.level ?? defaultLevel,
+        sound: options.sound,
+        changes,
+        tags: options.keepTags ? tags : undefined,
+        chapters: false,
+        onProgress: options.onProgress,
+        signal: options.signal,
+      }
+    )
+    return { bytes, level }
+  }
   const edits = options.edits ?? []
   const edited = editedBy(facts.duration, edits)
   const level = options.level ?? defaultLevel
@@ -846,6 +908,7 @@ export async function convertAudio(
     edits,
     edited,
     sound,
+    changes,
   }
 
   // Measured first, as it will be written, when the gain depends on it.
@@ -964,7 +1027,7 @@ export async function convertAudio(
       )
   }
   // Say in the file how many samples are the sound, so it plays without gaps.
-  const samples = expected
+  const samples = changes ? framesAfter(expected, changes) : expected
   const bytes = plan.copy
     ? written
     : plan.codec === "mp3"
@@ -988,6 +1051,29 @@ export async function convertAudio(
         }
       : null,
   }
+}
+
+/** Frames as one blob, the channels taking turns. */
+function interleaved(planes: Float32Array[]) {
+  const frames = planes[0].length
+  const data = new Float32Array(frames * planes.length)
+  planes.forEach((plane, channel) => {
+    for (let index = 0; index < frames; index++)
+      data[index * planes.length + channel] = plane[index]
+  })
+  return new Blob([data])
+}
+
+/** Frames kept by `interleaved`, back as one array per channel, last first. */
+function backward(buffer: ArrayBuffer, channels: number) {
+  const data = new Float32Array(buffer)
+  const frames = data.length / channels
+  return Array.from({ length: channels }, (_, channel) => {
+    const plane = new Float32Array(frames)
+    for (let index = 0; index < frames; index++)
+      plane[index] = data[(frames - 1 - index) * channels + channel]
+    return plane
+  })
 }
 
 /** One file to join: its sound, its facts and its edits, and the title of its chapter. */
@@ -1016,19 +1102,30 @@ export async function joinAudio(
     chapters: boolean
     onProgress?: (fraction: number) => void
     signal?: AbortSignal
+    /** Speed, pitch and channels for every file; backwards for the whole. */
+    changes?: Changes
   }
 ): Promise<{ bytes: Uint8Array; level: LevelResult | null; length: number }> {
   const { level } = options
+  const reverse = options.changes?.reverse ?? false
+  const forward = options.changes
+    ? { ...options.changes, reverse: false }
+    : null
+  const changes = forward && !isUnchanged(forward) ? forward : undefined
   const sound =
     options.sound && !isPlain(options.sound) ? options.sound : undefined
   const prepared = parts.map((part) => {
     const edited = editedBy(part.facts.duration, part.edits)
     const length = part.edits.length ? lengthOf(edited) : part.facts.duration
+    const expected = Math.round(length * plan.sampleRate)
     return {
       ...part,
       edited,
-      length,
-      expected: Math.round(length * plan.sampleRate),
+      // How long it is once its speed is changed.
+      length: changes
+        ? framesAfter(expected, changes) / plan.sampleRate
+        : length,
+      expected,
     }
   })
   const joins = joinsFor(
@@ -1061,6 +1158,7 @@ export async function joinAudio(
     edited: part.edited,
     expected: part.expected,
     sound,
+    changes,
     codec: "pcm-f32" as const,
     onProgress: progress,
   })
@@ -1126,9 +1224,18 @@ export async function joinAudio(
   const joiner = new Joiner(plan.sampleRate, plan.channels, joins, (planes) => {
     waiting.push(planes)
   })
+  // Backwards: everything is kept (in blobs, which the browser may keep on
+  // disk), then given out from the end.
+  const stored: Blob[] = []
+  let backwards = false
   /** Everything the joiner has let out, through the limiter, to the encoder. */
   const drain = async (last = false) => {
     const ready = waiting.splice(0)
+    if (reverse && !backwards) {
+      for (const planes of ready)
+        if (planes[0].length) stored.push(interleaved(planes))
+      return
+    }
     const out = ready.map((planes) =>
       limiter ? limiter.process(planes) : planes
     )
@@ -1162,6 +1269,15 @@ export async function joinAudio(
       await drain()
     }
     joiner.finish()
+    if (reverse) {
+      await drain()
+      backwards = true
+      for (let index = stored.length - 1; index >= 0; index--) {
+        waiting.push(backward(await stored[index].arrayBuffer(), plan.channels))
+        stored.length = index
+        await drain()
+      }
+    }
     await drain(true)
     source.close()
     await output.finalize()
@@ -1176,7 +1292,7 @@ export async function joinAudio(
     bytes = withOpusEnd(bytes, Math.round((written / plan.sampleRate) * 48000))
   else if (priming) bytes = withEditList(bytes, priming, written)
   const length = written / plan.sampleRate
-  if (options.chapters && holdsChapters(plan.format)) {
+  if (options.chapters && !reverse && holdsChapters(plan.format)) {
     const chapters = prepared.map((part, index) => ({
       title: part.title,
       start: starts[index],

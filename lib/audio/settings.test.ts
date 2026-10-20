@@ -1,3 +1,4 @@
+import { defaultChanges } from "./change"
 import { defaultLevel } from "./level"
 import { TONE_PRESETS } from "./tone"
 import { describe, expect, it } from "vitest"
@@ -139,8 +140,47 @@ describe("planFor", () => {
       song
     )
     expect(shaped.notes).toEqual([
-      "The sound is encoded again in its own format, to change how it sounds.",
+      "The sound is encoded again in its own format, to change how it sounds or plays.",
     ])
+    // Faster: encoded again too; the channels changed only where there are two.
+    const faster = planFor(
+      settings({ format: "same", changes: { ...defaultChanges, tempo: 1.5 } }),
+      song
+    )
+    expect(faster.copy).toBe(false)
+    expect(
+      planFor(
+        settings({
+          channels: 1,
+          changes: { ...defaultChanges, channels: "swap" },
+        }),
+        song
+      ).notes
+    ).toContain(
+      "The result is mono, so the channels are not swapped, kept to one side or balanced."
+    )
+    expect(
+      planFor(
+        settings({
+          format: "wav",
+          changes: { ...defaultChanges, balance: 0.5 },
+        }),
+        { ...song, channels: 6 }
+      ).notes
+    ).toContain(
+      "Only a stereo result's channels are swapped, kept to one side or balanced."
+    )
+    expect(
+      planFor(
+        settings({ changes: { ...defaultChanges, channels: "karaoke" } }),
+        { ...song, channels: 1 }
+      ).notes
+    ).toContain(
+      "This file is mono: everything is in the middle, so karaoke would leave only the bass."
+    )
+    expect(
+      settingsProblem(settings({ changes: { ...defaultChanges, tempo: 4 } }))
+    ).toBe("Choose a speed from 0.5 to 2 times.")
     expect(
       settingsProblem(
         settings({ level: { ...defaultLevel, mode: "louder", louder: 0 } })

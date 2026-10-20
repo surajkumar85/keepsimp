@@ -8,6 +8,13 @@ import type { Container, OutputFormat, WrittenFormat } from "./formats"
 import { writtenFormats } from "./formats"
 import { defaultLevel, levelKey, levelProblem, type Level } from "./level"
 import {
+  changesKey,
+  changesProblem,
+  defaultChanges,
+  isUnchanged,
+  type Changes,
+} from "./change"
+import {
   defaultSound,
   isPlain,
   soundKey,
@@ -37,6 +44,8 @@ export interface AudioSettings {
   level: Level
   /** The equaliser and compressor. */
   sound: SoundSettings
+  /** Speed, pitch, direction and channels. */
+  changes: Changes
 }
 
 export const defaultSettings: AudioSettings = {
@@ -50,6 +59,7 @@ export const defaultSettings: AudioSettings = {
   targetBytes: null,
   level: defaultLevel,
   sound: defaultSound,
+  changes: defaultChanges,
 }
 
 /** The bitrates (kbit/s) offered under Custom, per codec. */
@@ -185,7 +195,7 @@ export function planFor(
       format = kept
       const lossless = writtenFormats[kept].lossless
       const leveled = settings.level.mode !== "same"
-      const shaped = !isPlain(settings.sound)
+      const shaped = !isPlain(settings.sound) || !isUnchanged(settings.changes)
       copy =
         !edited &&
         !leveled &&
@@ -199,7 +209,7 @@ export function planFor(
           edited
             ? "The sound is encoded again in its own format, to make the edits."
             : shaped
-              ? "The sound is encoded again in its own format, to change how it sounds."
+              ? "The sound is encoded again in its own format, to change how it sounds or plays."
               : leveled
                 ? "The sound is encoded again in its own format, to change its loudness."
                 : "The sound is encoded again in its own format, to meet what was chosen."
@@ -306,6 +316,17 @@ export function planFor(
     notes.push(
       "An iPhone ringtone can be at most 40 seconds long (an alert tone 30); this one is longer, so the iPhone will not offer it until it is trimmed."
     )
+  const { channels: side, balance } = settings.changes
+  if (side === "karaoke" && facts.channels === 1)
+    notes.push(
+      "This file is mono: everything is in the middle, so karaoke would leave only the bass."
+    )
+  else if ((side !== "same" || balance !== 0) && channels !== 2)
+    notes.push(
+      channels === 1
+        ? "The result is mono, so the channels are not swapped, kept to one side or balanced."
+        : "Only a stereo result's channels are swapped, kept to one side or balanced."
+    )
   if (facts.hasVideo)
     notes.push(
       copy
@@ -333,7 +354,10 @@ function wavCodec(settings: AudioSettings, facts: SourceFacts) {
 
 /** Why these settings cannot be used; null when they can. */
 export function settingsProblem(settings: AudioSettings): string | null {
-  const level = levelProblem(settings.level) ?? soundProblem(settings.sound)
+  const level =
+    levelProblem(settings.level) ??
+    soundProblem(settings.sound) ??
+    changesProblem(settings.changes)
   if (level) return level
   if (settings.targetBytes !== null && !(settings.targetBytes >= 16 * 1024))
     return "Choose a file size limit of at least 16 KB."
@@ -358,4 +382,5 @@ export const settingsKey = (settings: AudioSettings) =>
     settings.targetBytes,
     levelKey(settings.level),
     soundKey(settings.sound),
+    changesKey(settings.changes),
   ])

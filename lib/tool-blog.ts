@@ -328,6 +328,14 @@ export const overviewPost: BlogPost = {
           label: "Guide: join audio files into one",
           href: "/blog/join-audio-files/",
         },
+        {
+          label: "Faster or slower? Open it as Change audio speed",
+          href: "/dashboard/change-audio-speed/",
+        },
+        {
+          label: "Guide: change speed and pitch",
+          href: "/blog/change-audio-speed-and-pitch/",
+        },
       ],
     },
     {
@@ -2445,6 +2453,87 @@ export const joinPost: BlogPost = {
     {
       title: "ID3v2 Chapter Frame Addendum",
       url: "https://id3.org/id3v2-chapters-1.0",
+    },
+  ],
+}
+
+export const speedPost: BlogPost = {
+  published: "2026-10-20",
+  modified: "2026-10-20",
+  slug: "change-audio-speed-and-pitch",
+  title: "Faster or slower, the notes where they were.",
+  searchTitle: "How to speed up or slow down audio without changing pitch",
+  description:
+    "Change the speed of a recording, song or podcast without changing its pitch, or the pitch without changing its length, in your browser. Also tape speed, reverse and karaoke. Nothing is uploaded.",
+  keywords: [
+    "change audio speed",
+    "speed up audio without changing pitch",
+    "slow down audio",
+    "pitch shifter",
+    "change pitch of song",
+    "reverse audio",
+    "karaoke vocal remover",
+  ],
+  category: "A little know-how",
+  readingTime: "4 min read",
+  image: "/images/audio-speed-guide.svg",
+  imageAlt:
+    "A waveform stretched shorter at 1.25 times, the same notes, beside chips for the speed and a slider for the pitch",
+  tool: "change-audio-speed",
+  intro:
+    "A lecture to get through faster, a solo to learn slowly, a song to sing a tone lower. Playing a file faster as a tape does raises its pitch; keeping the notes where they are means rebuilding the sound, and doing it on your own device means no upload and no waiting in a queue.",
+  sections: [
+    {
+      id: "how",
+      title: "How to change the speed.",
+      paragraphs: [
+        "Open Change audio speed and drop your files. Choose a speed from half to twice as fast; with Keep the pitch on, the notes stay where they are. The file is written in its own format unless you choose another, checked, and ready to download.",
+      ],
+      links: [
+        {
+          label: "Open Change audio speed",
+          href: "/dashboard/change-audio-speed/",
+        },
+      ],
+    },
+    {
+      id: "how-it-works",
+      title: "How the pitch stays put.",
+      paragraphs: [
+        "The sound is cut into overlapping pieces of 40 milliseconds and laid out again closer together (faster) or further apart (slower). Each piece is taken from where its waveform best matches the one before it, so they join without a beat: the method is called WSOLA. Speech and most music sound natural up to about one and a half times; at the extremes a little flutter can be heard.",
+        "To change the pitch and keep the length, the sound is stretched by the pitch's ratio and then played faster or slower by it, up or down by up to an octave. With Keep the pitch off, the file plays as a tape would: faster is higher.",
+      ],
+    },
+    {
+      id: "more",
+      title: "Backwards, karaoke and the channels.",
+      paragraphs: [
+        "The same page plays a file backwards, swaps its left and right, puts one side in both ears or sets the balance. Karaoke takes away what is in the middle of a stereo mix, where the voice often is, and keeps the bass. It is not a real vocal remover: it works on some songs, and takes away anything else in the middle too.",
+      ],
+    },
+    {
+      id: "private",
+      title: "On your device.",
+      paragraphs: [
+        "Files are read and written in your browser and never uploaded. There is no account and no limit on how many you change.",
+      ],
+      links: [
+        {
+          label: "Every KeepSimp tool in one place",
+          href: "/blog/free-online-tools-no-upload/",
+        },
+      ],
+    },
+  ],
+  sources: [
+    {
+      title: "Audio time stretching and pitch scaling, Wikipedia",
+      url: "https://en.wikipedia.org/wiki/Audio_time_stretching_and_pitch_scaling",
+    },
+    {
+      title:
+        "Verhelst and Roelands, an overlap-add technique based on waveform similarity (WSOLA), ICASSP 1993",
+      url: "https://ieeexplore.ieee.org/document/319366",
     },
   ],
 }

@@ -128,6 +128,7 @@ export type AudioMode =
   | "booster"
   | "splitter"
   | "joiner"
+  | "speed"
 
 /** What the waveform editor is opened for, in each mode; none where it waits to be asked for. */
 const EDITING: Record<AudioMode, EditorFocus | null> = {
@@ -140,6 +141,7 @@ const EDITING: Record<AudioMode, EditorFocus | null> = {
   booster: null,
   splitter: "edit",
   joiner: null,
+  speed: null,
 }
 
 const INPUT_ID = "audio-file"
@@ -188,6 +190,14 @@ const COPY: Record<AudioMode, DropZoneCopy> = {
     dropping: "Drop to normalize these files",
     body: "Each file is measured and brought to the same loudness (−14 LUFS for Spotify, or another target), with peaks kept under −1 dBTP. Many at once, on your device. You can also paste with ⌘V or Ctrl+V.",
     inputLabel: "Choose audio files to normalize",
+    action: "Choose files",
+    limits: `Stays on your device · up to ${MAX_FILES} files at once`,
+  },
+  speed: {
+    heading: "Drop audio to speed up or slow down",
+    dropping: "Drop to change these files' speed",
+    body: "Faster or slower keeping the pitch, the pitch up or down keeping the length, or both; also backwards, karaoke and the channels swapped. On your device. You can also paste with ⌘V or Ctrl+V.",
+    inputLabel: "Choose audio files to change",
     action: "Choose files",
     limits: `Stays on your device · up to ${MAX_FILES} files at once`,
   },
@@ -273,6 +283,7 @@ const FOCUSED: Partial<Record<AudioMode, string>> = {
   booster: "opened for making sound louder",
   splitter: "opened for splitting",
   joiner: "opened for joining files",
+  speed: "opened for changing speed and pitch",
 }
 
 const SAMPLES: Record<AudioMode, { name: string; type: string }[]> = {
@@ -294,6 +305,7 @@ const SAMPLES: Record<AudioMode, { name: string; type: string }[]> = {
     { name: "keepsimp-tune.flac", type: "audio/flac" },
     { name: "keepsimp-clip.mp4", type: "video/mp4" },
   ],
+  speed: [{ name: "keepsimp-tune.flac", type: "audio/flac" }],
 }
 
 /** The format each mode writes at first. */
@@ -307,6 +319,7 @@ const FIRST_FORMAT: Record<AudioMode, AudioSettings["format"]> = {
   booster: "same",
   splitter: "same",
   joiner: "mp3",
+  speed: "same",
 }
 
 /** How loud results are at first in each mode. */
@@ -419,7 +432,9 @@ function resultOf(
   written: Written,
   base: string,
   duration: number,
-  settings: AudioSettings
+  settings: AudioSettings,
+  /** `duration` is already at the speed written (a joined file). */
+  atSpeed = false
 ): AudioResult {
   const format = writtenFormats[plan.format]
   const blob = new Blob([written.bytes as BlobPart], { type: format.mime })
@@ -440,7 +455,8 @@ function resultOf(
     problems: written.heard
       ? checkResult(
           {
-            duration,
+            // As long as the sound, at the speed it was written at.
+            duration: atSpeed ? duration : duration / settings.changes.tempo,
             sampleRate: plan.sampleRate,
             channels: plan.channels,
             copy: plan.copy,
@@ -474,6 +490,10 @@ export function AudioWorkspace({ mode = "editor" }: { mode?: AudioMode }) {
     ...defaultSettings,
     format: FIRST_FORMAT[mode],
     level: { ...defaultSettings.level, ...FIRST_LEVEL[mode] },
+    changes:
+      mode === "speed"
+        ? { ...defaultSettings.changes, tempo: 1.25 }
+        : defaultSettings.changes,
   }))
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
@@ -622,7 +642,8 @@ export function AudioWorkspace({ mode = "editor" }: { mode?: AudioMode }) {
           message.written,
           `${baseName(first.file.name)}-joined`,
           want.length,
-          want.settings
+          want.settings,
+          true
         )
         setJoined((had) =>
           had.wanted?.key === message.key
@@ -723,9 +744,13 @@ export function AudioWorkspace({ mode = "editor" }: { mode?: AudioMode }) {
         plan,
         level: want.settings.level,
         sound: want.settings.sound,
+        changes: want.settings.changes,
         joining: want.joining,
         tags: want.settings.keepTags ? tagsOf(first) : undefined,
-        chapters: want.chapters && holdsChapters(plan.format),
+        chapters:
+          want.chapters &&
+          !want.settings.changes.reverse &&
+          holdsChapters(plan.format),
         key: want.key,
       }
     },
@@ -787,6 +812,7 @@ export function AudioWorkspace({ mode = "editor" }: { mode?: AudioMode }) {
       keepTags: settings.keepTags,
       level: settings.level,
       sound: settings.sound,
+      changes: settings.changes,
       tags: decoded ? tagsOf(facts) : undefined,
       edits,
     }
@@ -1139,8 +1165,11 @@ export function AudioWorkspace({ mode = "editor" }: { mode?: AudioMode }) {
   const splits = mode === "editor" || mode === "splitter"
   // The files that can be joined, in the list's order, as edited.
   const joinable = items.filter((one) => one.status === "ready" && one.facts)
-  const joinLengths = joinable.map((one) =>
-    lengthOf(editedBy(one.facts!.duration, stepsOf(one)))
+  // As long as each will be, once its speed is changed.
+  const joinLengths = joinable.map(
+    (one) =>
+      lengthOf(editedBy(one.facts!.duration, stepsOf(one))) /
+      settings.changes.tempo
   )
   const joinLength = startsOf(
     joinLengths,
@@ -1512,6 +1541,7 @@ export function AudioWorkspace({ mode = "editor" }: { mode?: AudioMode }) {
             onChapters={setChapters}
             holdsChapters={
               !problem &&
+              !settings.changes.reverse &&
               holdsChapters(joinPlan(joinable, settings, joinLength).format)
             }
             onMove={(id, by) => dispatch({ type: "move", id, by })}

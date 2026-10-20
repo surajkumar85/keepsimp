@@ -136,6 +136,7 @@ async function convert(job: ConvertJob | SplitJob, stop: AbortController) {
           edits,
           level: job.level,
           sound: job.sound,
+          changes: job.changes,
           tags:
             job.tags ??
             (wav.tags
@@ -250,6 +251,7 @@ async function joined(job: JoinJob, stop: AbortController) {
         joining: job.joining,
         level: job.level,
         sound: job.sound,
+        changes: job.changes,
         tags: job.tags,
         chapters: job.chapters,
         signal: stop.signal,

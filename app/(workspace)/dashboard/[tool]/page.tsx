@@ -16,6 +16,7 @@ import {
   BoosterTutorial,
   SplitterTutorial,
   JoinerTutorial,
+  SpeedTutorial,
 } from "@/components/audio/tutorial"
 import { AnimationConverterTutorial } from "@/components/animation-converter/tutorial"
 import { ImageCompressor } from "@/components/image-compressor/image-compressor"
@@ -108,6 +109,12 @@ export async function generateMetadata({
     return pageMetadata(
       "Normalize audio loudness online: −14 LUFS, free",
       "Bring audio files to the same loudness in your browser: −14 LUFS for Spotify, −16 for podcasts, −23 for broadcast, measured as ITU-R BS.1770 does, with a true-peak limiter. No account, no file uploads.",
+      `/dashboard/${id}/`
+    )
+  if (id === "change-audio-speed")
+    return pageMetadata(
+      "Change audio speed and pitch online for free",
+      "Speed up or slow down MP3, M4A, WAV and more without changing the pitch, or change the pitch keeping the length, in your browser. Also reverse and karaoke. No account, no file uploads.",
       `/dashboard/${id}/`
     )
   if (id === "join-audio")
@@ -302,6 +309,8 @@ export default async function ToolPage({
         <AudioWorkspace mode="splitter" />
       ) : id === "join-audio" ? (
         <AudioWorkspace mode="joiner" />
+      ) : id === "change-audio-speed" ? (
+        <AudioWorkspace mode="speed" />
       ) : id === "pdf-merger" ? (
         <PdfMerger />
       ) : id === "pdf-splitter" ? (
@@ -359,6 +368,8 @@ export default async function ToolPage({
         <SplitterTutorial />
       ) : id === "join-audio" ? (
         <JoinerTutorial />
+      ) : id === "change-audio-speed" ? (
+        <SpeedTutorial />
       ) : id === "audio-extractor" ? (
         <AudioExtractorTutorial />
       ) : id === "pdf-merger" ? (

@@ -4,6 +4,7 @@ import { MOST_LOUDER, MOST_RAISE, TARGETS } from "@/lib/audio/level"
 import { COMPRESSORS } from "@/lib/audio/dynamics"
 import { LOOKAHEAD, RELEASE } from "@/lib/audio/limiter"
 import { MOST_PARTS } from "@/lib/audio/split"
+import { FASTEST, MOST_PITCH, SLOWEST } from "@/lib/audio/change"
 import { CROSSFADES, GAPS } from "@/lib/audio/join"
 import {
   KEPT_EDGE,
@@ -253,6 +254,32 @@ const combining: TutorialContent["options"] = [
   },
 ]
 
+const timing: TutorialContent["options"] = [
+  {
+    term: "Speed, keeping the pitch",
+    detail: `From ${SLOWEST} to ${FASTEST} times as fast. The sound is rebuilt from short overlapping pieces (WSOLA: 40 ms, each placed where its waveform best matches the one before), so the notes stay where they are. Speech and most music sound natural up to about 1.5 times; much faster or slower, a little flutter can be heard.`,
+  },
+  {
+    term: "Pitch, keeping the length",
+    detail: `Up or down by up to ${MOST_PITCH} semitones (an octave): the sound is stretched by the pitch's ratio and then played faster or slower by it. Voices move with the music, so a large change sounds less natural.`,
+  },
+  {
+    term: "Tape speed",
+    detail:
+      "With Keep the pitch off, faster is higher and slower is lower, as a tape or a record plays: the sound is resampled, nothing else is done to it, and nothing above the new top frequency folds back.",
+  },
+  {
+    term: "Channels",
+    detail:
+      "Swap left and right, put one side in both ears, or set the balance. Karaoke takes away what is in the middle of a stereo mix, where the voice often is, keeping the bass under 150 Hz: it is not a real vocal remover, works on some songs only and takes away anything else in the middle too. A mono result has no channels to change, and the page says so.",
+  },
+  {
+    term: "Backwards",
+    detail:
+      "The whole sound, from its end to its start. It is kept while it is written (as blobs the browser may hold on disk), so very long files need room. A joined file is reversed as a whole and gets no chapters.",
+  },
+]
+
 const editing: TutorialContent["options"] = [
   {
     term: "Choosing a part",
@@ -318,6 +345,7 @@ const editor: TutorialContent = {
     ...silencing,
     ...splitting,
     ...combining,
+    ...timing,
     ...leveling,
     ...shaping,
     ...options,
@@ -530,4 +558,35 @@ const joiner: TutorialContent = {
 
 export function JoinerTutorial() {
   return <ToolTutorial content={joiner} />
+}
+
+const speeding: TutorialContent = {
+  name: "How to change the speed or pitch of audio with KeepSimp",
+  description:
+    "Speed up or slow down audio without changing its pitch, or change the pitch keeping the length, in your browser. Also tape speed, backwards and karaoke. Nothing is uploaded.",
+  intro: "Follow the steps below. Every option is explained underneath.",
+  steps: [
+    {
+      title: "Add your files",
+      text: "Drop them, choose them or paste them: MP3, M4A, Opus, FLAC, WAV, AIFF or videos.",
+    },
+    {
+      title: "Choose the speed",
+      text: "1.25 times is chosen for you; 0.5 to 2. Keep the pitch on to keep the notes where they are.",
+    },
+    {
+      title: "Or the pitch",
+      text: "Up or down by up to 12 semitones, keeping the length; or backwards, karaoke and the channels.",
+    },
+    {
+      title: "Listen and download",
+      text: "Each file is written in its own format unless you choose another, checked and ready to download.",
+    },
+  ],
+  options: [...timing, ...options],
+  guideHref: "/blog/change-audio-speed-and-pitch/",
+}
+
+export function SpeedTutorial() {
+  return <ToolTutorial content={speeding} />
 }

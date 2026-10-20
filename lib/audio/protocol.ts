@@ -4,6 +4,7 @@ import type { Step } from "./edits"
 import type { Level, LevelResult } from "./level"
 import type { LoudnessMap } from "./loudness"
 import type { SoundSettings } from "./sound"
+import type { Changes } from "./change"
 import type { Container } from "./formats"
 import type { ReadFacts } from "./mediabunny-audio"
 import type { Peaks } from "./peaks"
@@ -37,6 +38,8 @@ export interface ConvertJob {
   level: Level
   /** The equaliser and compressor. */
   sound: SoundSettings
+  /** Speed, pitch, direction and channels. */
+  changes: Changes
   /** Names the settings and edits, so a late result can be told from a current one. */
   key: string
 }
@@ -70,6 +73,7 @@ export interface JoinJob {
   plan: Plan
   level: Level
   sound: SoundSettings
+  changes: Changes
   joining: Joining
   tags?: MetadataTags
   chapters: boolean

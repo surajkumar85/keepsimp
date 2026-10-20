@@ -223,6 +223,12 @@ const cards = [
     "/images/audio-join-guide.svg",
   ],
   [
+    "change-audio-speed-and-pitch",
+    "Faster or slower, the notes where they were.",
+    "Speed, pitch, reverse and karaoke, on your device.",
+    "/images/audio-speed-guide.svg",
+  ],
+  [
     "gapless-mp3-and-aac",
     "Why a converted MP3 starts late, and ours does not.",
     "Gapless MP3 and AAC, checked before download.",

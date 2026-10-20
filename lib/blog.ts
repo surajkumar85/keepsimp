@@ -604,6 +604,7 @@ export const posts: readonly BlogPost[] = [
   boostPost,
   splitPost,
   joinPost,
+  speedPost,
   gaplessPost,
   {
     slug: "format-json-without-losing-precision",
@@ -715,6 +716,7 @@ import {
   boostPost,
   splitPost,
   joinPost,
+  speedPost,
   gaplessPost,
   overviewPost,
   resizePost,

@@ -9,6 +9,14 @@ import {
   writtenFormats,
   type OutputFormat,
 } from "@/lib/audio/formats"
+import {
+  FASTEST,
+  MOST_PITCH,
+  SLOWEST,
+  TEMPOS,
+  type ChannelChange,
+  type Changes,
+} from "@/lib/audio/change"
 import { COMPRESSORS, type CompressorPreset } from "@/lib/audio/dynamics"
 import { rateLabel } from "@/lib/audio/labels"
 import {
@@ -119,6 +127,13 @@ export function SettingsPanel({
       <LevelSection
         level={settings.level}
         update={(change) => update({ level: { ...settings.level, ...change } })}
+      />
+
+      <ChangesSection
+        changes={settings.changes}
+        update={(change) =>
+          update({ changes: { ...settings.changes, ...change } })
+        }
       />
 
       <SoundSection
@@ -571,6 +586,153 @@ function SoundSection({
           loudness is left as it is.
         </p>
       )}
+    </Section>
+  )
+}
+
+const CHANNEL_CHANGES: { value: ChannelChange; label: string }[] = [
+  { value: "same", label: "As they are" },
+  { value: "swap", label: "Swap left and right" },
+  { value: "left", label: "Left only" },
+  { value: "right", label: "Right only" },
+  { value: "karaoke", label: "Karaoke" },
+]
+
+const CHANNEL_HINTS: Record<ChannelChange, string> = {
+  same: "Each channel stays where it is.",
+  swap: "What was on the left is on the right, and the other way round.",
+  left: "The left channel, in both ears.",
+  right: "The right channel, in both ears.",
+  karaoke:
+    "Takes away what is in the middle of a stereo mix, where the voice often is, and keeps the bass. It is not a real vocal remover: it works on some songs only, and takes away anything else in the middle too.",
+}
+
+const times = (tempo: number) =>
+  `${tempo.toLocaleString("en", { maximumFractionDigits: 2 })}×`
+
+/** Speed, pitch, direction and channels. */
+function ChangesSection({
+  changes,
+  update,
+}: {
+  changes: Changes
+  update: (change: Partial<Changes>) => void
+}) {
+  const ids = useId()
+  const listed =
+    (TEMPOS as readonly number[]).includes(changes.tempo) || changes.tempo === 1
+  const [own, setOwn] = useState(!listed)
+  const [text, setText] = useState(String(changes.tempo))
+  const preset = own ? "custom" : String(changes.tempo)
+  const balance = Math.round(changes.balance * 100)
+  return (
+    <Section title="Speed, pitch and channels">
+      <ChoiceChips
+        label="Speed"
+        value={preset}
+        onValueChange={(value) => {
+          setOwn(value === "custom")
+          if (value === "custom")
+            update({ tempo: Number(text.replace(",", ".")) })
+          else update({ tempo: Number(value) })
+        }}
+        options={[
+          ...[0.5, 0.75, 0.9, 1, 1.1, 1.25, 1.5, 2].map((tempo) => ({
+            value: String(tempo),
+            label: tempo === 1 ? "Normal" : times(tempo),
+          })),
+          { value: "custom", label: "Custom" },
+        ]}
+      />
+      {preset === "custom" && (
+        <NumberField
+          id={`${ids}-tempo`}
+          label="Times as fast"
+          value={text}
+          hint={`From ${SLOWEST} to ${FASTEST}: 1.2 is a fifth faster, 0.8 a fifth slower.`}
+          onChange={(value) => {
+            setText(value)
+            update({ tempo: Number(value.replace(",", ".")) })
+          }}
+        />
+      )}
+      <ToggleRow
+        label="Keep the pitch"
+        hint={
+          changes.keepPitch
+            ? "The speed changes and the notes stay where they are."
+            : "As a tape or a record does: faster is higher, slower is lower."
+        }
+        checked={changes.keepPitch}
+        onCheckedChange={(keepPitch) => update({ keepPitch })}
+      />
+      {changes.keepPitch && (
+        <div>
+          <div className="mb-1 flex justify-between text-sm">
+            <label htmlFor={`${ids}-pitch`} className="font-medium">
+              Pitch
+            </label>
+            <span className="font-mono text-muted-foreground">
+              {changes.pitch === 0
+                ? "As it is"
+                : `${changes.pitch > 0 ? "+" : "−"}${Math.abs(changes.pitch)} ${Math.abs(changes.pitch) === 1 ? "semitone" : "semitones"}`}
+            </span>
+          </div>
+          <input
+            id={`${ids}-pitch`}
+            type="range"
+            min={-MOST_PITCH}
+            max={MOST_PITCH}
+            step={1}
+            value={changes.pitch}
+            onChange={(event) => update({ pitch: Number(event.target.value) })}
+            aria-describedby={`${ids}-pitch-hint`}
+            className="h-11 w-full accent-primary md:h-9"
+          />
+          <p id={`${ids}-pitch-hint`} className="text-xs text-muted-foreground">
+            Up or down by up to an octave (12 semitones), keeping the length.
+          </p>
+        </div>
+      )}
+      <ChoiceChips
+        label="Channels"
+        value={changes.channels}
+        onValueChange={(channels) => update({ channels })}
+        options={CHANNEL_CHANGES}
+        hint={CHANNEL_HINTS[changes.channels]}
+      />
+      <div>
+        <div className="mb-1 flex justify-between text-sm">
+          <label htmlFor={`${ids}-balance`} className="font-medium">
+            Balance
+          </label>
+          <span className="font-mono text-muted-foreground">
+            {balance === 0
+              ? "Centre"
+              : balance < 0
+                ? `Left ${-balance}%`
+                : `Right ${balance}%`}
+          </span>
+        </div>
+        <input
+          id={`${ids}-balance`}
+          type="range"
+          min={-100}
+          max={100}
+          step={5}
+          value={balance}
+          onChange={(event) =>
+            update({ balance: Number(event.target.value) / 100 })
+          }
+          className="h-11 w-full accent-primary md:h-9"
+        />
+      </div>
+      <ToggleRow
+        label="Play backwards"
+        hint="The whole sound, from its end to its start."
+        checked={changes.reverse}
+        onCheckedChange={(reverse) => update({ reverse })}
+      />
     </Section>
   )
 }

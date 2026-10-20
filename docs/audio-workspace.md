@@ -1,6 +1,6 @@
 # Audio workspace
 
-Updated 15 October 2026. Applies to `/dashboard/audio-editor/` and its doors. The workspace is built in eight phases (the plan is at the end). **Phases 1 to 4 are built:** converting and taking sound out of videos, many files at once, each file checked before it is offered; the waveform editor, with trimming, cutting, silence, fades, volume and ringtones, as steps that can be undone; loudness: measured, normalised to a target or a peak, or made louder, under a true-peak limiter; an equaliser and a compressor; silence trimmed at the ends and long pauses shortened; and splitting a file into parts and joining files into one, with chapters.
+Updated 15 October 2026. Applies to `/dashboard/audio-editor/` and its doors. The workspace is built in eight phases (the plan is at the end). **Phases 1 to 5 are built:** converting and taking sound out of videos, many files at once, each file checked before it is offered; the waveform editor, with trimming, cutting, silence, fades, volume and ringtones, as steps that can be undone; loudness: measured, normalised to a target or a peak, or made louder, under a true-peak limiter; an equaliser and a compressor; silence trimmed at the ends and long pauses shortened; splitting a file into parts and joining files into one, with chapters; and speed, pitch, direction and channels.
 
 ## What it does (phase 1)
 
@@ -58,6 +58,16 @@ Every choice made for the person (a rate a codec cannot hold, a mix-down, a capp
 - Doors: Audio splitter (`/dashboard/split-audio/`, the editor open with the split panel) and Join audio (`/dashboard/join-audio/`, MP3 at first).
 - Tests: `split.test.ts`, `join.test.ts` (100%); `chapters.node.test.ts` (FFmpeg-made MP3s and M4As, moov before or after the sound, read by FFprobe, decoded unchanged); `join.node.test.ts` (straight joins sample for sample, a gap of silence, a crossfade's length, an MP3 of exactly its length with two chapters, two loudnesses matched); `e2e/audio-join.spec.ts` (equal parts and a ZIP, markers with the keys, joining with chapters, reordered, crossfaded and normalised, on five profiles).
 
+## Speed, pitch and channels (phase 5)
+
+- **Tempo, keeping the pitch** (`lib/audio/stretch.ts`): WSOLA (Verhelst and Roelands, 1993) with 40 ms periodic Hann frames half a frame apart, each taken from within ±12 ms of where the tempo puts it, at the start whose first half best matches the natural continuation of the last frame (normalised cross-correlation of the channels summed, every fourth place on every fourth frame, then each place around the best). The channels share every choice. Before the first frame the sound counts as itself, so it starts at full level. It streams, holding a few frames; matching and adding read the held arrays directly, which made it six times faster (0.26 s a minute of stereo on a laptop).
+- **Pitch, keeping the length**: stretched by tempo over the pitch's ratio, then resampled by the ratio (`lib/audio/resample.ts`: a Kaiser-windowed sinc, 16 zero crossings, β 8, from a table at 1/512 of a frame, its cutoff lowered when speeding up so nothing folds back). ±12 semitones. **Tape speed** (Keep the pitch off) only resamples.
+- **Channels**: swap, left or right in both, balance (each side at most full), and karaoke: the side of a stereo mix ((L − R) / 2, and its negative on the right) plus the middle under 150 Hz, so the bass stays. The page says it is not a real vocal remover. A mono result says its channels are not changed; a mono file says karaoke would leave only the bass.
+- `Changer` (`lib/audio/change.ts`) runs channels, then stretching, then resampling, after the equaliser and compressor and before the gain and limiter, in every pass (the measuring one too). It gives exactly the input's frames over the tempo (`framesAfter`), cut or made up with silence; lengths, gapless headers, Opus ends, edit lists, the check, joins and chapters all use the changed length.
+- **Backwards** needs the whole sound, so it goes through the joining engine: what the joiner lets out is kept as blobs of interleaved floats (which the browser may keep on disk) and then given out from the last, each blob reversed, to the limiter, meter and encoder. A joined file is reversed as a whole and gets no chapters. Reversing a WAV gives every sample of the file, last first.
+- Door: Change audio speed (`/dashboard/change-audio-speed/`, 1.25 times at first).
+- Tests: `change.test.ts` (tempo at 0.5, 0.8, 1.25 and 2 keeps a 440 Hz tone and gives the exact length, pitch up an octave and down a fifth, both at once, tape, no aliasing, channels, karaoke keeping bass and removing the middle; 100% with `stretch.ts` and `resample.ts`); `change.node.test.ts` (FFmpeg reads the lengths and notes, a reverse and a swap sample for sample); `e2e/audio-speed.spec.ts` (five profiles).
+
 ## How it is built
 
 - **Mediabunny** (already used by the animation converter) reads and writes every container, decodes and encodes through WebCodecs, copies tracks, resamples and remixes, and reads and writes tags. Only `lib/audio/mediabunny-audio.ts` touches it, and it is handed the library, so the same code runs in the worker and in Node.
@@ -109,7 +119,7 @@ Each result is opened again and decoded from start to end (`hearAudio`, with the
 2. **The waveform editor:** trim, cut, silence, fades, volume, as steps with undo; ringtone presets. Doors: Audio trimmer, Ringtone maker. Built (splitting moves to phase 4).
 3. **Loudness and dynamics:** BS.1770-5 meter, normalising to named targets with a true-peak limiter, volume boost, compressor, equaliser, silence trimming. Doors: Normalize audio, Volume booster. Built.
 4. **Joining and splitting.** Doors: Join audio, Audio splitter. Built.
-5. **Speed, pitch and channels,** reverse, karaoke (said to be what it is). Door: Change audio speed.
+5. **Speed, pitch and channels,** reverse, karaoke (said to be what it is). Door: Change audio speed. Built.
 6. **Noise reduction and repair:** RNNoise, hum, rumble, clicks, sibilance. Door: Remove background noise.
 7. **Recording and tags.** Doors: Voice recorder, Edit audio tags.
 8. **Words and pictures:** transcription with Whisper on the device, a spectrogram, audio to video. Doors: Transcribe audio, Audio to video.
