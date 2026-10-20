@@ -257,6 +257,31 @@ describe("checkResult", () => {
     expect(lengthTolerance({ ...expected, copy: true })).toBe(0.25)
   })
 
+  it("holds a normalised result to its loudness, and a lossless one to its ceiling", () => {
+    const heard = (integrated: number, truePeak: number) => ({
+      duration: 10,
+      sampleRate: 44100,
+      channels: 2,
+      peak: 0.5,
+      loudness: { integrated, truePeak },
+    })
+    const asked = { ...expected, loudness: -14, ceiling: -1 }
+    expect(checkResult(asked, heard(-14.6, -1.1))).toEqual([])
+    expect(checkResult(asked, heard(-15.4, -1.1))).toEqual([
+      "It measures −15.4 LUFS, not −14.",
+    ])
+    expect(checkResult(asked, heard(-14, -0.5))).toEqual([
+      "Its peaks reach −0.5 dBTP, over −1.",
+    ])
+    // Not normalised, or lossy: only what was asked is held.
+    expect(
+      checkResult({ ...expected, loudness: null, ceiling: null }, heard(-30, 0))
+    ).toEqual([])
+    expect(checkResult(asked, { ...heard(0, 0), loudness: undefined })).toEqual(
+      []
+    )
+  })
+
   it("says each way a result is not as asked", () => {
     expect(
       checkResult(expected, {

@@ -11,6 +11,15 @@ import {
 } from "@/lib/audio/formats"
 import { rateLabel } from "@/lib/audio/labels"
 import {
+  dbLabel,
+  LOUDEST_TARGET,
+  MOST_LOUDER,
+  QUIETEST_TARGET,
+  TARGETS,
+  type Level,
+  type LevelMode,
+} from "@/lib/audio/level"
+import {
   BITRATES,
   PRESET_BITRATES,
   RATE_CHOICES,
@@ -94,6 +103,11 @@ export function SettingsPanel({
           hint={FORMAT_HINTS[settings.format]}
         />
       </Section>
+
+      <LevelSection
+        level={settings.level}
+        update={(change) => update({ level: { ...settings.level, ...change } })}
+      />
 
       {codec && (
         <Section title="Quality">
@@ -272,6 +286,162 @@ export function SettingsPanel({
           {problem}
         </p>
       )}
+    </div>
+  )
+}
+
+const LEVEL_MODES: { value: LevelMode; label: string }[] = [
+  { value: "same", label: "As it is" },
+  { value: "loudness", label: "Normalize loudness" },
+  { value: "peak", label: "Normalize peaks" },
+  { value: "louder", label: "Make louder" },
+]
+
+const LEVEL_HINTS: Record<LevelMode, string> = {
+  same: "Each file keeps its own level.",
+  loudness:
+    "Each file is measured as it will be written (ITU-R BS.1770) and made louder or quieter to reach the loudness chosen, so files played together sound as loud as each other. A limiter keeps peaks under the ceiling.",
+  peak: "Each file is made louder or quieter so its highest peak, between samples too, reaches the level chosen. Its loudness is not matched to other files.",
+  louder:
+    "Each file is made louder by the amount chosen; a limiter lowers only the loudest moments, so nothing goes over the ceiling and nothing clips.",
+}
+
+const CEILINGS = [-0.1, -1, -2, -3]
+
+/** How loud each result is to be. */
+function LevelSection({
+  level,
+  update,
+}: {
+  level: Level
+  update: (change: Partial<Level>) => void
+}) {
+  const ids = useId()
+  // Custom stays chosen even when its figure is one of the targets.
+  const [ownTarget, setOwnTarget] = useState(
+    !TARGETS.some((target) => target.lufs === level.target)
+  )
+  const preset = ownTarget ? "custom" : String(level.target)
+  const [custom, setCustom] = useState(String(level.target))
+  const [peak, setPeak] = useState(String(level.ceiling))
+  const [louder, setLouder] = useState(String(level.louder))
+  const number = (text: string) => {
+    const value = Number(text.replace("−", "-").replace(",", "."))
+    return text.trim() === "" ? NaN : value
+  }
+  return (
+    <Section title="Loudness">
+      <ChoiceChips
+        label="Loudness"
+        hideLabel
+        value={level.mode}
+        onValueChange={(mode) => update({ mode })}
+        options={LEVEL_MODES}
+        hint={LEVEL_HINTS[level.mode]}
+      />
+      {level.mode === "loudness" && (
+        <>
+          <ChoiceChips
+            label="Loudness to reach"
+            value={preset}
+            onValueChange={(value) => {
+              setOwnTarget(value === "custom")
+              if (value === "custom") update({ target: number(custom) })
+              else update({ target: Number(value) })
+            }}
+            options={[
+              ...TARGETS.map((target) => ({
+                value: String(target.lufs),
+                label: `${target.label} · ${target.for}`,
+              })),
+              { value: "custom", label: "Custom" },
+            ]}
+          />
+          {preset === "custom" && (
+            <NumberField
+              id={`${ids}-target`}
+              label="LUFS"
+              value={custom}
+              hint={`From ${dbLabel(QUIETEST_TARGET)} to ${dbLabel(LOUDEST_TARGET)}.`}
+              onChange={(text) => {
+                setCustom(text)
+                update({ target: number(text) })
+              }}
+            />
+          )}
+        </>
+      )}
+      {level.mode === "louder" && (
+        <NumberField
+          id={`${ids}-louder`}
+          label="How much louder, in dB"
+          value={louder}
+          hint={`Up to ${MOST_LOUDER} dB. 6 dB is about twice as loud in its peaks; 10 dB sounds about twice as loud.`}
+          onChange={(text) => {
+            setLouder(text)
+            update({ louder: number(text) })
+          }}
+        />
+      )}
+      {(level.mode === "loudness" || level.mode === "louder") && (
+        <ChoiceChips
+          label="Peak ceiling"
+          value={String(level.ceiling)}
+          onValueChange={(value) => update({ ceiling: Number(value) })}
+          options={CEILINGS.map((ceiling) => ({
+            value: String(ceiling),
+            label: `${dbLabel(ceiling)} dBTP`,
+          }))}
+          hint="The highest a peak may reach, between samples too. −1 dBTP leaves room for MP3 and AAC encoders, which raise peaks a little."
+        />
+      )}
+      {level.mode === "peak" && (
+        <NumberField
+          id={`${ids}-peak`}
+          label="Highest peak, in dBTP"
+          value={peak}
+          hint="From −9 to 0. −1 leaves room for MP3 and AAC encoders, which raise peaks a little."
+          onChange={(text) => {
+            setPeak(text)
+            update({ ceiling: number(text) })
+          }}
+        />
+      )}
+    </Section>
+  )
+}
+
+/** A labelled field for a number that may be negative. */
+function NumberField({
+  id,
+  label,
+  value,
+  hint,
+  onChange,
+}: {
+  id: string
+  label: string
+  value: string
+  hint: string
+  onChange: (text: string) => void
+}) {
+  return (
+    <div>
+      <label htmlFor={id} className="mb-2 block text-sm font-medium">
+        {label}
+      </label>
+      <Input
+        id={id}
+        inputMode="decimal"
+        autoComplete="off"
+        value={value}
+        aria-describedby={`${id}-hint`}
+        onChange={(event) => onChange(event.target.value)}
+        className="w-32 font-mono"
+      />
+      <p id={`${id}-hint`} className="mt-1 text-xs text-muted-foreground">
+        {hint}
+      </p>
     </div>
   )
 }

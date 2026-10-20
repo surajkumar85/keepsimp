@@ -199,6 +199,18 @@ const cards = [
     "/images/audio-ringtone-guide.svg",
   ],
   [
+    "normalize-audio-loudness",
+    "Every file as loud as the next.",
+    "Loudness to −14 LUFS or any target, on your device.",
+    "/images/audio-normalize-guide.svg",
+  ],
+  [
+    "make-audio-louder",
+    "Louder, without the crackle.",
+    "Boost quiet audio with a limiter, on your device.",
+    "/images/audio-boost-guide.svg",
+  ],
+  [
     "gapless-mp3-and-aac",
     "Why a converted MP3 starts late, and ours does not.",
     "Gapless MP3 and AAC, checked before download.",

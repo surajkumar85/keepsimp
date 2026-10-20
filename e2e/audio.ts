@@ -100,3 +100,22 @@ export async function open(page: Page, files: Upload[], route = EDITOR) {
   await page.locator("#audio-file").setInputFiles(files)
   await settled(page)
 }
+
+/** What FFmpeg's ebur128 filter measures of a file: integrated loudness and true peak. */
+export function loudnessOf(bytes: Uint8Array, name: string) {
+  const path = join(folder, name)
+  writeFileSync(path, bytes)
+  const text = execFileSync(
+    "sh",
+    [
+      "-c",
+      `ffmpeg -hide_banner -nostats -i "${path}" -af ebur128=peak=true -f null - 2>&1`,
+    ],
+    { encoding: "utf8", maxBuffer: 1 << 28 }
+  )
+  const tail = text.slice(text.lastIndexOf("Summary:"))
+  return {
+    integrated: Number(/I:\s+(-?[\d.]+) LUFS/.exec(tail)![1]),
+    truePeak: Number(/True peak:\s+Peak:\s+(-?[\d.]+) dBFS/.exec(tail)![1]),
+  }
+}

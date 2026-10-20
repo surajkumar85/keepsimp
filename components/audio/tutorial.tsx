@@ -1,5 +1,7 @@
 import { ToolTutorial, type TutorialContent } from "@/components/tool-tutorial"
 import { JOIN_FADE, MOST_GAIN } from "@/lib/audio/edits"
+import { MOST_LOUDER, MOST_RAISE, TARGETS } from "@/lib/audio/level"
+import { LOOKAHEAD, RELEASE } from "@/lib/audio/limiter"
 import { RINGTONES } from "@/lib/audio/ringtone"
 import { shortcutGroups } from "@/lib/audio/shortcuts"
 
@@ -139,6 +141,31 @@ const keys = shortcutGroups().map((group) => ({
     .join(" "),
 }))
 
+const leveling: TutorialContent["options"] = [
+  {
+    term: "Normalize loudness",
+    detail: `Each file is measured as it will be written, after its edits, at its new rate and channels, as ITU-R BS.1770 measures loudness (K-weighted, gated), and made louder or quieter to reach the target: ${TARGETS.map((target) => `${target.label} for ${target.for}`).join("; ")}, or one of your own. Files normalized together come out equally loud. A file is made at most ${MOST_RAISE} dB louder.`,
+  },
+  {
+    term: "The limiter and the ceiling",
+    detail: `When a file is made louder, its loudest moments could go over full scale and clip. The limiter looks ${LOOKAHEAD * 1000} ms ahead and lowers the gain smoothly just before them, letting go over ${RELEASE * 1000} ms, so peaks stay under the ceiling, between samples too (true peak). −1 dBTP leaves room for MP3 and AAC encoders, which raise peaks a little. If the ceiling keeps a file from its target, the page says how loud it reached.`,
+  },
+  {
+    term: "Normalize peaks",
+    detail:
+      "Makes each file louder or quieter so its highest true peak reaches the level chosen, with no limiter. Files keep their own loudness, so they will not sound equally loud.",
+  },
+  {
+    term: "Make louder",
+    detail: `Makes each file louder by up to ${MOST_LOUDER} dB, with the limiter. 6 dB doubles the height of the waveform; 10 dB sounds about twice as loud.`,
+  },
+  {
+    term: "Loudness, range and peaks",
+    detail:
+      "The editor shows each file's loudness in LUFS, its loudness range in LU (how much it varies, as EBU Tech 3342 measures it) and its highest true peak in dBTP, for the whole file and for the part chosen, with its short-term loudness drawn under the waveform. The check measures the file written again.",
+  },
+]
+
 const editing: TutorialContent["options"] = [
   {
     term: "Choosing a part",
@@ -199,7 +226,7 @@ const editor: TutorialContent = {
       text: "Each file is written as soon as it is read or edited, and checked. Download one, or everything as one ZIP.",
     },
   ],
-  options: [...editing, ...options],
+  options: [...editing, ...leveling, ...options],
   guideHref: "/blog/trim-audio-without-uploading/",
 }
 
@@ -284,4 +311,66 @@ export function AudioTrimmerTutorial() {
 
 export function RingtoneTutorial() {
   return <ToolTutorial content={ringtones} />
+}
+
+const normalizing: TutorialContent = {
+  name: "How to normalize audio loudness with KeepSimp",
+  description:
+    "Bring audio files to the same loudness in your browser, −14 LUFS for Spotify or another target, with a true-peak limiter. Nothing is uploaded.",
+  intro: "Follow the steps below. Every option is explained underneath.",
+  steps: [
+    {
+      title: "Add your files",
+      text: "Drop them, choose them or paste them: MP3, M4A, Opus, FLAC, WAV, AIFF or videos. Up to 50 at once.",
+    },
+    {
+      title: "Choose the loudness",
+      text: "−14 LUFS for Spotify, −16 for Apple Podcasts, −23 for broadcast, or your own; and the peak ceiling.",
+    },
+    {
+      title: "Let each file be measured",
+      text: "Each is measured as it will be written and made louder or quieter to reach the target; the limiter holds its peaks.",
+    },
+    {
+      title: "Check and download",
+      text: "Each file written is measured again; the page says what it reached. Download one, or all as a ZIP.",
+    },
+  ],
+  options: [...leveling, ...options],
+  guideHref: "/blog/normalize-audio-loudness/",
+}
+
+const boosting: TutorialContent = {
+  name: "How to make audio louder with KeepSimp",
+  description:
+    "Make a quiet recording, song or video's sound louder in your browser, with a limiter so nothing clips. Nothing is uploaded.",
+  intro: "Follow the steps below. Every option is explained underneath.",
+  steps: [
+    {
+      title: "Add the file",
+      text: "Drop it, choose it or paste it: MP3, M4A, Opus, FLAC, WAV, AIFF or a video.",
+    },
+    {
+      title: "Choose how much louder",
+      text: "6 dB is chosen for you; up to 30. The limiter keeps the loudest moments under the ceiling.",
+    },
+    {
+      title: "Listen",
+      text: "The page says how much louder it was made and how much the limiter took off the loudest moments.",
+    },
+    {
+      title: "Download",
+      text: "In the file's own format unless you choose another, checked before you download it.",
+    },
+  ],
+  options: [...leveling, ...options],
+  guideHref: "/blog/make-audio-louder/",
+}
+
+export function NormalizeTutorial() {
+  return <ToolTutorial content={normalizing} />
+}
+
+export function BoosterTutorial() {
+  return <ToolTutorial content={boosting} />
 }

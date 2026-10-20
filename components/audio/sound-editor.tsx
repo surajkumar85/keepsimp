@@ -40,6 +40,7 @@ import {
   lengthOf,
   MOST_GAIN,
   outputAt,
+  piecesOf,
   sourceAt,
   stepProblem,
   stepSaid,
@@ -48,6 +49,14 @@ import {
 } from "@/lib/audio/edits"
 import type { OutputFormat } from "@/lib/audio/formats"
 import { clockLabel, parseClock, timeLabel } from "@/lib/audio/labels"
+import { loudnessSaid } from "@/lib/audio/level"
+import {
+  decibels,
+  loudnessOfParts,
+  SEGMENTS_PER_SECOND,
+  shortTerm,
+  type LoudnessMap,
+} from "@/lib/audio/loudness"
 import type { Peaks } from "@/lib/audio/peaks"
 import { playFrom } from "@/lib/audio/playback"
 import {
@@ -95,6 +104,9 @@ function themeColour(element: Element, name: string) {
   )
 }
 
+/** The quietest the loudness graph shows, in LUFS; its top is 0. */
+const GRAPH_FLOOR = -60
+
 /** A ruler mark's words, as fine as its step. */
 function tickLabel(seconds: number, step: number) {
   if (step >= 1) return timeLabel(seconds)
@@ -127,6 +139,7 @@ export function SoundEditor({
   onRedo,
   onReset,
   onFormat,
+  loudness = null,
 }: {
   name: string
   /** The source's length, in seconds. */
@@ -144,6 +157,8 @@ export function SoundEditor({
   onReset: () => void
   /** Choose the format a ringtone is written in. */
   onFormat: (format: OutputFormat) => void
+  /** The file's loudness, 100 ms at a time, when it has been measured. */
+  loudness?: LoudnessMap | null
 }) {
   const id = useId()
   const steps = useMemo(() => changes.flat(), [changes])
@@ -218,6 +233,52 @@ export function SoundEditor({
       pixels * (typeof window === "undefined" ? 1 : window.devicePixelRatio)
     )
   )
+  // Short-term loudness under the waveform, where the edited sound plays.
+  const series = useMemo(
+    () => (loudness ? shortTerm(loudness) : null),
+    [loudness]
+  )
+  const chart = useRef<HTMLCanvasElement>(null)
+  useEffect(() => {
+    const element = chart.current
+    if (!element || !series) return
+    const ratio = window.devicePixelRatio || 1
+    const width = Math.max(1, Math.round(element.clientWidth * ratio))
+    const height = Math.max(1, Math.round(element.clientHeight * ratio))
+    element.width = width
+    element.height = height
+    const context = element.getContext("2d")
+    if (!context) return
+    context.clearRect(0, 0, width, height)
+    context.fillStyle = themeColour(element, "--primary")
+    for (let x = 0; x < width; x++) {
+      const time = view.from + ((x + 0.5) / width) * (view.to - view.from)
+      const source = sourceAt(edited, time)
+      const segment = Math.min(
+        series.length - 1,
+        Math.floor(source * SEGMENTS_PER_SECOND)
+      )
+      const level = series[segment] + decibels(gainAt(edited, source))
+      if (!(level > GRAPH_FLOOR)) continue
+      const top = height * (Math.min(0, level) / GRAPH_FLOOR)
+      context.fillRect(x, top, 1, height - top)
+    }
+  }, [series, edited, view, pixels])
+
+  // The meter for the part chosen, as measured in the file.
+  const chosen = useMemo(
+    () =>
+      loudness && selection
+        ? loudnessOfParts(
+            loudness,
+            piecesOf(edited, selection.from, selection.to).map(
+              (piece) => [piece.from, piece.to] as const
+            )
+          )
+        : null,
+    [loudness, selection, edited]
+  )
+
   const shown = useMemo(
     () =>
       peaks && length > 0
@@ -833,6 +894,14 @@ export function SoundEditor({
             </span>
           )}
         </div>
+        {series && (
+          <canvas
+            ref={chart}
+            className="h-10 w-full rounded-md border bg-muted/40"
+            aria-hidden="true"
+            data-testid="loudness-graph"
+          />
+        )}
         <p id={hint} className="text-xs text-muted-foreground">
           Drag across the waveform to choose a part, or click to move the
           playhead. On the waveform: Space plays, I and O start and end the part
@@ -944,6 +1013,19 @@ export function SoundEditor({
       >
         {selectionSaid}
       </p>
+      {chosen && (
+        <p
+          className="text-sm text-muted-foreground"
+          data-testid="editor-loudness"
+        >
+          <span className="font-medium text-foreground">
+            Loudness of the selection:
+          </span>{" "}
+          {loudnessSaid(chosen)}
+          {edited.effects.length > 0 &&
+            " (as in the file, before fades and volume changes)"}
+        </p>
+      )}
 
       {focus === "ringtone" && (
         <RingtonePanel

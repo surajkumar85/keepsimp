@@ -36,10 +36,12 @@ async function edited(steps: Step[], format: OutputFormat = "wav") {
   const blob = new Blob([wav])
   const facts = await readAudio(mediabunny, blob, "wav")
   const plan = planFor({ ...defaultSettings, format }, facts, true)
-  return convertAudio(mediabunny, blob, plan, facts, {
-    keepTags: false,
-    edits: steps,
-  })
+  return (
+    await convertAudio(mediabunny, blob, plan, facts, {
+      keepTags: false,
+      edits: steps,
+    })
+  ).bytes
 }
 
 const original = left(wav, "original.wav")

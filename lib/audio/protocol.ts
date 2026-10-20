@@ -1,6 +1,8 @@
 import type { MetadataTags } from "mediabunny"
 import type { Heard } from "./check"
 import type { Step } from "./edits"
+import type { Level, LevelResult } from "./level"
+import type { LoudnessMap } from "./loudness"
 import type { Container } from "./formats"
 import type { ReadFacts } from "./mediabunny-audio"
 import type { Peaks } from "./peaks"
@@ -28,6 +30,8 @@ export interface ConvertJob {
   tags?: MetadataTags
   /** The edits made to the sound, in order. */
   edits: Step[]
+  /** How loud the result is to be. */
+  level: Level
   /** Names the settings and edits, so a late result can be told from a current one. */
   key: string
 }
@@ -42,7 +46,14 @@ export type AudioRequest =
 export type AudioResponse =
   | { type: "facts"; id: string; facts: ReadFacts }
   | { type: "progress"; id: string; key: string; fraction: number }
-  | { type: "done"; id: string; job: "read"; peaks: Peaks | null }
+  | {
+      type: "done"
+      id: string
+      job: "read"
+      peaks: Peaks | null
+      /** The file's loudness, 100 ms at a time. */
+      loudness: LoudnessMap | null
+    }
   | {
       type: "done"
       id: string
@@ -52,6 +63,8 @@ export type AudioResponse =
       plan: Plan
       bytes: Uint8Array
       heard: Heard | null
+      /** What was done to its level, and what it measured. */
+      level: LevelResult | null
     }
   | { type: "open-error"; id: string; message: string }
   | { type: "error"; id: string; key: string; message: string }

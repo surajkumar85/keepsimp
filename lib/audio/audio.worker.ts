@@ -53,7 +53,7 @@ async function read(job: ReadJob, stop: AbortController) {
     if (!stop.signal.aborted) post(message, transfer)
   }
   const mediabunny = await engine()
-  const { readAudio, peaksOf } = await engineFiles()
+  const { readAudio, overviewOf } = await engineFiles()
   let facts
   let file = job.file
   try {
@@ -66,15 +66,22 @@ async function read(job: ReadJob, stop: AbortController) {
     return
   }
   send({ type: "facts", id: job.id, facts })
-  let peaks = null
+  let overview = null
   if (facts.decodable)
     try {
-      peaks = await peaksOf(mediabunny, file, facts, stop.signal)
+      overview = await overviewOf(mediabunny, file, facts, stop.signal)
     } catch {
-      peaks = null
+      overview = null
     }
   if (stop.signal.aborted) send({ type: "abandoned", id: job.id })
-  else send({ type: "done", id: job.id, job: "read", peaks })
+  else
+    send({
+      type: "done",
+      id: job.id,
+      job: "read",
+      peaks: overview?.peaks ?? null,
+      loudness: overview?.loudness ?? null,
+    })
 }
 
 async function convert(job: ConvertJob, stop: AbortController) {
@@ -106,27 +113,34 @@ async function convert(job: ConvertJob, stop: AbortController) {
         ? { ...job.facts, kept: null }
         : job.facts
     let last = 0
-    const bytes = await convertAudio(mediabunny, wav.file, job.plan, facts, {
-      keepTags: job.keepTags,
-      edits: job.edits,
-      tags:
-        job.tags ??
-        (wav.tags
-          ? {
-              title: wav.tags.title,
-              artist: wav.tags.artist,
-              comment: wav.tags.comment,
-            }
-          : undefined),
-      signal: stop.signal,
-      onProgress: (fraction) => {
-        sign = Date.now()
-        // A message for every whole percent is plenty.
-        if (fraction - last < 0.01 && fraction < 1) return
-        last = fraction
-        send({ type: "progress", id: job.id, key: job.key, fraction })
-      },
-    })
+    const { bytes, level } = await convertAudio(
+      mediabunny,
+      wav.file,
+      job.plan,
+      facts,
+      {
+        keepTags: job.keepTags,
+        edits: job.edits,
+        level: job.level,
+        tags:
+          job.tags ??
+          (wav.tags
+            ? {
+                title: wav.tags.title,
+                artist: wav.tags.artist,
+                comment: wav.tags.comment,
+              }
+            : undefined),
+        signal: stop.signal,
+        onProgress: (fraction) => {
+          sign = Date.now()
+          // A message for every whole percent is plenty.
+          if (fraction - last < 0.01 && fraction < 1) return
+          last = fraction
+          send({ type: "progress", id: job.id, key: job.key, fraction })
+        },
+      }
+    )
     if (stop.signal.aborted) {
       send({ type: "abandoned", id: job.id })
       return
@@ -146,6 +160,7 @@ async function convert(job: ConvertJob, stop: AbortController) {
         plan: job.plan,
         bytes,
         heard,
+        level,
       },
       [bytes.buffer as ArrayBuffer]
     )

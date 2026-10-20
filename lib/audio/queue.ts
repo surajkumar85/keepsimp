@@ -7,6 +7,8 @@
 import type { Heard } from "./check"
 import { editsKey, type Step } from "./edits"
 import type { ReadFacts } from "./mediabunny-audio"
+import type { LevelResult } from "./level"
+import type { LoudnessMap } from "./loudness"
 import type { Peaks } from "./peaks"
 import type { Plan } from "./settings"
 
@@ -24,6 +26,8 @@ export interface AudioResult {
   heard: Heard | null
   /** What the check found wrong; empty when the result is as asked. */
   problems: string[]
+  /** What was done to its level; null when it was left as it was. */
+  level?: LevelResult | null
 }
 
 export interface AudioItem {
@@ -32,6 +36,8 @@ export interface AudioItem {
   status: "reading" | "ready" | "error"
   facts?: ReadFacts
   peaks?: Peaks | null
+  /** Its loudness, 100 ms at a time; null when it could not be measured. */
+  loudness?: LoudnessMap | null
   /** The sound as the page decoded it (a WAV), when the worker cannot decode the file. */
   decoded?: Blob
   error?: string
@@ -49,7 +55,12 @@ export interface AudioItem {
 export type AudioAction =
   | { type: "add"; items: { id: string; file: File }[] }
   | { type: "facts"; id: string; facts: ReadFacts }
-  | { type: "peaks"; id: string; peaks: Peaks | null }
+  | {
+      type: "peaks"
+      id: string
+      peaks: Peaks | null
+      loudness?: LoudnessMap | null
+    }
   | { type: "decoded"; id: string; decoded: Blob }
   | { type: "failed"; id: string; message: string }
   | { type: "progress"; id: string; fraction: number }
@@ -95,6 +106,7 @@ export function audioReducer(
       return patch(items, action.id, (item) => ({
         ...item,
         peaks: action.peaks,
+        loudness: action.loudness ?? null,
       }))
     case "decoded":
       return patch(items, action.id, (item) => ({

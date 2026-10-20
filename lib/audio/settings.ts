@@ -6,6 +6,7 @@
  */
 import type { Container, OutputFormat, WrittenFormat } from "./formats"
 import { writtenFormats } from "./formats"
+import { defaultLevel, levelKey, levelProblem, type Level } from "./level"
 import { bitrateForSize, fittedSaid } from "./target-size"
 
 export type Preset = "small" | "balanced" | "high" | "custom"
@@ -25,6 +26,8 @@ export interface AudioSettings {
   keepTags: boolean
   /** Write lossy files no larger than this many bytes; null for no limit. */
   targetBytes: number | null
+  /** How loud each result is to be. */
+  level: Level
 }
 
 export const defaultSettings: AudioSettings = {
@@ -36,6 +39,7 @@ export const defaultSettings: AudioSettings = {
   depth: "same",
   keepTags: true,
   targetBytes: null,
+  level: defaultLevel,
 }
 
 /** The bitrates (kbit/s) offered under Custom, per codec. */
@@ -170,8 +174,10 @@ export function planFor(
     if (kept) {
       format = kept
       const lossless = writtenFormats[kept].lossless
+      const leveled = settings.level.mode !== "same"
       copy =
         !edited &&
+        !leveled &&
         settings.sampleRate === "same" &&
         settings.channels === "same" &&
         (settings.depth === "same" || !lossless) &&
@@ -180,7 +186,9 @@ export function planFor(
         notes.push(
           edited
             ? "The sound is encoded again in its own format, to make the edits."
-            : "The sound is encoded again in its own format, to meet what was chosen."
+            : leveled
+              ? "The sound is encoded again in its own format, to change its loudness."
+              : "The sound is encoded again in its own format, to meet what was chosen."
         )
     } else {
       format = "m4a"
@@ -311,6 +319,8 @@ function wavCodec(settings: AudioSettings, facts: SourceFacts) {
 
 /** Why these settings cannot be used; null when they can. */
 export function settingsProblem(settings: AudioSettings): string | null {
+  const level = levelProblem(settings.level)
+  if (level) return level
   if (settings.targetBytes !== null && !(settings.targetBytes >= 16 * 1024))
     return "Choose a file size limit of at least 16 KB."
   if (
@@ -332,4 +342,5 @@ export const settingsKey = (settings: AudioSettings) =>
     settings.depth,
     settings.keepTags,
     settings.targetBytes,
+    levelKey(settings.level),
   ])

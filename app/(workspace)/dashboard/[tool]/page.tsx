@@ -12,6 +12,8 @@ import {
   AudioExtractorTutorial,
   AudioTrimmerTutorial,
   RingtoneTutorial,
+  NormalizeTutorial,
+  BoosterTutorial,
 } from "@/components/audio/tutorial"
 import { AnimationConverterTutorial } from "@/components/animation-converter/tutorial"
 import { ImageCompressor } from "@/components/image-compressor/image-compressor"
@@ -85,7 +87,7 @@ export async function generateMetadata({
   if (id === "audio-editor")
     return pageMetadata(
       "Free audio editor and converter, with no uploads",
-      "Trim, cut, fade and change the volume of sound; convert MP3, M4A, Opus, FLAC, WAV and AIFF; make ringtones and take the sound out of videos, many files at once, in your browser. Every file is checked before you download it. No account, no uploads.",
+      "Trim, cut, fade and normalize sound to −14 LUFS or another loudness; convert MP3, M4A, Opus, FLAC, WAV and AIFF; make ringtones and take the sound out of videos, many files at once, in your browser. Every file is checked before you download it. No account, no uploads.",
       `/dashboard/${id}/`
     )
   if (id === "audio-converter")
@@ -98,6 +100,18 @@ export async function generateMetadata({
     return pageMetadata(
       "Trim audio online for free: cut MP3, M4A, WAV",
       "Cut a song, voice note or podcast to the part you want, to the millisecond, with fades in and out, in your browser. Every edit can be undone. No account, no file uploads.",
+      `/dashboard/${id}/`
+    )
+  if (id === "normalize-audio")
+    return pageMetadata(
+      "Normalize audio loudness online: −14 LUFS, free",
+      "Bring audio files to the same loudness in your browser: −14 LUFS for Spotify, −16 for podcasts, −23 for broadcast, measured as ITU-R BS.1770 does, with a true-peak limiter. No account, no file uploads.",
+      `/dashboard/${id}/`
+    )
+  if (id === "volume-booster")
+    return pageMetadata(
+      "Increase audio volume online for free, without clipping",
+      "Make a quiet recording, song or video's sound louder in your browser, with a limiter that keeps peaks from clipping. MP3, M4A, WAV and more, no account, no file uploads.",
       `/dashboard/${id}/`
     )
   if (id === "ringtone-maker")
@@ -266,6 +280,10 @@ export default async function ToolPage({
         <AudioWorkspace mode="trimmer" />
       ) : id === "ringtone-maker" ? (
         <AudioWorkspace mode="ringtone" />
+      ) : id === "normalize-audio" ? (
+        <AudioWorkspace mode="normalize" />
+      ) : id === "volume-booster" ? (
+        <AudioWorkspace mode="booster" />
       ) : id === "pdf-merger" ? (
         <PdfMerger />
       ) : id === "pdf-splitter" ? (
@@ -315,6 +333,10 @@ export default async function ToolPage({
         <AudioTrimmerTutorial />
       ) : id === "ringtone-maker" ? (
         <RingtoneTutorial />
+      ) : id === "normalize-audio" ? (
+        <NormalizeTutorial />
+      ) : id === "volume-booster" ? (
+        <BoosterTutorial />
       ) : id === "audio-extractor" ? (
         <AudioExtractorTutorial />
       ) : id === "pdf-merger" ? (

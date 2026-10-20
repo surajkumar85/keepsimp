@@ -1,3 +1,4 @@
+import { defaultLevel } from "./level"
 import { describe, expect, it } from "vitest"
 import {
   bitrateOf,
@@ -115,6 +116,28 @@ describe("planFor", () => {
     expect(plan.notes).toContain(
       "Vorbis cannot be written here, so the sound is written as Opus, which plays wherever Vorbis does."
     )
+  })
+
+  it("encodes sound again in its own format to change its loudness, saying why", () => {
+    const plan = planFor(
+      settings({
+        format: "same",
+        level: { ...defaultLevel, mode: "loudness" },
+      }),
+      song
+    )
+    expect(plan).toMatchObject({ format: "mp3", copy: false })
+    expect(plan.notes).toEqual([
+      "The sound is encoded again in its own format, to change its loudness.",
+    ])
+    expect(
+      settingsProblem(
+        settings({ level: { ...defaultLevel, mode: "louder", louder: 0 } })
+      )
+    ).toBe("Choose how much louder, up to 30 dB.")
+    expect(
+      settingsKey(settings({ level: { ...defaultLevel, mode: "louder" } }))
+    ).not.toBe(settingsKey(settings()))
   })
 
   it("encodes edited sound again in its own format, saying why", () => {

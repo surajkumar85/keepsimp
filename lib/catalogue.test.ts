@@ -16,6 +16,8 @@ describe("doors", () => {
       "audio-extractor",
       "audio-trimmer",
       "ringtone-maker",
+      "normalize-audio",
+      "volume-booster",
       "pdf-annotator",
       "sign-pdf",
       "fill-pdf-form",

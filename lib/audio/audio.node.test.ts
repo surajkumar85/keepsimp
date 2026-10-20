@@ -18,7 +18,7 @@ import {
   convertAudio,
   hearAudio,
   patiently,
-  peaksOf,
+  overviewOf,
   readAudio,
   Stalled,
 } from "./mediabunny-audio"
@@ -105,11 +105,14 @@ describe("reading", () => {
       kept: null,
     })
     expect(facts.duration).toBeCloseTo(0.5, 5)
-    const peaks = await peaksOf(mediabunny, blob(wav), facts)
+    const { peaks, loudness } = await overviewOf(mediabunny, blob(wav), facts)
     expect(peaks.min.length).toBe(2000)
     // A full-scale tone from FFmpeg's sine source peaks at 1/8.
     expect(peakLevel(peaks)).toBeGreaterThan(0.12)
     expect(peakLevel(peaks)).toBeLessThan(0.13)
+    // And its loudness, 100 ms at a time, is measured with it.
+    expect(loudness!.energy.length).toBe(5)
+    expect(loudness!.sampleRate).toBe(22050)
   })
 
   it("reads an AIFF through the WAV it equals, keeping its tags", async () => {
@@ -150,7 +153,7 @@ describe("writing", () => {
       settings({ format: "wav", depth: 24, sampleRate: 44100, channels: 1 }),
       read
     )
-    const bytes = await convertAudio(mediabunny, blob(wav), plan, read, {
+    const { bytes } = await convertAudio(mediabunny, blob(wav), plan, read, {
       keepTags: true,
     })
     const [stream] = probe(bytes, "deep.wav").streams
@@ -179,7 +182,7 @@ describe("writing", () => {
     const read = await facts()
     for (const depth of [16, 24] as const) {
       const plan = planFor(settings({ format: "flac", depth }), read)
-      const bytes = await convertAudio(mediabunny, blob(wav), plan, read, {
+      const { bytes } = await convertAudio(mediabunny, blob(wav), plan, read, {
         keepTags: true,
       })
       const [stream] = probe(bytes, `tone-${depth}.flac`).streams
@@ -217,7 +220,7 @@ describe("writing", () => {
     const plan = planFor(settings({ format: "mp3", preset: "high" }), read)
     // 22.05 kHz is MPEG-2: 160 kbit/s at most.
     expect(plan.bitrate).toBe(160_000)
-    const bytes = await convertAudio(mediabunny, blob(wav), plan, read, {
+    const { bytes } = await convertAudio(mediabunny, blob(wav), plan, read, {
       keepTags: true,
     })
     const [stream] = probe(bytes, "tone.mp3").streams
@@ -236,7 +239,7 @@ describe("writing", () => {
   it("writes M4A with our AAC encoder where the browser has none, with its edit list", async () => {
     const read = await facts()
     const plan = planFor(settings({ format: "m4a" }), read)
-    const bytes = await convertAudio(mediabunny, blob(wav), plan, read, {
+    const { bytes } = await convertAudio(mediabunny, blob(wav), plan, read, {
       keepTags: true,
     })
     const [stream] = probe(bytes, "tone.m4a").streams
@@ -269,22 +272,40 @@ describe("writing", () => {
     const read = await readAudio(mediabunny, blob(titled), "wav")
     expect(read.tags).toMatchObject({ title: "Tone", artist: "Ada" })
     const plan = planFor(settings({ format: "flac" }), read)
-    const kept = await convertAudio(mediabunny, blob(titled), plan, read, {
-      keepTags: true,
-    })
+    const { bytes: kept } = await convertAudio(
+      mediabunny,
+      blob(titled),
+      plan,
+      read,
+      {
+        keepTags: true,
+      }
+    )
     const tags = probe(kept, "kept.flac").format.tags ?? {}
     expect(tags.TITLE ?? tags.title).toBe("Tone")
     expect(tags.ARTIST ?? tags.artist).toBe("Ada")
-    const none = await convertAudio(mediabunny, blob(titled), plan, read, {
-      keepTags: false,
-    })
+    const { bytes: none } = await convertAudio(
+      mediabunny,
+      blob(titled),
+      plan,
+      read,
+      {
+        keepTags: false,
+      }
+    )
     const left = probe(none, "none.flac").format.tags ?? {}
     expect(left.TITLE ?? left.title).toBeUndefined()
     // Given tags replace the file's own (for sound the page decoded).
-    const given = await convertAudio(mediabunny, blob(wav), plan, read, {
-      keepTags: true,
-      tags: { title: "Given" },
-    })
+    const { bytes: given } = await convertAudio(
+      mediabunny,
+      blob(wav),
+      plan,
+      read,
+      {
+        keepTags: true,
+        tags: { title: "Given" },
+      }
+    )
     const set = probe(given, "given.flac").format.tags ?? {}
     expect(set.TITLE ?? set.title).toBe("Given")
   })
@@ -293,7 +314,7 @@ describe("writing", () => {
     const read = await facts()
     const plan = planFor(settings({ format: "same" }), read)
     expect(plan.copy).toBe(true)
-    const bytes = await convertAudio(mediabunny, blob(wav), plan, read, {
+    const { bytes } = await convertAudio(mediabunny, blob(wav), plan, read, {
       keepTags: true,
     })
     expect(ffmpegFrames(bytes, "copy.wav", 2)).toBe(11025)

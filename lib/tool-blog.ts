@@ -250,7 +250,8 @@ export const overviewPost: BlogPost = {
     },
     {
       id: "audio-editor",
-      title: "Audio editor: sound cut, faded and in the format you need.",
+      title:
+        "Audio editor: sound cut, faded, as loud as it should be and in the format you need.",
       paragraphs: [
         "Trim to the millisecond on a waveform you can zoom, cut parts out, fade in and out, silence a part or change its volume, with every edit undoable and your file never changed. Convert many files at once between MP3, M4A (AAC), Opus, FLAC, WAV and iPhone ringtones, or take the sound out of a video, exactly as it is. Tags and cover art come along, MP3 and AAC files are as long as the sound with no gap at the start, and every file is opened again and listened to before you download it.",
       ],
@@ -294,6 +295,22 @@ export const overviewPost: BlogPost = {
         {
           label: "Guide: make an iPhone or Android ringtone",
           href: "/blog/make-a-ringtone/",
+        },
+        {
+          label: "Files of different loudness? Open it as Normalize audio",
+          href: "/dashboard/normalize-audio/",
+        },
+        {
+          label: "Guide: normalize audio loudness",
+          href: "/blog/normalize-audio-loudness/",
+        },
+        {
+          label: "Too quiet? Open it as the Volume booster",
+          href: "/dashboard/volume-booster/",
+        },
+        {
+          label: "Guide: make audio louder without clipping",
+          href: "/blog/make-audio-louder/",
         },
       ],
     },
@@ -2090,6 +2107,176 @@ export const ringtonePost: BlogPost = {
     {
       title: "MP4 file format, Wikipedia",
       url: "https://en.wikipedia.org/wiki/MP4_file_format",
+    },
+  ],
+}
+
+export const normalizePost: BlogPost = {
+  published: "2026-10-20",
+  modified: "2026-10-20",
+  slug: "normalize-audio-loudness",
+  title: "Every file as loud as the next.",
+  searchTitle: "How to normalize audio loudness to −14 LUFS online for free",
+  description:
+    "What LUFS and true peak are, which loudness to choose for Spotify, podcasts or broadcast, and how to normalize many audio files at once in your browser, without clipping. Nothing is uploaded.",
+  keywords: [
+    "normalize audio",
+    "loudness normalization",
+    "LUFS",
+    "-14 LUFS",
+    "podcast loudness -16 LUFS",
+    "EBU R128",
+    "true peak",
+    "normalize mp3 volume",
+  ],
+  category: "A little know-how",
+  readingTime: "5 min read",
+  image: "/images/audio-normalize-guide.svg",
+  imageAlt:
+    "Three waveforms of different heights brought to the same loudness, with a meter that reads −14 LUFS and peaks under −1 dBTP",
+  tool: "normalize-audio",
+  intro:
+    "Play a playlist of files from different places and the volume jumps from one to the next. Turning the quiet ones up by their highest peak does not help: how loud a sound seems depends on all of it, not on its loudest moment. Loudness normalization measures what people hear and brings every file to the same figure.",
+  sections: [
+    {
+      id: "lufs",
+      title: "LUFS: loudness as people hear it.",
+      paragraphs: [
+        "ITU-R BS.1770 measures loudness the way the ear weighs sound: it filters out the lowest bass, lifts the treble a little, averages the energy over 400 ms blocks and leaves out the silences and the very quiet parts. The result is in LUFS (loudness units relative to full scale), and a file at −14 LUFS sounds as loud as another at −14.",
+        "True peak is the highest the wave reaches, between the samples too, in dBTP. A file can have every sample under full scale and still clip when it is played or encoded, because the wave rises between them.",
+      ],
+    },
+    {
+      id: "which",
+      title: "Which loudness to choose.",
+      paragraphs: [
+        "Spotify plays music at about −14 LUFS and turns louder tracks down to it. Apple asks for podcasts at about −16 LUFS, with true peaks no higher than −1 dB. European broadcasters use −23 LUFS (EBU R 128), and US television −24 (ATSC A/85). For your own playlists, any figure works as long as every file has the same.",
+      ],
+    },
+    {
+      id: "how",
+      title: "How to normalize.",
+      paragraphs: [
+        "Open Normalize audio, drop your files and choose a loudness. Each file is measured as it will be written, made louder or quieter to reach the target, and a limiter keeps its true peaks under the ceiling, −1 dBTP unless you choose another. The file written is measured again, and the page says what it reached.",
+        "When a quiet file must be made much louder, the limiter lowers its loudest moments; if the ceiling keeps it from the target, the page says how loud it got rather than letting it clip.",
+      ],
+      links: [
+        { label: "Open Normalize audio", href: "/dashboard/normalize-audio/" },
+      ],
+    },
+    {
+      id: "private",
+      title: "On your device.",
+      paragraphs: [
+        "Files are read, measured and written in your browser and never uploaded. There is no account and no limit on how many you normalize.",
+      ],
+      links: [
+        {
+          label: "Guide: make a quiet recording louder",
+          href: "/blog/make-audio-louder/",
+        },
+        {
+          label: "Every KeepSimp tool in one place",
+          href: "/blog/free-online-tools-no-upload/",
+        },
+      ],
+    },
+  ],
+  sources: [
+    {
+      title:
+        "ITU-R BS.1770, algorithms to measure loudness and true-peak level",
+      url: "https://www.itu.int/rec/R-REC-BS.1770",
+    },
+    {
+      title: "Loudness normalization, Spotify for Artists",
+      url: "https://support.spotify.com/us/artists/article/loudness-normalization/",
+    },
+    {
+      title: "Audio requirements, Apple Podcasts",
+      url: "https://podcasters.apple.com/support/893-audio-requirements",
+    },
+    {
+      title: "EBU R 128, loudness normalisation",
+      url: "https://tech.ebu.ch/publications/r128",
+    },
+  ],
+}
+
+export const boostPost: BlogPost = {
+  published: "2026-10-20",
+  modified: "2026-10-20",
+  slug: "make-audio-louder",
+  title: "Louder, without the crackle.",
+  searchTitle:
+    "How to increase the volume of an audio file online without clipping",
+  description:
+    "Make a quiet recording, song or video's sound louder in your browser. Why turning it up can make it crackle, and how a limiter stops that. Nothing is uploaded.",
+  keywords: [
+    "volume booster",
+    "increase audio volume",
+    "make mp3 louder",
+    "amplify audio",
+    "boost quiet recording",
+    "audio clipping",
+    "make voice recording louder",
+  ],
+  category: "A little know-how",
+  readingTime: "3 min read",
+  image: "/images/audio-boost-guide.svg",
+  imageAlt:
+    "A quiet waveform made louder, its loudest moments held under a dashed ceiling instead of being cut flat",
+  tool: "volume-booster",
+  intro:
+    "A voice note recorded across the room, a lecture from the back row, a song that was mastered quietly. Turning the volume up on the phone only goes so far; making the file itself louder fixes it everywhere it is played.",
+  sections: [
+    {
+      id: "clipping",
+      title: "Why louder can crackle.",
+      paragraphs: [
+        "A digital file cannot go above full scale. Make a sound louder and its loudest moments reach that limit and are cut flat, which you hear as crackling or distortion: clipping. Most of a recording may have room to spare while a few moments, a laugh, a cough, a drum, do not.",
+      ],
+    },
+    {
+      id: "limiter",
+      title: "A limiter lowers only the loudest moments.",
+      paragraphs: [
+        "The Volume booster makes the whole file louder by the decibels you choose and, looking 5 ms ahead, lowers the gain smoothly for the moments that would go over the ceiling, then lets it rise again over a tenth of a second. Everything else is simply louder. The page says how much louder the file was made and how much the limiter took off.",
+        "6 dB doubles the height of the waveform; 10 dB sounds about twice as loud. To bring several files to the same loudness instead, normalize them.",
+      ],
+      links: [
+        {
+          label: "Open the Volume booster",
+          href: "/dashboard/volume-booster/",
+        },
+        {
+          label: "Guide: normalize audio loudness",
+          href: "/blog/normalize-audio-loudness/",
+        },
+      ],
+    },
+    {
+      id: "private",
+      title: "On your device.",
+      paragraphs: [
+        "Files are read and written in your browser and never uploaded, and each one is opened again and measured before you download it.",
+      ],
+      links: [
+        {
+          label: "Every KeepSimp tool in one place",
+          href: "/blog/free-online-tools-no-upload/",
+        },
+      ],
+    },
+  ],
+  sources: [
+    {
+      title: "Clipping (audio), Wikipedia",
+      url: "https://en.wikipedia.org/wiki/Clipping_(audio)",
+    },
+    {
+      title: "Dynamic range compression and limiting, Wikipedia",
+      url: "https://en.wikipedia.org/wiki/Dynamic_range_compression",
     },
   ],
 }

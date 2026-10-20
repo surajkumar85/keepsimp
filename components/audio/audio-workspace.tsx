@@ -14,6 +14,8 @@ import {
   IconCircleCheck,
   IconCut,
   IconFileMusic,
+  IconGauge,
+  IconVolume,
   IconFilePlus,
   IconInfoCircle,
   IconLock,
@@ -60,6 +62,7 @@ import {
   nextAudioJob,
   stepsOf,
   type AudioItem,
+  type AudioResult,
 } from "@/lib/audio/queue"
 import {
   defaultSettings,
@@ -68,6 +71,14 @@ import {
   settingsProblem,
   type AudioSettings,
 } from "@/lib/audio/settings"
+import {
+  dbLabel,
+  levelSaid,
+  loudnessSaid,
+  type Level,
+  type LevelResult,
+} from "@/lib/audio/level"
+import { LoudnessMeter, loudnessOf, SILENT } from "@/lib/audio/loudness"
 import { peakCount } from "@/lib/audio/view"
 import { wavFromPlanes } from "@/lib/audio/wav"
 import { sizeLabel } from "@/lib/image-compressor/formats"
@@ -80,7 +91,13 @@ import { Waveform } from "./waveform"
 
 /** What the workspace is opened for: everything, or one job through a door. */
 export type AudioMode =
-  "editor" | "converter" | "extractor" | "trimmer" | "ringtone"
+  | "editor"
+  | "converter"
+  | "extractor"
+  | "trimmer"
+  | "ringtone"
+  | "normalize"
+  | "booster"
 
 /** What the waveform editor is opened for, in each mode; none where it waits to be asked for. */
 const EDITING: Record<AudioMode, EditorFocus | null> = {
@@ -89,6 +106,8 @@ const EDITING: Record<AudioMode, EditorFocus | null> = {
   ringtone: "ringtone",
   converter: null,
   extractor: null,
+  normalize: null,
+  booster: null,
 }
 
 const INPUT_ID = "audio-file"
@@ -132,6 +151,22 @@ const COPY: Record<AudioMode, DropZoneCopy> = {
     action: "Choose a song",
     limits: "Stays on your device · no account",
   },
+  normalize: {
+    heading: "Drop audio files to normalize",
+    dropping: "Drop to normalize these files",
+    body: "Each file is measured and brought to the same loudness (−14 LUFS for Spotify, or another target), with peaks kept under −1 dBTP. Many at once, on your device. You can also paste with ⌘V or Ctrl+V.",
+    inputLabel: "Choose audio files to normalize",
+    action: "Choose files",
+    limits: `Stays on your device · up to ${MAX_FILES} files at once`,
+  },
+  booster: {
+    heading: "Drop a quiet recording to make it louder",
+    dropping: "Drop to make these louder",
+    body: "Louder by as many decibels as you choose, with a limiter that keeps the loudest moments from clipping. MP3, M4A, WAV, the sound of videos and more, on your device. You can also paste with ⌘V or Ctrl+V.",
+    inputLabel: "Choose audio files to make louder",
+    action: "Choose files",
+    limits: `Stays on your device · up to ${MAX_FILES} files at once`,
+  },
   extractor: {
     heading: "Drop a video to take its sound out",
     dropping: "Drop to take the sound out",
@@ -152,6 +187,11 @@ const ABILITIES = [
     icon: IconTransform,
     title: "Every common format",
     text: "MP3, M4A (AAC), Opus, FLAC, WAV and iPhone ringtones, from those and from AIFF, Ogg and the sound of videos.",
+  },
+  {
+    icon: IconGauge,
+    title: "Loudness to a standard",
+    text: "Measured as ITU-R BS.1770 does, normalized to −14 LUFS or another target, with a true-peak limiter so nothing clips.",
   },
   {
     icon: IconMovie,
@@ -181,6 +221,8 @@ const FOCUSED: Partial<Record<AudioMode, string>> = {
   extractor: "opened for taking the sound out of videos",
   trimmer: "opened for trimming",
   ringtone: "opened for making ringtones",
+  normalize: "opened for normalizing loudness",
+  booster: "opened for making sound louder",
 }
 
 const SAMPLES: Record<AudioMode, { name: string; type: string }[]> = {
@@ -192,6 +234,11 @@ const SAMPLES: Record<AudioMode, { name: string; type: string }[]> = {
   extractor: [{ name: "keepsimp-clip.mp4", type: "video/mp4" }],
   trimmer: [{ name: "keepsimp-tune.flac", type: "audio/flac" }],
   ringtone: [{ name: "keepsimp-tune.flac", type: "audio/flac" }],
+  normalize: [
+    { name: "keepsimp-tune.flac", type: "audio/flac" },
+    { name: "keepsimp-clip.mp4", type: "video/mp4" },
+  ],
+  booster: [{ name: "keepsimp-tune.flac", type: "audio/flac" }],
 }
 
 /** The format each mode writes at first. */
@@ -201,6 +248,14 @@ const FIRST_FORMAT: Record<AudioMode, AudioSettings["format"]> = {
   extractor: "same",
   trimmer: "same",
   ringtone: "m4r",
+  normalize: "same",
+  booster: "same",
+}
+
+/** How loud results are at first in each mode. */
+const FIRST_LEVEL: Partial<Record<AudioMode, Partial<Level>>> = {
+  normalize: { mode: "loudness" },
+  booster: { mode: "louder" },
 }
 
 /** The tags of a file, to be written into what the page decoded (whose WAV has none). */
@@ -257,6 +312,7 @@ export function AudioWorkspace({ mode = "editor" }: { mode?: AudioMode }) {
   const [settings, setSettings] = useState<AudioSettings>(() => ({
     ...defaultSettings,
     format: FIRST_FORMAT[mode],
+    level: { ...defaultSettings.level, ...FIRST_LEVEL[mode] },
   }))
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
@@ -314,6 +370,8 @@ export function AudioWorkspace({ mode = "editor" }: { mode?: AudioMode }) {
         const frames = planes[0]?.length ?? 0
         const builder = new PeakBuilder(frames, peakCount(frames / sampleRate))
         builder.push(planes)
+        const meter = new LoudnessMeter(sampleRate, planes.length)
+        meter.push(planes)
         dispatch({
           type: "decoded",
           id,
@@ -321,7 +379,12 @@ export function AudioWorkspace({ mode = "editor" }: { mode?: AudioMode }) {
             type: "audio/wav",
           }),
         })
-        dispatch({ type: "peaks", id, peaks: builder.result() })
+        dispatch({
+          type: "peaks",
+          id,
+          peaks: builder.result(),
+          loudness: meter.result(),
+        })
       } catch {
         dispatch({
           type: "failed",
@@ -347,7 +410,12 @@ export function AudioWorkspace({ mode = "editor" }: { mode?: AudioMode }) {
           })
       } else if (message.type === "done" && message.job === "read") {
         if (message.peaks)
-          dispatch({ type: "peaks", id: message.id, peaks: message.peaks })
+          dispatch({
+            type: "peaks",
+            id: message.id,
+            peaks: message.peaks,
+            loudness: message.loudness,
+          })
       } else if (message.type === "done") {
         const item = live.current.items.find((one) => one.id === message.id)
         if (!item?.facts || message.key !== keyFor(message.id)) return
@@ -358,6 +426,9 @@ export function AudioWorkspace({ mode = "editor" }: { mode?: AudioMode }) {
         })
         const url = URL.createObjectURL(blob)
         const audible = item.peaks ? peakLevel(item.peaks) > 1e-4 : true
+        // The level these results were written at is the one in force.
+        const level = live.current.settings.level
+        const lossless = format.lossless
         dispatch({
           type: "done",
           id: message.id,
@@ -372,6 +443,7 @@ export function AudioWorkspace({ mode = "editor" }: { mode?: AudioMode }) {
             name: `${baseName(item.file.name)}.${format.extension}`,
             plan,
             heard: message.heard,
+            level: message.level,
             problems: message.heard
               ? checkResult(
                   {
@@ -384,6 +456,14 @@ export function AudioWorkspace({ mode = "editor" }: { mode?: AudioMode }) {
                     audible,
                     bitrate: plan.codec === "mp3" ? plan.bitrate : null,
                     bytes: blob.size,
+                    // Held to its loudness unless the page said why not.
+                    loudness:
+                      level.mode === "loudness" && !message.level?.notes.length
+                        ? level.target
+                        : null,
+                    // Lossy encoders raise peaks a little: only lossless is held to the ceiling.
+                    ceiling:
+                      lossless && level.mode !== "same" ? level.ceiling : null,
                   },
                   message.heard
                 )
@@ -433,6 +513,7 @@ export function AudioWorkspace({ mode = "editor" }: { mode?: AudioMode }) {
       facts: decoded ? { ...facts, kept: null } : facts,
       plan,
       keepTags: current.settings.keepTags,
+      level: current.settings.level,
       tags: decoded ? tagsOf(facts) : undefined,
       edits,
       key: itemKey(current.key, item)!,
@@ -870,6 +951,17 @@ export function AudioWorkspace({ mode = "editor" }: { mode?: AudioMode }) {
                             ? `Writing… ${Math.round(selected.progress * 100)}%`
                             : "Waiting…"}
                   </dd>
+                  {selected.loudness && (
+                    <>
+                      <dt className="font-medium">Loudness</dt>
+                      <dd
+                        className="text-muted-foreground"
+                        data-testid="audio-loudness"
+                      >
+                        {loudnessSaid(loudnessOf(selected.loudness))}
+                      </dd>
+                    </>
+                  )}
                   {Object.values(facts.tags).some(Boolean) && (
                     <>
                       <dt className="font-medium">Tags</dt>
@@ -899,6 +991,7 @@ export function AudioWorkspace({ mode = "editor" }: { mode?: AudioMode }) {
                     name={selected.file.name}
                     duration={facts.duration}
                     peaks={selected.peaks ?? null}
+                    loudness={selected.loudness ?? null}
                     url={originalUrl}
                     changes={selected.changes ?? NO_CHANGES}
                     canRedo={Boolean(selected.redo?.length)}
@@ -1010,6 +1103,7 @@ export function AudioWorkspace({ mode = "editor" }: { mode?: AudioMode }) {
                   </div>
                 )}
               {result && <Check result={result} />}
+              {result?.level && <LevelDone level={result.level} />}
               {plan && plan.notes.length > 0 && (
                 <ul
                   className="space-y-1 text-sm text-muted-foreground"
@@ -1160,6 +1254,34 @@ function Check({ result }: { result: NonNullable<AudioItem["result"]> }) {
       {timeLabel(result.heard.duration, true)} long,{" "}
       {rateLabel(result.heard.sampleRate)},{" "}
       {channelsLabel(result.heard.channels).toLowerCase()}, as asked.
+      {measuredSaid(result.heard)}
     </p>
+  )
+}
+
+/** What the check measured of a result's loudness, as a sentence after the check's. */
+function measuredSaid(heard: NonNullable<AudioResult["heard"]>) {
+  const loudness = heard.loudness
+  if (!loudness || loudness.integrated === SILENT) return null
+  return ` It measures ${dbLabel(loudness.integrated)} LUFS, with peaks up to ${dbLabel(loudness.truePeak)} dBTP.`
+}
+
+/** What was done to a result's level, and why not more. */
+function LevelDone({ level }: { level: LevelResult }) {
+  return (
+    <div
+      className="space-y-1 text-sm text-muted-foreground"
+      data-testid="audio-level"
+    >
+      <p className="flex items-start gap-2">
+        <IconVolume className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+        {levelSaid(level)}
+      </p>
+      {level.notes.map((note) => (
+        <p key={note} className="pl-6">
+          {note}
+        </p>
+      ))}
+    </div>
   )
 }

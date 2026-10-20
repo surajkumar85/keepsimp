@@ -14,6 +14,25 @@ import { peakCount } from "./view"
 import type { Plan, SourceFacts } from "./settings"
 import type { Heard } from "./check"
 import { editedBy, gainAt, lengthOf, type Edited, type Step } from "./edits"
+import {
+  dbLabel,
+  defaultLevel,
+  gainFor,
+  MOST_RAISE,
+  needsMeasure,
+  takenOff,
+  type Level,
+  type LevelResult,
+} from "./level"
+import { Limiter } from "./limiter"
+import {
+  integrated,
+  LoudnessMeter,
+  loudnessOf,
+  SILENT,
+  type Loudness,
+  type LoudnessMap,
+} from "./loudness"
 
 type Engine = typeof Mediabunny
 
@@ -222,20 +241,24 @@ export async function* soundOf(
   }
 }
 
-/** A file's overview waveform, made by decoding it once. */
-export async function peaksOf(
+/** A file's waveform and loudness, made by decoding it once. */
+export async function overviewOf(
   engine: Engine,
   file: Blob,
   facts: Pick<ReadFacts, "duration" | "sampleRate" | "kept">,
   signal?: AbortSignal
-): Promise<Peaks> {
+): Promise<{ peaks: Peaks; loudness: LoudnessMap | null }> {
   const builder = new PeakBuilder(
     Math.round(facts.duration * facts.sampleRate),
     peakCount(facts.duration)
   )
-  for await (const chunk of soundOf(engine, file, facts.kept, signal))
+  let meter: LoudnessMeter | null = null
+  for await (const chunk of soundOf(engine, file, facts.kept, signal)) {
     builder.push(chunk.planes)
-  return builder.result()
+    meter ??= new LoudnessMeter(chunk.sampleRate, chunk.planes.length)
+    meter.push(chunk.planes)
+  }
+  return { peaks: builder.result(), loudness: meter?.result() ?? null }
 }
 
 /** The format a plan is written in, as Mediabunny makes it. */
@@ -523,49 +546,79 @@ export function aacEncoding(
   return chosen
 }
 
+/** The planes of a sample, as floats; the sample is closed. */
+function planesOf(sample: Mediabunny.AudioSample) {
+  const planes = Array.from({ length: sample.numberOfChannels }, (_, plane) => {
+    const values = new Float32Array(sample.numberOfFrames)
+    sample.copyTo(values, { planeIndex: plane, format: "f32-planar" })
+    return values
+  })
+  sample.close()
+  return planes
+}
+
+/** A sample made of planes of floats. */
+function sampleOf(
+  engine: Engine,
+  planes: Float32Array[],
+  sampleRate: number,
+  timestamp: number
+) {
+  const frames = planes[0].length
+  const data = new Float32Array(frames * planes.length)
+  planes.forEach((plane, channel) => data.set(plane, channel * frames))
+  return new engine.AudioSample({
+    data,
+    format: "f32-planar",
+    numberOfChannels: planes.length,
+    sampleRate,
+    timestamp,
+  })
+}
+
+/** Made louder or quieter by a gain, kept under a ceiling by the limiter, and measured. */
+interface Shaping {
+  gain: number
+  limiter: Limiter | null
+  meter: LoudnessMeter
+}
+
+/** A decoder gave fewer frames than the sound has: written again to that many. */
+class EndedEarly extends Error {
+  constructor(readonly frames: number) {
+    super("ended early")
+  }
+}
+
 /**
- * Write a file by a plan. `tags` replaces the file's own when given (for
- * sound the page decoded, whose WAV has none); `keepTags` false writes none.
+ * One pass over the sound as it will be written (trimmed, edited, at the
+ * plan's rate and channels), into `output`. With `shaping`, each chunk is
+ * made louder or quieter and limited, and what comes out is measured; with
+ * `measure` only, it is measured as it is.
  */
-export async function convertAudio(
+async function pass(
   engine: Engine,
   file: Blob,
   plan: Plan,
   facts: Pick<ReadFacts, "duration" | "sampleRate" | "kept">,
+  output: Mediabunny.Output,
   options: {
     keepTags: boolean
     tags?: Mediabunny.MetadataTags
     onProgress?: (fraction: number) => void
     signal?: AbortSignal
-    /** Edits to make while writing (see `edits.ts`); none when left out. */
-    edits?: readonly Step[]
+    edits: readonly Step[]
+    edited: Edited
+    /** Frames the sound has at the plan's rate. */
+    expected: number
+    shaping?: Shaping
+    measure?: LoudnessMeter
+    /** The codec and sample format to write, when not the plan's (for measuring). */
+    codec?: Mediabunny.AudioCodec
   }
-): Promise<Uint8Array> {
-  const edits = options.edits ?? []
-  const edited = editedBy(facts.duration, edits)
-  /** How long the sound written is, in seconds. */
-  const length = edits.length ? lengthOf(edited) : facts.duration
-  // AAC is written by an encoder chosen first; its priming is known after.
-  const priming =
-    !plan.copy && plan.codec === "aac"
-      ? await aacEncoding(
-          engine,
-          plan.sampleRate,
-          plan.channels,
-          plan.bitrate ?? 128_000
-        )
-      : null
-  if (!plan.copy && plan.codec !== "aac") await readyEncoder(engine, plan.codec)
+) {
+  const { edits, edited, expected, shaping } = options
   const source = input(engine, file)
-  const target = new engine.BufferTarget()
-  // A WAV over 4 GB needs the RF64 form.
-  const longWav =
-    plan.format === "wav" &&
-    length * plan.sampleRate * plan.channels * 4 > 3.9e9
-  const output = new engine.Output({
-    format: outputFormat(engine, plan, longWav),
-    target,
-  })
   try {
     // Where the sound starts in the decoder's time: an MP3's delay comes first.
     const soundStart = facts.kept ? facts.kept.start / facts.sampleRate : 0
@@ -586,10 +639,18 @@ export async function convertAudio(
                   : (facts.kept.start + facts.kept.length) / facts.sampleRate
                 : facts.duration,
         }
-    const expected = Math.round(length * plan.sampleRate)
     let made = 0
     /** Frames seen so far at the rate written, counted from the trim's start. */
     let seen = 0
+    /** Frames given to the encoder, after the limiter's delay. */
+    let given = 0
+    const integers =
+      !options.codec &&
+      (plan.sampleFormat === "s16" || plan.sampleFormat === "s32")
+        ? plan.sampleFormat
+        : null
+    const finish = (sample: Mediabunny.AudioSample) =>
+      integers ? asIntegers(engine, sample, integers) : sample
     const conversion = await engine.Conversion.init({
       input: source,
       output,
@@ -597,18 +658,20 @@ export async function convertAudio(
       audio: plan.copy
         ? { forceTranscode: false }
         : {
-            codec: plan.codec as Mediabunny.AudioCodec,
+            codec: options.codec ?? (plan.codec as Mediabunny.AudioCodec),
             sampleRate: plan.sampleRate,
             numberOfChannels: plan.channels,
-            ...(plan.bitrate
+            ...(plan.bitrate && !options.codec
               ? { quality: new engine.Quality({ bitrate: plan.bitrate }) }
               : {}),
-            ...(plan.sampleFormat === "f32" ? { sampleFormat: "f32" } : {}),
+            ...(plan.sampleFormat === "f32" && !options.codec
+              ? { sampleFormat: "f32" }
+              : {}),
             process: (incoming: Mediabunny.AudioSample) => {
               let sample: Mediabunny.AudioSample | null = incoming
+              const rate = incoming.sampleRate
               if (edits.length) {
                 // Frames are counted, so the source time of each is exact.
-                const rate = incoming.sampleRate
                 const at = first + seen / rate
                 seen += incoming.numberOfFrames
                 sample = shaped(engine, incoming, edited, at, made / rate)
@@ -625,11 +688,37 @@ export async function convertAudio(
                   ? firstFrames(engine, sample, room)
                   : sample
               made += kept.numberOfFrames
-              // Whole-number samples are made here, exactly (see `asIntegers`),
-              // from the decoder's own floats: the library's conversion comes first.
-              return plan.sampleFormat === "s16" || plan.sampleFormat === "s32"
-                ? asIntegers(engine, kept, plan.sampleFormat)
-                : kept
+              if (options.measure) {
+                const planes = planesOf(kept)
+                options.measure.push(planes)
+                return sampleOf(
+                  engine,
+                  planes,
+                  rate,
+                  (made - planes[0].length) / rate
+                )
+              }
+              if (!shaping) return finish(kept)
+              // Louder or quieter, limited, and measured as it comes out.
+              const planes = planesOf(kept)
+              if (shaping.gain !== 1)
+                for (const plane of planes)
+                  for (let index = 0; index < plane.length; index++)
+                    plane[index] *= shaping.gain
+              const ready = shaping.limiter
+                ? [shaping.limiter.process(planes)]
+                : [planes]
+              // The limiter's last frames come out once the sound is all in.
+              if (shaping.limiter && made === expected)
+                ready.push(shaping.limiter.flush())
+              const out: Mediabunny.AudioSample[] = []
+              for (const part of ready) {
+                if (!part[0].length) continue
+                shaping.meter.push(part)
+                out.push(finish(sampleOf(engine, part, rate, given / rate)))
+                given += part[0].length
+              }
+              return out.length ? out : null
             },
             forceTranscode: true,
           },
@@ -652,17 +741,193 @@ export async function convertAudio(
     } finally {
       options.signal?.removeEventListener("abort", abort)
     }
-    const written = new Uint8Array(target.buffer!)
-    // Say in the file how many samples are the sound, so it plays without gaps.
-    const samples = Math.round(length * plan.sampleRate)
-    if (plan.copy) return written
-    if (plan.codec === "mp3") return lameTagged(written, samples)
-    if (plan.codec === "opus")
-      return withOpusEnd(written, Math.round(length * 48000))
-    if (priming) return withEditList(written, priming, samples)
-    return written
+    if (shaping?.limiter && made < expected && !options.signal?.aborted)
+      throw new EndedEarly(made)
   } finally {
     source.dispose()
+  }
+}
+
+/**
+ * Write a file by a plan. `tags` replaces the file's own when given (for
+ * sound the page decoded, whose WAV has none); `keepTags` false writes none.
+ * A level other than "same" measures the sound first where it must, then
+ * writes it louder or quieter, limited and measured.
+ */
+export async function convertAudio(
+  engine: Engine,
+  file: Blob,
+  plan: Plan,
+  facts: Pick<ReadFacts, "duration" | "sampleRate" | "kept">,
+  options: {
+    keepTags: boolean
+    tags?: Mediabunny.MetadataTags
+    onProgress?: (fraction: number) => void
+    signal?: AbortSignal
+    /** Edits to make while writing (see `edits.ts`); none when left out. */
+    edits?: readonly Step[]
+    /** How loud the result is to be; as it is when left out. */
+    level?: Level
+  }
+): Promise<{ bytes: Uint8Array; level: LevelResult | null }> {
+  const edits = options.edits ?? []
+  const edited = editedBy(facts.duration, edits)
+  const level = options.level ?? defaultLevel
+  /** How long the sound written is, in seconds. */
+  const length = edits.length ? lengthOf(edited) : facts.duration
+  // AAC is written by an encoder chosen first; its priming is known after.
+  const priming =
+    !plan.copy && plan.codec === "aac"
+      ? await aacEncoding(
+          engine,
+          plan.sampleRate,
+          plan.channels,
+          plan.bitrate ?? 128_000
+        )
+      : null
+  if (!plan.copy && plan.codec !== "aac") await readyEncoder(engine, plan.codec)
+  let expected = Math.round(length * plan.sampleRate)
+  const common = {
+    keepTags: options.keepTags,
+    tags: options.tags,
+    signal: options.signal,
+    edits,
+    edited,
+  }
+
+  // Measured first, as it will be written, when the gain depends on it.
+  let before: Loudness | null = null
+  const measuring = !plan.copy && needsMeasure(level)
+  if (measuring) {
+    const meter = new LoudnessMeter(plan.sampleRate, plan.channels)
+    await pass(
+      engine,
+      file,
+      plan,
+      facts,
+      new engine.Output({
+        format: new engine.WavOutputFormat(),
+        target: new engine.NullTarget(),
+      }),
+      {
+        ...common,
+        keepTags: false,
+        expected,
+        measure: meter,
+        codec: "pcm-f32",
+        onProgress: (fraction) => options.onProgress?.(fraction / 2),
+      }
+    )
+    before = loudnessOf(meter.result())
+  }
+  const gain = gainFor(level, before)
+  const shaped = !plan.copy && level.mode !== "same"
+
+  /** One write at a gain; the bytes, and what came out. */
+  const write = async (db: number) => {
+    // A WAV over 4 GB needs the RF64 form.
+    const longWav =
+      plan.format === "wav" &&
+      length * plan.sampleRate * plan.channels * 4 > 3.9e9
+    const target = new engine.BufferTarget()
+    const shaping: Shaping | undefined = shaped
+      ? {
+          gain: 10 ** (db / 20),
+          limiter:
+            gain.ceiling === null
+              ? null
+              : new Limiter(plan.sampleRate, plan.channels, gain.ceiling),
+          meter: new LoudnessMeter(plan.sampleRate, plan.channels),
+        }
+      : undefined
+    await pass(
+      engine,
+      file,
+      plan,
+      facts,
+      new engine.Output({
+        format: outputFormat(engine, plan, longWav),
+        target,
+      }),
+      {
+        ...common,
+        expected,
+        shaping,
+        onProgress: (fraction) =>
+          options.onProgress?.(measuring ? 0.5 + fraction / 2 : fraction),
+      }
+    )
+    return { written: new Uint8Array(target.buffer!), shaping }
+  }
+
+  let done: Awaited<ReturnType<typeof write>>
+  try {
+    done = await write(gain.db)
+  } catch (error) {
+    // A decoder that gave fewer frames than the sound has: the limiter's
+    // last frames never came out, so it is written again to that many.
+    if (!(error instanceof EndedEarly)) throw error
+    expected = error.frames
+    done = await write(gain.db)
+  }
+  let { written, shaping } = done
+  let db = gain.db
+  const notes = [...gain.notes]
+  // The limiter makes a loud file quieter than asked: the gain is put right
+  // by what was measured (by the slope seen, after the first try) and the
+  // file written again, at most twice more. More gain can also lift quiet
+  // parts over the relative gate and so measure quieter: the try closest
+  // to the target is kept.
+  if (shaping && level.mode === "loudness" && gain.ceiling !== null && before) {
+    let reached = integrated(shaping.meter.result())
+    let best = { db, written, shaping, reached }
+    let last: { db: number; reached: number } | null = null
+    for (let tries = 0; tries < 2 && !options.signal?.aborted; tries++) {
+      const short = level.target - reached
+      if (reached === SILENT || short <= 0.3) break
+      const slope = last ? (reached - last.reached) / (db - last.db) : 1
+      // Hardly any louder for more gain: the ceiling is reached.
+      if (slope < 0.1) break
+      const next = Math.min(MOST_RAISE, db + short / slope)
+      if (next <= db + 0.05) break
+      last = { db, reached }
+      db = next
+      ;({ written, shaping } = await write(db))
+      reached = integrated(shaping!.meter.result())
+      if (
+        Math.abs(level.target - reached) < Math.abs(level.target - best.reached)
+      )
+        best = { db, written, shaping: shaping!, reached }
+    }
+    ;({ db, written, shaping, reached } = best)
+    if (level.target - reached > 0.5)
+      notes.push(
+        `Under a ${dbLabel(level.ceiling)} dBTP ceiling it reaches only ${dbLabel(reached)} LUFS; a higher ceiling lets it get louder.`
+      )
+  }
+  // Say in the file how many samples are the sound, so it plays without gaps.
+  const samples = expected
+  const bytes = plan.copy
+    ? written
+    : plan.codec === "mp3"
+      ? lameTagged(written, samples)
+      : plan.codec === "opus"
+        ? withOpusEnd(written, Math.round((samples / plan.sampleRate) * 48000))
+        : priming
+          ? withEditList(written, priming, samples)
+          : written
+  return {
+    bytes,
+    level: shaping
+      ? {
+          mode: level.mode,
+          before,
+          db,
+          after: loudnessOf(shaping.meter.result()),
+          limited: takenOff(shaping.limiter?.lowest ?? 1),
+          notes,
+        }
+      : null,
   }
 }
 
@@ -693,16 +958,25 @@ export async function hearAudio(
   }
   let frames = 0
   let peak = 0
+  const meter = new LoudnessMeter(sampleRate, channels)
   try {
     for await (const chunk of soundOf(engine, file, kept, signal)) {
       frames += chunk.planes[0].length
       for (const plane of chunk.planes)
         for (const value of plane)
           if (Math.abs(value) > peak) peak = Math.abs(value)
+      meter.push(chunk.planes)
     }
   } catch {
     // Said to be decodable, but not (Safari with FLAC): not heard here.
     return null
   }
-  return { duration: frames / sampleRate, sampleRate, channels, peak }
+  const { integrated, truePeak } = loudnessOf(meter.result())
+  return {
+    duration: frames / sampleRate,
+    sampleRate,
+    channels,
+    peak,
+    loudness: { integrated, truePeak },
+  }
 }
