@@ -430,7 +430,7 @@ function LevelSection({
 }
 
 /** A labelled field for a number that may be negative. */
-function NumberField({
+export function NumberField({
   id,
   label,
   value,

@@ -18,6 +18,8 @@ describe("doors", () => {
       "ringtone-maker",
       "normalize-audio",
       "volume-booster",
+      "join-audio",
+      "split-audio",
       "pdf-annotator",
       "sign-pdf",
       "fill-pdf-form",

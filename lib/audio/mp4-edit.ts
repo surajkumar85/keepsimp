@@ -7,7 +7,7 @@
  * priming, for exactly the length of the sound.
  */
 
-interface Box {
+export interface Box {
   type: string
   start: number
   size: number
@@ -15,11 +15,15 @@ interface Box {
   body: number
 }
 
-const ascii = (bytes: Uint8Array, at: number) =>
+export const ascii = (bytes: Uint8Array, at: number) =>
   String.fromCharCode(bytes[at], bytes[at + 1], bytes[at + 2], bytes[at + 3])
 
 /** The boxes between `from` and `to`; null when one does not fit or uses a 64-bit size. */
-function boxes(bytes: Uint8Array, from: number, to: number): Box[] | null {
+export function boxes(
+  bytes: Uint8Array,
+  from: number,
+  to: number
+): Box[] | null {
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength)
   const found: Box[] = []
   for (let at = from; at + 8 <= to;) {
@@ -31,7 +35,7 @@ function boxes(bytes: Uint8Array, from: number, to: number): Box[] | null {
   return found
 }
 
-const child = (bytes: Uint8Array, parent: Box, type: string) =>
+export const child = (bytes: Uint8Array, parent: Box, type: string) =>
   boxes(bytes, parent.body, parent.start + parent.size)?.find(
     (box) => box.type === type
   ) ?? null
@@ -128,29 +132,41 @@ export function withEditList(
     length
   )
   // Sound stored after the movie box has moved: its chunk offsets move with it.
-  const shift = top.some((box) => box.type === "mdat" && box.start > moov.start)
-  if (shift) {
-    const moved = boxes(out, moov.body, moov.start + moov.size + delta)!
-    const tables: Box[] = []
-    const walk = (list: Box[]) => {
-      for (const box of list) {
-        if (box.type === "stco" || box.type === "co64") tables.push(box)
-        if (["trak", "mdia", "minf", "stbl"].includes(box.type))
-          walk(boxes(out, box.body, box.start + box.size)!)
-      }
-    }
-    walk(moved)
-    for (const table of tables) {
-      const count = write.getUint32(table.body + 4)
-      for (let index = 0; index < count; index++)
-        if (table.type === "stco") {
-          const where = table.body + 8 + index * 4
-          write.setUint32(where, write.getUint32(where) + delta)
-        } else {
-          const where = table.body + 8 + index * 8
-          write.setBigUint64(where, write.getBigUint64(where) + BigInt(delta))
-        }
+  if (top.some((box) => box.type === "mdat" && box.start > moov.start))
+    shiftChunks(out, moov.start, moov.size + delta, delta)
+  return out
+}
+
+/**
+ * Move every chunk offset of the movie box at `moovStart` (now `moovSize`
+ * long) by `delta`: sound stored after a movie box that grew or shrank has
+ * moved with it.
+ */
+export function shiftChunks(
+  out: Uint8Array,
+  moovStart: number,
+  moovSize: number,
+  delta: number
+) {
+  const write = new DataView(out.buffer, out.byteOffset, out.byteLength)
+  const tables: Box[] = []
+  const walk = (list: Box[]) => {
+    for (const box of list) {
+      if (box.type === "stco" || box.type === "co64") tables.push(box)
+      if (["trak", "mdia", "minf", "stbl"].includes(box.type))
+        walk(boxes(out, box.body, box.start + box.size)!)
     }
   }
-  return out
+  walk(boxes(out, moovStart + 8, moovStart + moovSize)!)
+  for (const table of tables) {
+    const count = write.getUint32(table.body + 4)
+    for (let index = 0; index < count; index++)
+      if (table.type === "stco") {
+        const where = table.body + 8 + index * 4
+        write.setUint32(where, write.getUint32(where) + delta)
+      } else {
+        const where = table.body + 8 + index * 8
+        write.setBigUint64(where, write.getBigUint64(where) + BigInt(delta))
+      }
+  }
 }

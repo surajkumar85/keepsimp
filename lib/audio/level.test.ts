@@ -148,6 +148,13 @@ describe("levelSaid", () => {
     expect(levelSaid(result({ db: 0.01, mode: "louder" }))).toBe(
       "Its level is left as it is."
     )
+    // Files joined, each brought to the target by itself; or all given the same.
+    expect(levelSaid(result({ db: -2, each: [-2, 4.25] }))).toBe(
+      "Each file made louder or quieter by itself (from −2 to +4.3 dB) to −14 LUFS."
+    )
+    expect(levelSaid(result({ mode: "louder", db: 6, each: [6, 6] }))).toBe(
+      "Made 6 dB louder."
+    )
     expect(levelSaid(result({ mode: "same", db: 0, compressed: 7.25 }))).toBe(
       "Its level is left as it is. The compressor turned the loudest moments down by up to 7.3 dB."
     )

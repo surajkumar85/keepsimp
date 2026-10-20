@@ -146,15 +146,22 @@ export interface LevelResult {
   limited: number
   /** The most the compressor took off, in dB (0 when it was off). */
   compressed?: number
+  /** For files joined: the gain each was given, in order. */
+  each?: number[]
   notes: string[]
 }
 
 /** The sentence the page says of a file's level. */
 export function levelSaid(result: LevelResult): string {
+  const each = result.each ?? []
+  const lowest = Math.min(...each)
+  const highest = Math.max(...each)
   const gain =
-    Math.abs(result.db) < 0.05
-      ? "Its level is left as it is"
-      : `Made ${dbLabel(Math.abs(result.db))} dB ${result.db > 0 ? "louder" : "quieter"}`
+    each.length > 1 && highest - lowest >= 0.05
+      ? `Each file made louder or quieter by itself (from ${dbLabel(lowest, true)} to ${dbLabel(highest, true)} dB)`
+      : Math.abs(result.db) < 0.05
+        ? "Its level is left as it is"
+        : `Made ${dbLabel(Math.abs(result.db))} dB ${result.db > 0 ? "louder" : "quieter"}`
   const reach =
     result.mode === "loudness"
       ? ` to ${dbLabel(result.after.integrated)} LUFS`

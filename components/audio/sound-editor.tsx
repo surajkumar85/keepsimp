@@ -15,6 +15,7 @@ import {
   IconArrowForwardUp,
   IconBell,
   IconCut,
+  IconFlag,
   IconPlayerPause,
   IconPlayerPlay,
   IconRefresh,
@@ -27,6 +28,7 @@ import {
   IconZoomIn,
   IconZoomOut,
   IconZoomReset,
+  IconX,
 } from "@tabler/icons-react"
 import { Button } from "@/components/ui/button"
 import { ChoiceChips } from "@/components/ui/choice-chips"
@@ -94,6 +96,8 @@ interface Part {
 const GRAB = 8
 /** A press that moves less than this is a click, not a drag. */
 const CLICK = 4
+const NO_MARKS: readonly number[] = []
+
 /** Silence at an end this long or more is offered to trim, in seconds. */
 const ENDS_AT_LEAST = 0.2
 /** How often, while playing, cuts are skipped and loudness followed. */
@@ -150,6 +154,9 @@ export function SoundEditor({
   onReset,
   onFormat,
   loudness = null,
+  marks = NO_MARKS,
+  onMark,
+  onUnmark,
 }: {
   name: string
   /** The source's length, in seconds. */
@@ -169,6 +176,10 @@ export function SoundEditor({
   onFormat: (format: OutputFormat) => void
   /** The file's loudness, 100 ms at a time, when it has been measured. */
   loudness?: LoudnessMap | null
+  /** Markers, in the source's seconds. */
+  marks?: readonly number[]
+  onMark?: (source: number) => void
+  onUnmark?: (source: number) => void
 }) {
   const id = useId()
   const steps = useMemo(() => changes.flat(), [changes])
@@ -543,6 +554,23 @@ export function SoundEditor({
     )
   }
 
+  // Markers ---------------------------------------------------------------
+
+  // Where each marker plays in the sound as edited; those in a cut part are not shown.
+  const shownMarks = useMemo(
+    () =>
+      marks.flatMap((source) => {
+        const at = outputAt(edited, source)
+        return at === null ? [] : [{ source, at }]
+      }),
+    [marks, edited]
+  )
+  const addMark = () => {
+    if (!onMark) return
+    onMark(sourceAt(edited, playhead))
+    announce(`Marker added at ${clockLabel(playhead)}`)
+  }
+
   // Zoom -------------------------------------------------------------------
 
   const zoom = (factor: number, centre?: number) => {
@@ -708,6 +736,8 @@ export function SoundEditor({
         return zoom(2)
       case "zoom-fit":
         return fit()
+      case "mark":
+        return addMark()
     }
   }
 
@@ -881,6 +911,19 @@ export function SoundEditor({
             data-testid="waveform"
             aria-hidden="true"
           />
+          {shownMarks.map((mark) =>
+            mark.at >= view.from && mark.at <= view.to ? (
+              <span
+                key={mark.source}
+                className="absolute inset-y-0 w-0.5 bg-foreground/70"
+                style={{ left: `${xOf(mark.at)}%` }}
+                data-testid="editor-marker"
+                aria-hidden="true"
+              >
+                <span className="absolute top-0 left-0 size-2 bg-foreground/70" />
+              </span>
+            ) : null
+          )}
           {joins.map((join) =>
             join >= view.from && join <= view.to ? (
               <span
@@ -979,6 +1022,43 @@ export function SoundEditor({
           />
         )}
       </div>
+
+      {onMark && (
+        <div
+          className="flex flex-wrap items-center gap-2"
+          data-testid="editor-markers"
+        >
+          <Button type="button" variant="outline" onClick={addMark}>
+            <IconFlag data-icon="inline-start" aria-hidden="true" />
+            Add a marker
+          </Button>
+          {shownMarks.map((mark) => (
+            <div
+              key={mark.source}
+              className="flex items-center rounded-md border"
+            >
+              <Button
+                type="button"
+                variant="ghost"
+                className="font-mono"
+                onClick={() => moveTo(mark.at)}
+                aria-label={`Go to the marker at ${clockLabel(mark.at)}`}
+              >
+                {clockLabel(mark.at)}
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                onClick={() => onUnmark?.(mark.source)}
+                aria-label={`Remove the marker at ${clockLabel(mark.at)}`}
+              >
+                <IconX aria-hidden="true" />
+              </Button>
+            </div>
+          ))}
+        </div>
+      )}
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-[1fr_1fr_auto]">
         <div className="space-y-1">

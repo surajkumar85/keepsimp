@@ -14,6 +14,8 @@ import {
   RingtoneTutorial,
   NormalizeTutorial,
   BoosterTutorial,
+  SplitterTutorial,
+  JoinerTutorial,
 } from "@/components/audio/tutorial"
 import { AnimationConverterTutorial } from "@/components/animation-converter/tutorial"
 import { ImageCompressor } from "@/components/image-compressor/image-compressor"
@@ -106,6 +108,18 @@ export async function generateMetadata({
     return pageMetadata(
       "Normalize audio loudness online: −14 LUFS, free",
       "Bring audio files to the same loudness in your browser: −14 LUFS for Spotify, −16 for podcasts, −23 for broadcast, measured as ITU-R BS.1770 does, with a true-peak limiter. No account, no file uploads.",
+      `/dashboard/${id}/`
+    )
+  if (id === "join-audio")
+    return pageMetadata(
+      "Join audio files online for free: merge MP3, M4A, WAV",
+      "Join sound files into one in your browser, in the order you set, straight on, with silence between or crossfaded, with a chapter for each. No account, no file uploads.",
+      `/dashboard/${id}/`
+    )
+  if (id === "split-audio")
+    return pageMetadata(
+      "Split audio into parts online for free (MP3, M4A, WAV)",
+      "Split a recording, podcast or mix into parts in your browser: every few minutes, into equal parts, at markers or at its pauses, each part checked. No account, no file uploads.",
       `/dashboard/${id}/`
     )
   if (id === "volume-booster")
@@ -284,6 +298,10 @@ export default async function ToolPage({
         <AudioWorkspace mode="normalize" />
       ) : id === "volume-booster" ? (
         <AudioWorkspace mode="booster" />
+      ) : id === "split-audio" ? (
+        <AudioWorkspace mode="splitter" />
+      ) : id === "join-audio" ? (
+        <AudioWorkspace mode="joiner" />
       ) : id === "pdf-merger" ? (
         <PdfMerger />
       ) : id === "pdf-splitter" ? (
@@ -337,6 +355,10 @@ export default async function ToolPage({
         <NormalizeTutorial />
       ) : id === "volume-booster" ? (
         <BoosterTutorial />
+      ) : id === "split-audio" ? (
+        <SplitterTutorial />
+      ) : id === "join-audio" ? (
+        <JoinerTutorial />
       ) : id === "audio-extractor" ? (
         <AudioExtractorTutorial />
       ) : id === "pdf-merger" ? (

@@ -25,6 +25,8 @@ import {
   type Level,
   type LevelResult,
 } from "./level"
+import { holdsChapters, withMp3Chapters, withMp4Chapters } from "./chapters"
+import { Joiner, joinsFor, startsOf, type Joining } from "./join"
 import { Limiter } from "./limiter"
 import { isPlain, SoundShaper, type SoundSettings } from "./sound"
 import {
@@ -621,6 +623,9 @@ async function pass(
     codec?: Mediabunny.AudioCodec
     /** The equaliser and compressor; none when left out. */
     sound?: SoundSettings
+    /** Hand the frames on (made louder or quieter by `gain`) instead of writing them. */
+    deliver?: (planes: Float32Array[]) => Promise<void>
+    gain?: number
   }
 ) {
   const { edits, edited, expected, shaping } = options
@@ -707,6 +712,26 @@ async function pass(
                     kept.timestamp
                   )
                 : kept
+              if (options.deliver) {
+                const planes = planesOf(shaped_)
+                const gain = options.gain ?? 1
+                if (gain !== 1)
+                  for (const plane of planes)
+                    for (let index = 0; index < plane.length; index++)
+                      plane[index] *= gain
+                // The null output still wants one sample, or it will not finish.
+                const token = given++ === 0
+                return options.deliver(planes).then(() =>
+                  token
+                    ? sampleOf(
+                        engine,
+                        planes.map((plane) => plane.subarray(0, 1)),
+                        rate,
+                        0
+                      )
+                    : null
+                )
+              }
               if (options.measure) {
                 const planes = planesOf(shaped_)
                 options.measure.push(planes)
@@ -960,6 +985,220 @@ export async function convertAudio(
           limited: takenOff(shaping.limiter?.lowest ?? 1),
           compressed: -(shaping.compressed ?? 0),
           notes,
+        }
+      : null,
+  }
+}
+
+/** One file to join: its sound, its facts and its edits, and the title of its chapter. */
+export interface JoinPart {
+  file: Blob
+  facts: Pick<ReadFacts, "duration" | "sampleRate" | "kept">
+  edits: readonly Step[]
+  title: string
+}
+
+/**
+ * Join files into one, in order, by a plan: each as edited, shaped and
+ * made louder or quieter by itself (so files normalised together match),
+ * with gaps or crossfades between, one limiter and one meter over all of
+ * it, and a chapter for each file where the format holds chapters.
+ */
+export async function joinAudio(
+  engine: Engine,
+  parts: readonly JoinPart[],
+  plan: Plan,
+  options: {
+    joining: Joining
+    level: Level
+    sound?: SoundSettings
+    tags?: Mediabunny.MetadataTags
+    chapters: boolean
+    onProgress?: (fraction: number) => void
+    signal?: AbortSignal
+  }
+): Promise<{ bytes: Uint8Array; level: LevelResult | null; length: number }> {
+  const { level } = options
+  const sound =
+    options.sound && !isPlain(options.sound) ? options.sound : undefined
+  const prepared = parts.map((part) => {
+    const edited = editedBy(part.facts.duration, part.edits)
+    const length = part.edits.length ? lengthOf(edited) : part.facts.duration
+    return {
+      ...part,
+      edited,
+      length,
+      expected: Math.round(length * plan.sampleRate),
+    }
+  })
+  const joins = joinsFor(
+    prepared.map((part) => part.length),
+    options.joining
+  )
+  const { starts } = startsOf(
+    prepared.map((part) => part.length),
+    joins
+  )
+  const priming =
+    plan.codec === "aac"
+      ? await aacEncoding(
+          engine,
+          plan.sampleRate,
+          plan.channels,
+          plan.bitrate ?? 128_000
+        )
+      : null
+  if (plan.codec !== "aac") await readyEncoder(engine, plan.codec)
+  const measuring = needsMeasure(level)
+  const steps = prepared.length * (measuring ? 2 : 1)
+  let done = 0
+  const progress = (fraction: number) =>
+    options.onProgress?.(Math.min(1, (done + fraction) / steps))
+  const common = (part: (typeof prepared)[number]) => ({
+    keepTags: false,
+    signal: options.signal,
+    edits: part.edits,
+    edited: part.edited,
+    expected: part.expected,
+    sound,
+    codec: "pcm-f32" as const,
+    onProgress: progress,
+  })
+  const nothing = () =>
+    new engine.Output({
+      format: new engine.WavOutputFormat(),
+      target: new engine.NullTarget(),
+    })
+
+  // Each file measured first when its gain depends on it.
+  const gains = []
+  for (const part of prepared) {
+    let before: Loudness | null = null
+    if (measuring) {
+      const meter = new LoudnessMeter(plan.sampleRate, plan.channels)
+      await pass(engine, part.file, plan, part.facts, nothing(), {
+        ...common(part),
+        measure: meter,
+      })
+      before = loudnessOf(meter.result())
+      done++
+    }
+    gains.push(gainFor(level, before))
+  }
+  const ceiling =
+    gains.find((gain) => gain.ceiling !== null)?.ceiling ??
+    (sound ? 10 ** (SAFE_CEILING / 20) : null)
+  const shapedLevel = level.mode !== "same" || sound !== undefined
+
+  const target = new engine.BufferTarget()
+  const longWav =
+    plan.format === "wav" &&
+    prepared.reduce((sum, part) => sum + part.length, 0) *
+      plan.sampleRate *
+      plan.channels *
+      4 >
+      3.9e9
+  const output = new engine.Output({
+    format: outputFormat(engine, plan, longWav),
+    target,
+  })
+  const source = new engine.AudioSampleSource({
+    codec: plan.codec as Mediabunny.AudioCodec,
+    ...(plan.bitrate
+      ? { quality: new engine.Quality({ bitrate: plan.bitrate }) }
+      : {}),
+  })
+  output.addAudioTrack(source)
+  if (options.tags) output.setMetadataTags(options.tags)
+  await output.start()
+
+  const limiter =
+    ceiling === null
+      ? null
+      : new Limiter(plan.sampleRate, plan.channels, ceiling)
+  const meter = new LoudnessMeter(plan.sampleRate, plan.channels)
+  const integers =
+    plan.sampleFormat === "s16" || plan.sampleFormat === "s32"
+      ? plan.sampleFormat
+      : null
+  let written = 0
+  const waiting: Float32Array[][] = []
+  const joiner = new Joiner(plan.sampleRate, plan.channels, joins, (planes) => {
+    waiting.push(planes)
+  })
+  /** Everything the joiner has let out, through the limiter, to the encoder. */
+  const drain = async (last = false) => {
+    const ready = waiting.splice(0)
+    const out = ready.map((planes) =>
+      limiter ? limiter.process(planes) : planes
+    )
+    if (last && limiter) out.push(limiter.flush())
+    for (const planes of out) {
+      if (!planes[0].length) continue
+      meter.push(planes)
+      let sample = sampleOf(
+        engine,
+        planes,
+        plan.sampleRate,
+        written / plan.sampleRate
+      )
+      if (integers) sample = asIntegers(engine, sample, integers)
+      await source.add(sample)
+      written += planes[0].length
+    }
+  }
+  try {
+    for (const [index, part] of prepared.entries()) {
+      await pass(engine, part.file, plan, part.facts, nothing(), {
+        ...common(part),
+        gain: 10 ** (gains[index].db / 20),
+        deliver: async (planes) => {
+          joiner.push(planes)
+          await drain()
+        },
+      })
+      done++
+      if (index < prepared.length - 1) joiner.next()
+      await drain()
+    }
+    joiner.finish()
+    await drain(true)
+    source.close()
+    await output.finalize()
+  } catch (error) {
+    await output.cancel().catch(() => undefined)
+    throw error
+  }
+  let bytes: Uint8Array = new Uint8Array(target.buffer!)
+  // Say in the file how many samples are the sound, so it plays without gaps.
+  if (plan.codec === "mp3") bytes = lameTagged(bytes, written)
+  else if (plan.codec === "opus")
+    bytes = withOpusEnd(bytes, Math.round((written / plan.sampleRate) * 48000))
+  else if (priming) bytes = withEditList(bytes, priming, written)
+  const length = written / plan.sampleRate
+  if (options.chapters && holdsChapters(plan.format)) {
+    const chapters = prepared.map((part, index) => ({
+      title: part.title,
+      start: starts[index],
+    }))
+    bytes =
+      plan.format === "mp3"
+        ? withMp3Chapters(bytes, chapters, length)
+        : withMp4Chapters(bytes, chapters)
+  }
+  const dbs = gains.map((gain) => gain.db)
+  return {
+    bytes,
+    length,
+    level: shapedLevel
+      ? {
+          mode: level.mode,
+          before: null,
+          db: dbs[0],
+          each: dbs,
+          after: loudnessOf(meter.result()),
+          limited: takenOff(limiter?.lowest ?? 1),
+          notes: [...new Set(gains.flatMap((gain) => gain.notes))],
         }
       : null,
   }

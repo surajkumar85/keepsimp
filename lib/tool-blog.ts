@@ -312,6 +312,22 @@ export const overviewPost: BlogPost = {
           label: "Guide: make audio louder without clipping",
           href: "/blog/make-audio-louder/",
         },
+        {
+          label: "A long recording? Open it as the Audio splitter",
+          href: "/dashboard/split-audio/",
+        },
+        {
+          label: "Guide: split audio into parts",
+          href: "/blog/split-audio-into-parts/",
+        },
+        {
+          label: "Several files? Open it as Join audio",
+          href: "/dashboard/join-audio/",
+        },
+        {
+          label: "Guide: join audio files into one",
+          href: "/blog/join-audio-files/",
+        },
       ],
     },
     {
@@ -2277,6 +2293,158 @@ export const boostPost: BlogPost = {
     {
       title: "Dynamic range compression and limiting, Wikipedia",
       url: "https://en.wikipedia.org/wiki/Dynamic_range_compression",
+    },
+  ],
+}
+
+export const splitPost: BlogPost = {
+  published: "2026-10-20",
+  modified: "2026-10-20",
+  slug: "split-audio-into-parts",
+  title: "One long recording, in parts you can find.",
+  searchTitle: "How to split an audio file into parts online for free",
+  description:
+    "Split a long recording, podcast, lecture or mix into parts in your browser: every few minutes, into equal parts, at markers or at its pauses. Nothing is uploaded.",
+  keywords: [
+    "split audio",
+    "audio splitter",
+    "split mp3 into parts",
+    "split audio by silence",
+    "cut audio into segments",
+    "split podcast",
+    "split long recording",
+  ],
+  category: "A little know-how",
+  readingTime: "3 min read",
+  image: "/images/audio-split-guide.svg",
+  imageAlt:
+    "A long waveform with markers along it, and below it a list of numbered parts, each with a tick and a download button",
+  tool: "split-audio",
+  intro:
+    "A two-hour lecture, a recorded meeting, a DJ mix, an audiobook chapter: some players skip badly through long files, some sites take only short ones, and finding your place is easier in parts. Splitting should not mean uploading the recording or cutting it by hand ten times.",
+  sections: [
+    {
+      id: "how",
+      title: "How to split.",
+      paragraphs: [
+        "Open the Audio splitter and drop the file. Choose how to split it: every few minutes, into a number of equal parts, at markers, or at its pauses. The parts are listed with their times before anything is written; press Split and each part is written, checked and named in order, ready to download one by one or as a ZIP.",
+      ],
+      links: [
+        { label: "Open the Audio splitter", href: "/dashboard/split-audio/" },
+      ],
+    },
+    {
+      id: "markers",
+      title: "At markers, or at the pauses.",
+      paragraphs: [
+        "To choose the places yourself, play the file and press M (or Add a marker) where each part should start. To let the sound choose, split at pauses: every pause longer than half a second, one or two seconds ends a part at its middle, and the pauses can be left out of the parts altogether, which suits a talk or a set of songs.",
+        "You can trim, fade and normalise the file first: the parts are made from it as you edited it, and each part is cut to the sample.",
+      ],
+      links: [
+        {
+          label: "Guide: trim audio without uploading it",
+          href: "/blog/trim-audio-without-uploading/",
+        },
+      ],
+    },
+    {
+      id: "private",
+      title: "On your device.",
+      paragraphs: [
+        "The file is read and the parts written in your browser; nothing is uploaded and there is no account. The file itself is never changed.",
+      ],
+      links: [
+        {
+          label: "Every KeepSimp tool in one place",
+          href: "/blog/free-online-tools-no-upload/",
+        },
+      ],
+    },
+  ],
+  sources: [
+    {
+      title: "Audio file format, Wikipedia",
+      url: "https://en.wikipedia.org/wiki/Audio_file_format",
+    },
+  ],
+}
+
+export const joinPost: BlogPost = {
+  published: "2026-10-20",
+  modified: "2026-10-20",
+  slug: "join-audio-files",
+  title: "Many recordings, one file, no jumps between.",
+  searchTitle: "How to join or merge audio files into one online for free",
+  description:
+    "Join MP3, M4A, WAV and other sound files into one in your browser, in your order, straight on, with silence or crossfades, with chapters. Nothing is uploaded.",
+  keywords: [
+    "join audio files",
+    "merge mp3",
+    "combine audio files",
+    "audio joiner",
+    "crossfade songs",
+    "merge audio with chapters",
+    "concatenate mp3",
+  ],
+  category: "A little know-how",
+  readingTime: "3 min read",
+  image: "/images/audio-join-guide.svg",
+  imageAlt:
+    "Three numbered files with arrows to move them, joined into one waveform with chapter marks where each begins",
+  tool: "join-audio",
+  intro:
+    "Voice notes recorded in pieces, the songs of a mix, the chapters of an audiobook, the takes of a podcast: joining them should keep their order, not jump in loudness from one to the next, and leave a way to find each part again.",
+  sections: [
+    {
+      id: "how",
+      title: "How to join.",
+      paragraphs: [
+        "Open Join audio and drop the files. Put them in order with the arrows, choose how they meet (straight on, a moment of silence, or a crossfade) and the format, and press Join. The joined file is written, opened again and listened to, and offered with a player and a download.",
+      ],
+      links: [{ label: "Open Join audio", href: "/dashboard/join-audio/" }],
+    },
+    {
+      id: "matching",
+      title: "Files that do not match.",
+      paragraphs: [
+        "Files of different sample rates and channels are made the same. Recordings of different loudness can be made to match: choose Normalize loudness, and each file is measured and brought to the same loudness before it is joined, with one limiter over the whole so nothing clips. Each file joins as you edited it, so trim each one first if it needs it.",
+      ],
+      links: [
+        {
+          label: "Guide: normalize audio loudness",
+          href: "/blog/normalize-audio-loudness/",
+        },
+      ],
+    },
+    {
+      id: "chapters",
+      title: "A chapter for each file.",
+      paragraphs: [
+        "An MP3 or M4A gets a chapter where each file begins, named after it, so a player can jump from one to the next. MP3 chapters are read by most players and podcast apps; the M4A kind is read by VLC, FFmpeg and foobar2000, while Apple's own apps read another kind.",
+      ],
+    },
+    {
+      id: "private",
+      title: "On your device.",
+      paragraphs: [
+        "Files are read and joined in your browser and never uploaded. There is no account and no limit on how many you join, up to 50 at once.",
+      ],
+      links: [
+        {
+          label: "Guide: split audio into parts",
+          href: "/blog/split-audio-into-parts/",
+        },
+        {
+          label: "Every KeepSimp tool in one place",
+          href: "/blog/free-online-tools-no-upload/",
+        },
+      ],
+    },
+  ],
+  sources: [
+    {
+      title: "ID3v2 Chapter Frame Addendum",
+      url: "https://id3.org/id3v2-chapters-1.0",
     },
   ],
 }

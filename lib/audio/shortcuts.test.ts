@@ -69,6 +69,7 @@ describe("shortcutGroups", () => {
       "zoom-in",
       "zoom-out",
       "zoom-fit",
+      "mark",
     ]
     expect(listed).toHaveLength(actions.length)
   })

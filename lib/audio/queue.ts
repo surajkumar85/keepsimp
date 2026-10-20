@@ -6,6 +6,7 @@
  */
 import type { Heard } from "./check"
 import { editsKey, type Step } from "./edits"
+import type { PartTimes } from "./split"
 import type { ReadFacts } from "./mediabunny-audio"
 import type { LevelResult } from "./level"
 import type { LoudnessMap } from "./loudness"
@@ -50,6 +51,14 @@ export interface AudioItem {
   /** The changes made to it, in order, each one or more steps undone together; and those undone that can be made again. */
   changes?: Step[][]
   redo?: Step[][]
+  /** Markers, in the source's own seconds, so edits do not move them. */
+  marks?: number[]
+  /** The parts asked for, and the key they are to be written for. */
+  splitWanted?: { key: string; parts: PartTimes[] }
+  /** The parts written, for a key. */
+  split?: { key: string; parts: AudioResult[] }
+  splitProgress?: number
+  splitError?: string
 }
 
 export type AudioAction =
@@ -70,6 +79,13 @@ export type AudioAction =
   | { type: "undo"; id: string }
   | { type: "redo"; id: string }
   | { type: "reset"; id: string }
+  | { type: "mark"; id: string; at: number }
+  | { type: "unmark"; id: string; at: number }
+  | { type: "split-wanted"; id: string; key: string; parts: PartTimes[] }
+  | { type: "split-progress"; id: string; fraction: number }
+  | { type: "split-done"; id: string; key: string; parts: AudioResult[] }
+  | { type: "split-failed"; id: string; key: string; message: string }
+  | { type: "move"; id: string; by: -1 | 1 }
   | { type: "remove"; id: string }
   | { type: "clear" }
 
@@ -173,6 +189,59 @@ export function audioReducer(
         changes: [],
         redo: [],
       }))
+    case "mark":
+      return patch(items, action.id, (item) => ({
+        ...item,
+        marks: [...new Set([...(item.marks ?? []), action.at])].sort(
+          (a, b) => a - b
+        ),
+      }))
+    case "unmark":
+      return patch(items, action.id, (item) => ({
+        ...item,
+        marks: (item.marks ?? []).filter((at) => at !== action.at),
+      }))
+    case "split-wanted":
+      return patch(items, action.id, (item) => ({
+        ...item,
+        splitWanted: { key: action.key, parts: action.parts },
+        splitError: undefined,
+        splitProgress: undefined,
+      }))
+    case "split-progress":
+      return patch(items, action.id, (item) => ({
+        ...item,
+        splitProgress: action.fraction,
+      }))
+    case "split-done":
+      return patch(items, action.id, (item) =>
+        item.splitWanted?.key === action.key
+          ? {
+              ...item,
+              split: { key: action.key, parts: action.parts },
+              splitProgress: undefined,
+            }
+          : item
+      )
+    case "split-failed":
+      return patch(items, action.id, (item) =>
+        item.splitWanted?.key === action.key
+          ? {
+              ...item,
+              splitWanted: undefined,
+              splitError: action.message,
+              splitProgress: undefined,
+            }
+          : item
+      )
+    case "move": {
+      const from = items.findIndex((item) => item.id === action.id)
+      const to = from + action.by
+      if (from < 0 || to < 0 || to >= items.length) return items
+      const moved = [...items]
+      ;[moved[from], moved[to]] = [moved[to], moved[from]]
+      return moved
+    }
     case "remove":
       return items.filter((item) => item.id !== action.id)
     case "clear":
@@ -193,9 +262,10 @@ export function audioState(item: AudioItem, key: string | null): AudioState {
 export function droppedUrls(before: AudioItem[], after: AudioItem[]) {
   const urls = (items: AudioItem[]) =>
     items.flatMap((item) =>
-      item.result
-        ? [...new Set([item.result.url, item.result.downloadUrl])]
-        : []
+      [
+        ...(item.result ? [item.result] : []),
+        ...(item.split?.parts ?? []),
+      ].flatMap((result) => [...new Set([result.url, result.downloadUrl])])
     )
   const kept = new Set(urls(after))
   return urls(before).filter((url) => !kept.has(url))
@@ -214,7 +284,7 @@ export function nextAudioJob(
   keyOf: (item: AudioItem) => string | null,
   inFlight: ReadonlySet<string>,
   selectedId: string | null
-): { item: AudioItem; job: "read" | "convert" } | null {
+): { item: AudioItem; job: "read" | "convert" | "split" } | null {
   const free = items.filter((item) => !inFlight.has(item.id))
   const unread = free.find(
     (item) => item.status === "reading" && item.facts === undefined
@@ -224,10 +294,23 @@ export function nextAudioJob(
     const key = keyOf(item)
     return item.status === "ready" && key !== null && item.resultKey !== key
   })
-  const item =
-    waiting.find((one) => one.id === selectedId) ?? waiting[0] ?? null
+  const selected = waiting.find((one) => one.id === selectedId)
+  if (selected) return { item: selected, job: "convert" }
+  // Parts asked for come before the files no one is looking at.
+  const splitting = items.find(
+    (one) =>
+      one.status === "ready" &&
+      one.splitWanted &&
+      one.split?.key !== one.splitWanted.key &&
+      !inFlight.has(splitId(one.id))
+  )
+  if (splitting) return { item: splitting, job: "split" }
+  const item = waiting[0] ?? null
   return item ? { item, job: "convert" } : null
 }
+
+/** The pool's name for the job that splits a file. */
+export const splitId = (id: string) => `split:${id}`
 
 /** Totals for the summary bar. */
 export function audioTotals(

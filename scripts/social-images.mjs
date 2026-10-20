@@ -211,6 +211,18 @@ const cards = [
     "/images/audio-boost-guide.svg",
   ],
   [
+    "split-audio-into-parts",
+    "One long recording, in parts you can find.",
+    "Split by time, at markers or at pauses, on your device.",
+    "/images/audio-split-guide.svg",
+  ],
+  [
+    "join-audio-files",
+    "Many recordings, one file, no jumps between.",
+    "Join in your order, with crossfades and chapters.",
+    "/images/audio-join-guide.svg",
+  ],
+  [
     "gapless-mp3-and-aac",
     "Why a converted MP3 starts late, and ours does not.",
     "Gapless MP3 and AAC, checked before download.",

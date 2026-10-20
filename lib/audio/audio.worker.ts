@@ -8,14 +8,20 @@ import type {
   AudioRequest,
   AudioResponse,
   ConvertJob,
+  JoinJob,
   ReadJob,
+  SplitJob,
+  Written,
 } from "./protocol"
+import { partStep } from "./split"
 import { AiffProblem, wavFromAiff } from "./wav"
 
 declare const self: DedicatedWorkerGlobalScope
 
 const UNREADABLE =
   "This file could not be read. It may be damaged, or of a kind not read here."
+const UNJOINED =
+  "These files could not be joined. Try again, or choose another format."
 const UNWRITTEN =
   "This file could not be written. Try again, or choose another format."
 
@@ -23,7 +29,7 @@ let generation = 0
 /** The job running now, and how to stop it. */
 let running: {
   id: string
-  job: "read" | "convert"
+  job: "read" | "convert" | "split" | "join"
   generation: number
   stop: AbortController
 } | null = null
@@ -84,7 +90,7 @@ async function read(job: ReadJob, stop: AbortController) {
     })
 }
 
-async function convert(job: ConvertJob, stop: AbortController) {
+async function convert(job: ConvertJob | SplitJob, stop: AbortController) {
   // Nothing is said of a job once it is stopped: the worker has said it retires.
   const send = (message: AudioResponse, transfer: Transferable[] = []) => {
     if (!stop.signal.aborted) post(message, transfer)
@@ -112,30 +118,143 @@ async function convert(job: ConvertJob, stop: AbortController) {
       job.container === "aiff" || job.tags
         ? { ...job.facts, kept: null }
         : job.facts
+    // A split writes the file once for every part, with a keep of it.
+    const lists =
+      job.job === "split"
+        ? job.parts.map((part) => [...job.edits, partStep(part)])
+        : [job.edits]
+    const written: Written[] = []
     let last = 0
-    const { bytes, level } = await convertAudio(
+    for (const [index, edits] of lists.entries()) {
+      const { bytes, level } = await convertAudio(
+        mediabunny,
+        wav.file,
+        job.plan,
+        facts,
+        {
+          keepTags: job.keepTags,
+          edits,
+          level: job.level,
+          sound: job.sound,
+          tags:
+            job.tags ??
+            (wav.tags
+              ? {
+                  title: wav.tags.title,
+                  artist: wav.tags.artist,
+                  comment: wav.tags.comment,
+                }
+              : undefined),
+          signal: stop.signal,
+          onProgress: (part) => {
+            sign = Date.now()
+            const fraction = (index + part) / lists.length
+            // A message for every whole percent is plenty.
+            if (fraction - last < 0.01 && fraction < 1) return
+            last = fraction
+            send({ type: "progress", id: job.id, key: job.key, fraction })
+          },
+        }
+      )
+      if (stop.signal.aborted) {
+        send({ type: "abandoned", id: job.id })
+        return
+      }
+      sign = Date.now()
+      const heard = await hearAudio(mediabunny, bytes, stop.signal)
+      if (stop.signal.aborted) {
+        send({ type: "abandoned", id: job.id })
+        return
+      }
+      written.push({ bytes, heard, level })
+    }
+    const transfer = written.map(({ bytes }) => bytes.buffer as ArrayBuffer)
+    if (job.job === "split")
+      send(
+        {
+          type: "done",
+          id: job.id,
+          job: "split",
+          key: job.key,
+          plan: job.plan,
+          parts: written,
+        },
+        transfer
+      )
+    else
+      send(
+        {
+          type: "done",
+          id: job.id,
+          job: "convert",
+          key: job.key,
+          plan: job.plan,
+          ...written[0],
+        },
+        transfer
+      )
+  } catch (error) {
+    if (stop.signal.aborted) send({ type: "abandoned", id: job.id })
+    else
+      send({
+        type: "error",
+        id: job.id,
+        key: job.key,
+        message: said(error, UNWRITTEN),
+      })
+  } finally {
+    clearInterval(watch)
+  }
+}
+
+async function joined(job: JoinJob, stop: AbortController) {
+  const send = (message: AudioResponse, transfer: Transferable[] = []) => {
+    if (!stop.signal.aborted) post(message, transfer)
+  }
+  const mediabunny = await engine()
+  const { joinAudio, hearAudio, STALL_MS, Stalled } = await engineFiles()
+  let sign = Date.now()
+  const watch = setInterval(() => {
+    if (stop.signal.aborted) return clearInterval(watch)
+    if (Date.now() - sign < STALL_MS * 2) return
+    clearInterval(watch)
+    send({
+      type: "error",
+      id: job.id,
+      key: job.key,
+      message: new Stalled().message,
+    })
+    if (running?.stop === stop) retire(running)
+  }, 1000)
+  try {
+    const parts = await Promise.all(
+      job.parts.map(async (part) => {
+        const wav = await asWav(part)
+        return {
+          file: wav.file,
+          facts:
+            part.container === "aiff"
+              ? { ...part.facts, kept: null }
+              : part.facts,
+          edits: part.edits,
+          title: part.title,
+        }
+      })
+    )
+    let last = 0
+    const { bytes, level, length } = await joinAudio(
       mediabunny,
-      wav.file,
+      parts,
       job.plan,
-      facts,
       {
-        keepTags: job.keepTags,
-        edits: job.edits,
+        joining: job.joining,
         level: job.level,
         sound: job.sound,
-        tags:
-          job.tags ??
-          (wav.tags
-            ? {
-                title: wav.tags.title,
-                artist: wav.tags.artist,
-                comment: wav.tags.comment,
-              }
-            : undefined),
+        tags: job.tags,
+        chapters: job.chapters,
         signal: stop.signal,
         onProgress: (fraction) => {
           sign = Date.now()
-          // A message for every whole percent is plenty.
           if (fraction - last < 0.01 && fraction < 1) return
           last = fraction
           send({ type: "progress", id: job.id, key: job.key, fraction })
@@ -156,12 +275,11 @@ async function convert(job: ConvertJob, stop: AbortController) {
       {
         type: "done",
         id: job.id,
-        job: "convert",
+        job: "join",
         key: job.key,
         plan: job.plan,
-        bytes,
-        heard,
-        level,
+        written: { bytes, heard, level },
+        length,
       },
       [bytes.buffer as ArrayBuffer]
     )
@@ -172,7 +290,7 @@ async function convert(job: ConvertJob, stop: AbortController) {
         type: "error",
         id: job.id,
         key: job.key,
-        message: said(error, UNWRITTEN),
+        message: said(error, UNJOINED),
       })
   } finally {
     clearInterval(watch)
@@ -217,5 +335,6 @@ self.onmessage = (event: MessageEvent<AudioRequest>) => {
   else if (message.generation < generation) {
     post({ type: "abandoned", id: message.id })
     done()
-  } else void convert(message, stop).finally(done)
+  } else if (message.job === "join") void joined(message, stop).finally(done)
+  else void convert(message, stop).finally(done)
 }

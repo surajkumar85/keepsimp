@@ -25,6 +25,7 @@ export type KeyAction =
   | "zoom-in"
   | "zoom-out"
   | "zoom-fit"
+  | "mark"
 
 interface Binding {
   /** `KeyboardEvent.key`, lower case for letters. */
@@ -59,6 +60,7 @@ const BINDINGS: Binding[] = [
   { key: "=", action: "zoom-in" },
   { key: "-", action: "zoom-out" },
   { key: "0", action: "zoom-fit" },
+  { key: "m", action: "mark" },
 ]
 
 /** How far the keys move the playhead, in seconds. */
@@ -109,6 +111,7 @@ const SAID: Record<KeyAction, string> = {
   "zoom-in": "Zoom in",
   "zoom-out": "Zoom out",
   "zoom-fit": "Show all of it",
+  mark: "Add a marker at the playhead",
 }
 
 const NAMES: Record<string, string> = {
@@ -148,7 +151,7 @@ const GROUPS: { title: string; actions: KeyAction[] }[] = [
   },
   {
     title: "Choosing a part",
-    actions: ["mark-in", "mark-out", "select-all", "clear"],
+    actions: ["mark-in", "mark-out", "select-all", "clear", "mark"],
   },
   { title: "Editing", actions: ["cut", "undo", "redo"] },
   { title: "Zoom", actions: ["zoom-in", "zoom-out", "zoom-fit"] },

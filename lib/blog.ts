@@ -602,6 +602,8 @@ export const posts: readonly BlogPost[] = [
   ringtonePost,
   normalizePost,
   boostPost,
+  splitPost,
+  joinPost,
   gaplessPost,
   {
     slug: "format-json-without-losing-precision",
@@ -711,6 +713,8 @@ import {
   ringtonePost,
   normalizePost,
   boostPost,
+  splitPost,
+  joinPost,
   gaplessPost,
   overviewPost,
   resizePost,

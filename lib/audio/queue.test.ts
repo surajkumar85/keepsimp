@@ -7,6 +7,7 @@ import {
   droppedUrls,
   itemKey,
   nextAudioJob,
+  splitId,
   stepsOf,
   type AudioItem,
   type AudioResult,
@@ -169,6 +170,129 @@ describe("edits", () => {
     expect(
       audioReducer([{ ...bare, redo: [[cut]] }], { type: "redo", id: "c" })[0]
     ).toMatchObject({ changes: [[cut]], redo: [] })
+  })
+})
+
+describe("markers and parts", () => {
+  it("keeps markers in order, once each, and takes them away", () => {
+    let items = audioReducer(added(), { type: "mark", id: "a", at: 5 })
+    items = audioReducer(items, { type: "mark", id: "a", at: 2 })
+    items = audioReducer(items, { type: "mark", id: "a", at: 5 })
+    expect(items[0].marks).toEqual([2, 5])
+    items = audioReducer(items, { type: "unmark", id: "a", at: 2 })
+    expect(items[0].marks).toEqual([5])
+    expect(
+      audioReducer(added(), { type: "unmark", id: "a", at: 1 })[0].marks
+    ).toEqual([])
+  })
+
+  it("asks for parts, follows their progress, and keeps only those for the key asked", () => {
+    const parts = [
+      { from: 0, to: 1 },
+      { from: 1, to: 2 },
+    ]
+    let items = audioReducer(added(), {
+      type: "split-wanted",
+      id: "a",
+      key: "s1",
+      parts,
+    })
+    expect(items[0].splitWanted).toEqual({ key: "s1", parts })
+    items = audioReducer(items, {
+      type: "split-progress",
+      id: "a",
+      fraction: 0.5,
+    })
+    expect(items[0].splitProgress).toBe(0.5)
+    // A late answer for other parts changes nothing.
+    const late = audioReducer(items, {
+      type: "split-done",
+      id: "a",
+      key: "old",
+      parts: [result("blob:old")],
+    })
+    expect(late[0]).toBe(items[0])
+    expect(
+      audioReducer(items, {
+        type: "split-failed",
+        id: "a",
+        key: "old",
+        message: "x",
+      })[0]
+    ).toBe(items[0])
+    items = audioReducer(items, {
+      type: "split-done",
+      id: "a",
+      key: "s1",
+      parts: [result("blob:p1r"), result("blob:p2")],
+    })
+    expect(items[0].split?.parts).toHaveLength(2)
+    expect(items[0].splitProgress).toBeUndefined()
+    // Their links are let go with the file.
+    expect(
+      droppedUrls(items, audioReducer(items, { type: "remove", id: "a" }))
+    ).toEqual(["blob:p1r", "blob:p1r-download", "blob:p2"])
+    items = audioReducer(items, {
+      type: "split-wanted",
+      id: "a",
+      key: "s2",
+      parts,
+    })
+    items = audioReducer(items, {
+      type: "split-failed",
+      id: "a",
+      key: "s2",
+      message: "No.",
+    })
+    expect(items[0]).toMatchObject({
+      splitError: "No.",
+      splitWanted: undefined,
+    })
+  })
+
+  it("writes parts asked for after the selected file and before the rest", () => {
+    const ready = (id: string): AudioItem => ({
+      id,
+      file: file(id),
+      status: "ready",
+      facts: facts(),
+    })
+    const wanting = { ...ready("b"), splitWanted: { key: "s", parts: [] } }
+    const items = [ready("a"), wanting]
+    expect(nextAudioJob(items, () => "k", new Set(), "a")).toMatchObject({
+      item: { id: "a" },
+      job: "convert",
+    })
+    expect(nextAudioJob(items, () => "k", new Set(), null)).toMatchObject({
+      item: { id: "b" },
+      job: "split",
+    })
+    expect(splitId("b")).toBe("split:b")
+    // Being split, or split already: on to the files waiting.
+    expect(
+      nextAudioJob(items, () => "k", new Set([splitId("b")]), null)
+    ).toMatchObject({ item: { id: "a" }, job: "convert" })
+    const done = { ...wanting, split: { key: "s", parts: [] } }
+    expect(nextAudioJob([done], () => null, new Set(), null)).toBeNull()
+  })
+})
+
+describe("order", () => {
+  it("moves a file up or down one place, never past the ends", () => {
+    const items = added()
+    expect(
+      audioReducer(items, { type: "move", id: "b", by: -1 }).map(
+        (item) => item.id
+      )
+    ).toEqual(["b", "a"])
+    expect(
+      audioReducer(items, { type: "move", id: "a", by: 1 }).map(
+        (item) => item.id
+      )
+    ).toEqual(["b", "a"])
+    expect(audioReducer(items, { type: "move", id: "a", by: -1 })).toBe(items)
+    expect(audioReducer(items, { type: "move", id: "b", by: 1 })).toBe(items)
+    expect(audioReducer(items, { type: "move", id: "z", by: 1 })).toBe(items)
   })
 })
 

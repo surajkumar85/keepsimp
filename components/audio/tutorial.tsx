@@ -3,6 +3,8 @@ import { JOIN_FADE, MOST_GAIN } from "@/lib/audio/edits"
 import { MOST_LOUDER, MOST_RAISE, TARGETS } from "@/lib/audio/level"
 import { COMPRESSORS } from "@/lib/audio/dynamics"
 import { LOOKAHEAD, RELEASE } from "@/lib/audio/limiter"
+import { MOST_PARTS } from "@/lib/audio/split"
+import { CROSSFADES, GAPS } from "@/lib/audio/join"
 import {
   KEPT_EDGE,
   KEPT_PAUSE,
@@ -212,6 +214,45 @@ const silencing: TutorialContent["options"] = [
   },
 ]
 
+const splitting: TutorialContent["options"] = [
+  {
+    term: "Ways to split",
+    detail: `Every few minutes (the last part is what is left), into a number of equal parts (2 to ${MOST_PARTS}), at markers you place, or at pauses longer than ${PAUSES.map((pause) => `${pause} s`).join(", ")} (each part ends at the middle of a pause, or the pauses can be left out). The parts are listed with their times before anything is written.`,
+  },
+  {
+    term: "Markers",
+    detail:
+      "Put the playhead where a part should start and press Add a marker, or M on the waveform. Markers stay where they are in the file when you edit it; one in a part you cut out is not used. Remove one with its ×.",
+  },
+  {
+    term: "The parts",
+    detail:
+      "Each part is the file as you edited it, cut to its part to the sample, in the format and with the settings chosen, and checked like any result. They are named after the file with a number (talk - 01, talk - 02 …), and can be downloaded one by one or as one ZIP. The file itself is never changed.",
+  },
+]
+
+const combining: TutorialContent["options"] = [
+  {
+    term: "The order",
+    detail:
+      "Files join in the order of the list; move each up or down with its arrows. Each joins as you edited it, so trim, fade or cut each one first if you like.",
+  },
+  {
+    term: "Between files",
+    detail: `Straight on, with ${GAPS.map((gap) => `${gap}`).join(", ")} s of silence, or crossfaded over ${CROSSFADES.map((crossfade) => `${crossfade}`).join(", ")} s: the end of one fades out as the next fades in, at equal power so the loudness does not dip. A crossfade is never longer than half of either file.`,
+  },
+  {
+    term: "Matching files",
+    detail:
+      "Files of different rates and channels are made the same (the first file's rate unless you choose one, and stereo when any is stereo). Choose Normalize loudness and each file is measured and brought to the target by itself, so they come out equally loud; one limiter keeps the peaks of the whole under the ceiling.",
+  },
+  {
+    term: "Chapters",
+    detail:
+      "An MP3 or M4A gets a chapter for each file, named after it: ID3 chapters in an MP3, which most players and podcast apps read; a Nero chapter list in an M4A, which VLC, FFmpeg and foobar2000 read. Apple's own apps read chapters of another kind, which is not written.",
+  },
+]
+
 const editing: TutorialContent["options"] = [
   {
     term: "Choosing a part",
@@ -272,7 +313,15 @@ const editor: TutorialContent = {
       text: "Each file is written as soon as it is read or edited, and checked. Download one, or everything as one ZIP.",
     },
   ],
-  options: [...editing, ...silencing, ...leveling, ...shaping, ...options],
+  options: [
+    ...editing,
+    ...silencing,
+    ...splitting,
+    ...combining,
+    ...leveling,
+    ...shaping,
+    ...options,
+  ],
   guideHref: "/blog/trim-audio-without-uploading/",
 }
 
@@ -419,4 +468,66 @@ export function NormalizeTutorial() {
 
 export function BoosterTutorial() {
   return <ToolTutorial content={boosting} />
+}
+
+const splitter: TutorialContent = {
+  name: "How to split audio into parts with KeepSimp",
+  description:
+    "Split a recording, podcast or mix into parts in your browser: by time, into equal parts, at markers or at its pauses. Nothing is uploaded.",
+  intro: "Follow the steps below. Every option is explained underneath.",
+  steps: [
+    {
+      title: "Add the file",
+      text: "Drop it, choose it or paste it: MP3, M4A, Opus, FLAC, WAV, AIFF or a video.",
+    },
+    {
+      title: "Choose how to split it",
+      text: "Every few minutes, into equal parts, at markers you place on the waveform, or at its pauses. Trim or edit it first if you like.",
+    },
+    {
+      title: "Split",
+      text: "The parts are listed with their times; press Split, and each is written and checked.",
+    },
+    {
+      title: "Download",
+      text: "Each part on its own, or all of them as one ZIP, named in order.",
+    },
+  ],
+  options: [...splitting, ...editing, ...silencing, ...options],
+  guideHref: "/blog/split-audio-into-parts/",
+}
+
+export function SplitterTutorial() {
+  return <ToolTutorial content={splitter} />
+}
+
+const joiner: TutorialContent = {
+  name: "How to join audio files with KeepSimp",
+  description:
+    "Join sound files into one in your browser, in the order you set, straight on, with silence between or crossfaded, with a chapter for each. Nothing is uploaded.",
+  intro: "Follow the steps below. Every option is explained underneath.",
+  steps: [
+    {
+      title: "Add the files",
+      text: "Drop them, choose them or paste them: MP3, M4A, Opus, FLAC, WAV, AIFF or the sound of videos.",
+    },
+    {
+      title: "Put them in order",
+      text: "Move each up or down. Trim or edit any of them first if you like.",
+    },
+    {
+      title: "Choose how they meet",
+      text: "Straight on, with silence between or crossfaded; the format, and Normalize loudness to make them match.",
+    },
+    {
+      title: "Join and download",
+      text: "The joined file is written, checked and ready, with a chapter for each file in an MP3 or M4A.",
+    },
+  ],
+  options: [...combining, ...options],
+  guideHref: "/blog/join-audio-files/",
+}
+
+export function JoinerTutorial() {
+  return <ToolTutorial content={joiner} />
 }
