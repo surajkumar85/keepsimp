@@ -44,21 +44,21 @@ test("splits into equal parts, each checked, one by one or as a ZIP", async ({
   })
   const part = await saved(page, () =>
     page
-      .getByRole("link", { name: "Download keepsimp-tune - 02.flac" })
+      .getByRole("link", { name: "Download keepsimp-tune-02.flac" })
       .dispatchEvent("click")
   )
-  expect(part.name).toBe("keepsimp-tune - 02.flac")
+  expect(part.name).toBe("keepsimp-tune-02.flac")
   expect(
     Math.abs(samples(part.bytes, "part-2.flac") - (8 / 3) * RATE)
   ).toBeLessThan(2)
   const zip = await saved(page, () =>
     panel.getByRole("button", { name: "Download all parts (ZIP)" }).click()
   )
-  expect(zip.name).toBe("keepsimp-tune parts.zip")
+  expect(zip.name).toBe("keepsimp-tune-parts.zip")
   expect(Object.keys(unzipSync(zip.bytes)).sort()).toEqual([
-    "keepsimp-tune - 01.flac",
-    "keepsimp-tune - 02.flac",
-    "keepsimp-tune - 03.flac",
+    "keepsimp-tune-01.flac",
+    "keepsimp-tune-02.flac",
+    "keepsimp-tune-03.flac",
   ])
 })
 
@@ -89,7 +89,7 @@ test("splits at markers placed with the keys", async ({ page }) => {
   })
   const middle = await saved(page, () =>
     page
-      .getByRole("link", { name: "Download keepsimp-tune - 02.flac" })
+      .getByRole("link", { name: "Download keepsimp-tune-02.flac" })
       .dispatchEvent("click")
   )
   expect(samples(middle.bytes, "marked-2.flac")).toBe(2 * RATE)
@@ -115,7 +115,7 @@ test("joins in order with a chapter each, then crossfaded and normalised", async
   const straight = await saved(page, () =>
     page.getByTestId("join-download").dispatchEvent("click")
   )
-  expect(straight.name).toBe("keepsimp-tune (joined).mp3")
+  expect(straight.name).toBe("keepsimp-tune-joined.mp3")
   expect(samples(straight.bytes, "joined.mp3")).toBe(14 * RATE)
   const chapters = JSON.parse(
     execFileSync("ffprobe", [
@@ -154,7 +154,7 @@ test("joins in order with a chapter each, then crossfaded and normalised", async
   const matched = await saved(page, () =>
     page.getByTestId("join-download").dispatchEvent("click")
   )
-  expect(matched.name).toBe("keepsimp-clip (joined).mp3")
+  expect(matched.name).toBe("keepsimp-clip-joined.mp3")
   expect(samples(matched.bytes, "matched.mp3")).toBe(12 * RATE)
   expect(
     Math.abs(loudnessOf(matched.bytes, "matched.mp3").integrated - -16)

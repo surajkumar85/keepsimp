@@ -118,12 +118,15 @@ export const partStep = (part: PartTimes): Step => ({
   to: part.to,
 })
 
-/** The parts' names: the file's own, a dash and a number padded to the same width. */
+/**
+ * The parts' names: the file's own, a dash and a number padded to the same
+ * width. No spaces: some browsers change them in the name of a download.
+ */
 export function partNames(base: string, count: number) {
   const width = Math.max(2, String(count).length)
   return Array.from(
     { length: count },
-    (_, index) => `${base} - ${String(index + 1).padStart(width, "0")}`
+    (_, index) => `${base}-${String(index + 1).padStart(width, "0")}`
   )
 }
 

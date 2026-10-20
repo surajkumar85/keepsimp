@@ -105,12 +105,8 @@ describe("the rest", () => {
   })
 
   it("names the parts, makes their steps and keys", () => {
-    expect(partNames("talk", 3)).toEqual([
-      "talk - 01",
-      "talk - 02",
-      "talk - 03",
-    ])
-    expect(partNames("talk", 120)[0]).toBe("talk - 001")
+    expect(partNames("talk", 3)).toEqual(["talk-01", "talk-02", "talk-03"])
+    expect(partNames("talk", 120)[0]).toBe("talk-001")
     expect(partStep({ from: 1, to: 2 })).toEqual({ do: "keep", from: 1, to: 2 })
     expect(splitKey([{ from: 0, to: 1 }])).toBe("[[0,1]]")
   })

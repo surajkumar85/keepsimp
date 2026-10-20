@@ -26,7 +26,7 @@ jobs:
   # longer than its limit, and every run was cut off before it could finish.
   browser:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 75
     strategy:
       fail-fast: false
       matrix:

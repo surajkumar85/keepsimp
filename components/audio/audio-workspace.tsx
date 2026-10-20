@@ -620,7 +620,7 @@ export function AudioWorkspace({ mode = "editor" }: { mode?: AudioMode }) {
           first,
           message.plan,
           message.written,
-          `${baseName(first.file.name)} (joined)`,
+          `${baseName(first.file.name)}-joined`,
           want.length,
           want.settings
         )
@@ -1495,7 +1495,7 @@ export function AudioWorkspace({ mode = "editor" }: { mode?: AudioMode }) {
                   name: part.name,
                   blob: part.blob,
                 })),
-                `${baseName(selected.file.name)} parts.zip`
+                `${baseName(selected.file.name)}-parts.zip`
               )
             }
             zipping={zipping}

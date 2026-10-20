@@ -227,7 +227,7 @@ const splitting: TutorialContent["options"] = [
   {
     term: "The parts",
     detail:
-      "Each part is the file as you edited it, cut to its part to the sample, in the format and with the settings chosen, and checked like any result. They are named after the file with a number (talk - 01, talk - 02 …), and can be downloaded one by one or as one ZIP. The file itself is never changed.",
+      "Each part is the file as you edited it, cut to its part to the sample, in the format and with the settings chosen, and checked like any result. They are named after the file with a number (talk-01, talk-02 …), and can be downloaded one by one or as one ZIP. The file itself is never changed.",
   },
 ]
 
