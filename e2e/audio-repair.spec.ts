@@ -82,7 +82,7 @@ test("takes the noise out between the words and the hum from under them, on the 
     const url = new URL(request.url())
     if (
       url.protocol.startsWith("http") &&
-      !["127.0.0.1", "localhost"].includes(url.hostname)
+      url.host !== new URL(test.info().project.use.baseURL!).host
     )
       outside.push(request.url())
   })
