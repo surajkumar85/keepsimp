@@ -82,6 +82,17 @@ KeepSimp's tools can be used by agents: Claude Code, Codex and other MCP clients
 - **`add_text_to_pdf`** and **`add_image_to_pdf`**: a text box or a picture added as the editor adds one, laid out by `laidOut`, in points from the top left of the page as shown. A picture is placed at 150 pixels to the inch, at most half the page wide, unless a size is given.
 - **`ocr_pdf`**: the OCR panel's loop, moved to `lib/pdf-editor/ocr-run.ts` (`readPages`) and Tesseract's start to `lib/pdf-editor/tesseract.ts`, so the panel and the tool run the same code. The words are laid in one `editOcr` step; the download reads every one back (`report.ocr`). Stop does not wait for Tesseract, which is let go of after every run.
 
+### Images and animation (phase 4)
+
+- **The workers** are the pages' own, the agent's own copies with one worker each:
+  - the compressor's `CompressorClient`, through `CompressorEngine` (`lib/agent/image-engines.ts`): one image at a time, opened then compressed. Stop disposes of the worker, so a late answer from it cannot be taken for the next image's.
+  - the resizer's, converter's and animation converter's `WorkerPool`s, through `PoolJobs` (`lib/agent/pool-jobs.ts`): a job is handed out when the worker asks, and its answer comes back as a promise. Stop takes a waiting job out of the queue, or ends the worker of a running one; the rest carry on in a new worker.
+- **The tools** (`lib/agent/image.ts`, `lib/agent/animation.ts`) lay what is asked over the pages' default settings, so a choice left out is the page's:
+  - files are read by `inspectFile`, and SVG is drawn on the page by `rasteriseSvg`;
+  - `compress_image` builds its request as the compressor's page does (`buildPlan`, `candidateFormats`, `backgroundRgb`), and makes nothing when `originalIsBetter`;
+  - `resize_image` and `convert_image` name their files by the pages' own `fileName` and `uniqueNames`; several images become one PDF by `createPdf`;
+  - `convert_animation` takes the page's own limits for a video as caps: at most 15 frames a second and 640 pixels on the longest side, never enlarged, unless asked otherwise. Several stills are shown 200 ms each.
+
 ### The agent page (`/dashboard/agents/`)
 
 - **What it is:** a workspace page, not a catalogue entry, linked from the sidebar footer, in the sitemap and in the offline copy.
@@ -182,6 +193,10 @@ A package of its own, in TypeScript that Node runs as it is (type stripping), bu
   - words replaced in two places;
   - a text box and a picture placed;
   - a scan recognised by Tesseract and its words then redacted.
+- **Images and animation** (`lib/agent/image.test.ts`, `pool-jobs.test.ts`, 100%, against stand-ins in `tests/agent-image-fake.ts`; `e2e/agent-image.spec.ts`, five profiles, the real workers, results read by FFprobe and pdf.js):
+  - a JPEG read, compressed to WebP at 600 by 400, fitted under 40 KB, resized to a 300 by 300 PNG, to a set of widths and to a preset;
+  - converted to AVIF within 200 pixels, and two images made into one PDF;
+  - the sample video turned into a GIF of at most 640 pixels and 15 frames a second, the GIF into a WebP at twice the speed, and three stills into an MP4.
 - **A real agent:** Codex (`codex exec` with the bridge as its MCP server) formatted a JSON file with sorted keys and checked a contrast. It kept every digit and saved the result beside the file. Then Codex merged two PDFs into `combined.pdf` and compressed the brochure through the bridge. Poppler (`pdfinfo`, `pdftotext`) read 5 pages (3 + 2) and the same text in the compressed brochure, 90% smaller.
 
 ## Phases
@@ -189,5 +204,5 @@ A package of its own, in TypeScript that Node runs as it is (type stripping), bu
 1. **JSON and colour**, with the registry, the agent page, WebMCP and the bridge. Built.
 2. **PDF files:** information, merge, split, compress. Built.
 3. **PDF editor jobs:** pages, crop, page numbers, watermarks, details, forms, signature checks, redaction, find and replace, text and pictures, OCR. Built.
-4. **Images and animation.**
+4. **Images and animation.** Built.
 5. **Audio:** every job of the audio workspace, after its job-building moves into `lib/audio/`.

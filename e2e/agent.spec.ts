@@ -44,6 +44,11 @@ test("the page offers its tools to the bridge, runs them and hands their files b
     "add_text_to_pdf",
     "add_image_to_pdf",
     "ocr_pdf",
+    "image_info",
+    "compress_image",
+    "resize_image",
+    "convert_image",
+    "convert_animation",
   ])
   expect(await page.evaluate(() => window.keepsimp!.version)).toBe(1)
 
@@ -188,7 +193,7 @@ test("the person adds files, and sees what agents asked", async ({ page }) => {
   // The person can take a file away.
   await page.getByRole("button", { name: "Remove notes.json" }).click()
   await expect(row).toHaveCount(1)
-  await expect(page.getByTestId("agent-tools").locator("li")).toHaveCount(31)
+  await expect(page.getByTestId("agent-tools").locator("li")).toHaveCount(36)
 })
 
 test("an agent in the browser calls the tools through WebMCP", async ({
@@ -203,7 +208,7 @@ test("an agent in the browser calls the tools through WebMCP", async ({
     const page = await context.newPage()
     await ready(page)
     await expect(page.getByTestId("webmcp-status")).toContainText(
-      "has given 31 tools to agents in this browser"
+      "has given 36 tools to agents in this browser"
     )
     const tools = await page.webmcp.tools()
     expect(tools.map((tool) => tool.name)).toContain("list_files")

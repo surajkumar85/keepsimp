@@ -4,6 +4,10 @@ import { jsonTools, type RunJson } from "./json"
 import { pdfTools } from "./pdf"
 import { pdfEditTools, type EditText, type StartOcr } from "./pdf-edit"
 import type { PdfEngine } from "./pdf-engine"
+import { imageTools, type ImageEngines } from "./image"
+import { animationTools, type AnimationJob } from "./animation"
+import type { PoolJobs } from "./pool-jobs"
+import type { AnimationResponse } from "@/lib/animation/protocol"
 import { asTool, type AgentTool } from "./registry"
 
 export interface Engines {
@@ -12,6 +16,8 @@ export interface Engines {
   pdf: PdfEngine
   text: EditText
   ocr: StartOcr
+  images: ImageEngines
+  animation: PoolJobs<AnimationJob, AnimationResponse>
 }
 
 const listFiles: AgentTool<Record<string, never>> = {
@@ -40,5 +46,7 @@ export function agentTools(engines: Engines): AgentTool[] {
     ...colorTools(engines.sampleImage),
     ...pdfTools(engines.pdf),
     ...pdfEditTools(engines.pdf, engines.text, engines.ocr),
+    ...imageTools(engines.images),
+    ...animationTools(engines.animation),
   ]
 }

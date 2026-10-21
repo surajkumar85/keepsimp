@@ -3127,7 +3127,7 @@ export const agentsPost: BlogPost = {
       id: "tools",
       title: "The tools so far.",
       paragraphs: [
-        "JSON: format, repair, query, validate against a schema, compare, patch and convert, with every number kept exactly. Colour: convert between spaces, check contrast, make palettes and find the colours of an image. PDF: read a file's facts and text, merge, split every way the splitter does, compress, organise pages, crop, add page numbers, headers and watermarks, change details and bookmarks, fill forms, redact, find and replace, add text and pictures, recognise scans and check signatures, each result checked. Images, animation and audio come next; signing and recording stay for you to do yourself.",
+        "JSON: format, repair, query, validate against a schema, compare, patch and convert, with every number kept exactly. Colour: convert between spaces, check contrast, make palettes and find the colours of an image. PDF: read a file's facts and text, merge, split every way the splitter does, compress, organise pages, crop, add page numbers, headers and watermarks, change details and bookmarks, fill forms, redact, find and replace, add text and pictures, recognise scans and check signatures, each result checked. Images: read, compress, resize and convert, and turn animations and short videos into GIF, WebP, APNG, MP4 or WebM. Audio comes next; signing and recording stay for you to do yourself.",
       ],
       links: [
         {

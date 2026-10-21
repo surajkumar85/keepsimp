@@ -9,6 +9,17 @@ import { PdfEngine } from "./pdf-engine"
 import { fontUrls, screenFamily } from "@/lib/pdf-editor/fonts"
 import { laidOut } from "@/lib/pdf-editor/laid-out"
 import type { EditText, StartOcr } from "./pdf-edit"
+import { CompressorClient, rasteriseSvg } from "@/lib/image-compressor/client"
+import { ResizerPool } from "@/lib/image-resizer/client"
+import { ConverterPool } from "@/lib/image-converter/client"
+import { AnimationPool } from "@/lib/animation/client"
+import { CompressorEngine } from "./image-engines"
+import { PoolJobs } from "./pool-jobs"
+import type { ConvertJob, ResizeJob } from "./image"
+import type { AnimationJob } from "./animation"
+import type { ResizerResponse } from "@/lib/image-resizer/protocol"
+import type { ConverterResponse } from "@/lib/image-converter/protocol"
+import type { AnimationResponse } from "@/lib/animation/protocol"
 import { recognise, startTesseract } from "@/lib/pdf-editor/tesseract"
 import { sampleSize } from "@/lib/color/sample"
 import { Agent } from "./agent"
@@ -97,6 +108,26 @@ export function startAgent(): Started {
   const json = new JsonClient()
   let pdfClient: PdfClient | null = null
   const pdf = new PdfEngine((onFile) => (pdfClient = new PdfClient(onFile)))
+  // The agent's own workers, one of each: a job stopped ends only its worker.
+  let compressor: CompressorClient | null = null
+  const images = {
+    compressor: new CompressorEngine(
+      (listener) => (compressor = new CompressorClient(listener))
+    ),
+    resizer: new PoolJobs<ResizeJob, ResizerResponse>(
+      (listener, next) => new ResizerPool(1, listener, next),
+      "resize"
+    ),
+    converter: new PoolJobs<ConvertJob, ConverterResponse>(
+      (listener, next) => new ConverterPool(1, listener, next),
+      "convert"
+    ),
+    rasterise: rasteriseSvg,
+  }
+  const animation = new PoolJobs<AnimationJob, AnimationResponse>(
+    (listener, next) => new AnimationPool(1, listener, next),
+    "animation"
+  )
   const agent = new Agent(
     agentTools({
       runJson: (job) => json.run(job),
@@ -104,6 +135,8 @@ export function startAgent(): Started {
       pdf,
       text: editText,
       ocr: startOcr,
+      images,
+      animation,
     })
   )
   window.keepsimp = bridgeApi(agent, {
@@ -132,6 +165,10 @@ export function startAgent(): Started {
       undo?.()
       json.stop()
       pdfClient?.dispose()
+      compressor?.dispose()
+      images.resizer.dispose()
+      images.converter.dispose()
+      animation.dispose()
       delete window.keepsimp
     },
   }

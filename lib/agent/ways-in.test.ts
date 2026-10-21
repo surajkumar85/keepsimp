@@ -3,6 +3,9 @@ import { runJob } from "@/lib/json-workspace/jobs"
 import { FakePdfClient } from "@/tests/agent-pdf-fake"
 import { Agent } from "./agent"
 import { PdfEngine } from "./pdf-engine"
+import { CompressorEngine } from "./image-engines"
+import { PoolJobs } from "./pool-jobs"
+import { FakeCompressor, FakePool } from "@/tests/agent-image-fake"
 import { bridgeApi } from "./bridge-api"
 import { AGENT_VERSION, asTool, type AgentTool } from "./registry"
 import { agentTools } from "./tools"
@@ -17,6 +20,28 @@ const engines = {
     layOut: (object: never) => object,
   },
   ocr: async () => ({ read: async () => [], stop: () => undefined }),
+  images: {
+    compressor: new CompressorEngine(
+      (listener) => new FakeCompressor(listener)
+    ),
+    resizer: new PoolJobs(
+      (listener, next) => new FakePool(listener, next, () => []),
+      "r"
+    ) as never,
+    converter: new PoolJobs(
+      (listener, next) => new FakePool(listener, next, () => []),
+      "c"
+    ) as never,
+    rasterise: async () => ({
+      data: new Uint8ClampedArray(4),
+      width: 1,
+      height: 1,
+    }),
+  },
+  animation: new PoolJobs(
+    (listener, next) => new FakePool(listener, next, () => []),
+    "a"
+  ) as never,
 }
 
 describe("every tool", () => {

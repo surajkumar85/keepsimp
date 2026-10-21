@@ -35,7 +35,9 @@ The bridge asks the KeepSimp page which tools there are, so the list is always t
 
 Also `redact_pdf` (words, e-mail addresses, phone and card numbers or shapes taken out for good, checked so no letter stays readable), `find_replace_pdf_text` (in the line's own font), `add_text_to_pdf`, `add_image_to_pdf` and `ocr_pdf` (Tesseract on your computer, from KeepSimp's own files).
 
-Image, animation and audio tools follow.
+- **Images and animation:** `image_info`, `compress_image` (measured so the difference cannot be seen, or to a size), `resize_image` (sizes, presets, sets of widths), `convert_image` (to JPEG, PNG, WebP, AVIF, JPEG XL, GIF, BMP, TIFF, ICO or PDF, several images into one PDF) and `convert_animation` (GIF, WebP, APNG and short videos to GIF, WebP, APNG, MP4, WebM, frames or a sprite sheet, or stills into one).
+
+Audio tools follow.
 
 ## What it may touch
 

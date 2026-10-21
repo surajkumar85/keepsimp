@@ -301,6 +301,17 @@ describe("the KeepSimp bridge", () => {
     assert.deepEqual(names, ["brochure-compressed.pdf"])
   })
 
+  it("converts an image from disk", async () => {
+    const converted = await call("convert_image", {
+      files: ["two.png"],
+      to: "webp",
+    })
+    assert.equal(converted.isError, undefined, converted.content[0].text)
+    const saved = converted.structuredContent!.files[0].path
+    assert.equal(saved, join(work, "two.webp"))
+    assert.equal((await readFile(saved)).subarray(8, 12).toString(), "WEBP")
+  })
+
   it("never lets the browser leave the site", () => {
     assert.doesNotMatch(said, /Refused a request/)
   })
