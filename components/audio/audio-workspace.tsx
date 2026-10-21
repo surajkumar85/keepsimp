@@ -59,6 +59,7 @@ import {
 } from "@/lib/audio/edits"
 import type { ReadFacts } from "@/lib/audio/mediabunny-audio"
 import { PeakBuilder, peakLevel, type Peaks } from "@/lib/audio/peaks"
+import { SpectrumBuilder, spectrumColumns } from "@/lib/audio/spectrum"
 import {
   JOIN_ID,
   type AudioJob,
@@ -127,8 +128,10 @@ import { SplitPanel } from "./split-panel"
 import { TagPanel, type TagRow } from "./tag-panel"
 import { Recorder } from "./recorder"
 import { TranscriptPanel } from "./transcript-panel"
+import { VideoPanel } from "./video-panel"
 import { JoinPanel, type JoinRow } from "./join-panel"
 import { Waveform } from "./waveform"
+import { Spectrogram } from "./spectrogram"
 
 /** What the workspace is opened for: everything, or one job through a door. */
 export type AudioMode =
@@ -146,6 +149,7 @@ export type AudioMode =
   | "tags"
   | "recorder"
   | "transcribe"
+  | "video"
 
 /** What the waveform editor is opened for, in each mode; none where it waits to be asked for. */
 const EDITING: Record<AudioMode, EditorFocus | null> = {
@@ -163,6 +167,7 @@ const EDITING: Record<AudioMode, EditorFocus | null> = {
   tags: null,
   recorder: null,
   transcribe: null,
+  video: null,
 }
 
 const INPUT_ID = "audio-file"
@@ -219,6 +224,14 @@ const COPY: Record<AudioMode, DropZoneCopy> = {
     dropping: "Drop to change these files' speed",
     body: "Faster or slower keeping the pitch, the pitch up or down keeping the length, or both; also backwards, karaoke and the channels swapped. On your device. You can also paste with ⌘V or Ctrl+V.",
     inputLabel: "Choose audio files to change",
+    action: "Choose files",
+    limits: `Stays on your device · up to ${MAX_FILES} files at once`,
+  },
+  video: {
+    heading: "Drop audio to turn into a video",
+    dropping: "Drop to make videos of these files",
+    body: "The sound with its cover or a picture of your own, a moving waveform and its title, as an MP4 for places that take only video. On your device. You can also paste with ⌘V or Ctrl+V.",
+    inputLabel: "Choose audio files to turn into video",
     action: "Choose files",
     limits: `Stays on your device · up to ${MAX_FILES} files at once`,
   },
@@ -341,6 +354,7 @@ const FOCUSED: Partial<Record<AudioMode, string>> = {
   tags: "opened for changing tags",
   recorder: "opened for recording",
   transcribe: "opened for transcribing",
+  video: "opened for making a video",
 }
 
 const SAMPLES: Record<AudioMode, { name: string; type: string }[]> = {
@@ -370,6 +384,7 @@ const SAMPLES: Record<AudioMode, { name: string; type: string }[]> = {
   ],
   recorder: [{ name: "keepsimp-voice.mp3", type: "audio/mpeg" }],
   transcribe: [{ name: "keepsimp-voice.mp3", type: "audio/mpeg" }],
+  video: [{ name: "keepsimp-tune.flac", type: "audio/flac" }],
 }
 
 /** The format each mode writes at first. */
@@ -388,6 +403,7 @@ const FIRST_FORMAT: Record<AudioMode, AudioSettings["format"]> = {
   tags: "same",
   recorder: "mp3",
   transcribe: "same",
+  video: "same",
 }
 
 /** How loud results are at first in each mode. */
@@ -558,6 +574,8 @@ export function AudioWorkspace({ mode = "editor" }: { mode?: AudioMode }) {
         : defaultSettings.sound,
   }))
   const [selectedId, setSelectedId] = useState<string | null>(null)
+  /** Which picture of the sound the file shows. */
+  const [picture, setPicture] = useState<"waveform" | "spectrogram">("waveform")
   /** Whether the editor shows the recorder (its own door always does). */
   const [recording, setRecording] = useState(false)
   const [notice, setNotice] = useState<string | null>(null)
@@ -652,6 +670,12 @@ export function AudioWorkspace({ mode = "editor" }: { mode?: AudioMode }) {
         builder.push(planes)
         const meter = new LoudnessMeter(sampleRate, planes.length)
         meter.push(planes)
+        const spectrum = new SpectrumBuilder(
+          sampleRate,
+          frames,
+          spectrumColumns(frames / sampleRate)
+        )
+        spectrum.push(planes)
         dispatch({
           type: "decoded",
           id,
@@ -664,6 +688,7 @@ export function AudioWorkspace({ mode = "editor" }: { mode?: AudioMode }) {
           id,
           peaks: builder.result(),
           loudness: meter.result(),
+          spectrum: spectrum.result(),
         })
       } catch {
         dispatch({
@@ -706,6 +731,7 @@ export function AudioWorkspace({ mode = "editor" }: { mode?: AudioMode }) {
             id: message.id,
             peaks: message.peaks,
             loudness: message.loudness,
+            spectrum: message.spectrum,
           })
       } else if (message.type === "done" && message.job === "join") {
         const want = joinLive.current.wanted
@@ -1487,6 +1513,7 @@ export function AudioWorkspace({ mode = "editor" }: { mode?: AudioMode }) {
                     duration={facts.duration}
                     peaks={selected.peaks ?? null}
                     loudness={selected.loudness ?? null}
+                    spectrum={selected.spectrum ?? null}
                     url={originalUrl}
                     changes={selected.changes ?? NO_CHANGES}
                     canRedo={Boolean(selected.redo?.length)}
@@ -1527,16 +1554,40 @@ export function AudioWorkspace({ mode = "editor" }: { mode?: AudioMode }) {
                 </>
               ) : (
                 <>
-                  <Waveform
-                    peaks={selected.peaks ?? null}
-                    progress={played}
-                    label={`Waveform of ${selected.file.name}`}
-                    onSeek={(fraction) => {
-                      const element = player.current
-                      if (element && Number.isFinite(element.duration))
-                        element.currentTime = fraction * element.duration
-                    }}
-                  />
+                  {selected.spectrum && (
+                    <ChoiceChips
+                      label="Show"
+                      value={picture}
+                      onValueChange={setPicture}
+                      options={[
+                        { value: "waveform", label: "Waveform" },
+                        { value: "spectrogram", label: "Spectrogram" },
+                      ]}
+                    />
+                  )}
+                  {picture === "spectrogram" && selected.spectrum ? (
+                    <Spectrogram
+                      spectrum={selected.spectrum}
+                      progress={played}
+                      label={`Spectrogram of ${selected.file.name}: how loud each pitch is over time, low pitches at the bottom, from ${Math.round(selected.spectrum.lowest)} Hz to ${Math.round(selected.spectrum.highest / 100) / 10} kHz`}
+                      onSeek={(fraction) => {
+                        const element = player.current
+                        if (element && Number.isFinite(element.duration))
+                          element.currentTime = fraction * element.duration
+                      }}
+                    />
+                  ) : (
+                    <Waveform
+                      peaks={selected.peaks ?? null}
+                      progress={played}
+                      label={`Waveform of ${selected.file.name}`}
+                      onSeek={(fraction) => {
+                        const element = player.current
+                        if (element && Number.isFinite(element.duration))
+                          element.currentTime = fraction * element.duration
+                      }}
+                    />
+                  )}
                   {result && (
                     <ChoiceChips
                       label="Listen to"
@@ -1659,6 +1710,29 @@ export function AudioWorkspace({ mode = "editor" }: { mode?: AudioMode }) {
                 kept: selected.decoded ? null : facts.kept,
                 duration: facts.duration,
                 url: originalUrl,
+              }}
+            />
+          )}
+
+        {(mode === "editor" || mode === "video") &&
+          facts &&
+          selected.status === "ready" && (
+            <VideoPanel
+              key={selected.id}
+              source={{
+                id: selected.id,
+                name: selected.file.name,
+                sound: selectedState === "done" && result ? result.blob : null,
+                cover:
+                  selected.tagChange?.cover !== undefined
+                    ? selected.tagChange.cover
+                    : facts.cover,
+                title:
+                  changed(facts.tags, selected.tagChange ?? noTagChange)
+                    .title ?? "",
+                artist:
+                  changed(facts.tags, selected.tagChange ?? noTagChange)
+                    .artist ?? "",
               }}
             />
           )}

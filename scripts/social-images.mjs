@@ -253,6 +253,12 @@ const cards = [
     "/images/audio-transcribe-guide.svg",
   ],
   [
+    "turn-audio-into-video",
+    "A sound, a picture, and a waveform that moves.",
+    "Audio to MP4 for sharing, on your device.",
+    "/images/audio-video-guide.svg",
+  ],
+  [
     "gapless-mp3-and-aac",
     "Why a converted MP3 starts late, and ours does not.",
     "Gapless MP3 and AAC, checked before download.",

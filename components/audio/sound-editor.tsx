@@ -29,6 +29,7 @@ import {
   IconZoomOut,
   IconZoomReset,
   IconX,
+  IconWaveSine,
 } from "@tabler/icons-react"
 import { Button } from "@/components/ui/button"
 import { ChoiceChips } from "@/components/ui/choice-chips"
@@ -68,6 +69,8 @@ import {
   type LoudnessMap,
 } from "@/lib/audio/loudness"
 import type { Peaks } from "@/lib/audio/peaks"
+import type { Spectrum } from "@/lib/audio/spectrum"
+import { FrequencyMarks, paintSpectrum } from "./spectrogram"
 import { playFrom } from "@/lib/audio/playback"
 import {
   ringtonePart,
@@ -154,6 +157,7 @@ export function SoundEditor({
   onReset,
   onFormat,
   loudness = null,
+  spectrum = null,
   marks = NO_MARKS,
   onMark,
   onUnmark,
@@ -176,6 +180,8 @@ export function SoundEditor({
   onFormat: (format: OutputFormat) => void
   /** The file's loudness, 100 ms at a time, when it has been measured. */
   loudness?: LoudnessMap | null
+  /** The file's spectrogram, when it has been made. */
+  spectrum?: Spectrum | null
   /** Markers, in the source's seconds. */
   marks?: readonly number[]
   onMark?: (source: number) => void
@@ -260,6 +266,22 @@ export function SoundEditor({
     [loudness]
   )
   const chart = useRef<HTMLCanvasElement>(null)
+  // The spectrogram of what is shown, through the edits, as the waveform.
+  const [spectral, setSpectral] = useState(false)
+  const spectrogram = useRef<HTMLCanvasElement>(null)
+  useEffect(() => {
+    const element = spectrogram.current
+    if (!element || !spectrum || !spectral) return
+    paintSpectrum(element, spectrum, (fraction) => {
+      const time = view.from + fraction * (view.to - view.from)
+      if (time >= length) return null
+      const source = sourceAt(edited, time)
+      return Math.min(
+        spectrum.columns - 1,
+        Math.max(0, Math.floor((source / duration) * spectrum.columns))
+      )
+    })
+  }, [spectrum, spectral, edited, view, pixels, duration, length])
   useEffect(() => {
     const element = chart.current
     if (!element || !series) return
@@ -960,6 +982,18 @@ export function SoundEditor({
             </span>
           )}
         </div>
+        {spectrum && spectral && (
+          <div className="relative">
+            <canvas
+              ref={spectrogram}
+              className="h-24 w-full rounded-md border"
+              role="img"
+              aria-label="Spectrogram of what is shown: how loud each pitch is over time, low pitches at the bottom"
+              data-testid="editor-spectrogram"
+            />
+            <FrequencyMarks spectrum={spectrum} />
+          </div>
+        )}
         {series && (
           <canvas
             ref={chart}
@@ -976,6 +1010,17 @@ export function SoundEditor({
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
+        {spectrum && (
+          <Button
+            type="button"
+            variant="outline"
+            aria-pressed={spectral}
+            onClick={() => setSpectral((on) => !on)}
+          >
+            <IconWaveSine data-icon="inline-start" aria-hidden="true" />
+            Spectrogram
+          </Button>
+        )}
         <Button
           type="button"
           variant="outline"

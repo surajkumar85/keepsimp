@@ -295,6 +295,24 @@ const transcribing: TutorialContent["options"] = [
   },
 ]
 
+const videoHelp: TutorialContent["options"] = [
+  {
+    term: "Video",
+    detail:
+      "The sound as written with your settings (trimmed, cleaned, louder: whatever you chose), with a picture, as a video for places that take only video. MP4 with H.264 and AAC where the browser can write H.264, otherwise WebM with VP9 and Opus, and the page says which. Made on your device, opened again and checked before you can download it.",
+  },
+  {
+    term: "Shape and picture",
+    detail:
+      "Square (1080 × 1080), landscape (1920 × 1080) or portrait (1080 × 1920). The picture is the file's cover, one of your own (JPEG, PNG or WebP) or none, filling its place and cut evenly at the sides that do not fit.",
+  },
+  {
+    term: "Waveform and title",
+    detail:
+      "The sound's waveform with a playhead that moves as it plays (24 frames a second), and the title and artist from its tags. Without the waveform the picture stands still at one frame a second, so an hour takes moments.",
+  },
+]
+
 const silencing: TutorialContent["options"] = [
   {
     term: "Silence at the ends",
@@ -441,6 +459,7 @@ const editor: TutorialContent = {
     ...tagging,
     ...recordingHelp,
     ...transcribing,
+    ...videoHelp,
     ...leveling,
     ...shaping,
     ...options,
@@ -808,4 +827,35 @@ const transcribeHelp: TutorialContent = {
 
 export function TranscribeTutorial() {
   return <ToolTutorial content={transcribeHelp} />
+}
+
+const videoTutorial: TutorialContent = {
+  name: "How to turn audio into a video with KeepSimp",
+  description:
+    "Turn a song, podcast clip or voice note into an MP4 video with its cover or a picture, a moving waveform and its title, in your browser. Nothing is uploaded.",
+  intro: "Follow the steps below. Every option is explained underneath.",
+  steps: [
+    {
+      title: "Add your audio",
+      text: "Drop it, choose it or paste it: MP3, M4A, FLAC, WAV, Opus and more.",
+    },
+    {
+      title: "Choose the look",
+      text: "Square, landscape or portrait; the cover or a picture of your own; the waveform and the title.",
+    },
+    {
+      title: "Make the video",
+      text: "It is drawn and written on your device, then checked.",
+    },
+    {
+      title: "Download and share",
+      text: "An MP4 that plays where video is taken.",
+    },
+  ],
+  options: [...videoHelp, ...options],
+  guideHref: "/blog/turn-audio-into-video/",
+}
+
+export function VideoTutorial() {
+  return <ToolTutorial content={videoTutorial} />
 }

@@ -368,6 +368,14 @@ export const overviewPost: BlogPost = {
           label: "Guide: transcribe audio on your device",
           href: "/blog/transcribe-audio-on-your-device/",
         },
+        {
+          label: "Sharing where only video goes? Open it as Audio to video",
+          href: "/dashboard/audio-to-video/",
+        },
+        {
+          label: "Guide: turn audio into a video",
+          href: "/blog/turn-audio-into-video/",
+        },
       ],
     },
     {
@@ -2902,6 +2910,74 @@ export const transcribePost: BlogPost = {
     {
       title: "Transformers.js",
       url: "https://huggingface.co/docs/transformers.js",
+    },
+  ],
+}
+
+export const videoPost: BlogPost = {
+  published: "2026-10-21",
+  modified: "2026-10-21",
+  slug: "turn-audio-into-video",
+  title: "A sound, a picture, and a waveform that moves.",
+  searchTitle: "How to turn audio into a video with a picture for free",
+  description:
+    "Turn a song, podcast clip or voice note into an MP4 with its cover or a picture of your own, a moving waveform and its title, in your browser, to share where only video goes. Nothing is uploaded.",
+  keywords: [
+    "audio to video",
+    "mp3 to mp4 with picture",
+    "add image to audio",
+    "audiogram maker",
+    "waveform video",
+    "put audio on instagram",
+  ],
+  category: "A little know-how",
+  readingTime: "3 min read",
+  image: "/images/audio-video-guide.svg",
+  imageAlt:
+    "A square video frame with a cover picture, a title and a waveform whose first part is lit, beside chips for the shape",
+  tool: "audio-to-video",
+  intro:
+    "Many places take video and not sound: a social post, a story, a video site. A sound becomes a video once it has a picture, and a waveform that moves as it plays tells people there is something to hear.",
+  sections: [
+    {
+      id: "how",
+      title: "How to make one.",
+      paragraphs: [
+        "Open Audio to video and drop your sound. Choose the shape (square, landscape or portrait), the picture (its cover, one of your own, or none), and whether to show the waveform and the title. Press Make the video: it is drawn and written on your device, checked, and ready to download as an MP4.",
+      ],
+      links: [
+        {
+          label: "Open Audio to video",
+          href: "/dashboard/audio-to-video/",
+        },
+      ],
+    },
+    {
+      id: "sound",
+      title: "The sound you made.",
+      paragraphs: [
+        "The video has the sound as you set it in the editor: trimmed, cleaned of noise, made louder or anything else. Without the moving waveform the picture stands still at one frame a second, so even an hour is made in moments; with it, the playhead moves 24 times a second.",
+        "Where the browser can write H.264 the video is an MP4 with AAC sound, which plays everywhere; where it cannot, it is a WebM, and the page says so.",
+      ],
+    },
+    {
+      id: "private",
+      title: "On your device.",
+      paragraphs: [
+        "The sound and the picture are read and the video written in your browser, never uploaded. There is no account and no watermark.",
+      ],
+      links: [
+        {
+          label: "Every KeepSimp tool in one place",
+          href: "/blog/free-online-tools-no-upload/",
+        },
+      ],
+    },
+  ],
+  sources: [
+    {
+      title: "MDN: WebCodecs API",
+      url: "https://developer.mozilla.org/en-US/docs/Web/API/WebCodecs_API",
     },
   ],
 }

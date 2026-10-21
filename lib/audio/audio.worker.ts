@@ -109,6 +109,7 @@ async function read(job: ReadJob, stop: AbortController) {
       id: job.id,
       job: "read",
       peaks: overview?.peaks ?? null,
+      spectrum: overview?.spectrum ?? null,
       loudness: overview?.loudness ?? null,
     })
 }

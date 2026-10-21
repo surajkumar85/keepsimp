@@ -109,6 +109,22 @@ Every choice made for the person (a rate a codec cannot hold, a mix-down, a capp
 - Door: Transcribe audio (`/dashboard/transcribe-audio/`); the editor has the panel too. Licences: `public/licenses/audio.txt`.
 - Tests: `transcript.test.ts`, `whisper.test.ts` (100%); `e2e/audio-transcribe.spec.ts` (five profiles: about 40 s of speech, so the second window must seek right, each sentence exactly four times, search, listening from a time, SRT and WebVTT read by FFprobe with the last cue inside the sound; Stop; the noisy sample; axe and 320 px); `e2e/offline.spec.ts` (Whisper kept on first use, only base's files, and run with the server stopped).
 
+## Spectrogram (phase 8, part 2)
+
+- **Made while the file is read** (`lib/audio/spectrum.ts`, in `overviewOf` beside the peaks and the loudness map, and on the page for sound it decodes itself): 2,048-point Hann-windowed FFTs of the channels mixed, about four to a column (a ring of the last 2,048 frames, a hop of a quarter of a column: apart in a long file, overlapping in a short one), averaged, in 96 bands evenly spaced in pitch from 40 Hz to half the sample rate, each band the mean power of its bins (the bin nearest its middle when narrower than one), as bytes from −100 to 0 dBFS. 25 columns a second, at least 100 and at most 8,000: an hour costs about 32,000 FFTs and 768 KB, never the sound held whole. A sound shorter than one FFT is heard once.
+- **Drawn** (`components/audio/spectrogram.tsx`, `paintSpectrum`): low pitches at the bottom, the theme's background to its primary colour by loudness (the quietest third shows as nothing), with marks at 100 Hz, 1 kHz and 10 kHz; in the file's card beside the waveform ("Show": Waveform or Spectrogram, the playhead over it, a press moving the player), and in the editor under the waveform for what is shown, through the edits, as the waveform is.
+- Tests: `spectrum.test.ts` (100%: the FFT against a plain DFT, a 1 kHz tone in its band in every column, silence, a sound shorter than an FFT, a long file's columns); `e2e/audio-spectrogram.spec.ts` (five profiles: the brightest row of the drawn pixels is the tone's pitch, in the overview and in the editor; axe in both themes).
+
+## Audio to video (phase 8, part 3)
+
+- **Door:** Audio to video (`/dashboard/audio-to-video/`), for places that take only video. The video carries the sound as it is written with the file's settings and edits (the result the card would download), so what is heard is what was checked.
+- **The picture** (`lib/audio/video.ts`, 100%): square 1080 × 1080, landscape 1920 × 1080 or portrait 1080 × 1920; the cover from the tags (as changed on the page), a JPEG, PNG or WebP of one's own, or none (the theme's background); the picture fills its box and is cut evenly where it sticks out (`cover`). Optionally the title and artist from the tags, and the waveform in 96 bars (`barsOf`, scaled so the loudest is full height) with the part played in the theme's primary colour. Colours are read from the theme on the page and handed to the worker.
+- **Frames only as many as the picture needs:** 24 a second with the moving waveform, one a second without it, which is far faster and smaller.
+- **Written in a worker** (`lib/audio/video.worker.ts`, `video-client.ts`) on an `OffscreenCanvas` through Mediabunny's `CanvasSource` (`soundToVideo` in `mediabunny-audio.ts`): H.264 with AAC in MP4 where the browser can encode H.264, otherwise VP9 (or VP8) with Opus in WebM, and the page says which and that WebM does not open in every app. The sound is resampled to 48 kHz, at most two channels; AAC gets its edit list, as every AAC file here does. A key frame every 2 s.
+- **Sound the worker cannot decode** (Safari with FLAC): the worker says `undecodable`; the page decodes it with `decodeAudioData` into a WAV and asks once more.
+- **Checked before it is offered:** the video is opened again and must have a picture track, a sound track and its length; otherwise it is not offered. Stop ends the worker at once. Nothing is kept on the device.
+- Tests: `video.test.ts`, `video-client.test.ts` (100%); `e2e/audio-video.spec.ts` (five profiles: FFprobe reads H.264 and AAC, or VP9/VP8 and Opus, 1080 × 1080 and the sound's length; the frames at 1 s and 7 s differ by the playhead; a still portrait is 1080 × 1920 at one frame a second and the same at 1 s and 7 s; axe in both themes, 320 px and the article).
+
 ## How it is built
 
 - **Mediabunny** (already used by the animation converter) reads and writes every container, decodes and encodes through WebCodecs, copies tracks, resamples and remixes, and reads and writes tags. Only `lib/audio/mediabunny-audio.ts` touches it, and it is handed the library, so the same code runs in the worker and in Node.
@@ -163,4 +179,4 @@ Each result is opened again and decoded from start to end (`hearAudio`, with the
 5. **Speed, pitch and channels,** reverse, karaoke (said to be what it is). Door: Change audio speed. Built.
 6. **Noise reduction and repair:** RNNoise, hum, rumble, clicks, sibilance, before and after at the same moment. Door: Remove background noise. Built.
 7. **Recording and tags.** Doors: Voice recorder, Edit audio tags. Built.
-8. **Words and pictures:** transcription with Whisper on the device (built), a spectrogram, audio to video. Doors: Transcribe audio, Audio to video.
+8. **Words and pictures:** transcription with Whisper on the device, a spectrogram, audio to video. Doors: Transcribe audio, Audio to video. Built.

@@ -11,6 +11,7 @@ import type { ReadFacts } from "./mediabunny-audio"
 import type { LevelResult } from "./level"
 import type { LoudnessMap } from "./loudness"
 import type { Peaks } from "./peaks"
+import type { Spectrum } from "./spectrum"
 import type { Plan } from "./settings"
 import {
   cleaned,
@@ -49,6 +50,8 @@ export interface AudioItem {
   peaks?: Peaks | null
   /** Its loudness, 100 ms at a time; null when it could not be measured. */
   loudness?: LoudnessMap | null
+  /** Its spectrogram; null when it could not be made. */
+  spectrum?: Spectrum | null
   /** The sound as the page decoded it (a WAV), when the worker cannot decode the file. */
   decoded?: Blob
   error?: string
@@ -81,6 +84,7 @@ export type AudioAction =
       id: string
       peaks: Peaks | null
       loudness?: LoudnessMap | null
+      spectrum?: Spectrum | null
     }
   | { type: "decoded"; id: string; decoded: Blob }
   | { type: "failed"; id: string; message: string }
@@ -142,6 +146,7 @@ export function audioReducer(
         ...item,
         peaks: action.peaks,
         loudness: action.loudness ?? null,
+        spectrum: action.spectrum ?? null,
       }))
     case "decoded":
       return patch(items, action.id, (item) => ({

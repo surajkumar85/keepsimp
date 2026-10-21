@@ -8,6 +8,7 @@ import type { Changes } from "./change"
 import type { Container } from "./formats"
 import type { ReadFacts } from "./mediabunny-audio"
 import type { Peaks } from "./peaks"
+import type { Spectrum } from "./spectrum"
 import type { Plan } from "./settings"
 import type { PartTimes } from "./split"
 import type { Joining } from "./join"
@@ -101,6 +102,8 @@ export type AudioResponse =
       id: string
       job: "read"
       peaks: Peaks | null
+      /** How loud each band of frequencies is, over the file. */
+      spectrum: Spectrum | null
       /** The file's loudness, 100 ms at a time. */
       loudness: LoudnessMap | null
     }

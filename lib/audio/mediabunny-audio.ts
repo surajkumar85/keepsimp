@@ -36,6 +36,8 @@ import { Joiner, joinsFor, startsOf, straight, type Joining } from "./join"
 import { Limiter } from "./limiter"
 import { isPlain, SoundShaper, type SoundSettings } from "./sound"
 import type { Rnnoise } from "./repair"
+import { Resampler } from "./resample"
+import { SpectrumBuilder, spectrumColumns, type Spectrum } from "./spectrum"
 import {
   noTagChange,
   valuesOf,
@@ -247,18 +249,31 @@ export async function overviewOf(
   file: Blob,
   facts: Pick<ReadFacts, "duration" | "sampleRate" | "kept">,
   signal?: AbortSignal
-): Promise<{ peaks: Peaks; loudness: LoudnessMap | null }> {
-  const builder = new PeakBuilder(
-    Math.round(facts.duration * facts.sampleRate),
-    peakCount(facts.duration)
-  )
+): Promise<{
+  peaks: Peaks
+  loudness: LoudnessMap | null
+  spectrum: Spectrum | null
+}> {
+  const frames = Math.round(facts.duration * facts.sampleRate)
+  const builder = new PeakBuilder(frames, peakCount(facts.duration))
   let meter: LoudnessMeter | null = null
+  let spectrum: SpectrumBuilder | null = null
   for await (const chunk of soundOf(engine, file, facts.kept, signal)) {
     builder.push(chunk.planes)
     meter ??= new LoudnessMeter(chunk.sampleRate, chunk.planes.length)
     meter.push(chunk.planes)
+    spectrum ??= new SpectrumBuilder(
+      chunk.sampleRate,
+      Math.round(facts.duration * chunk.sampleRate),
+      spectrumColumns(facts.duration)
+    )
+    spectrum.push(chunk.planes)
   }
-  return { peaks: builder.result(), loudness: meter?.result() ?? null }
+  return {
+    peaks: builder.result(),
+    loudness: meter?.result() ?? null,
+    spectrum: spectrum?.result() ?? null,
+  }
 }
 
 /** The format a plan is written in, as Mediabunny makes it. */
@@ -1452,4 +1467,153 @@ export async function hearAudio(
     peak,
     loudness: { integrated, truePeak },
   }
+}
+
+/** What a video made of sound is, once written. */
+export interface SoundVideo {
+  bytes: Uint8Array
+  container: "mp4" | "webm"
+  /** Seconds of sound in it. */
+  seconds: number
+}
+
+/**
+ * Sound and frames drawn on a canvas, as one video file: H.264 and AAC in
+ * MP4 where this browser encodes H.264, otherwise VP9 (or VP8) and Opus in
+ * WebM. The sound is decoded as it is read and the frames are drawn up to
+ * where it has got, so neither is ever held whole.
+ */
+export async function soundToVideo(
+  engine: Engine,
+  file: Blob,
+  facts: Pick<ReadFacts, "kept" | "duration" | "channels">,
+  video: {
+    canvas: OffscreenCanvas
+    fps: number
+    /** Draw the frame at `time` seconds on the canvas. */
+    draw: (time: number) => void
+  },
+  options: {
+    signal?: AbortSignal
+    onProgress?: (fraction: number) => void
+  } = {}
+): Promise<SoundVideo> {
+  const { width, height } = video.canvas
+  // A still picture needs little; a moving waveform more.
+  const bitrate = video.fps > 1 ? 2_500_000 : 500_000
+  const avc = await engine.getFirstEncodableVideoCodec(["avc"], {
+    width,
+    height,
+    bitrate,
+  })
+  const videoCodec =
+    avc ??
+    (await engine.getFirstEncodableVideoCodec(["vp9", "vp8"], {
+      width,
+      height,
+      bitrate,
+    }))
+  if (!videoCodec)
+    throw new AudioProblem(
+      "This browser cannot write video. Try another browser, such as Chrome, Edge or Safari."
+    )
+  const mp4 = videoCodec === "avc"
+  const channels = Math.min(2, facts.channels)
+  const rate = 48000
+  const audioCodec = mp4 ? "aac" : "opus"
+  const audioBitrate = 192_000
+  const priming = mp4
+    ? await aacEncoding(engine, rate, channels, audioBitrate)
+    : null
+  if (
+    !mp4 &&
+    !(await engine.canEncodeAudio("opus", {
+      numberOfChannels: channels,
+      sampleRate: rate,
+      bitrate: audioBitrate,
+    }))
+  )
+    throw new AudioProblem(
+      "This browser cannot write the sound of a video. Try another browser, such as Chrome, Edge or Safari."
+    )
+
+  const target = new engine.BufferTarget()
+  const output = new engine.Output({
+    format: mp4
+      ? new engine.Mp4OutputFormat({ fastStart: "in-memory" })
+      : new engine.WebMOutputFormat(),
+    target,
+  })
+  const frames = new engine.CanvasSource(video.canvas, {
+    codec: videoCodec,
+    bitrate,
+    keyFrameInterval: 2,
+    latencyMode: "quality",
+  })
+  output.addVideoTrack(frames, { frameRate: video.fps })
+  const sound = new engine.AudioSampleSource({
+    codec: audioCodec,
+    quality: new engine.Quality({ bitrate: audioBitrate }),
+  })
+  output.addAudioTrack(sound)
+  await output.start()
+
+  let written = 0
+  let frame = 0
+  let resampler: Resampler | null = null
+  /**
+   * Frames up to `seconds` of sound, one held back until the end is known,
+   * so that the last stretches to where the sound stops instead of a sliver
+   * of a frame being added after it.
+   */
+  const drawTo = async (seconds: number, end = false) => {
+    const next = async (length: number) => {
+      video.draw(frame / video.fps)
+      await frames.add(frame / video.fps, length)
+      frame++
+    }
+    while ((frame + 2) / video.fps <= seconds) await next(1 / video.fps)
+    if (!end) return
+    let rest = seconds - frame / video.fps
+    if (rest > 1.5 / video.fps) {
+      await next(1 / video.fps)
+      rest -= 1 / video.fps
+    }
+    if (rest > 0) await next(rest)
+  }
+  const add = async (planes: Float32Array[]) => {
+    if (!planes[0]?.length) return
+    // Mono stays mono; more than two channels keep the first two.
+    const kept = planes.slice(0, channels)
+    await sound.add(sampleOf(engine, kept, rate, written / rate))
+    written += kept[0].length
+    await drawTo(written / rate)
+    options.onProgress?.(
+      Math.min(1, written / rate / Math.max(facts.duration, 0.001))
+    )
+  }
+  try {
+    for await (const chunk of soundOf(
+      engine,
+      file,
+      facts.kept,
+      options.signal
+    )) {
+      if (!resampler && chunk.sampleRate !== rate)
+        resampler = new Resampler(chunk.planes.length, chunk.sampleRate / rate)
+      await add(resampler ? resampler.process(chunk.planes) : chunk.planes)
+    }
+    if (resampler) await add(resampler.flush())
+    // The picture lasts exactly as long as the sound.
+    await drawTo(written / rate, true)
+    sound.close()
+    frames.close()
+    await output.finalize()
+  } catch (error) {
+    await output.cancel().catch(() => undefined)
+    throw error
+  }
+  let bytes: Uint8Array = new Uint8Array(target.buffer!)
+  if (priming) bytes = withEditList(bytes, priming, written)
+  return { bytes, container: mp4 ? "mp4" : "webm", seconds: written / rate }
 }
