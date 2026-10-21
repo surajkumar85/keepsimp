@@ -3072,7 +3072,7 @@ export const gaplessPost: BlogPost = {
 
 export const agentsPost: BlogPost = {
   published: "2026-10-21",
-  modified: "2026-10-21",
+  modified: "2026-10-22",
   slug: "keepsimp-tools-for-ai-agents",
   title: "Ask your agent, and the work stays on your computer.",
   searchTitle: "Use KeepSimp's free tools from Claude Code or Codex (MCP)",
@@ -3093,7 +3093,7 @@ export const agentsPost: BlogPost = {
     "A terminal asking an agent to format a file, a KeepSimp page in a hidden browser, and the formatted file saved beside the first",
   tool: "",
   intro:
-    "An agent that writes code can also format a file, check a colour or, soon, merge PDFs and clean up a recording. KeepSimp's tools can be handed to it, and they still run on your device.",
+    "An agent that writes code can also format a file, check a colour, or merge, split and compress PDFs, and soon clean up a recording. KeepSimp's tools can be handed to it, and they still run on your device.",
   sections: [
     {
       id: "connect",
@@ -3127,9 +3127,13 @@ export const agentsPost: BlogPost = {
       id: "tools",
       title: "The tools so far.",
       paragraphs: [
-        "JSON: format, repair, query, validate against a schema, compare, patch and convert, with every number kept exactly. Colour: convert between spaces, check contrast, make palettes and find the colours of an image. PDF, image, animation and audio tools come next; signing and recording stay for you to do yourself.",
+        "JSON: format, repair, query, validate against a schema, compare, patch and convert, with every number kept exactly. Colour: convert between spaces, check contrast, make palettes and find the colours of an image. PDF: read a file's facts and text, merge, split every way the splitter does, and compress, each result checked. The PDF editor's jobs, images, animation and audio come next; signing and recording stay for you to do yourself.",
       ],
       links: [
+        {
+          label: "Open the PDF merger",
+          href: "/dashboard/pdf-merger/",
+        },
         {
           label: "Open the JSON workspace",
           href: "/dashboard/json-formatter/",

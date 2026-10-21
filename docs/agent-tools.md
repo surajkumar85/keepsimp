@@ -37,6 +37,23 @@ KeepSimp's tools can be used by agents: Claude Code, Codex and other MCP clients
   - Its answer comes back in the result when the source was text and the answer is short (at most 50,000 characters).
   - The answer is a file when the source was a file or the answer is long.
 
+### The PDF tools (phase 2)
+
+- **The way to the worker** is `lib/agent/pdf-engine.ts` (`PdfEngine`): the same `PdfClient` every PDF page uses, with three things added:
+  - a file's opening is turned into a promise; a locked file, a wrong password and a damaged file each say so in words;
+  - a search and a look for blank pages are turned into lists of pages;
+  - a job's Stop is joined to the call's signal (the worker answers a stopped job with null or false, which becomes `AbortError`).
+
+  Compression asks for the file's audit first, as the compressor's page does, which also starts the picture helpers.
+
+- **The tools** (`lib/agent/pdf.ts`) build their requests from the pages' own settings and helpers:
+  - `pdf_info`: the facts the worker reads, page sizes, bookmarks (`headingsOf`) and the text of up to 100 pages (200,000 characters).
+  - `merge_pdfs`: PDFs and pictures (each a page; SVG refused, as the merger does), with pages chosen by `parseRanges`, turns, passwords to open, the merger's defaults for bookmarks, forms, labels, attachments and details, page numbers, and a lock. The result is opened again and must have every page.
+  - `split_pdf`: every N (`cutsEvery`), equal parts (`cutsEqual`), single pages, ranges, odd and even, extract, remove, bookmarks, blank pages (from the worker's `ink`), words (from its `search`), all through the splitter's own `planFor`; or by size (`splitBySize`). Parts are named by `partNames` and come back as one ZIP (`zipName`, `createZip`) beyond 20, or when asked. Each part must have the pages it was planned with.
+  - `compress_pdf`: a level, a target size or custom settings, the scan choices, what to take out, and a lock. It says what changed in the compressor's own words (`checkLine`, `alreadySmall`). A file already as small as it gets is not handed back.
+  - Locks use the merger's rules (`settingsProblem`, `permissionBits`). Limits without a second password get one nobody keeps.
+- **Passwords:** a password given to open a file or lock a result passes through the agent, as the person's own words do. It is sent only to the worker and kept nowhere.
+
 ### The agent page (`/dashboard/agents/`)
 
 - **What it is:** a workspace page, not a catalogue entry, linked from the sidebar footer, in the sitemap and in the offline copy.
@@ -117,13 +134,20 @@ A package of its own, in TypeScript that Node runs as it is (type stripping), bu
   - a folder made for results;
   - an image read from disk;
   - paths outside, links that lead out and bad input refused;
-  - no request outside the site.
-- **A real agent:** Codex (`codex exec` with the bridge as its MCP server) formatted a JSON file with sorted keys and checked a contrast. It kept every digit and saved the result beside the file.
+  - no request outside the site;
+  - PDFs merged and split on disk, progress told for a compression, and a compression cancelled with nothing saved.
+- **PDF** (`lib/agent/pdf.test.ts`, 100%, with a stand-in for the worker in `tests/agent-pdf-fake.ts` to see what each tool asks; `e2e/agent-pdf.spec.ts`, five profiles, the real worker):
+  - Facts and text are read back.
+  - A merge of PDFs and a picture, with chosen pages, turns, a locked input and a locked result, read by pdf.js: the text in order, the turns, the fields kept, the title, and no opening without the password.
+  - A split every N pages, at bookmarks named by their titles, extracted pages, at words, at blank pages, and 25 parts as a ZIP listed by `unzip`.
+  - Compression of the brochure, smaller with the same text, and a second pass that says it is already as small.
+  - A long compression stopped, and the tools working after it.
+- **A real agent:** Codex (`codex exec` with the bridge as its MCP server) formatted a JSON file with sorted keys and checked a contrast. It kept every digit and saved the result beside the file. Then Codex merged two PDFs into `combined.pdf` and compressed the brochure through the bridge. Poppler (`pdfinfo`, `pdftotext`) read 5 pages (3 + 2) and the same text in the compressed brochure, 90% smaller.
 
 ## Phases
 
 1. **JSON and colour**, with the registry, the agent page, WebMCP and the bridge. Built.
-2. **PDF files:** information, merge, split, compress.
+2. **PDF files:** information, merge, split, compress. Built.
 3. **PDF editor jobs:** pages, crop, page numbers, watermarks, details, forms, redaction, find and replace, text and pictures, OCR, signature checks.
 4. **Images and animation.**
 5. **Audio:** every job of the audio workspace, after its job-building moves into `lib/audio/`.

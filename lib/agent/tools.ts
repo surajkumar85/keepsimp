@@ -1,11 +1,14 @@
 /** Every tool given to agents, made with the engines it needs. */
 import { colorTools, type SampleImage } from "./color"
 import { jsonTools, type RunJson } from "./json"
+import { pdfTools } from "./pdf"
+import type { PdfEngine } from "./pdf-engine"
 import { asTool, type AgentTool } from "./registry"
 
 export interface Engines {
   runJson: RunJson
   sampleImage: SampleImage
+  pdf: PdfEngine
 }
 
 const listFiles: AgentTool<Record<string, never>> = {
@@ -32,5 +35,6 @@ export function agentTools(engines: Engines): AgentTool[] {
     asTool(listFiles),
     ...jsonTools(engines.runJson),
     ...colorTools(engines.sampleImage),
+    ...pdfTools(engines.pdf),
   ]
 }

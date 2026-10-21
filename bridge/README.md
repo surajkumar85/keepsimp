@@ -20,7 +20,7 @@ args = ["-y", "keepsimp-mcp"]
 
 Any other client: run `npx -y keepsimp-mcp` as a stdio server.
 
-Then ask in plain words: "format data.json with sorted keys", "check the contrast of #777 on white", "find the main colours of logo.png".
+Then ask in plain words: "merge a.pdf and b.pdf", "split book.pdf at its bookmarks", "format data.json with sorted keys", "check the contrast of #777 on white", "find the main colours of logo.png".
 
 ## The tools
 
@@ -29,7 +29,9 @@ The bridge asks the KeepSimp page which tools there are, so the list is always t
 - **JSON:** `format_json`, `repair_json`, `transform_json`, `query_json` (JSONPath and JSON Pointer), `validate_json` (JSON Schema), `compare_json`, `patch_json`, `convert_json` (YAML, CSV, JSON Lines, TypeScript, JSON Schema). Numbers keep their exact digits.
 - **Colour:** `convert_color`, `check_contrast` (WCAG 2), `make_palette`, `colors_from_image`.
 
-PDF, image, animation and audio tools follow.
+- **PDF:** `pdf_info` (facts, bookmarks and text), `merge_pdfs` (with page ranges, turns, pictures as pages, contents, page numbers and a lock), `split_pdf` (every N pages, equal parts, ranges, odd and even, extract or remove, bookmarks, blank pages, words, size) and `compress_pdf` (levels, a size, or your own resolution and quality). Every page is compared with the original before a compressed file is handed over.
+
+The PDF editor's jobs, then image, animation and audio tools follow.
 
 ## What it may touch
 

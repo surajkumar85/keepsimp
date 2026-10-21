@@ -90,6 +90,8 @@ export default defineConfig({
         "lib/agent/tools.ts",
         "lib/agent/webmcp.ts",
         "lib/agent/bridge-api.ts",
+        "lib/agent/pdf.ts",
+        "lib/agent/pdf-engine.ts",
         "lib/image-tools.ts",
         "lib/site.ts",
         "lib/tool-search.ts",

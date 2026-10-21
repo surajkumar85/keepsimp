@@ -1,106 +1,7 @@
-import { crc32, deflateSync } from "node:zlib"
-import {
-  chromium,
-  expect,
-  test,
-  type BrowserContext,
-  type Page,
-} from "@playwright/test"
+import { chromium, expect, test, type BrowserContext } from "@playwright/test"
 import AxeBuilder from "@axe-core/playwright"
 import { parse as parseYaml } from "yaml"
-import { bytesOf } from "./pdf"
-
-const AGENTS = "/dashboard/agents/"
-
-/** A PNG, left half teal (#00786f), right half white, written byte by byte. */
-function twoColourPng() {
-  const width = 64
-  const height = 32
-  const rows = Buffer.alloc((width * 3 + 1) * height)
-  for (let y = 0; y < height; y++)
-    for (let x = 0; x < width; x++)
-      rows.set(
-        x < width / 2 ? [0x00, 0x78, 0x6f] : [0xff, 0xff, 0xff],
-        y * (width * 3 + 1) + 1 + x * 3
-      )
-  const chunk = (type: string, data: Buffer) => {
-    const body = Buffer.concat([Buffer.from(type), data])
-    const length = Buffer.alloc(4)
-    length.writeUInt32BE(data.length)
-    const check = Buffer.alloc(4)
-    check.writeUInt32BE(crc32(body))
-    return Buffer.concat([length, body, check])
-  }
-  const header = Buffer.alloc(13)
-  header.writeUInt32BE(width, 0)
-  header.writeUInt32BE(height, 4)
-  header.set([8, 2, 0, 0, 0], 8)
-  return Buffer.concat([
-    Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]),
-    chunk("IHDR", header),
-    chunk("IDAT", deflateSync(rows)),
-    chunk("IEND", Buffer.alloc(0)),
-  ])
-}
-
-async function ready(page: Page) {
-  await page.goto(AGENTS)
-  await expect(page.getByTestId("agent-page")).toHaveAttribute(
-    "data-ready",
-    "true"
-  )
-}
-
-type Answer<T> = { ok: true; value: T } | { ok: false; problem: string }
-type Result = {
-  summary: string
-  files?: { id: string; name: string }[]
-  data?: Record<string, unknown> & { output?: string }
-}
-
-/** Hands a file to the page as the bridge does: from an address answered here, never the network. */
-let served = 0
-async function hand(
-  page: Page,
-  name: string,
-  body: Buffer | string,
-  type: string
-) {
-  const url = `/__bridge/in/${++served}`
-  await page.route(`**${url}`, (route) =>
-    route.fulfill({ body, contentType: type })
-  )
-  const answer = await page.evaluate(
-    ([url, name, type]) => window.keepsimp!.load(url, name, type),
-    [url, name, type] as const
-  )
-  expect(answer.ok).toBe(true)
-  return (answer as { ok: true; value: { id: string } }).value.id
-}
-
-async function run(page: Page, name: string, input: unknown) {
-  const answer = (await page.evaluate(
-    ([name, input]) =>
-      window.keepsimp!.run(`e2e-${Math.random()}`, name as string, input),
-    [name, input] as const
-  )) as Answer<Result>
-  return answer
-}
-
-async function ran(page: Page, name: string, input: unknown) {
-  const answer = await run(page, name, input)
-  if (!answer.ok) throw new Error(answer.problem)
-  return answer.value
-}
-
-/** Saves a file the tools made, as the bridge does, from a download. */
-async function saved(page: Page, id: string) {
-  const pending = page.waitForEvent("download")
-  await page.evaluate((id) => window.keepsimp!.save(id), id)
-  const download = await pending
-  const bytes = Buffer.from(await bytesOf(download))
-  return { name: download.suggestedFilename(), text: bytes.toString(), bytes }
-}
+import { hand, ran, ready, run, saved, twoColourPng } from "./agent"
 
 test("the page offers its tools to the bridge, runs them and hands their files back", async ({
   page,
@@ -125,6 +26,10 @@ test("the page offers its tools to the bridge, runs them and hands their files b
     "check_contrast",
     "make_palette",
     "colors_from_image",
+    "pdf_info",
+    "merge_pdfs",
+    "split_pdf",
+    "compress_pdf",
   ])
   expect(await page.evaluate(() => window.keepsimp!.version)).toBe(1)
 
@@ -269,7 +174,7 @@ test("the person adds files, and sees what agents asked", async ({ page }) => {
   // The person can take a file away.
   await page.getByRole("button", { name: "Remove notes.json" }).click()
   await expect(row).toHaveCount(1)
-  await expect(page.getByTestId("agent-tools").locator("li")).toHaveCount(13)
+  await expect(page.getByTestId("agent-tools").locator("li")).toHaveCount(17)
 })
 
 test("an agent in the browser calls the tools through WebMCP", async ({
@@ -284,7 +189,7 @@ test("an agent in the browser calls the tools through WebMCP", async ({
     const page = await context.newPage()
     await ready(page)
     await expect(page.getByTestId("webmcp-status")).toContainText(
-      "has given 13 tools to agents in this browser"
+      "has given 17 tools to agents in this browser"
     )
     const tools = await page.webmcp.tools()
     expect(tools.map((tool) => tool.name)).toContain("list_files")

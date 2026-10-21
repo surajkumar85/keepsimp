@@ -4,6 +4,8 @@
  * browser offers it. Everything stops when the page goes.
  */
 import { JsonClient } from "@/lib/json-workspace/client"
+import { PdfClient } from "@/lib/pdf-merger/client"
+import { PdfEngine } from "./pdf-engine"
 import { sampleSize } from "@/lib/color/sample"
 import { Agent } from "./agent"
 import { bridgeApi, type BridgeApi } from "./bridge-api"
@@ -56,8 +58,10 @@ export interface Started {
 
 export function startAgent(): Started {
   const json = new JsonClient()
+  let pdfClient: PdfClient | null = null
+  const pdf = new PdfEngine((onFile) => (pdfClient = new PdfClient(onFile)))
   const agent = new Agent(
-    agentTools({ runJson: (job) => json.run(job), sampleImage })
+    agentTools({ runJson: (job) => json.run(job), sampleImage, pdf })
   )
   window.keepsimp = bridgeApi(agent, {
     download,
@@ -84,6 +88,7 @@ export function startAgent(): Started {
       stopped = true
       undo?.()
       json.stop()
+      pdfClient?.dispose()
       delete window.keepsimp
     },
   }

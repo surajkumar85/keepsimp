@@ -6,6 +6,7 @@
 import { after, before, describe, it } from "node:test"
 import assert from "node:assert/strict"
 import {
+  copyFile,
   mkdtemp,
   mkdir,
   readFile,
@@ -205,6 +206,84 @@ describe("the KeepSimp bridge", () => {
         .sort(),
       ["#00786f", "#ffffff"]
     )
+  })
+
+  it("merges and splits PDFs on disk", async () => {
+    const samples = new URL("../../public/samples/", import.meta.url).pathname
+    await copyFile(
+      join(samples, "keepsimp-report.pdf"),
+      join(work, "report.pdf")
+    )
+    await copyFile(
+      join(samples, "keepsimp-appendix.pdf"),
+      join(work, "appendix.pdf")
+    )
+    const merged = await call("merge_pdfs", {
+      files: ["report.pdf", "appendix.pdf"],
+      name: "together",
+    })
+    assert.equal(merged.isError, undefined, merged.content[0].text)
+    const saved = merged.structuredContent!.files[0].path
+    assert.equal(saved, join(work, "together.pdf"))
+    assert.equal((await readFile(saved)).subarray(0, 5).toString(), "%PDF-")
+    const pages = (merged.structuredContent!.data as { pages: number }).pages
+    const info = await call("pdf_info", { file: "together.pdf" })
+    assert.equal(
+      (info.structuredContent!.data as { pages: number }).pages,
+      pages
+    )
+    const split = await call("split_pdf", {
+      file: "together.pdf",
+      mode: "single",
+      outputFolder: "pages",
+    })
+    assert.equal(split.structuredContent!.files.length, pages)
+    assert.match(
+      split.structuredContent!.files[0].path,
+      /pages\/together-1\.pdf$/
+    )
+  })
+
+  it("tells progress, and stops a long job when the agent cancels", async () => {
+    const samples = new URL("../../public/samples/", import.meta.url).pathname
+    await copyFile(
+      join(samples, "keepsimp-brochure.pdf"),
+      join(work, "brochure.pdf")
+    )
+    const told: number[] = []
+    const done = (await client.callTool(
+      { name: "compress_pdf", arguments: { file: "brochure.pdf" } },
+      undefined,
+      {
+        onprogress: (progress) => told.push(progress.progress),
+        timeout: 240_000,
+      }
+    )) as Result
+    assert.equal(done.isError, undefined, done.content[0].text)
+    assert.ok(told.length > 1, "progress was told")
+    assert.ok(told.every((fraction) => fraction >= 0 && fraction <= 1))
+    const controller = new AbortController()
+    const stopped = client
+      .callTool(
+        {
+          name: "compress_pdf",
+          arguments: { file: "brochure.pdf", level: "strong" },
+        },
+        undefined,
+        { signal: controller.signal, onprogress: () => controller.abort() }
+      )
+      .then(
+        () => "finished",
+        () => "cancelled"
+      )
+    assert.equal(await stopped, "cancelled")
+    // Nothing was saved for the stopped job, and the bridge goes on working.
+    const after = await call("pdf_info", { file: "brochure.pdf" })
+    assert.equal(after.isError, undefined)
+    const names = (await readdir(work)).filter((name) =>
+      name.startsWith("brochure-compressed")
+    )
+    assert.deepEqual(names, ["brochure-compressed.pdf"])
   })
 
   it("never lets the browser leave the site", () => {

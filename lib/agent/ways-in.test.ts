@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest"
 import { runJob } from "@/lib/json-workspace/jobs"
+import { FakePdfClient } from "@/tests/agent-pdf-fake"
 import { Agent } from "./agent"
+import { PdfEngine } from "./pdf-engine"
 import { bridgeApi } from "./bridge-api"
 import { AGENT_VERSION, asTool, type AgentTool } from "./registry"
 import { agentTools } from "./tools"
@@ -9,6 +11,7 @@ import { modelContextOf, registerTools, type WebMcpTool } from "./webmcp"
 const engines = {
   runJson: (job: Parameters<typeof runJob>[0]) => Promise.resolve(runJob(job)),
   sampleImage: async () => new Uint8ClampedArray(4),
+  pdf: new PdfEngine((onFile) => new FakePdfClient(onFile)),
 }
 
 describe("every tool", () => {
