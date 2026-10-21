@@ -46,6 +46,8 @@ function refused(error: unknown) {
     return "The browser was not allowed to use the microphone. Allow it for this site (in the address bar or the browser's settings), then try again."
   if (name === "NotFoundError" || name === "OverconstrainedError")
     return "No microphone was found. Plug one in, or choose another, and try again."
+  if (name === "NoSoundEngine")
+    return "The browser could not start its sound engine, which recording needs. Check that a sound device is on and not in use, then try again."
   if (name === "NotReadableError")
     return "The microphone is in use by another app, or could not be started. Close the other app and try again."
   return "The microphone could not be started in this browser."
@@ -137,7 +139,14 @@ export function Recorder({ onTake }: { onTake: (file: File) => void }) {
       })
       void listDevices()
       context = new AudioContext()
-      await context.resume()
+      // A browser that cannot start its sound engine (no sound device, say)
+      // never answers: after a few seconds the page says so.
+      const running = await Promise.race([
+        context.resume().then(() => true),
+        new Promise<false>((done) => setTimeout(() => done(false), 3000)),
+      ])
+      if (!running || context.state !== "running")
+        throw Object.assign(new Error("silent"), { name: "NoSoundEngine" })
       await context.audioWorklet.addModule("/worklets/capture.js")
       const channels = stereo ? 2 : 1
       const node = new AudioWorkletNode(context, "keepsimp-capture", {

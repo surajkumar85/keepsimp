@@ -17,6 +17,12 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
+      # Whisper's models come from pinned revisions, checked by their hashes;
+      # kept between runs so each job does not download them again.
+      - uses: actions/cache@v6.1.0
+        with:
+          path: .next/cache/whisper
+          key: whisper-${{ hashFiles('lib/audio/whisper-models.json') }}
       # The audio tests read what is written with FFmpeg, never with the
       # library that wrote it.
       - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg libimage-exiftool-perl
@@ -50,6 +56,12 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
+      # Whisper's models come from pinned revisions, checked by their hashes;
+      # kept between runs so each job does not download them again.
+      - uses: actions/cache@v6.1.0
+        with:
+          path: .next/cache/whisper
+          key: whisper-${{ hashFiles('lib/audio/whisper-models.json') }}
       - run: npm run build
       - run: npx playwright install --with-deps ${{ matrix.engine }}
       - run: sudo apt-get install -y --no-install-recommends ffmpeg libimage-exiftool-perl

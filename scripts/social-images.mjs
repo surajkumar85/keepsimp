@@ -247,6 +247,12 @@ const cards = [
     "/images/audio-record-guide.svg",
   ],
   [
+    "transcribe-audio-on-your-device",
+    "Every word written down, none of it sent away.",
+    "Whisper on your device: text and subtitles.",
+    "/images/audio-transcribe-guide.svg",
+  ],
+  [
     "gapless-mp3-and-aac",
     "Why a converted MP3 starts late, and ours does not.",
     "Gapless MP3 and AAC, checked before download.",

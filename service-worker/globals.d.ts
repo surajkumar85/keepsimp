@@ -3,3 +3,4 @@ declare const VERSION: string
 declare const PRECACHE: string[]
 declare const isImmutable: typeof import("./rules.js").isImmutable
 declare const routeFor: typeof import("./rules.js").routeFor
+declare const keptFolders: typeof import("./rules.js").keptFolders

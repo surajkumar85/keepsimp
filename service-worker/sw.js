@@ -1,6 +1,6 @@
 // @ts-check
 /// <reference lib="webworker" />
-/* global VERSION, PRECACHE, isImmutable, routeFor */
+/* global VERSION, PRECACHE, isImmutable, routeFor, keptFolders */
 
 // The body of the service worker. app/sw.js/route.ts writes the finished
 // worker at build time: VERSION and PRECACHE first, then the functions of
@@ -116,7 +116,7 @@ async function fresh(request, key) {
 
 /**
  * The saved copy; the network the first time, when what it answers is saved.
- * A file of another version in the same folder is let go of then.
+ * Files of the same kind and another version are let go of then.
  * @param {Request} request
  * @param {string} key
  */
@@ -127,11 +127,10 @@ async function kept(request, key) {
   const response = await fetch(request)
   if (response.ok && !response.redirected) {
     await cache.put(key, response.clone())
-    const folder = key.slice(0, key.lastIndexOf("/") + 1)
-    const kind = folder.slice(0, folder.slice(0, -1).lastIndexOf("/") + 1)
+    const { kind, version } = keptFolders(key)
     for (const old of await cache.keys()) {
       const path = new URL(old.url).pathname
-      if (path.startsWith(kind) && !path.startsWith(folder))
+      if (path.startsWith(kind) && !path.startsWith(version))
         await cache.delete(old)
     }
   }

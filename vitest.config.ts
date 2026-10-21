@@ -58,6 +58,8 @@ export default defineConfig({
         "lib/audio/wav-tags.ts",
         "lib/audio/retag.ts",
         "lib/audio/record.ts",
+        "lib/audio/transcript.ts",
+        "lib/audio/whisper.ts",
         "lib/color/core.ts",
         "lib/color/picker.ts",
         "lib/color/palette.ts",

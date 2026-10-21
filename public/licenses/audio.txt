@@ -1,0 +1,32 @@
+KeepSimp audio workspace: third-party components
+=================================================
+
+The audio editor and its pages run these components in your browser. KeepSimp itself is
+licensed under AGPL-3.0-only (see LICENSE in the repository). Source code for every
+component is available from the links below.
+
+Component                   Version   Licence                 Source
+--------------------------  --------  ----------------------  ---------------------------------------------
+Mediabunny                  1.61.4    MPL-2.0                 https://github.com/Vanilagy/mediabunny
+@mediabunny/mp3-encoder     1.61.4    MPL-2.0 (wrapper);      https://github.com/Vanilagy/mediabunny
+  (LAME)                              LGPL-2.0 (LAME)         https://lame.sourceforge.io/
+@mediabunny/flac-encoder    1.61.4    MPL-2.0 (wrapper);      https://github.com/Vanilagy/mediabunny
+  (libFLAC)                           BSD-3-Clause (libFLAC)  https://github.com/xiph/flac
+@mediabunny/aac-encoder     1.61.4    MPL-2.0 (wrapper);      https://github.com/Vanilagy/mediabunny
+  (FFmpeg's AAC encoder)              LGPL-2.1 (FFmpeg)       https://ffmpeg.org/
+@shiguredo/rnnoise-wasm     2025.1.5  Apache-2.0 (wrapper);   https://github.com/shiguredo/rnnoise-wasm
+  (RNNoise and its model)             BSD-3-Clause (RNNoise)  https://gitlab.xiph.org/xiph/rnnoise
+Transformers.js             4.3.1     Apache-2.0              https://github.com/huggingface/transformers.js
+ONNX Runtime Web            1.31.0    MIT                     https://github.com/microsoft/onnxruntime
+Whisper base and small      (pinned)  MIT (OpenAI's weights;  https://github.com/openai/whisper
+  (ONNX, 8-bit, from                  converted by the ONNX   https://huggingface.co/onnx-community/whisper-base
+  onnx-community)                     Community)              https://huggingface.co/onnx-community/whisper-small
+
+The LGPL components (LAME and FFmpeg's AAC encoder) are separate, unmodified WebAssembly
+modules, loaded only when a file is written in their format: LAME for every MP3, and
+FFmpeg's AAC encoder only where the browser's own does not give back every sample.
+Their source code is at the links above.
+
+The Whisper models are downloaded from this site the first time a transcription starts,
+at the exact revisions named in lib/audio/whisper-models.json in the repository, each file
+checked against its SHA-256 when the site is built.

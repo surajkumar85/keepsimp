@@ -27,7 +27,9 @@
     "samples:pdfs": "node scripts/sample-pdfs.mjs",
     "check": "npm run design:check && npm run format:check && npm run lint && npm run build && npm run typecheck && npm run test:coverage",
     "audit:production": "npm audit --omit=dev --audit-level=high",
-    "postinstall": "patch-package"
+    "postinstall": "patch-package",
+    "prebuild": "node scripts/whisper-files.mjs",
+    "predev": "node scripts/whisper-files.mjs"
   },
   "dependencies": {
     "@base-ui/react": "^1.9.0",
@@ -115,6 +117,7 @@
     "@axe-core/playwright": "^4.13.0",
     "@cantoo/fontkit": "^2.0.12",
     "@cantoo/pdf-lib": "^2.11.1",
+    "@huggingface/transformers": "4.3.1",
     "@playwright/test": "^1.64.0",
     "@signpdf/signer-p12": "^3.3.0",
     "@signpdf/signpdf": "^3.3.0",

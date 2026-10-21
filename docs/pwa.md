@@ -44,6 +44,7 @@ Both files in `service-worker/` are plain JavaScript with JSDoc types, because t
   - copies a file-syncing program leaves beside a file in `public/` ("guide 2.svg"), which Git ignores and which exist on one machine only
   - the data Next.js fetches for page transitions, whose file names only exist after the build
   - what recognises words (OCR): Tesseract's worker and cores (about 4 MB kept, 1.1 MB downloaded) and the data of each language read (0.4 to 3.7 MB each, 31 languages), which only some visitors need, each language only when it is chosen. They are served from `/ocr/<version>/` and kept in a cache of their own, `keepsimp-kept-on-use`, the first time they are used, so OCR works offline from then on. That cache is not one release's: a new release does not delete it, since the files' address names their version, and saving a file of a new version deletes the older version's files in the same folder.
+  - what transcribes speech: Whisper's engine (27.5 MB) and the model chosen (base about 80 MB, small about 252 MB), served from `/whisper/<version>/` (put there before each build by `scripts/whisper-files.mjs`) and kept the same way the first time a transcription starts, only the files of the model used.
   - what takes background noise away in the audio workspace: RNNoise (`@shiguredo/rnnoise-wasm`, one script with its WebAssembly and model inside; 4.8 MB kept, 3.1 MB downloaded), served from `/rnnoise/<version>/rnnoise.js` by `app/rnnoise/[version]/[file]/route.ts` and kept the same way the first time noise is taken away.
 
 Because page data is not saved, following a link offline loads the page in full from the saved copy instead of swapping it in place. When a video cannot load, the player says so and points at the written steps.
@@ -54,14 +55,15 @@ Because page data is not saved, following a link offline loads the page in full 
 
 ### How requests are answered
 
-| Request                                       | Answer                                                                                   |
-| --------------------------------------------- | ---------------------------------------------------------------------------------------- |
-| Hashed build files (`/_next/static/`)         | The saved copy; the network if this release never saved it.                              |
-| Pages, page data and other saved files        | The network first. The saved copy when the network fails or takes longer than 4 seconds. |
-| Page-transition data of a saved page          | The network. After 4 seconds without an answer it fails, and the page loads in full.     |
-| What recognises words (`/ocr/<version>/`)     | The copy kept on first use; the network the first time, when the answer is kept.         |
-| What takes noise away (`/rnnoise/<version>/`) | The same.                                                                                |
-| Videos, range requests, anything not saved    | Left to the browser, as if there were no worker.                                         |
+| Request                                          | Answer                                                                                   |
+| ------------------------------------------------ | ---------------------------------------------------------------------------------------- |
+| Hashed build files (`/_next/static/`)            | The saved copy; the network if this release never saved it.                              |
+| Pages, page data and other saved files           | The network first. The saved copy when the network fails or takes longer than 4 seconds. |
+| Page-transition data of a saved page             | The network. After 4 seconds without an answer it fails, and the page loads in full.     |
+| What recognises words (`/ocr/<version>/`)        | The copy kept on first use; the network the first time, when the answer is kept.         |
+| What takes noise away (`/rnnoise/<version>/`)    | The same.                                                                                |
+| What transcribes speech (`/whisper/<version>/…`) | The same.                                                                                |
+| Videos, range requests, anything not saved       | Left to the browser, as if there were no worker.                                         |
 
 Online visitors therefore always get the latest pages. The saved copy is a fallback, and nothing is written to it after install, so it stays one complete release.
 

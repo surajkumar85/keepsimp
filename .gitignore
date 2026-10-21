@@ -46,3 +46,6 @@ next-env.d.ts
 # iCloud Drive conflict copies (this folder is synced by iCloud)
 * [2-9].*
 * [2-9]
+
+# Whisper's models and engine, put in by scripts/whisper-files.mjs before each build.
+/public/whisper/

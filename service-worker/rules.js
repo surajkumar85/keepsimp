@@ -27,6 +27,8 @@ const SKIPPED = [
   /^videos\/.*\.mp4$/,
   // Link-preview images are read by other sites, never by a visitor.
   /^images\/social\//,
+  // What transcribes speech (Whisper, 100 MB and more): kept once used.
+  /^whisper\//,
   // Dotfiles such as .gitkeep.
   /(^|\/)\.[^/]*$/,
   // Copies a file-syncing program leaves beside a file ("guide 2.svg"). Git
@@ -44,14 +46,28 @@ export function shouldPrecache(file) {
 
 /**
  * Files that are not in the offline copy until they are first used, and are
- * then kept: what recognises words (OCR) and what takes noise out of sound
- * (RNNoise), which only some visitors need. The
- * folder they are in is named for their version, so a saved copy never goes
- * stale either.
+ * then kept: what recognises words (OCR), what takes noise out of sound
+ * (RNNoise) and what transcribes speech (Whisper's engine and models),
+ * which only some visitors need. The folder under their kind is named for
+ * their version, so a saved copy never goes stale either.
  * @param {string} path
  */
 export function isKeptOnUse(path) {
-  return /^\/(ocr|rnnoise)\/[^/]+\/[^/]+$/.test(path)
+  return (
+    /^\/(ocr|rnnoise)\/[^/]+\/[^/]+$/.test(path) ||
+    /^\/whisper\/[^/]+\/[^?#]*[^/]$/.test(path)
+  )
+}
+
+/**
+ * The kind of a file kept on use and the folder of its version, such as
+ * "/whisper/" and "/whisper/4.3.1-1/": saving a file lets go of the same
+ * kind's files of other versions, and never of its own version's.
+ * @param {string} path
+ */
+export function keptFolders(path) {
+  const [, kind, version] = path.split("/")
+  return { kind: `/${kind}/`, version: `/${kind}/${version}/` }
 }
 
 /**

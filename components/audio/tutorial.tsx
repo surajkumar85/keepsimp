@@ -277,6 +277,24 @@ const recordingHelp: TutorialContent["options"] = [
   },
 ]
 
+const transcribing: TutorialContent["options"] = [
+  {
+    term: "Whisper",
+    detail:
+      "OpenAI's speech recognition model, run in your browser with Transformers.js and ONNX Runtime. The first time, the model and its engine are downloaded from this site (Base about 107 MB, Small about 280 MB) and then kept for working offline; the sound never leaves your device. Base takes about a third of the sound's length on a laptop and is good for clear speech; Small is slower and better with accents, noise and other languages.",
+  },
+  {
+    term: "Language",
+    detail:
+      "Whisper finds the language by itself, or you can say which it is, which helps with short or mixed speech. Translate into English writes what is said in English instead: a quick translation, not a careful one.",
+  },
+  {
+    term: "The transcript",
+    detail:
+      "Written in parts with their times, as Whisper hears them, 30 seconds at a time; each next window starts where the last whole sentence ended, so nothing is cut in two. Press a time to listen from there, find words in it, copy it, or save it as text, text with times, SRT or WebVTT subtitles. Whisper can mishear names, quiet words and speech over noise, and on silence or music it can write words that were not said: read it through before you rely on it.",
+  },
+]
+
 const silencing: TutorialContent["options"] = [
   {
     term: "Silence at the ends",
@@ -422,6 +440,7 @@ const editor: TutorialContent = {
     ...repairing,
     ...tagging,
     ...recordingHelp,
+    ...transcribing,
     ...leveling,
     ...shaping,
     ...options,
@@ -758,4 +777,35 @@ const recorderHelp: TutorialContent = {
 
 export function RecorderTutorial() {
   return <ToolTutorial content={recorderHelp} />
+}
+
+const transcribeHelp: TutorialContent = {
+  name: "How to transcribe audio to text with KeepSimp",
+  description:
+    "Turn speech in audio or video into text and subtitles with Whisper running in your browser. Search it, play along and save it as SRT or WebVTT. Nothing is uploaded.",
+  intro: "Follow the steps below. Every option is explained underneath.",
+  steps: [
+    {
+      title: "Add your files",
+      text: "Drop them, choose them or paste them: MP3, M4A, WAV, FLAC, Opus or videos.",
+    },
+    {
+      title: "Choose the model",
+      text: "Base is quick; Small is more accurate and slower. Either is downloaded once, then kept.",
+    },
+    {
+      title: "Transcribe",
+      text: "The text comes in as Whisper hears it. Stop at any time and keep what was heard.",
+    },
+    {
+      title: "Read, search and save",
+      text: "Press a time to listen from there, find words, and save it as text or subtitles.",
+    },
+  ],
+  options: [...transcribing, ...options],
+  guideHref: "/blog/transcribe-audio-on-your-device/",
+}
+
+export function TranscribeTutorial() {
+  return <ToolTutorial content={transcribeHelp} />
 }

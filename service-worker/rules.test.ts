@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest"
 import {
   isImmutable,
   isKeptOnUse,
+  keptFolders,
   pageOfData,
   routeFor,
   shouldPrecache,
@@ -27,6 +28,8 @@ describe("shouldPrecache", () => {
       "images/social/keepsimp.png",
       ".gitkeep",
       "images/.DS_Store",
+      "whisper/4.3.1-1/engine/transformers.min.js",
+      "whisper/4.3.1-1/models/onnx-community/whisper-base/onnx/encoder_model_quantized.onnx",
     ])
       expect(shouldPrecache(file), file).toBe(false)
   })
@@ -147,6 +150,30 @@ describe("routeFor", () => {
     expect(isKeptOnUse("/ocr/")).toBe(false)
     expect(isKeptOnUse("/ocr/worker.min.js")).toBe(false)
     expect(isKeptOnUse("/blog/ocr/a/b")).toBe(false)
+    // Whisper's files lie deeper: its engine and each model in folders.
+    expect(isKeptOnUse("/whisper/4.3.1-1/engine/transformers.min.js")).toBe(
+      true
+    )
+    expect(
+      isKeptOnUse(
+        "/whisper/4.3.1-1/models/onnx-community/whisper-small/onnx/decoder_model_merged_quantized.onnx"
+      )
+    ).toBe(true)
+    expect(isKeptOnUse("/whisper/4.3.1-1/")).toBe(false)
+    expect(isKeptOnUse("/whisper/")).toBe(false)
+    // A new version lets go of the old one's files, never of its own.
+    expect(
+      keptFolders(
+        "/whisper/4.3.1-1/models/onnx-community/whisper-base/config.json"
+      )
+    ).toEqual({
+      kind: "/whisper/",
+      version: "/whisper/4.3.1-1/",
+    })
+    expect(keptFolders("/ocr/v2/eng.traineddata.gz")).toEqual({
+      kind: "/ocr/",
+      version: "/ocr/v2/",
+    })
     expect(route("/ocr/v1/worker.min.js?x=1")).toEqual({
       kind: "kept",
       key: "/ocr/v1/worker.min.js",

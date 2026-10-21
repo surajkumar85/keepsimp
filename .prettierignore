@@ -11,3 +11,4 @@ test-results/
 package-lock.json
 app/design-tokens.css
 .claude/
+public/whisper/

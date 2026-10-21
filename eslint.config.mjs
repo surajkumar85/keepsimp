@@ -18,6 +18,8 @@ const eslintConfig = defineConfig([
     "**/* [2-9].*",
     // Other sessions' working copies of this repository.
     ".claude/**",
+    // Whisper's engine and models, copied in before each build.
+    "public/whisper/**",
   ]),
 ])
 

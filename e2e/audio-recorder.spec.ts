@@ -74,6 +74,19 @@ async function take(page: Page) {
  * device past the system's permission, so the microphone is the one part
  * not the browser's own; everything after it is.
  */
+/** Whether this browser can start its sound engine here (Firefox on a machine with no sound device cannot). */
+async function soundRuns(page: Page) {
+  return page.evaluate(async () => {
+    const context = new AudioContext()
+    const started = await Promise.race([
+      context.resume().then(() => context.state === "running"),
+      new Promise<boolean>((done) => setTimeout(() => done(false), 3000)),
+    ])
+    void context.close()
+    return started
+  })
+}
+
 async function toneMicrophone(page: Page) {
   await page.addInitScript(() => {
     Object.defineProperty(MediaDevices.prototype, "getUserMedia", {
@@ -100,6 +113,10 @@ test("records from the microphone, pauses and goes on, and keeps every sample", 
   test.setTimeout(120_000)
   await toneMicrophone(page)
   await page.goto(RECORDER)
+  test.skip(
+    !(await soundRuns(page)),
+    "This browser cannot start its sound engine on this machine (no sound device)"
+  )
   await expect(page.getByTestId("audio-focused")).toContainText(
     "opened for recording"
   )
@@ -168,6 +185,10 @@ test("keeps a draft that a closed tab does not lose, and deletes it once used", 
   test.setTimeout(120_000)
   await toneMicrophone(page)
   await page.goto(RECORDER)
+  test.skip(
+    !(await soundRuns(page)),
+    "This browser cannot start its sound engine on this machine (no sound device)"
+  )
   await recorder(page)
     .getByRole("switch", { name: "Keep a draft while recording" })
     .click()

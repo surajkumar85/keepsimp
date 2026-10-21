@@ -20,6 +20,7 @@ import {
   NoiseTutorial,
   TagsTutorial,
   RecorderTutorial,
+  TranscribeTutorial,
 } from "@/components/audio/tutorial"
 import { AnimationConverterTutorial } from "@/components/animation-converter/tutorial"
 import { ImageCompressor } from "@/components/image-compressor/image-compressor"
@@ -118,6 +119,12 @@ export async function generateMetadata({
     return pageMetadata(
       "Change audio speed and pitch online for free",
       "Speed up or slow down MP3, M4A, WAV and more without changing the pitch, or change the pitch keeping the length, in your browser. Also reverse and karaoke. No account, no file uploads.",
+      `/dashboard/${id}/`
+    )
+  if (id === "transcribe-audio")
+    return pageMetadata(
+      "Transcribe audio to text online for free, on your device",
+      "Turn speech in MP3, M4A, WAV or video into text and SRT or WebVTT subtitles with Whisper running in your browser. Search it and play along. No account, no file uploads.",
       `/dashboard/${id}/`
     )
   if (id === "voice-recorder")
@@ -338,6 +345,8 @@ export default async function ToolPage({
         <AudioWorkspace mode="tags" />
       ) : id === "voice-recorder" ? (
         <AudioWorkspace mode="recorder" />
+      ) : id === "transcribe-audio" ? (
+        <AudioWorkspace mode="transcribe" />
       ) : id === "pdf-merger" ? (
         <PdfMerger />
       ) : id === "pdf-splitter" ? (
@@ -403,6 +412,8 @@ export default async function ToolPage({
         <TagsTutorial />
       ) : id === "voice-recorder" ? (
         <RecorderTutorial />
+      ) : id === "transcribe-audio" ? (
+        <TranscribeTutorial />
       ) : id === "audio-extractor" ? (
         <AudioExtractorTutorial />
       ) : id === "pdf-merger" ? (

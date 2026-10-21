@@ -91,9 +91,10 @@ export default function PrivacyPage() {
           is not part of it until you first recognise text in that language; it
           is then kept the same way. It too holds none of your files, and the
           words it finds go only into the PDF you are editing. What takes
-          background noise out of sound (about 3 MB) is kept the same way the
-          first time you use it; the sound and its noise are never sent
-          anywhere.
+          background noise out of sound (about 3 MB), and Whisper, which
+          transcribes speech (about 107 MB, or 280 MB for the larger model), are
+          kept the same way the first time you use them; the sound, its noise
+          and its words are never sent anywhere.
         </p>
         <h2>Keep the limits in mind.</h2>
         <p>

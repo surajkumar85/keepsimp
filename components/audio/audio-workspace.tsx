@@ -126,6 +126,7 @@ import { SoundEditor, type EditorFocus } from "./sound-editor"
 import { SplitPanel } from "./split-panel"
 import { TagPanel, type TagRow } from "./tag-panel"
 import { Recorder } from "./recorder"
+import { TranscriptPanel } from "./transcript-panel"
 import { JoinPanel, type JoinRow } from "./join-panel"
 import { Waveform } from "./waveform"
 
@@ -144,6 +145,7 @@ export type AudioMode =
   | "noise"
   | "tags"
   | "recorder"
+  | "transcribe"
 
 /** What the waveform editor is opened for, in each mode; none where it waits to be asked for. */
 const EDITING: Record<AudioMode, EditorFocus | null> = {
@@ -160,6 +162,7 @@ const EDITING: Record<AudioMode, EditorFocus | null> = {
   noise: null,
   tags: null,
   recorder: null,
+  transcribe: null,
 }
 
 const INPUT_ID = "audio-file"
@@ -216,6 +219,14 @@ const COPY: Record<AudioMode, DropZoneCopy> = {
     dropping: "Drop to change these files' speed",
     body: "Faster or slower keeping the pitch, the pitch up or down keeping the length, or both; also backwards, karaoke and the channels swapped. On your device. You can also paste with ⌘V or Ctrl+V.",
     inputLabel: "Choose audio files to change",
+    action: "Choose files",
+    limits: `Stays on your device · up to ${MAX_FILES} files at once`,
+  },
+  transcribe: {
+    heading: "Drop audio or video to transcribe",
+    dropping: "Drop to transcribe these files",
+    body: "What is said, written out with times by Whisper running on your device: search it, play along, and save it as text or subtitles. Nothing is uploaded. You can also paste with ⌘V or Ctrl+V.",
+    inputLabel: "Choose audio or video files to transcribe",
     action: "Choose files",
     limits: `Stays on your device · up to ${MAX_FILES} files at once`,
   },
@@ -329,6 +340,7 @@ const FOCUSED: Partial<Record<AudioMode, string>> = {
   noise: "opened for taking away background noise",
   tags: "opened for changing tags",
   recorder: "opened for recording",
+  transcribe: "opened for transcribing",
 }
 
 const SAMPLES: Record<AudioMode, { name: string; type: string }[]> = {
@@ -357,6 +369,7 @@ const SAMPLES: Record<AudioMode, { name: string; type: string }[]> = {
     { name: "keepsimp-voice.mp3", type: "audio/mpeg" },
   ],
   recorder: [{ name: "keepsimp-voice.mp3", type: "audio/mpeg" }],
+  transcribe: [{ name: "keepsimp-voice.mp3", type: "audio/mpeg" }],
 }
 
 /** The format each mode writes at first. */
@@ -374,6 +387,7 @@ const FIRST_FORMAT: Record<AudioMode, AudioSettings["format"]> = {
   noise: "same",
   tags: "same",
   recorder: "mp3",
+  transcribe: "same",
 }
 
 /** How loud results are at first in each mode. */
@@ -1632,6 +1646,22 @@ export function AudioWorkspace({ mode = "editor" }: { mode?: AudioMode }) {
             </>
           )}
         </section>
+
+        {(mode === "editor" || mode === "transcribe") &&
+          facts &&
+          selected.status === "ready" &&
+          originalUrl && (
+            <TranscriptPanel
+              source={{
+                id: selected.id,
+                name: selected.file.name,
+                file: selected.decoded ?? selected.file,
+                kept: selected.decoded ? null : facts.kept,
+                duration: facts.duration,
+                url: originalUrl,
+              }}
+            />
+          )}
 
         {tagging && facts && selected.status === "ready" && (
           <TagPanel

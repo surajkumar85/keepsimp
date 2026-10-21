@@ -360,6 +360,14 @@ export const overviewPost: BlogPost = {
           label: "Guide: record audio online",
           href: "/blog/record-audio-online/",
         },
+        {
+          label: "Need the words? Open it as Transcribe audio",
+          href: "/dashboard/transcribe-audio/",
+        },
+        {
+          label: "Guide: transcribe audio on your device",
+          href: "/blog/transcribe-audio-on-your-device/",
+        },
       ],
     },
     {
@@ -2808,6 +2816,92 @@ export const recordPost: BlogPost = {
     {
       title: "MDN: AudioWorkletProcessor",
       url: "https://developer.mozilla.org/en-US/docs/Web/API/AudioWorkletProcessor",
+    },
+  ],
+}
+
+export const transcribePost: BlogPost = {
+  published: "2026-10-21",
+  modified: "2026-10-21",
+  slug: "transcribe-audio-on-your-device",
+  title: "Every word written down, none of it sent away.",
+  searchTitle: "How to transcribe audio to text for free without uploading it",
+  description:
+    "Turn speech in a recording, interview or video into text and subtitles with Whisper running in your browser, then search it and play along. Nothing is uploaded.",
+  keywords: [
+    "transcribe audio to text",
+    "speech to text free",
+    "whisper online",
+    "audio to text without upload",
+    "make subtitles srt",
+    "transcribe interview",
+  ],
+  category: "A little know-how",
+  readingTime: "4 min read",
+  image: "/images/audio-transcribe-guide.svg",
+  imageAlt:
+    "A transcript in parts with their times beside a player, one part highlighted as it plays, and buttons to save it as text, SRT and WebVTT",
+  tool: "transcribe-audio",
+  intro:
+    "An interview to quote, a lecture to search, a video that needs subtitles. Transcription services upload the recording and often keep it; here Whisper, OpenAI's speech recognition model, runs in your browser, so the recording stays on your device.",
+  sections: [
+    {
+      id: "how",
+      title: "How to transcribe.",
+      paragraphs: [
+        "Open Transcribe audio and drop your recording or video. Choose a model and press Transcribe: the text comes in as Whisper hears it, a few seconds at a time, and you can stop whenever you like and keep what was heard. Press a time to listen from there, find words, and save it as text or as SRT or WebVTT subtitles.",
+      ],
+      links: [
+        {
+          label: "Open Transcribe audio",
+          href: "/dashboard/transcribe-audio/",
+        },
+      ],
+    },
+    {
+      id: "models",
+      title: "Which model.",
+      paragraphs: [
+        "Base is quick: on a laptop it takes about a third of the recording's length, and it is good with clear speech. Small is about three times slower and better with accents, noise and languages other than English. Either is downloaded from this site the first time (about 107 MB or 280 MB) and kept for working offline after that.",
+        "Whisper hears about a hundred languages and finds which one by itself, or you can say which it is. It can also write what is said in English instead: a quick translation, not a careful one.",
+      ],
+    },
+    {
+      id: "honest",
+      title: "What to check.",
+      paragraphs: [
+        "Whisper is very good and not perfect: it can mishear names, quiet words and speech over noise, and on long silence or music it can write words nobody said. Read the transcript through before you quote it or publish subtitles. Taking background noise out first can help.",
+      ],
+      links: [
+        {
+          label: "Remove background noise first",
+          href: "/dashboard/remove-background-noise/",
+        },
+      ],
+    },
+    {
+      id: "private",
+      title: "On your device.",
+      paragraphs: [
+        "The recording is read and transcribed in your browser and never uploaded. There is no account and no limit on how much you transcribe.",
+      ],
+      links: [
+        {
+          label: "Every KeepSimp tool in one place",
+          href: "/blog/free-online-tools-no-upload/",
+        },
+      ],
+    },
+  ],
+  sources: [
+    {
+      title:
+        "Radford et al., Robust speech recognition via large-scale weak supervision (Whisper), 2022",
+      url: "https://arxiv.org/abs/2212.04356",
+    },
+    {
+      title: "Transformers.js",
+      url: "https://huggingface.co/docs/transformers.js",
     },
   ],
 }

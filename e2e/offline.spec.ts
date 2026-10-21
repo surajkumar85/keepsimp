@@ -107,7 +107,7 @@ test("every tool works offline after one visit", async ({ page }) => {
     /^images\/social\//,
     // What recognises words and takes noise away is kept once it is first
     // used, not before.
-    /^(ocr|rnnoise)\//,
+    /^(ocr|rnnoise|whisper)\//,
     /^(robots\.txt|sitemap\.xml|\.gitkeep)$/,
     // Not-found pages, and the data Next.js fetches for page transitions.
     /^(404\.html|404\/|_not-found\/)/,
@@ -517,6 +517,49 @@ test("taking noise away works offline once it has been used online", async ({
 
   await site.stop()
   await clean()
+})
+
+test("transcribing works offline once it has been used online", async ({
+  page,
+}) => {
+  test.setTimeout(300_000)
+  await install(page)
+  const transcribe = async () => {
+    await page.goto(`${site.origin}/dashboard/transcribe-audio/`)
+    await page.getByRole("button", { name: "Try a sample" }).click()
+    await expect(page.getByTestId("audio-workspace")).toHaveAttribute(
+      "data-settled",
+      "true",
+      { timeout: 90_000 }
+    )
+    const panel = page.getByTestId("transcript-panel")
+    await panel.getByRole("button", { name: "Transcribe", exact: true }).click()
+    await expect(page.getByTestId("transcript")).toContainText("noisy room", {
+      timeout: 180_000,
+    })
+  }
+  // Nothing of it is in the offline copy until it is used.
+  const before = await offlineCopy(page)
+  expect(before.saved.some((path) => path.startsWith("/whisper/"))).toBe(false)
+  await transcribe()
+  const kept = await page.evaluate(async () =>
+    (await (await caches.open("keepsimp-kept-on-use")).keys()).map(
+      (request) => new URL(request.url).pathname
+    )
+  )
+  expect(
+    kept.some((path) => path.endsWith("/engine/transformers.min.js"))
+  ).toBe(true)
+  expect(
+    kept.some((path) =>
+      path.endsWith("/whisper-base/onnx/decoder_model_merged_quantized.onnx")
+    )
+  ).toBe(true)
+  // Only what Base needs: Small is not fetched.
+  expect(kept.some((path) => path.includes("/whisper-small/"))).toBe(false)
+
+  await site.stop()
+  await transcribe()
 })
 
 test("shows the latest page online and the saved one when the network fails", async ({
