@@ -200,8 +200,10 @@ test("converts a video and an animation, and builds one from stills", async ({
     width: 160,
     speed: 2,
   })
-  const webpFile = await probed(page, webp.files![0].id)
-  expect(webpFile.stream.width).toBe(160)
+  // Not every FFprobe reads animated WebP: its size is read from its own header.
+  const webpBytes = (await saved(page, webp.files![0].id)).bytes
+  expect(webpBytes.subarray(12, 16).toString()).toBe("VP8X")
+  expect(webpBytes.readUIntLE(24, 3) + 1).toBe(160)
   expect(webp.data).toMatchObject({ seconds: expect.closeTo(1, 0) })
 
   const stills = await Promise.all(
