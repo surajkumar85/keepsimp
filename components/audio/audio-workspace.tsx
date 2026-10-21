@@ -19,6 +19,7 @@ import {
   IconFilePlus,
   IconInfoCircle,
   IconLock,
+  IconMicrophone,
   IconMovie,
   IconStack2,
   IconTransform,
@@ -124,6 +125,7 @@ import { SettingsPanel } from "./settings-panel"
 import { SoundEditor, type EditorFocus } from "./sound-editor"
 import { SplitPanel } from "./split-panel"
 import { TagPanel, type TagRow } from "./tag-panel"
+import { Recorder } from "./recorder"
 import { JoinPanel, type JoinRow } from "./join-panel"
 import { Waveform } from "./waveform"
 
@@ -141,6 +143,7 @@ export type AudioMode =
   | "speed"
   | "noise"
   | "tags"
+  | "recorder"
 
 /** What the waveform editor is opened for, in each mode; none where it waits to be asked for. */
 const EDITING: Record<AudioMode, EditorFocus | null> = {
@@ -156,6 +159,7 @@ const EDITING: Record<AudioMode, EditorFocus | null> = {
   speed: null,
   noise: null,
   tags: null,
+  recorder: null,
 }
 
 const INPUT_ID = "audio-file"
@@ -212,6 +216,14 @@ const COPY: Record<AudioMode, DropZoneCopy> = {
     dropping: "Drop to change these files' speed",
     body: "Faster or slower keeping the pitch, the pitch up or down keeping the length, or both; also backwards, karaoke and the channels swapped. On your device. You can also paste with ⌘V or Ctrl+V.",
     inputLabel: "Choose audio files to change",
+    action: "Choose files",
+    limits: `Stays on your device · up to ${MAX_FILES} files at once`,
+  },
+  recorder: {
+    heading: "Or drop sound you already have",
+    dropping: "Drop to add these files",
+    body: "Recordings and files go into the same list, to be trimmed, cleaned up, made louder and written in any format. On your device. You can also paste with ⌘V or Ctrl+V.",
+    inputLabel: "Choose audio files to add",
     action: "Choose files",
     limits: `Stays on your device · up to ${MAX_FILES} files at once`,
   },
@@ -316,6 +328,7 @@ const FOCUSED: Partial<Record<AudioMode, string>> = {
   speed: "opened for changing speed and pitch",
   noise: "opened for taking away background noise",
   tags: "opened for changing tags",
+  recorder: "opened for recording",
 }
 
 const SAMPLES: Record<AudioMode, { name: string; type: string }[]> = {
@@ -343,6 +356,7 @@ const SAMPLES: Record<AudioMode, { name: string; type: string }[]> = {
     { name: "keepsimp-tune.flac", type: "audio/flac" },
     { name: "keepsimp-voice.mp3", type: "audio/mpeg" },
   ],
+  recorder: [{ name: "keepsimp-voice.mp3", type: "audio/mpeg" }],
 }
 
 /** The format each mode writes at first. */
@@ -359,6 +373,7 @@ const FIRST_FORMAT: Record<AudioMode, AudioSettings["format"]> = {
   speed: "same",
   noise: "same",
   tags: "same",
+  recorder: "mp3",
 }
 
 /** How loud results are at first in each mode. */
@@ -529,6 +544,8 @@ export function AudioWorkspace({ mode = "editor" }: { mode?: AudioMode }) {
         : defaultSettings.sound,
   }))
   const [selectedId, setSelectedId] = useState<string | null>(null)
+  /** Whether the editor shows the recorder (its own door always does). */
+  const [recording, setRecording] = useState(false)
   const [notice, setNotice] = useState<string | null>(null)
   const [zipping, setZipping] = useState(false)
   const [thumbnails, setThumbnails] = useState<
@@ -1150,11 +1167,34 @@ export function AudioWorkspace({ mode = "editor" }: { mode?: AudioMode }) {
   })
 
   const focused = FOCUSED[mode]
+  // A take goes into the list and is the file shown.
+  const recorder =
+    mode === "recorder" || recording ? (
+      <Recorder
+        onTake={(file) => {
+          const before = new Set(live.current.items.map((one) => one.id))
+          void addFiles([file]).then(() => {
+            const made = live.current.items.find((one) => !before.has(one.id))
+            if (made) setSelectedId(made.id)
+          })
+        }}
+      />
+    ) : mode === "editor" ? (
+      <Button
+        type="button"
+        variant="outline"
+        onClick={() => setRecording(true)}
+      >
+        <IconMicrophone data-icon="inline-start" aria-hidden="true" />
+        Record from a microphone
+      </Button>
+    ) : null
 
   if (!items.length)
     return (
       <div className="grid gap-6 lg:grid-cols-5" data-testid="audio-workspace">
         <div className="min-w-0 space-y-4 lg:col-span-3">
+          {recorder}
           <DropZone
             onFiles={(added) => void addFiles(added)}
             onSample={() => void loadSamples()}
@@ -1299,6 +1339,7 @@ export function AudioWorkspace({ mode = "editor" }: { mode?: AudioMode }) {
       data-settled={(totals.settled && !zipping) || undefined}
     >
       <div className="min-w-0 space-y-4 lg:col-span-3">
+        {recorder}
         <section
           aria-label={`${selected.file.name}`}
           className="space-y-3 rounded-xl border bg-card p-4"

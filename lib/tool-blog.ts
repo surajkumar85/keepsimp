@@ -352,6 +352,14 @@ export const overviewPost: BlogPost = {
           label: "Guide: edit audio tags and cover art",
           href: "/blog/edit-audio-tags-and-cover-art/",
         },
+        {
+          label: "Nothing recorded yet? Open it as the Voice recorder",
+          href: "/dashboard/voice-recorder/",
+        },
+        {
+          label: "Guide: record audio online",
+          href: "/blog/record-audio-online/",
+        },
       ],
     },
     {
@@ -2721,6 +2729,85 @@ export const tagsPost: BlogPost = {
       title:
         "RFC 7845: Ogg encapsulation for the Opus audio codec, comment header",
       url: "https://www.rfc-editor.org/rfc/rfc7845.html",
+    },
+  ],
+}
+
+export const recordPost: BlogPost = {
+  published: "2026-10-21",
+  modified: "2026-10-21",
+  slug: "record-audio-online",
+  title: "Press record, keep every sample.",
+  searchTitle: "How to record audio online from your microphone for free",
+  description:
+    "Record from a microphone in your browser, with pause and a level meter and no call filters unless you want them, then trim, clean up and save it as MP3, M4A or WAV. Nothing is uploaded.",
+  keywords: [
+    "online voice recorder",
+    "record audio online",
+    "microphone recorder",
+    "record voice memo",
+    "free audio recorder",
+    "record from microphone",
+  ],
+  category: "A little know-how",
+  readingTime: "4 min read",
+  image: "/images/audio-record-guide.svg",
+  imageAlt:
+    "A recording in progress at 1:24.6, with a level meter, Pause and Stop buttons, and the take's waveform",
+  tool: "voice-recorder",
+  intro:
+    "A voice note, an interview, a guitar idea before it is gone. Many online recorders compress the sound as it comes in, or send it to a server; this one keeps exactly what the microphone gives, on your device, and hands it to the same editor as any file.",
+  sections: [
+    {
+      id: "how",
+      title: "How to record.",
+      paragraphs: [
+        "Open the Voice recorder and press Record; the browser asks before the microphone is used. Pause and go on as often as you like, watch the meter, and press Stop and keep. The take goes into the list of files, where it can be trimmed, cleaned of noise, made louder and saved as MP3, M4A, WAV or anything else.",
+      ],
+      links: [
+        {
+          label: "Open the Voice recorder",
+          href: "/dashboard/voice-recorder/",
+        },
+      ],
+    },
+    {
+      id: "raw",
+      title: "The microphone as it is.",
+      paragraphs: [
+        "Browsers are made for calls, so by default they cancel echo, suppress noise and change the level of a microphone. Here those are off unless you turn them on: the sound is taken as the browser hands it over, 32-bit floating point at the device's own rate, so nothing is lost before you choose what to do with it.",
+        "The meter shows how loud the sound is, and the page says when it reaches full scale, past which it is cut off for good: move back, or turn the input down.",
+      ],
+    },
+    {
+      id: "safe",
+      title: "A take that survives a closed tab.",
+      paragraphs: [
+        "Turn on Keep a draft while recording, and the take is kept on your device as it is recorded. If the tab is closed or the browser crashes, the next visit offers it back, up to the last second before it stopped. The switch starts off every time, and nothing is ever sent anywhere.",
+      ],
+    },
+    {
+      id: "private",
+      title: "On your device.",
+      paragraphs: [
+        "Recordings are made and written in your browser and never uploaded. There is no account and no limit on how many you make.",
+      ],
+      links: [
+        {
+          label: "Every KeepSimp tool in one place",
+          href: "/blog/free-online-tools-no-upload/",
+        },
+      ],
+    },
+  ],
+  sources: [
+    {
+      title: "MDN: MediaDevices.getUserMedia()",
+      url: "https://developer.mozilla.org/en-US/docs/Web/API/MediaDevices/getUserMedia",
+    },
+    {
+      title: "MDN: AudioWorkletProcessor",
+      url: "https://developer.mozilla.org/en-US/docs/Web/API/AudioWorkletProcessor",
     },
   ],
 }

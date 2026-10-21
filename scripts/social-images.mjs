@@ -241,6 +241,12 @@ const cards = [
     "/images/audio-tags-guide.svg",
   ],
   [
+    "record-audio-online",
+    "Press record, keep every sample.",
+    "A voice recorder that keeps the microphone as it is.",
+    "/images/audio-record-guide.svg",
+  ],
+  [
     "gapless-mp3-and-aac",
     "Why a converted MP3 starts late, and ours does not.",
     "Gapless MP3 and AAC, checked before download.",

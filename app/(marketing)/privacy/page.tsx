@@ -45,6 +45,14 @@ export default function PrivacyPage() {
           or sent. You can also remove them through your browser’s site-data
           settings.
         </p>
+        <p>
+          The voice recorder keeps a take in this browser’s own storage, on this
+          device, only while “Keep a draft while recording” is on (it starts off
+          every time), so that a closed tab does not lose it. The draft is
+          deleted when the take is finished or you delete it, and it is never
+          sent anywhere. The microphone is used only after you press Record and
+          the browser asks you, and only until you press Stop.
+        </p>
         <h2>The website still loads from a host.</h2>
         <p>
           Page HTML, scripts, fonts and public images load from the website

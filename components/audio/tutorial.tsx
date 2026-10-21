@@ -249,6 +249,34 @@ const tagging: TutorialContent["options"] = [
   },
 ]
 
+const recordingHelp: TutorialContent["options"] = [
+  {
+    term: "Recording",
+    detail:
+      "Press Record and allow the microphone when the browser asks. The sound is taken as the browser hands it over, 32-bit floats at the device's own rate, so nothing is lost; it goes into the list of files as a WAV when you press Stop, to be trimmed, cleaned up, made louder and written in any format. Long takes are kept a second at a time and never held whole.",
+  },
+  {
+    term: "Pause and go on",
+    detail:
+      "Pause stops taking sound and Go on takes it again, in the same file. The sound fades out and in over 5 ms at each pause, so the join does not click.",
+  },
+  {
+    term: "Level",
+    detail:
+      "The meter shows how loud the microphone is. When the sound reaches full scale the page says so: move back, or turn the input down, since sound past full scale is cut off for good.",
+  },
+  {
+    term: "Microphone and channels",
+    detail:
+      "Choose the microphone once the browser has allowed one, and mono (for a voice) or stereo. Letting the browser clean up the voice turns on its echo cancelling, noise suppression and automatic level, which are made for calls; off, the sound is exactly what the microphone gives.",
+  },
+  {
+    term: "Keep a draft while recording",
+    detail:
+      "Off at first, every time. On, the take is kept on this device as it is recorded, so a closed tab or a crash does not lose it (up to the last second before it stopped); the next visit offers to add it to the files or delete it, and finishing a take deletes it. It is never sent anywhere.",
+  },
+]
+
 const silencing: TutorialContent["options"] = [
   {
     term: "Silence at the ends",
@@ -393,6 +421,7 @@ const editor: TutorialContent = {
     ...timing,
     ...repairing,
     ...tagging,
+    ...recordingHelp,
     ...leveling,
     ...shaping,
     ...options,
@@ -698,4 +727,35 @@ const tagsHelp: TutorialContent = {
 
 export function TagsTutorial() {
   return <ToolTutorial content={tagsHelp} />
+}
+
+const recorderHelp: TutorialContent = {
+  name: "How to record audio from a microphone with KeepSimp",
+  description:
+    "Record your voice or any sound from a microphone in your browser, pause and go on, watch the level, then trim, clean up and save it in any format. Nothing is uploaded.",
+  intro: "Follow the steps below. Every option is explained underneath.",
+  steps: [
+    {
+      title: "Press Record",
+      text: "Allow the microphone when the browser asks. Choose mono or stereo first if you like.",
+    },
+    {
+      title: "Watch the level",
+      text: "Keep it out of the red: the page says when the sound reaches full scale.",
+    },
+    {
+      title: "Pause, go on, stop",
+      text: "Pause as often as you like; Stop and keep puts the take in the list of files.",
+    },
+    {
+      title: "Edit and save",
+      text: "Trim it, take the noise away, make it louder, and download it as MP3 or any other format.",
+    },
+  ],
+  options: [...recordingHelp, ...options],
+  guideHref: "/blog/record-audio-online/",
+}
+
+export function RecorderTutorial() {
+  return <ToolTutorial content={recorderHelp} />
 }

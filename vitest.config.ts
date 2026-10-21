@@ -57,6 +57,7 @@ export default defineConfig({
         "lib/audio/mp4-tags.ts",
         "lib/audio/wav-tags.ts",
         "lib/audio/retag.ts",
+        "lib/audio/record.ts",
         "lib/color/core.ts",
         "lib/color/picker.ts",
         "lib/color/palette.ts",

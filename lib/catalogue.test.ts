@@ -20,6 +20,7 @@ describe("doors", () => {
       "volume-booster",
       "change-audio-speed",
       "remove-background-noise",
+      "voice-recorder",
       "edit-audio-tags",
       "join-audio",
       "split-audio",
