@@ -8,6 +8,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
   return [
     "/",
     "/dashboard/",
+    "/dashboard/agents/",
     "/blog/",
     "/privacy/",
     ...posts.map((post) => `/blog/${post.slug}/`),

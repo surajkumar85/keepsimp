@@ -10,7 +10,8 @@ export default defineConfig({
     include: ["**/*.test.{ts,tsx}"],
     // Other sessions keep working copies of this repository under .claude:
     // their tests are theirs to run.
-    exclude: [...configDefaults.exclude, ".claude/**"],
+    // The bridge is a package of its own, tested with Node's runner.
+    exclude: [...configDefaults.exclude, ".claude/**", "bridge/**"],
     // The real-engine tests of the PDF tools run side by side and slow one
     // another down; five seconds is too tight for the longer ones on a
     // machine with few cores.
@@ -76,6 +77,19 @@ export default defineConfig({
         "lib/json-workspace/query.ts",
         "lib/json-workspace/schema.ts",
         "lib/json-workspace/convert.ts",
+        "lib/json-workspace/jobs.ts",
+        "lib/json-workspace/client.ts",
+        "lib/color/sample.ts",
+        "lib/agent/agent.ts",
+        "lib/agent/files.ts",
+        "lib/agent/registry.ts",
+        "lib/agent/schema.ts",
+        "lib/agent/text.ts",
+        "lib/agent/json.ts",
+        "lib/agent/color.ts",
+        "lib/agent/tools.ts",
+        "lib/agent/webmcp.ts",
+        "lib/agent/bridge-api.ts",
         "lib/image-tools.ts",
         "lib/site.ts",
         "lib/tool-search.ts",

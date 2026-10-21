@@ -20,6 +20,8 @@ const eslintConfig = defineConfig([
     ".claude/**",
     // Whisper's engine and models, copied in before each build.
     "public/whisper/**",
+    // The bridge's built files; its sources are linted.
+    "bridge/dist/**",
   ]),
 ])
 

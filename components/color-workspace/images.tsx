@@ -2,6 +2,7 @@
 import { useRef, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { checkImageHeader, paletteFromPixels } from "@/lib/color/palette"
+import { sampleProblem, sampleSize } from "@/lib/color/sample"
 import { panel, Swatch, type Tell } from "./shared"
 export function ImagePanel({
   tell,
@@ -33,13 +34,8 @@ export function ImagePanel({
     const image = new Image()
     let url = ""
     try {
-      if (
-        !/^image\/(png|jpeg|webp|gif)$/.test(file.type) ||
-        file.size > 10 * 1024 * 1024
-      )
-        throw new Error(
-          "Choose a PNG, JPEG, WebP or GIF up to 10 MiB. GIF uses the frame decoded by your browser."
-        )
+      const problem = sampleProblem(file.type, file.size)
+      if (problem) throw new Error(problem)
       checkImageHeader(
         new Uint8Array(await file.slice(0, 16).arrayBuffer()),
         file.type
@@ -49,15 +45,10 @@ export function ImagePanel({
       image.src = url
       await image.decode()
       if (id !== job.current) return
-      if (image.naturalWidth * image.naturalHeight > 30_000_000)
-        throw new Error("Use an image up to 30 million pixels.")
-      const scale = Math.min(
-          1,
-          256 / image.naturalWidth,
-          256 / image.naturalHeight
-        ),
-        width = Math.max(1, Math.round(image.naturalWidth * scale)),
-        height = Math.max(1, Math.round(image.naturalHeight * scale))
+      const { width, height } = sampleSize(
+        image.naturalWidth,
+        image.naturalHeight
+      )
       const target = canvas.current!
       target.width = width
       target.height = height

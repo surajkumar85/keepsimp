@@ -1,0 +1,90 @@
+/**
+ * Starting the agent tools on the agent page: the engines they use, the
+ * interface the bridge calls, and the tools registered with WebMCP where the
+ * browser offers it. Everything stops when the page goes.
+ */
+import { JsonClient } from "@/lib/json-workspace/client"
+import { sampleSize } from "@/lib/color/sample"
+import { Agent } from "./agent"
+import { bridgeApi, type BridgeApi } from "./bridge-api"
+import { agentTools } from "./tools"
+import { modelContextOf, registerTools } from "./webmcp"
+
+declare global {
+  interface Window {
+    keepsimp?: BridgeApi
+    /** Set by the bridge, to be told how far a call is. */
+    keepsimpBridgeProgress?: (
+      id: string,
+      fraction: number,
+      note: string
+    ) => void
+  }
+}
+
+async function sampleImage(file: Blob) {
+  const bitmap = await createImageBitmap(file)
+  try {
+    const { width, height } = sampleSize(bitmap.width, bitmap.height)
+    const canvas = new OffscreenCanvas(width, height)
+    const context = canvas.getContext("2d", { willReadFrequently: true })!
+    context.drawImage(bitmap, 0, 0, width, height)
+    return context.getImageData(0, 0, width, height).data
+  } finally {
+    bitmap.close()
+  }
+}
+
+/** Saves a file as a download, as the tools' pages do: an untyped link to the bytes. */
+export function download(blob: Blob, name: string) {
+  const url = URL.createObjectURL(
+    new Blob([blob], { type: "application/octet-stream" })
+  )
+  const link = document.createElement("a")
+  link.href = url
+  link.download = name
+  link.click()
+  setTimeout(() => URL.revokeObjectURL(url), 60_000)
+}
+
+export interface Started {
+  agent: Agent
+  /** Resolves with how many tools WebMCP took, or null when the browser has none. */
+  webMcp: Promise<number | null>
+  stop: () => void
+}
+
+export function startAgent(): Started {
+  const json = new JsonClient()
+  const agent = new Agent(
+    agentTools({ runJson: (job) => json.run(job), sampleImage })
+  )
+  window.keepsimp = bridgeApi(agent, {
+    download,
+    progress: (id, fraction, note) =>
+      window.keepsimpBridgeProgress?.(id, fraction, note),
+    fetch: (url) => fetch(url),
+  })
+  let undo: (() => void) | null = null
+  let stopped = false
+  const context = modelContextOf(document)
+  const webMcp = context
+    ? registerTools(agent, context, (name, problem) =>
+        console.warn(`WebMCP did not take ${name}: ${problem}`)
+      ).then(({ taken, undo: done }) => {
+        if (stopped) done()
+        else undo = done
+        return taken
+      })
+    : Promise.resolve(null)
+  return {
+    agent,
+    webMcp,
+    stop() {
+      stopped = true
+      undo?.()
+      json.stop()
+      delete window.keepsimp
+    },
+  }
+}

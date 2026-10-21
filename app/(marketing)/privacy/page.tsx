@@ -13,7 +13,7 @@ export default function PrivacyPage() {
         A straightforward approach to privacy.
       </h1>
       <p className="mt-4 text-sm text-muted-foreground">
-        Updated 15 October 2026
+        Updated 21 October 2026
       </p>
       <div className="article-copy">
         <h2>Files and text stay in your browser.</h2>
@@ -79,6 +79,18 @@ export default function PrivacyPage() {
           may store the desktop sidebar state in a cookie. Those preferences
           contain no selected files or pasted text. You can remove them through
           your browser’s site-data settings.
+        </p>
+        <h2>When an AI agent uses the tools.</h2>
+        <p>
+          The KeepSimp bridge, which lets agents such as Claude Code or Codex
+          use these tools, runs on your computer. It opens KeepSimp in a browser
+          of its own, hidden, and refuses every other address. It reads the
+          files your agent names from your disk, only inside the folders the
+          agent works in, hands them to that browser and saves the results
+          beside them. Neither the bridge nor the page sends your files or their
+          contents anywhere. What your agent does with an answer is up to it and
+          the service it runs on. An agent in your browser that uses the tools
+          on the agent page sees only the files you add there.
         </p>
         <h2>A copy of the tools for offline use.</h2>
         <p>

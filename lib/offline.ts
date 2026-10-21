@@ -7,6 +7,7 @@ export function pagePaths(): string[] {
   return [
     "/",
     "/dashboard/",
+    "/dashboard/agents/",
     "/design-system/",
     "/blog/",
     "/privacy/",

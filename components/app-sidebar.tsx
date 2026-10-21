@@ -3,7 +3,7 @@
 import Link from "next/link"
 import { BrandLogo } from "@/components/brand-logo"
 import { usePathname, useSearchParams } from "next/navigation"
-import { IconLock, IconPalette, IconX } from "@tabler/icons-react"
+import { IconLock, IconPalette, IconRobot, IconX } from "@tabler/icons-react"
 import {
   categories,
   isActivePath,
@@ -29,6 +29,10 @@ import {
 export function AppSidebar() {
   const pathname = usePathname()
   const activeCategory = parseCategory(useSearchParams().get("category"))
+  // The agent page is under /dashboard/ but is not a list of tools.
+  const inCatalogue =
+    isActivePath(pathname, "/dashboard") &&
+    !isActivePath(pathname, "/dashboard/agents")
   const { setOpenMobile } = useSidebar()
   const closeMobile = () => setOpenMobile(false)
   return (
@@ -80,15 +84,11 @@ export function AppSidebar() {
                       }
                       onClick={closeMobile}
                       aria-current={
-                        isActivePath(pathname, "/dashboard") &&
-                        activeCategory === category.id
+                        inCatalogue && activeCategory === category.id
                           ? "page"
                           : undefined
                       }
-                      isActive={
-                        isActivePath(pathname, "/dashboard") &&
-                        activeCategory === category.id
-                      }
+                      isActive={inCatalogue && activeCategory === category.id}
                       className="h-11 gap-2.5 px-2.5 md:h-9 data-active:bg-primary/10 data-active:text-sidebar-accent-foreground"
                     >
                       <CategoryIcon
@@ -114,6 +114,20 @@ export function AppSidebar() {
       </SidebarContent>
       <SidebarFooter className="gap-2 border-t p-3">
         <SidebarMenu>
+          <SidebarMenuItem>
+            <SidebarMenuButton
+              render={<Link href="/dashboard/agents/" />}
+              onClick={closeMobile}
+              aria-current={
+                isActivePath(pathname, "/dashboard/agents") ? "page" : undefined
+              }
+              isActive={isActivePath(pathname, "/dashboard/agents")}
+              className="h-11 gap-2.5 px-2.5 md:h-9"
+            >
+              <IconRobot className="size-4.5" aria-hidden="true" />
+              <span>For AI agents</span>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
           <SidebarMenuItem>
             <SidebarMenuButton
               render={<Link href="/design-system/" />}

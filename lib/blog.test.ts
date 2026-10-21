@@ -37,7 +37,8 @@ describe("the blog", () => {
             expect(slugs.has(link.href.slice(6, -1)), where).toBe(true)
           else if (link.href.startsWith("/dashboard/") && link.href.length > 11)
             expect(
-              ready.some((tool) => link.href === `/dashboard/${tool.id}/`),
+              ready.some((tool) => link.href === `/dashboard/${tool.id}/`) ||
+                link.href === "/dashboard/agents/",
               where
             ).toBe(true)
           else

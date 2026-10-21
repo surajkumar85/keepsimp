@@ -1,0 +1,50 @@
+{
+  "name": "keepsimp-mcp",
+  "version": "0.1.0",
+  "description": "KeepSimp's tools for Claude Code, Codex and other MCP agents, run on your own computer in a hidden browser.",
+  "license": "AGPL-3.0-only",
+  "type": "module",
+  "bin": {
+    "keepsimp-mcp": "dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=22.18"
+  },
+  "homepage": "https://keepsimp.vercel.app/dashboard/agents/",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/surajkumar85/keepsimp.git",
+    "directory": "bridge"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "claude-code",
+    "codex",
+    "webmcp",
+    "json",
+    "pdf",
+    "audio",
+    "image"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test --experimental-test-coverage --test-coverage-include='src/*.ts' --test-coverage-exclude='src/browser.ts' --test-coverage-exclude='src/cli.ts' --test-coverage-lines=100 --test-coverage-branches=100 --test-coverage-functions=100 test/unit/*.test.ts",
+    "test:bridge": "node --test --test-timeout=300000 test/bridge.test.ts",
+    "prepack": "npm run build"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.32.1",
+    "playwright-core": "~1.64.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.19.2",
+    "typescript": "~5.9.3"
+  }
+}

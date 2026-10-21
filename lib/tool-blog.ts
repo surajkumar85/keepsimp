@@ -3069,3 +3069,86 @@ export const gaplessPost: BlogPost = {
     },
   ],
 }
+
+export const agentsPost: BlogPost = {
+  published: "2026-10-21",
+  modified: "2026-10-21",
+  slug: "keepsimp-tools-for-ai-agents",
+  title: "Ask your agent, and the work stays on your computer.",
+  searchTitle: "Use KeepSimp's free tools from Claude Code or Codex (MCP)",
+  description:
+    "Give Claude Code, Codex or an agent in your browser KeepSimp's tools: they run in a hidden browser on your computer, read your files where they are and save results beside them.",
+  keywords: [
+    "mcp server",
+    "claude code tools",
+    "codex mcp",
+    "webmcp",
+    "local ai agent tools",
+    "format json with ai agent",
+  ],
+  category: "A little know-how",
+  readingTime: "3 min read",
+  image: "/images/agent-tools-guide.svg",
+  imageAlt:
+    "A terminal asking an agent to format a file, a KeepSimp page in a hidden browser, and the formatted file saved beside the first",
+  tool: "",
+  intro:
+    "An agent that writes code can also format a file, check a colour or, soon, merge PDFs and clean up a recording. KeepSimp's tools can be handed to it, and they still run on your device.",
+  sections: [
+    {
+      id: "connect",
+      title: "Connect it once.",
+      paragraphs: [
+        "The KeepSimp bridge is a small program for agents that speak the Model Context Protocol. In Claude Code, add it with: claude mcp add keepsimp -- npx -y keepsimp-mcp. Codex takes the same command in its config file. Then ask in plain words, such as: format data.json with sorted keys, or check the contrast of #777 on white.",
+      ],
+      links: [
+        {
+          label: "How to connect an agent",
+          href: "/dashboard/agents/",
+        },
+      ],
+    },
+    {
+      id: "how",
+      title: "What happens.",
+      paragraphs: [
+        "The bridge opens the KeepSimp agent page in a browser of its own, hidden, on your computer. It hands the page the files your agent names, the tool runs there with the same engines as the tools' own pages, and what it made is saved next to your file. An existing file is never overwritten.",
+        "It reads and writes only inside the folders your agent works in, and its browser opens the KeepSimp site and refuses every other address. Your files are never uploaded.",
+      ],
+    },
+    {
+      id: "browser",
+      title: "Or in your browser.",
+      paragraphs: [
+        "WebMCP is a proposed standard that lets a page give its tools to an agent in the browser. Chrome is trying it out; where it is on, the agent page gives the same tools to that agent, working on the files you add to the page.",
+      ],
+    },
+    {
+      id: "tools",
+      title: "The tools so far.",
+      paragraphs: [
+        "JSON: format, repair, query, validate against a schema, compare, patch and convert, with every number kept exactly. Colour: convert between spaces, check contrast, make palettes and find the colours of an image. PDF, image, animation and audio tools come next; signing and recording stay for you to do yourself.",
+      ],
+      links: [
+        {
+          label: "Open the JSON workspace",
+          href: "/dashboard/json-formatter/",
+        },
+        {
+          label: "Open the colour utility",
+          href: "/dashboard/color-utility/",
+        },
+      ],
+    },
+  ],
+  sources: [
+    {
+      title: "Model Context Protocol",
+      url: "https://modelcontextprotocol.io/",
+    },
+    {
+      title: "Chrome for Developers: WebMCP",
+      url: "https://developer.chrome.com/docs/ai/webmcp",
+    },
+  ],
+}

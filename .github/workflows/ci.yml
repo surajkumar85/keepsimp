@@ -28,6 +28,48 @@ jobs:
       - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg libimage-exiftool-perl
       - run: npm run audit:production
       - run: npm run check
+  # The bridge (npm keepsimp-mcp): its own tests, then the real bridge over
+  # stdio against this build, with Chromium.
+  bridge:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7.1.0
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            bridge/package-lock.json
+      - run: npm ci
+      - uses: actions/cache@v6.1.0
+        with:
+          path: .next/cache/whisper
+          key: whisper-${{ hashFiles('lib/audio/whisper-models.json') }}
+      - run: npm run build
+      - run: npm ci
+        working-directory: bridge
+      - run: npm audit --omit=dev
+        working-directory: bridge
+      - run: npx tsc --noEmit
+        working-directory: bridge
+      - run: npm test
+        working-directory: bridge
+      - run: npx playwright-core install --with-deps chromium
+        working-directory: bridge
+      - run: npm run build
+        working-directory: bridge
+      - name: The bridge against this build
+        run: |
+          npx serve out -l tcp://127.0.0.1:4173 > /dev/null 2>&1 &
+          for attempt in $(seq 1 60); do
+            curl -sf http://127.0.0.1:4173/dashboard/agents/ > /dev/null && break
+            sleep 1
+          done
+          cd bridge && npm run test:bridge
   # The browser tests, one job for each profile. In one job they came to take
   # longer than its limit, and every run was cut off before it could finish.
   browser:

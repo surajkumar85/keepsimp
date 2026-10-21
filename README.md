@@ -71,4 +71,6 @@ The initializer required a new directory, so the same preset/template was genera
 
 The application uses [AGPL-3.0-only](LICENSE), following the project's open-source direction. Dependencies, font files, and generated upstream components retain their own license notices.
 
+Agents can use the tools too: [the agent tools reference](docs/agent-tools.md) covers the tool registry, the agent page at `/dashboard/agents/` (WebMCP), and the KeepSimp bridge in `bridge/` (npm `keepsimp-mcp`), a local MCP server that runs the tools in a hidden browser.
+
 The [color utility reference](docs/color-utility.md) records color standards, brand sources, numerical decisions and limits for the converter, palettes, contrast, gradients and local image sampling.

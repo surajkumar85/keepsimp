@@ -259,6 +259,12 @@ const cards = [
     "/images/audio-video-guide.svg",
   ],
   [
+    "keepsimp-tools-for-ai-agents",
+    "Ask your agent. The work stays here.",
+    "KeepSimp's tools in Claude Code, Codex and WebMCP.",
+    "/images/agent-tools-guide.svg",
+  ],
+  [
     "gapless-mp3-and-aac",
     "Why a converted MP3 starts late, and ours does not.",
     "Gapless MP3 and AAC, checked before download.",
