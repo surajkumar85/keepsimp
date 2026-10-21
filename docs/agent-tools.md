@@ -54,6 +54,34 @@ KeepSimp's tools can be used by agents: Claude Code, Codex and other MCP clients
   - Locks use the merger's rules (`settingsProblem`, `permissionBits`). Limits without a second password get one nobody keeps.
 - **Passwords:** a password given to open a file or lock a result passes through the agent, as the person's own words do. It is sent only to the worker and kept nowhere.
 
+### The PDF editor's jobs (phase 3, part 1)
+
+- **One way in** (`lib/agent/pdf-edit.ts`, `editing`), as the editor's page does it:
+  - the file is opened for editing (`PdfEngine.openForEdit`: `open` with `edit: true`, then `editState`);
+  - each job is made as the editor's own steps;
+  - the file is written with `editExport`, which makes added things part of the pages unless `keepEditable`, reads their words back, and compares untouched pages.
+- **Signed files:** only a signed file is written after its signature (`after`), as the editor does, which keeps the signature holding. Any other file is written anew, so its read-back checks run. The answer says which, with the checks' figures in `data.checked`.
+- **The jobs:**
+  - `organize_pdf_pages`: one `editPages` step per step asked, made as the pages panel makes them (`whyNot`, `planOf`, `labelOf`, `blankSize`, `SHEETS`), with other PDFs handed over once each by `editInsert`.
+  - `crop_pdf`: `crop` or `whole`, checked by `cutSize`. It says that what is cut off is hidden.
+  - `add_page_numbers` (and Bates numbers) and `add_header_footer`: `repeatedChange` with the repeat panel's formats and `lineProblem`.
+  - `watermark_pdf`: `markObject` through `repeatedChange`, with a picture handed over by `editPicture`. It says that a watermark does not protect.
+  - `edit_pdf_details`: one `editDocument` step of details (over the file's own), bookmarks (`bookmarkTo`) and label runs.
+  - `list_pdf_form_fields` and `fill_pdf_form`: the file's own fields by name. A tick box takes true or false, round buttons the number of their choice, lists the option or its shown words; a date field takes the day as ISO and writes it with `writeDate`. Scripts are never run.
+  - `verify_pdf_signatures`: the worker's `signatures`, in the panel's words (`verdictSaid`, `signerSaid`, `changesSaid`). Trust is the reader's to judge.
+- **Text** is laid out by `laidOut` (`lib/pdf-editor/laid-out.ts`, moved there from the editor's hook so both use it), after the editor's font has been loaded as a `FontFace` and handed to the worker (`EditText` in `lib/agent/browser.ts`).
+
+### The PDF editor's jobs (phase 3, part 2)
+
+- **`redact_pdf`**, as the redaction panel's Mark all and Apply:
+  - every place the words, patterns (`PATTERNS`) or shapes (`shapeSearch`) are found by `redactFind` is marked in one step;
+  - the marks are applied in a second step, which removes the letters, pixels and drawings under them and refuses a change that leaves a letter readable;
+  - nothing found writes nothing.
+  - A signed file is never written after its signature (`anew`): what was taken out would stay in the file beneath. The details, attachments and scripts are left out on request (`clean`).
+- **`find_replace_pdf_text`**, as the find panel's Replace all: `editFind`, the stand-in fonts handed over, one `editReplace` step of `opFor` for every place, and a second look to count what changed. Refused places are said, never forced.
+- **`add_text_to_pdf`** and **`add_image_to_pdf`**: a text box or a picture added as the editor adds one, laid out by `laidOut`, in points from the top left of the page as shown. A picture is placed at 150 pixels to the inch, at most half the page wide, unless a size is given.
+- **`ocr_pdf`**: the OCR panel's loop, moved to `lib/pdf-editor/ocr-run.ts` (`readPages`) and Tesseract's start to `lib/pdf-editor/tesseract.ts`, so the panel and the tool run the same code. The words are laid in one `editOcr` step; the download reads every one back (`report.ocr`). Stop does not wait for Tesseract, which is let go of after every run.
+
 ### The agent page (`/dashboard/agents/`)
 
 - **What it is:** a workspace page, not a catalogue entry, linked from the sidebar footer, in the sitemap and in the offline copy.
@@ -142,12 +170,24 @@ A package of its own, in TypeScript that Node runs as it is (type stripping), bu
   - A split every N pages, at bookmarks named by their titles, extracted pages, at words, at blank pages, and 25 parts as a ZIP listed by `unzip`.
   - Compression of the brochure, smaller with the same text, and a second pass that says it is already as small.
   - A long compression stopped, and the tools working after it.
+- **PDF editor** (`lib/agent/pdf-edit.test.ts`, 100%, against the stand-in worker; `e2e/agent-pdf-edit.spec.ts`, five profiles, the real worker, results read by pdf.js):
+  - pages turned, deleted, moved, copied, blank and inserted, in order;
+  - a crop of 20 mm;
+  - page numbers, Bates numbers and a footer read back (kept editable, they stay stamps);
+  - a watermark of words and of a picture;
+  - details, nested bookmarks and labels i, ii, 1, 2, 3;
+  - a form listed, filled and flattened;
+  - the signed sample checked, numbered after its signature, and still holding;
+  - e-mail addresses, phone numbers and words redacted, gone from the text pdf.js reads;
+  - words replaced in two places;
+  - a text box and a picture placed;
+  - a scan recognised by Tesseract and its words then redacted.
 - **A real agent:** Codex (`codex exec` with the bridge as its MCP server) formatted a JSON file with sorted keys and checked a contrast. It kept every digit and saved the result beside the file. Then Codex merged two PDFs into `combined.pdf` and compressed the brochure through the bridge. Poppler (`pdfinfo`, `pdftotext`) read 5 pages (3 + 2) and the same text in the compressed brochure, 90% smaller.
 
 ## Phases
 
 1. **JSON and colour**, with the registry, the agent page, WebMCP and the bridge. Built.
 2. **PDF files:** information, merge, split, compress. Built.
-3. **PDF editor jobs:** pages, crop, page numbers, watermarks, details, forms, redaction, find and replace, text and pictures, OCR, signature checks.
+3. **PDF editor jobs:** pages, crop, page numbers, watermarks, details, forms, signature checks, redaction, find and replace, text and pictures, OCR. Built.
 4. **Images and animation.**
 5. **Audio:** every job of the audio workspace, after its job-building moves into `lib/audio/`.

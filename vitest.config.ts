@@ -92,6 +92,8 @@ export default defineConfig({
         "lib/agent/bridge-api.ts",
         "lib/agent/pdf.ts",
         "lib/agent/pdf-engine.ts",
+        "lib/agent/pdf-edit.ts",
+        "lib/pdf-editor/ocr-run.ts",
         "lib/image-tools.ts",
         "lib/site.ts",
         "lib/tool-search.ts",

@@ -22,7 +22,6 @@ import { emptyHistory, markSaved, type History } from "@/lib/pdf-editor/history"
 import {
   fontKey,
   fontsFor,
-  retyped,
   type Colour,
   type EditorObject,
   type TextObject,
@@ -75,7 +74,7 @@ import {
   type PageLine,
   type TextOp,
 } from "@/lib/pdf-editor/retext"
-import { breakLines, combLine } from "@/lib/pdf-editor/text-layout"
+import { laidOut, measureWith } from "@/lib/pdf-editor/laid-out"
 import {
   applied,
   defaultStyles,
@@ -117,37 +116,10 @@ export interface Typing {
 }
 
 /** What makes a text box what it is, apart from where its lines break. */
+export { laidOut }
+
 const substance = (object: TextObject) =>
   JSON.stringify({ ...object, lines: null, box: object.box.width })
-
-let measurer: CanvasRenderingContext2D | null | undefined
-
-/** How wide the browser writes some text in one of the editor's fonts, in points at a size in points. */
-function measureWith(key: string, size: number) {
-  if (measurer === undefined)
-    measurer = document.createElement("canvas").getContext("2d")
-  return (text: string) => {
-    if (!measurer) return text.length * size * 0.5
-    measurer.font = `${size}px "${screenFamily(key)}"`
-    // The file is written letter by letter, each as wide as the font says.
-    measurer.fontKerning = "none"
-    return measurer.measureText(text).width
-  }
-}
-
-/** A text box with its lines broken for its width, in its own font. */
-export const laidOut = (object: TextObject, text = object.text): TextObject =>
-  retyped(object, {
-    text,
-    // A row of boxes is one line, with a letter to a box.
-    lines: object.comb
-      ? [combLine(text, object.comb)]
-      : breakLines(
-          text,
-          object.box.width,
-          measureWith(fontKey(object), object.size)
-        ),
-  })
 
 let made = 0
 const newId = () => `k${Date.now().toString(36)}${(made++).toString(36)}`

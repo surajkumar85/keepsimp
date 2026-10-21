@@ -1,19 +1,17 @@
 "use client"
 
 import { useCallback, useEffect, useRef, useState } from "react"
-import type { Worker as Tesseract } from "tesseract.js"
 import { parseRanges } from "@/lib/pdf-merger/ranges"
+import { ocrSummary } from "@/lib/pdf-editor/ocr"
+import { ocrLabel, readPages } from "@/lib/pdf-editor/ocr-run"
 import {
-  ocrSummary,
-  readingOf,
-  type OcrOp,
-  type TesseractBlock,
-} from "@/lib/pdf-editor/ocr"
+  recognise,
+  startTesseract,
+  type Tesseract,
+} from "@/lib/pdf-editor/tesseract"
 import {
-  OCR_BASE,
   OCR_ENGINE_SIZE,
   OCR_LANGUAGES,
-  OCR_PARAMETERS,
   preferredLanguage,
 } from "@/lib/pdf-editor/ocr-files"
 import type { Comments } from "./use-comments"
@@ -118,23 +116,9 @@ export function useOcr(
     // Other languages are read by a Tesseract started for them.
     if (startedFor.current !== langs) letGo()
     startedFor.current = langs
-    return (tesseract.current ??= (async () => {
-      const { createWorker, OEM } = await import("tesseract.js")
-      const worker = await createWorker(langs, OEM.LSTM_ONLY, {
-        workerPath: `${OCR_BASE}/worker.min.js`,
-        corePath: OCR_BASE,
-        langPath: OCR_BASE,
-        // The language is kept by the site's offline copy, not a store of Tesseract's own.
-        cacheMethod: "none",
-        workerBlobURL: false,
-        logger: (message) => {
-          if (message.status === "recognizing text")
-            progress.current(message.progress)
-        },
-      })
-      await worker.setParameters(OCR_PARAMETERS as never)
-      return worker
-    })())
+    return (tesseract.current ??= startTesseract(langs, (share) =>
+      progress.current(share)
+    ))
   }
 
   const setListed = comments.setListed
@@ -188,60 +172,17 @@ export function useOcr(
       setSaid({ text: OCR_UNAVAILABLE, good: false })
       return
     }
-    const ops: OcrOp[] = []
-    const tally = {
-      read: [] as number[],
-      words: 0,
-      unsure: 0,
-      sure: 0,
-      hadText: [] as number[],
-      blank: [] as number[],
-      failed: [] as number[],
-    }
-    for (const [done, page] of target.entries()) {
-      if (stopped.current) break
-      setRun({ done, total, page, share: 0, loading: false })
-      progress.current = (share) =>
-        setRun((now) => (now && now.page === page ? { ...now, share } : now))
-      const picture = await editor.ocrPicture(page)
-      if (stopped.current) break
-      if (!picture) {
-        tally.failed.push(page)
-        continue
-      }
-      if (picture.letters > 0 && !alsoText) {
-        tally.hadText.push(page)
-        continue
-      }
-      let blocks: TesseractBlock[]
-      try {
-        const reading = await Promise.race([
-          worker.recognize(
-            new Blob([picture.png as BlobPart], { type: "image/png" }),
-            {},
-            { blocks: true, text: false }
-          ),
-          promise,
-        ])
-        if (!reading) break
-        blocks = (reading.data.blocks ?? []) as unknown as TesseractBlock[]
-      } catch {
-        // Stopping lets Tesseract go in the middle of a page.
-        if (stopped.current) break
-        tally.failed.push(page)
-        continue
-      }
-      const reading = readingOf(blocks, picture.scale)
-      if (!reading.words) {
-        tally.blank.push(page)
-        continue
-      }
-      ops.push({ page, lines: reading.lines })
-      tally.read.push(page)
-      tally.words += reading.words
-      tally.unsure += reading.unsure
-      tally.sure += reading.confidence * reading.words
-    }
+    const { ops, tally } = await readPages(target, alsoText, {
+      picture: (page) => editor.ocrPicture(page),
+      read: (png) =>
+        Promise.race([recognise(worker, png), promise.then(() => null)]),
+      stopped: () => stopped.current,
+      onPage: (done, total, page) => {
+        setRun({ done, total, page, share: 0, loading: false })
+        progress.current = (share) =>
+          setRun((now) => (now && now.page === page ? { ...now, share } : now))
+      },
+    })
     progress.current = () => {}
     if (layout.current !== began) {
       setRun(null)
@@ -253,22 +194,13 @@ export function useOcr(
     }
     const laid = ops.length
       ? await editor.recognised({
-          label:
-            ops.length === 1
-              ? `Recognise text on page ${ops[0].page + 1}`
-              : `Recognise text on ${ops.length.toLocaleString("en")} pages`,
+          label: ocrLabel(ops),
           ops,
         })
       : true
     setRun(null)
     if (!laid) return
-    setSaid(
-      ocrSummary({
-        ...tally,
-        confidence: tally.words ? Math.round(tally.sure / tally.words) : 0,
-        stopped: stopped.current,
-      })
-    )
+    setSaid(ocrSummary({ ...tally, stopped: stopped.current }))
   }
 
   /** Stop reading: the pages read so far are laid. */

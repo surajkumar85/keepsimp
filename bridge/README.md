@@ -31,7 +31,11 @@ The bridge asks the KeepSimp page which tools there are, so the list is always t
 
 - **PDF:** `pdf_info` (facts, bookmarks and text), `merge_pdfs` (with page ranges, turns, pictures as pages, contents, page numbers and a lock), `split_pdf` (every N pages, equal parts, ranges, odd and even, extract or remove, bookmarks, blank pages, words, size) and `compress_pdf` (levels, a size, or your own resolution and quality). Every page is compared with the original before a compressed file is handed over.
 
-The PDF editor's jobs, then image, animation and audio tools follow.
+- **PDF editor:** `organize_pdf_pages` (turn, delete, move, copy, resize, blank pages, other PDFs), `crop_pdf` (hides, never removes), `add_page_numbers` (and Bates numbers), `add_header_footer`, `watermark_pdf` (words or a picture; it marks a file, it does not protect it), `edit_pdf_details` (details, bookmarks, page labels), `list_pdf_form_fields`, `fill_pdf_form` and `verify_pdf_signatures`. Each runs as the editor's own steps, and the file is checked as the editor checks it.
+
+Also `redact_pdf` (words, e-mail addresses, phone and card numbers or shapes taken out for good, checked so no letter stays readable), `find_replace_pdf_text` (in the line's own font), `add_text_to_pdf`, `add_image_to_pdf` and `ocr_pdf` (Tesseract on your computer, from KeepSimp's own files).
+
+Image, animation and audio tools follow.
 
 ## What it may touch
 

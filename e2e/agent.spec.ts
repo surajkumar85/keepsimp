@@ -30,6 +30,20 @@ test("the page offers its tools to the bridge, runs them and hands their files b
     "merge_pdfs",
     "split_pdf",
     "compress_pdf",
+    "organize_pdf_pages",
+    "crop_pdf",
+    "add_page_numbers",
+    "add_header_footer",
+    "watermark_pdf",
+    "edit_pdf_details",
+    "list_pdf_form_fields",
+    "fill_pdf_form",
+    "verify_pdf_signatures",
+    "redact_pdf",
+    "find_replace_pdf_text",
+    "add_text_to_pdf",
+    "add_image_to_pdf",
+    "ocr_pdf",
   ])
   expect(await page.evaluate(() => window.keepsimp!.version)).toBe(1)
 
@@ -174,7 +188,7 @@ test("the person adds files, and sees what agents asked", async ({ page }) => {
   // The person can take a file away.
   await page.getByRole("button", { name: "Remove notes.json" }).click()
   await expect(row).toHaveCount(1)
-  await expect(page.getByTestId("agent-tools").locator("li")).toHaveCount(17)
+  await expect(page.getByTestId("agent-tools").locator("li")).toHaveCount(31)
 })
 
 test("an agent in the browser calls the tools through WebMCP", async ({
@@ -189,7 +203,7 @@ test("an agent in the browser calls the tools through WebMCP", async ({
     const page = await context.newPage()
     await ready(page)
     await expect(page.getByTestId("webmcp-status")).toContainText(
-      "has given 17 tools to agents in this browser"
+      "has given 31 tools to agents in this browser"
     )
     const tools = await page.webmcp.tools()
     expect(tools.map((tool) => tool.name)).toContain("list_files")

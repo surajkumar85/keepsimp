@@ -244,6 +244,21 @@ describe("the KeepSimp bridge", () => {
     )
   })
 
+  it("runs the PDF editor's jobs on files on disk", async () => {
+    const numbered = await call("add_page_numbers", {
+      file: "report.pdf",
+      format: "Page 1 of 9",
+    })
+    assert.equal(numbered.isError, undefined, numbered.content[0].text)
+    assert.match(numbered.content[0].text, /read back from the file/)
+    assert.equal(
+      numbered.structuredContent!.files[0].path,
+      join(work, "report-numbered.pdf")
+    )
+    const fields = await call("list_pdf_form_fields", { file: "report.pdf" })
+    assert.deepEqual(fields.structuredContent!.files, [])
+  })
+
   it("tells progress, and stops a long job when the agent cancels", async () => {
     const samples = new URL("../../public/samples/", import.meta.url).pathname
     await copyFile(

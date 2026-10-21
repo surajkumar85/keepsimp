@@ -5,7 +5,7 @@
 import Ajv, { type ErrorObject } from "ajv"
 import type { JsonSchema } from "./registry"
 
-const ajv = new Ajv({ allErrors: true, strict: true })
+const ajv = new Ajv({ allErrors: true, strict: true, allowUnionTypes: true })
 // Marks the properties that name files; it checks nothing itself.
 ajv.addKeyword({ keyword: "x-keepsimp", schemaType: "string" })
 

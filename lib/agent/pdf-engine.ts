@@ -22,12 +22,40 @@ import type { Lock, Removal } from "@/lib/pdf-compressor/options"
 import type { ScanChoice } from "@/lib/pdf-compressor/settings"
 import type { Stage } from "@/lib/pdf-compressor/report"
 import type { PageText } from "@/lib/pdf-reader/text"
+import type { EditState, Inserted } from "@/lib/pdf-merger/client"
+import type { EditNews } from "@/lib/pdf-merger/protocol"
+import type { Change } from "@/lib/pdf-editor/tools"
+import type { PagesChange } from "@/lib/pdf-editor/pages"
+import type { DocumentChange } from "@/lib/pdf-editor/document"
+import type { FieldChange } from "@/lib/pdf-editor/forms"
+import type {
+  Clean,
+  FoundPlace,
+  RedactChange,
+  Sought,
+} from "@/lib/pdf-editor/redact"
+import type { Found, Query } from "@/lib/pdf-editor/find"
+import type { TextChange } from "@/lib/pdf-editor/retext"
+import type { OcrPicture } from "@/lib/pdf-editor/mupdf-ocr"
+import type { OcrChange } from "@/lib/pdf-editor/ocr"
+import type { ExportReport } from "@/lib/pdf-editor/mupdf-edit"
+import type { FoundSignature } from "@/lib/pdf-editor/signature-report"
+import type { Size } from "@/lib/image-compressor/geometry"
 import { ToolError } from "./registry"
 
 export type MergeOrder = Omit<
   Extract<PdfRequest, { type: "merge" }>,
   "type" | "job"
 >
+
+export interface ExportOrder {
+  keepEditable: boolean
+  comments: "keep" | "flatten" | "remove"
+  fields: "keep" | "flatten"
+  after: boolean
+  lock: Lock | null
+  clean?: Clean
+}
 
 export interface CompressOrder {
   how: CompressHow
@@ -81,6 +109,39 @@ export interface PdfClientLike {
     onProgress: (done: number, total: number) => void
   ): Job<boolean>
   audit(id: string, size: number): Promise<unknown>
+  editState(id: string): Promise<EditState | null>
+  editFont(id: string, key: string, bytes: ArrayBuffer): void
+  editPicture(id: string, name: string, file: Blob): Promise<Size | null>
+  editInsert(
+    id: string,
+    name: string,
+    file: Blob,
+    how?: { password?: string }
+  ): Promise<Inserted>
+  editApply(id: string, change: Change): Promise<EditNews>
+  editPages(id: string, change: PagesChange): Promise<EditNews>
+  editDocument(id: string, change: DocumentChange): Promise<EditNews>
+  editField(id: string, change: FieldChange): Promise<EditNews>
+  signatures(
+    id: string,
+    trusted?: Uint8Array[]
+  ): Promise<FoundSignature[] | null>
+  redactFind(
+    id: string,
+    sought: Sought
+  ): Promise<{ found: (FoundPlace & { page: number })[]; more: boolean } | null>
+  editRedact(id: string, change: RedactChange): Promise<EditNews>
+  editFind(
+    id: string,
+    query: Query
+  ): Promise<{ found: Found[]; more: boolean } | null>
+  editReplace(id: string, change: TextChange): Promise<EditNews>
+  ocrPicture(id: string, page: number): Promise<OcrPicture | null>
+  editOcr(id: string, change: OcrChange): Promise<EditNews>
+  editExport(
+    id: string,
+    options: ExportOrder
+  ): Job<{ bytes: ArrayBuffer; report: ExportReport } | null>
   compress(
     id: string,
     file: Blob,
@@ -151,7 +212,7 @@ export class PdfEngine {
   open(
     file: Blob,
     name: string,
-    options: { password?: string; picture?: boolean } = {}
+    options: { password?: string; picture?: boolean; edit?: boolean } = {}
   ) {
     const id = `agent-${++this.count}`
     const facts = new Promise<FileFacts>((resolve, reject) =>
@@ -244,6 +305,95 @@ export class PdfEngine {
       signal
     )
     return parts.sort((a, b) => a.index - b.index)
+  }
+
+  /**
+   * Opens a file to be changed by steps, as the editor does: untouched, with
+   * what its pages hold. Closed again with `close`.
+   */
+  async openForEdit(file: Blob, name: string, password?: string) {
+    const { id, facts } = await this.open(file, name, { password, edit: true })
+    const state = await this.client.editState(id)
+    if (!state) {
+      this.client.close(id)
+      throw new ToolError(`${name} could not be opened for editing.`)
+    }
+    return { id, facts, state }
+  }
+
+  /** The editor's calls, one at a time: each is awaited before the next is made. */
+  editFont(id: string, key: string, bytes: ArrayBuffer) {
+    this.client.editFont(id, key, bytes)
+  }
+  async editPicture(id: string, name: string, file: Blob) {
+    const size = await this.client.editPicture(id, name, file)
+    if (!size)
+      throw new ToolError(
+        "This picture could not be read. PNG, JPEG, WebP and AVIF can be used."
+      )
+    return size
+  }
+  async editInsert(
+    id: string,
+    name: string,
+    file: Blob,
+    shown: string,
+    password?: string
+  ) {
+    const taken = await this.client.editInsert(id, name, file, { password })
+    if ("locked" in taken)
+      throw new ToolError(
+        taken.wrong
+          ? `The password for ${shown} is wrong.`
+          : `${shown} is locked with a password: give it as "insertPassword".`
+      )
+    if ("failed" in taken) throw new ToolError(taken.failed)
+    return taken.pages
+  }
+  editApply(id: string, change: Change) {
+    return this.client.editApply(id, change)
+  }
+  editPages(id: string, change: PagesChange) {
+    return this.client.editPages(id, change)
+  }
+  editDocument(id: string, change: DocumentChange) {
+    return this.client.editDocument(id, change)
+  }
+  editField(id: string, change: FieldChange) {
+    return this.client.editField(id, change)
+  }
+  async signatures(id: string) {
+    const found = await this.client.signatures(id, [])
+    if (!found)
+      throw new ToolError("The signatures of this file could not be read.")
+    return found
+  }
+  async redactFind(id: string, sought: Sought) {
+    const found = await this.client.redactFind(id, sought)
+    if (!found) throw new ToolError("The file could not be looked through.")
+    return found
+  }
+  editRedact(id: string, change: RedactChange) {
+    return this.client.editRedact(id, change)
+  }
+  async editFind(id: string, query: Query) {
+    const found = await this.client.editFind(id, query)
+    if (!found) throw new ToolError("The file could not be looked through.")
+    return found
+  }
+  editReplace(id: string, change: TextChange) {
+    return this.client.editReplace(id, change)
+  }
+  ocrPicture(id: string, page: number) {
+    return this.client.ocrPicture(id, page)
+  }
+  editOcr(id: string, change: OcrChange) {
+    return this.client.editOcr(id, change)
+  }
+
+  /** Writes the edited file out, with the editor's read-back checks. */
+  exportEdit(id: string, options: ExportOrder, signal: AbortSignal) {
+    return stoppable(this.client.editExport(id, options), signal)
   }
 
   async compress(

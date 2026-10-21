@@ -6,6 +6,10 @@
 import { JsonClient } from "@/lib/json-workspace/client"
 import { PdfClient } from "@/lib/pdf-merger/client"
 import { PdfEngine } from "./pdf-engine"
+import { fontUrls, screenFamily } from "@/lib/pdf-editor/fonts"
+import { laidOut } from "@/lib/pdf-editor/laid-out"
+import type { EditText, StartOcr } from "./pdf-edit"
+import { recognise, startTesseract } from "@/lib/pdf-editor/tesseract"
 import { sampleSize } from "@/lib/color/sample"
 import { Agent } from "./agent"
 import { bridgeApi, type BridgeApi } from "./bridge-api"
@@ -49,6 +53,39 @@ export function download(blob: Blob, name: string) {
   setTimeout(() => URL.revokeObjectURL(url), 60_000)
 }
 
+const fonts = new Map<string, Promise<ArrayBuffer>>()
+/** The editor's fonts, read from the site once and made ready for measuring, as the editor does. */
+const editText: EditText = {
+  font(key) {
+    let loading = fonts.get(key)
+    if (!loading) {
+      loading = (async () => {
+        const response = await fetch(fontUrls[key])
+        if (!response.ok) throw new Error("The font could not be loaded.")
+        const bytes = await response.arrayBuffer()
+        const face = new FontFace(screenFamily(key), bytes.slice(0))
+        await face.load()
+        document.fonts.add(face)
+        return bytes
+      })()
+      loading.catch(() => fonts.delete(key))
+      fonts.set(key, loading)
+    }
+    // Each file is given its own copy: the worker takes what it is handed.
+    return loading.then((bytes) => bytes.slice(0))
+  },
+  layOut: (object) => laidOut(object),
+}
+
+/** Tesseract from the site's own files, as the editor's OCR panel starts it. */
+const startOcr: StartOcr = async (languages, onShare) => {
+  const worker = await startTesseract(languages, onShare)
+  return {
+    read: (png) => recognise(worker, png),
+    stop: () => void worker.terminate().catch(() => undefined),
+  }
+}
+
 export interface Started {
   agent: Agent
   /** Resolves with how many tools WebMCP took, or null when the browser has none. */
@@ -61,7 +98,13 @@ export function startAgent(): Started {
   let pdfClient: PdfClient | null = null
   const pdf = new PdfEngine((onFile) => (pdfClient = new PdfClient(onFile)))
   const agent = new Agent(
-    agentTools({ runJson: (job) => json.run(job), sampleImage, pdf })
+    agentTools({
+      runJson: (job) => json.run(job),
+      sampleImage,
+      pdf,
+      text: editText,
+      ocr: startOcr,
+    })
   )
   window.keepsimp = bridgeApi(agent, {
     download,

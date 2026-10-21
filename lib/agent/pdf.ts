@@ -64,16 +64,16 @@ export const MOST_PART_FILES = 20
 export const MOST_TEXT_PAGES = 100
 export const MOST_TEXT = 200_000
 
-const plural = (count: number, word: string) =>
+export const plural = (count: number, word: string) =>
   `${count.toLocaleString("en")} ${word}${count === 1 ? "" : "s"}`
 
-const password = {
+export const password = {
   type: "string",
   maxLength: 127,
   description: "The password that opens the file, when it has one.",
 }
 
-interface LockInput {
+export interface LockInput {
   password: string
   ownerPassword?: string
   allowPrint?: boolean
@@ -81,7 +81,7 @@ interface LockInput {
   allowChanges?: boolean
 }
 
-const lock: JsonSchema = {
+export const lock: JsonSchema = {
   type: "object",
   description:
     "Lock the result with a password. Limits on printing, copying and changes need a second password to lift them; without one they cannot be lifted.",
@@ -127,7 +127,7 @@ export function lockOf(input: LockInput | undefined) {
 }
 
 /** A file to open: a PDF, or (where pictures are taken) a picture to become a page. */
-async function kindOf(blob: Blob, name: string, pictures: boolean) {
+export async function kindOf(blob: Blob, name: string, pictures: boolean) {
   const head = new Uint8Array(await blob.slice(0, 2048).arrayBuffer())
   if (!blob.size) throw new ToolError(`${name} is empty.`)
   if (blob.size > desktopLimits.fileBytes)
@@ -143,7 +143,7 @@ async function kindOf(blob: Blob, name: string, pictures: boolean) {
 }
 
 /** Pages counted from 1 as typed ("1-3, 7", "all"), as pages counted from 0. */
-function pagesOf(text: string, count: number, what: string) {
+export function pagesOf(text: string, count: number, what: string) {
   if (text.trim().toLowerCase() === "all")
     return Array.from({ length: count }, (_, page) => page)
   const read = parseRanges(text, count)

@@ -12,6 +12,11 @@ const engines = {
   runJson: (job: Parameters<typeof runJob>[0]) => Promise.resolve(runJob(job)),
   sampleImage: async () => new Uint8ClampedArray(4),
   pdf: new PdfEngine((onFile) => new FakePdfClient(onFile)),
+  text: {
+    font: async () => new ArrayBuffer(1),
+    layOut: (object: never) => object,
+  },
+  ocr: async () => ({ read: async () => [], stop: () => undefined }),
 }
 
 describe("every tool", () => {

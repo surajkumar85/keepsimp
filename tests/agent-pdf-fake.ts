@@ -8,9 +8,14 @@ import type { FileEvent, SplitPart } from "@/lib/pdf-merger/client"
 import type { Bookmark } from "@/lib/pdf-merger/outline"
 import type {
   CompressOrder,
+  ExportOrder,
   MergeOrder,
   PdfClientLike,
 } from "@/lib/agent/pdf-engine"
+import type { EditState } from "@/lib/pdf-merger/client"
+import type { EditNews } from "@/lib/pdf-merger/protocol"
+import type { FormField } from "@/lib/pdf-editor/forms"
+import type { FoundSignature } from "@/lib/pdf-editor/signature-report"
 
 export interface FakeFile {
   pages: number
@@ -25,6 +30,33 @@ export interface FakeFile {
   words?: Record<string, number[]>
   /** Each page's share of marks. */
   ink?: number[]
+  /** The fields of each page, for the editor. */
+  fields?: Partial<FormField>[][]
+  scripts?: boolean
+  xfa?: boolean
+  /** Can be written after its signature. */
+  after?: boolean
+  signatures?: Partial<FoundSignature>[]
+  /** The editor cannot open it. */
+  noEdit?: boolean
+  /** For redaction: what each sought thing is found as, by its words, pattern or shape. */
+  redact?: Record<string, { page: number; text: string }[]>
+  /** Under how many marks something is still drawn after applying. */
+  residue?: number
+  /** For find and replace: what is found, and the places the engine leaves as they were. */
+  find?: {
+    page: number
+    text: string
+    spans: [number, number][]
+    fonts?: string[]
+    block?: boolean
+  }[]
+  refuse?: string[]
+  /** Whether a look for more found more than are listed. */
+  more?: boolean
+  /** For OCR: which pages have text, and which cannot be drawn. */
+  hasText?: number[]
+  undrawn?: number[]
 }
 
 export const fakePdf = (file: FakeFile) =>
@@ -345,5 +377,221 @@ export class FakePdfClient implements PdfClientLike {
       }),
       null
     ) as never
+  }
+
+  /** What the editor was asked, in order: [call, the change]. */
+  asked: [string, unknown][] = []
+  fonts: string[] = []
+  exports: ExportOrder[] = []
+  /** The report the next export gives, in part. */
+  report: Record<string, unknown> = {}
+  /** Letters the font of a text added next lacks. */
+  lacking: string[] = []
+
+  async editState(id: string): Promise<EditState | null> {
+    const file = this.held.get(id)!
+    if (file.noEdit) return null
+    const fields = Array.from({ length: file.pages }, (_, page) =>
+      (file.fields?.[page] ?? []).map(
+        (field, at) =>
+          ({
+            id: `f${page * 10 + at}`,
+            kind: "text",
+            name: `field${page}${at}`,
+            label: "",
+            box: { x: 0, y: 0, width: 10, height: 10 },
+            value: "",
+            on: false,
+            options: [],
+            shown: [],
+            required: false,
+            readOnly: false,
+            multiline: false,
+            password: false,
+            comb: false,
+            maxLength: 0,
+            multiple: false,
+            custom: false,
+            date: null,
+            ...field,
+          }) as FormField
+      )
+    )
+    return {
+      sizes: Array.from({ length: file.pages }, () => ({
+        width: 400,
+        height: 600,
+      })),
+      objects: [],
+      comments: [],
+      fields,
+      form: {
+        fields: fields.flat().length,
+        xfa: Boolean(file.xfa),
+        scripts: Boolean(file.scripts),
+      },
+      after: Boolean(file.after),
+      history: { steps: [], position: 0, saved: 0 } as never,
+      bookmarks: [],
+      document: {
+        details: {
+          title: file.title ?? "",
+          author: "Who",
+          subject: "",
+          keywords: "",
+        },
+      } as never,
+      waiting: 0,
+    }
+  }
+  editFont(_id: string, key: string) {
+    this.fonts.push(key)
+  }
+  async editPicture(_id: string, name: string, file: Blob) {
+    this.asked.push(["picture", name])
+    return file.size ? { width: 30, height: 20 } : null
+  }
+  async editInsert(
+    _id: string,
+    name: string,
+    file: Blob,
+    how: { password?: string } = {}
+  ) {
+    const facts = await read(file)
+    this.asked.push(["insert", name])
+    if (facts.broken) return { failed: "It is damaged." }
+    if (facts.password && how.password !== facts.password)
+      return { locked: true as const, wrong: how.password !== undefined }
+    return { pages: facts.pages }
+  }
+  private news(
+    what: string,
+    change: unknown,
+    layout = false
+  ): Promise<EditNews> {
+    this.asked.push([what, change])
+    const ops = (change as { ops: { do?: string }[] }).ops
+    if (ops.some((op) => op.do === "fail"))
+      return Promise.reject(new Error("The editor said no."))
+    return Promise.resolve({
+      pages: [],
+      history: {} as never,
+      lacking: this.lacking,
+      waiting: 0,
+      ...(layout
+        ? { layout: { sizes: [{ width: 400, height: 600 }], bookmarks: [] } }
+        : {}),
+    })
+  }
+  editApply(_id: string, change: unknown) {
+    return this.news("apply", change)
+  }
+  editPages(_id: string, change: unknown) {
+    // A turn leaves the list of pages as it was; other changes tell it anew.
+    const turn = (change as { ops: { do: string }[] }).ops[0].do === "turn"
+    return this.news("pages", change, !turn)
+  }
+  editDocument(_id: string, change: unknown) {
+    return this.news("document", change)
+  }
+  editField(_id: string, change: unknown) {
+    return this.news("fields", change)
+  }
+  async signatures(id: string) {
+    const file = this.held.get(id)!
+    if (file.title === "unreadable") return null
+    return (file.signatures ?? []) as FoundSignature[]
+  }
+  editExport(_id: string, options: ExportOrder) {
+    this.exports.push(options)
+    return this.job(
+      () => ({
+        bytes: new TextEncoder().encode("%PDF-{}").buffer as ArrayBuffer,
+        report: {
+          text: { boxes: 0, found: 0 },
+          untouched: { checked: 0, differ: [] },
+          ...this.report,
+        } as never,
+      }),
+      null
+    )
+  }
+
+  private finds = 0
+  async redactFind(
+    id: string,
+    sought: { words?: string; pattern?: string; shape?: string }
+  ) {
+    const file = this.held.get(id)!
+    if (file.title === "unsearchable") return null
+    const key = sought.words ?? sought.pattern ?? sought.shape ?? ""
+    return {
+      found: (file.redact?.[key] ?? []).map((place) => ({
+        ...place,
+        quad: [0, 0, 1, 0, 0, 1, 1, 1] as never,
+      })),
+      more: Boolean(file.more),
+    }
+  }
+  editRedact(id: string, change: { ops: { do: string; page?: number }[] }) {
+    const file = this.held.get(id)!
+    const applying = change.ops[0].do === "apply"
+    const marked = this.asked
+      .filter(([kind]) => kind === "redact")
+      .flatMap(([, made]) => (made as typeof change).ops)
+    return this.news("redact", change).then((news) =>
+      applying
+        ? {
+            ...news,
+            applied: [...new Set(marked.map((op) => op.page!))].map(
+              (page, at) => ({
+                page,
+                boxes: marked
+                  .filter((op) => op.page === page)
+                  .map(() => ({ x: 0, y: 0, width: 1, height: 1 })),
+                residue: at === 0 ? (file.residue ?? 0) : 0,
+                notes: 0,
+                fields: 0,
+              })
+            ),
+          }
+        : news
+    )
+  }
+  async editFind(id: string) {
+    const file = this.held.get(id)!
+    if (file.title === "unsearchable") return null
+    // After a replace, what was found is gone unless the engine left it.
+    const found = this.finds++ && !file.refuse?.length ? [] : (file.find ?? [])
+    return {
+      found: found.map((one) => ({
+        page: one.page,
+        kind: one.block ? ("block" as const) : ("line" as const),
+        lines: [{ box: { x: 0, y: 0, width: 100, height: 10 }, was: one.text }],
+        text: one.text,
+        spans: one.spans,
+        fonts: one.fonts ?? [],
+      })),
+      more: Boolean(file.more),
+    }
+  }
+  editReplace(id: string, change: unknown) {
+    const file = this.held.get(id)!
+    return this.news("replace", change).then((news) => ({
+      ...news,
+      refused: file.refuse,
+    }))
+  }
+  async ocrPicture(id: string, page: number) {
+    const file = this.held.get(id)!
+    if (file.undrawn?.includes(page)) return null
+    return {
+      png: Uint8Array.of(page),
+      scale: 0.5,
+      letters: file.hasText?.includes(page) ? 5 : 0,
+    }
+  }
+  editOcr(_id: string, change: unknown) {
+    return this.news("ocr", change)
   }
 }
