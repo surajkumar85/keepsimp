@@ -13,6 +13,7 @@ import type * as Mediabunny from "mediabunny"
 import type { ReadFacts } from "./mediabunny-audio"
 import { Resampler } from "./resample"
 import {
+  inSound,
   keptFrom,
   WHISPER_RATE,
   WINDOW,
@@ -36,6 +37,8 @@ export interface TranscribeJob {
 
 export type TranscribeMessage =
   | { type: "loading"; fraction: number }
+  /** The language Whisper found, when none was chosen. */
+  | { type: "language"; code: string }
   | { type: "segments"; segments: Segment[]; done: number }
   | { type: "done" }
   | { type: "error"; message: string }
@@ -43,17 +46,35 @@ export type TranscribeMessage =
 const post = (message: TranscribeMessage) =>
   (self as unknown as DedicatedWorkerGlobalScope).postMessage(message)
 
+/** What the pipeline holds, as far as finding the language needs. */
+interface Whisper {
+  (
+    audio: Float32Array,
+    options: Record<string, unknown>
+  ): Promise<{
+    text: string
+    chunks?: Heard[]
+  }>
+  processor: (audio: Float32Array) => Promise<{ input_features: unknown }>
+  model: ((
+    inputs: Record<string, unknown>
+  ) => Promise<
+    Record<string, { data: Float32Array; dims: number[]; dispose?: () => void }>
+  >) & {
+    generation_config: {
+      decoder_start_token_id: number
+      lang_to_id: Record<string, number>
+    }
+  }
+}
+
 interface Engine {
+  Tensor: new (type: string, data: BigInt64Array, dims: number[]) => unknown
   pipeline: (
     task: string,
     model: string,
     options: Record<string, unknown>
-  ) => Promise<
-    (
-      audio: Float32Array,
-      options: Record<string, unknown>
-    ) => Promise<{ text: string; chunks?: Heard[] }>
-  >
+  ) => Promise<Whisper>
   env: {
     allowRemoteModels: boolean
     allowLocalModels: boolean
@@ -63,10 +84,30 @@ interface Engine {
   }
 }
 
+/**
+ * Whisper's files are tens of megabytes, sent compressed and so without a
+ * length: a browser that cannot write one into its HTTP cache (a private
+ * window's is small) fails the whole request. They are fetched past that
+ * cache; the site's service worker keeps its own copy once used.
+ */
+const plainFetch = self.fetch.bind(self)
+self.fetch = (input: RequestInfo | URL, init?: RequestInit) => {
+  const url =
+    typeof input === "string"
+      ? input
+      : input instanceof URL
+        ? input.href
+        : input.url
+  return plainFetch(
+    input,
+    url.includes("/whisper/") ? { ...init, cache: "no-store" } : init
+  )
+}
+
 async function transcribe(job: TranscribeJob) {
   const base = whisperBase()
   const model = whisperModel(job.model)
-  const { pipeline, env } = (await import(
+  const { pipeline, env, Tensor } = (await import(
     /* webpackIgnore: true */ /* turbopackIgnore: true */ `${base}engine/transformers.min.js`
   )) as Engine
   env.allowRemoteModels = false
@@ -88,10 +129,31 @@ async function transcribe(job: TranscribeJob) {
       post({ type: "loading", fraction: Math.min(1, sum / total) })
     },
   })
-  const options = {
-    return_timestamps: true,
-    task: job.translate ? "translate" : "transcribe",
-    ...(job.language ? { language: job.language } : {}),
+  let language = job.language
+  /**
+   * The language of the first window, as Whisper finds it: the most likely
+   * of its language tokens after <|startoftranscript|> (the library itself
+   * only assumes English).
+   */
+  const detect = async (audio: Float32Array) => {
+    const { input_features } = await whisper.processor(audio)
+    const config = whisper.model.generation_config
+    const start = new Tensor(
+      "int64",
+      BigInt64Array.of(BigInt(config.decoder_start_token_id)),
+      [1, 1]
+    )
+    const outputs = await whisper.model({
+      input_features,
+      decoder_input_ids: start,
+    })
+    const { data, dims } = outputs.logits
+    const row = data.subarray(data.length - dims[dims.length - 1])
+    let best = "<|en|>"
+    for (const [token, id] of Object.entries(config.lang_to_id))
+      if (row[id] > row[config.lang_to_id[best]]) best = token
+    for (const output of Object.values(outputs)) output.dispose?.()
+    return best.slice(2, -2)
   }
 
   const engine = (await import("mediabunny")) as typeof Mediabunny
@@ -119,10 +181,20 @@ async function transcribe(job: TranscribeJob) {
     const count = Math.min(size, length)
     const window = new Float32Array(size)
     window.set(held.subarray(0, count))
-    const result = await whisper(
-      last ? window.subarray(0, Math.max(count, WHISPER_RATE)) : window,
-      options
-    )
+    const audio = last
+      ? window.subarray(0, Math.max(count, WHISPER_RATE))
+      : window
+    if (!language) {
+      language = await detect(audio)
+      post({ type: "language", code: language })
+    }
+    // The engine may take the array it is given: the sound is measured from a copy.
+    const measured = audio.slice()
+    const result = await whisper(audio, {
+      return_timestamps: true,
+      task: job.translate ? "translate" : "transcribe",
+      language,
+    })
     const start = from / WHISPER_RATE
     const { kept, next } = keptFrom(
       start,
@@ -134,7 +206,9 @@ async function transcribe(job: TranscribeJob) {
     held.copyWithin(0, drop, length)
     length -= drop
     from += drop
-    if (kept.length) segments = withoutLoops([...segments, ...kept])
+    // What lies in silence was made up; the next window still starts after it.
+    const said = inSound(kept, measured, start)
+    if (said.length) segments = withoutLoops([...segments, ...said])
     post({ type: "segments", segments, done: from / WHISPER_RATE })
   }
 

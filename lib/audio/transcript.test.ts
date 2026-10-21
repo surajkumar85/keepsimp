@@ -3,6 +3,7 @@ import {
   clock,
   doubtful,
   found,
+  inSound,
   keptFrom,
   LANGUAGES,
   segmentAt,
@@ -66,6 +67,8 @@ describe("windows", () => {
       { start: 95, end: 102.5, text: "B" },
     ])
     expect(next).toBe(102.5)
+    // The last window hears the sound to its end, even after its last word.
+    expect(keptFrom(0, 8.3, [heard("All", 0, 8)], true).next).toBe(8.3)
   })
 
   it("goes on through a window that is one long segment, or silence", () => {
@@ -198,5 +201,40 @@ describe("doubtful phrases", () => {
       "",
     ])
       expect(doubtful(text), text).toBe(false)
+  })
+})
+
+describe("silence", () => {
+  it("drops what Whisper wrote over silence, and keeps quiet speech", () => {
+    // Two seconds of a tone at −20 dBFS, then two of nothing, from 10 s.
+    const audio = new Float32Array(16000 * 4)
+    for (let index = 0; index < 32000; index++)
+      audio[index] = 0.1414 * Math.sin(index / 5)
+    const segments = [
+      { start: 10, end: 12, text: "Said" },
+      { start: 12, end: 14, text: "Made up" },
+      { start: 13.5, end: 14, text: "Also made up" },
+    ]
+    expect(inSound(segments, audio, 10).map((one) => one.text)).toEqual([
+      "Said",
+    ])
+    // A quiet recording (speech near −50 dBFS) keeps its speech, and drops
+    // only what lies in its silence.
+    const quiet = audio.map((value) => value / 30)
+    expect(inSound(segments, quiet, 10).map((one) => one.text)).toEqual([
+      "Said",
+    ])
+    // Speech everywhere at −50 dBFS: all of it kept.
+    const low = new Float32Array(16000 * 4).map(
+      (_, index) => 0.0047 * Math.sin(index / 5)
+    )
+    expect(inSound(segments, low, 10)).toHaveLength(3)
+    // A segment of no length, or past the window, is silent.
+    expect(inSound([{ start: 20, end: 21, text: "Past" }], audio, 10)).toEqual(
+      []
+    )
+    // A window that is all silence keeps nothing.
+    expect(inSound(segments, new Float32Array(0), 10)).toEqual([])
+    expect(inSound(segments, new Float32Array(16000), 10)).toEqual([])
   })
 })

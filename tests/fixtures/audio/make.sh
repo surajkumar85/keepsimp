@@ -28,3 +28,7 @@ ffmpeg -loglevel error -y -i tone.m4a -c copy -use_editlist 0 tone-noedit.m4a
 espeak-ng -v en-us -s 150 -p 45 -w speech.wav "The quick brown fox jumps over the lazy dog. Recording a voice note in a busy room is hard, so we remove the background noise on your own device."
 ffmpeg -loglevel error -y -i speech.wav -ar 48000 -ac 1 -c:a flac -sample_fmt s16 speech.flac
 rm speech.wav
+# German, for finding the language of a transcription.
+espeak-ng -v de -s 150 -w speech-de.wav "Guten Morgen. Heute nehmen wir eine Sprachnachricht auf und schreiben jeden Satz auf, ohne die Aufnahme irgendwohin zu schicken."
+ffmpeg -loglevel error -y -i speech-de.wav -ar 48000 -ac 1 -c:a flac -sample_fmt s16 speech-de.flac
+rm speech-de.wav

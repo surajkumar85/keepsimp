@@ -41,6 +41,8 @@ interface Transcript {
   error?: string
   /** What it was made with. */
   model: WhisperId
+  /** The language Whisper found, when none was chosen. */
+  found?: string
   translate: boolean
 }
 
@@ -56,6 +58,15 @@ export interface TranscriptSource {
 }
 
 const baseName = (name: string) => name.replace(/\.[^.]+$/, "")
+
+/** A language's name in English, from its code. */
+function languageName(code: string) {
+  try {
+    return new Intl.DisplayNames(["en"], { type: "language" }).of(code) ?? code
+  } catch {
+    return code
+  }
+}
 
 /** Text saved as a file: an untyped link, so no browser renames it or opens it instead. */
 function save(text: string, name: string) {
@@ -117,6 +128,8 @@ export function TranscriptPanel({ source }: { source: TranscriptSource }) {
       },
       (message) => {
         if (message.type === "loading") update(id, { loaded: message.fraction })
+        else if (message.type === "language")
+          update(id, { found: message.code })
         else if (message.type === "segments")
           update(id, {
             status: "running",
@@ -244,6 +257,16 @@ export function TranscriptPanel({ source }: { source: TranscriptSource }) {
             Stop
           </Button>
         </div>
+      )}
+
+      {transcript?.found && (
+        <p
+          className="text-sm text-muted-foreground"
+          data-testid="transcript-language"
+        >
+          Whisper heard {languageName(transcript.found)}. If that is wrong,
+          choose the language and transcribe again.
+        </p>
       )}
 
       {transcript?.status === "error" && (

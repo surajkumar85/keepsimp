@@ -125,15 +125,20 @@ async function kept(request, key) {
   const copy = await cache.match(key, lookup)
   if (copy) return request.destination === "worker" ? unaddressed(copy) : copy
   const response = await fetch(request)
-  if (response.ok && !response.redirected) {
-    await cache.put(key, response.clone())
-    const { kind, version } = keptFolders(key)
-    for (const old of await cache.keys()) {
-      const path = new URL(old.url).pathname
-      if (path.startsWith(kind) && !path.startsWith(version))
-        await cache.delete(old)
+  if (response.ok && !response.redirected)
+    // Keeping it is a kindness: a full store (a private window's is small)
+    // must not cost the page the file it asked for.
+    try {
+      await cache.put(key, response.clone())
+      const { kind, version } = keptFolders(key)
+      for (const old of await cache.keys()) {
+        const path = new URL(old.url).pathname
+        if (path.startsWith(kind) && !path.startsWith(version))
+          await cache.delete(old)
+      }
+    } catch {
+      // Fetched again next time.
     }
-  }
   return response
 }
 

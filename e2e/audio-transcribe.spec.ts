@@ -146,6 +146,27 @@ test("stops at once and keeps what was heard, and hears the noisy sample", async
   expect(text.toLowerCase()).toContain("noise away")
 })
 
+test("finds the language by itself and writes it in that language", async ({
+  page,
+}) => {
+  test.setTimeout(300_000)
+  await page.goto(TRANSCRIBE)
+  await page.locator("#audio-file").setInputFiles({
+    name: "guten-morgen.flac",
+    mimeType: "audio/flac",
+    buffer: readFileSync("tests/fixtures/audio/speech-de.flac"),
+  })
+  await settled(page)
+  const text = (await transcribed(page)).toLowerCase()
+  await expect(page.getByTestId("transcript-language")).toContainText(
+    "Whisper heard German"
+  )
+  expect(text).toContain("morgen")
+  expect(text).toContain("aufnahme")
+  // Nothing written over the silence after the speech.
+  expect(text).not.toMatch(/die die/)
+})
+
 test("the door stays accessible and fits a phone", async ({ page }) => {
   test.setTimeout(120_000)
   await page.goto(TRANSCRIBE)

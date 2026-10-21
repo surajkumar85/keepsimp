@@ -65,7 +65,8 @@ export function keptFrom(
       end: Math.max(start, end),
       text,
     })),
-    next: Math.max(end, start + 1),
+    // The sound's last window hears it to its end.
+    next: last ? Math.max(end, start + length) : Math.max(end, start + 1),
   }
 }
 
@@ -182,13 +183,54 @@ const STOCK = [
   "subtitles by the amara.org community",
 ]
 
-/** Whether a segment is one of the phrases Whisper writes when nothing was said. */
+/**
+ * Whether a segment is one Whisper writes when nothing was said: one of its
+ * stock phrases, or a word said three times running ("die die die").
+ */
 export function doubtful(text: string) {
   const bare = plain(text)
     .replace(/[^\p{L}\p{N}. ]/gu, "")
     .replace(/[. ]+$/, "")
     .trim()
-  return STOCK.includes(bare)
+  return STOCK.includes(bare) || /\b(\p{L}+)(?:[ .]+\1\b){2,}/u.test(bare)
+}
+
+/** Under this, in dBFS, a part of a window is silent… */
+export const SILENT = -60
+/** …when it is also this far under the window's loudest second. */
+export const QUIETER = 30
+
+/**
+ * Segments without those that lie in silence, which Whisper fills with
+ * words nobody said: their sound (from `audio`, the window at 16 kHz from
+ * `start` seconds) is under SILENT dBFS and QUIETER dB under the loudest
+ * second of the window.
+ */
+export function inSound(
+  segments: readonly Segment[],
+  audio: Float32Array,
+  start: number
+): Segment[] {
+  const level = (from: number, to: number) => {
+    const first = Math.max(0, Math.floor(from))
+    const last = Math.min(audio.length, Math.ceil(to))
+    let sum = 0
+    for (let index = first; index < last; index++) sum += audio[index] ** 2
+    return last > first
+      ? 10 * Math.log10(sum / (last - first) + 1e-20)
+      : -Infinity
+  }
+  let loudest = -Infinity
+  for (let at = 0; at < audio.length; at += WHISPER_RATE)
+    loudest = Math.max(loudest, level(at, at + WHISPER_RATE))
+  return segments.filter((one) => {
+    const db = level(
+      (one.start - start) * WHISPER_RATE,
+      (one.end - start) * WHISPER_RATE
+    )
+    // A window that is all silence has nothing louder to compare with.
+    return !(db < SILENT && (loudest < SILENT || db < loudest - QUIETER))
+  })
 }
 
 /** The languages offered; Whisper hears about a hundred, and finds which by itself when none is chosen. */
