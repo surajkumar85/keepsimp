@@ -60,6 +60,7 @@ export default defineConfig({
         "lib/audio/record.ts",
         "lib/audio/transcript.ts",
         "lib/audio/whisper.ts",
+        "lib/audio/transcribe-client.ts",
         "lib/color/core.ts",
         "lib/color/picker.ts",
         "lib/color/palette.ts",
