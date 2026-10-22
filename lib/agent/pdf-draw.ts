@@ -104,7 +104,7 @@ export interface Item {
   opacity?: number
   rotation?: number
   size?: number
-  font?: TextObject["font"]
+  font?: TextObject["font"] | "own"
   bold?: boolean
   italic?: boolean
   align?: TextObject["align"]
@@ -167,7 +167,11 @@ const itemSchema: JsonSchema = {
     opacity: { type: "number", minimum: 0.05, maximum: 1 },
     rotation: { type: "number", minimum: -360, maximum: 360 },
     size: { type: "number", minimum: SMALLEST_TEXT, maximum: LARGEST_TEXT },
-    font,
+    font: {
+      ...font,
+      enum: [...font.enum, "own"],
+      description: `${font.description} Or own: the font file given as fontFile.`,
+    },
     bold: { type: "boolean" },
     italic: { type: "boolean" },
     align: { type: "string", enum: ["left", "centre", "right"] },
@@ -196,7 +200,9 @@ const MARKS = [...MARK_KINDS]
 export function objectOf(
   item: Item,
   page: { width: number; height: number },
-  id: string
+  id: string,
+  /** The key of the font of one's own that "own" stands for. */
+  own?: TextObject["font"]
 ): EditorObject {
   const at = { x: item.x, y: item.y }
   const off = (spot: Point) =>
@@ -223,7 +229,7 @@ export function objectOf(
       ? {}
       : { fill: colourOf(item.fill), coverFill: colourOf(item.fill) }),
     ...(item.size ? { size: item.size } : {}),
-    ...(item.font ? { font: item.font } : {}),
+    ...(item.font ? { font: item.font === "own" ? own! : item.font } : {}),
     bold: Boolean(item.bold),
     italic: Boolean(item.italic),
     ...(item.align ? { align: item.align } : {}),
@@ -309,7 +315,7 @@ export function objectOf(
 }
 
 export function pdfDrawTools(engine: PdfEngine, text: EditText): AgentTool[] {
-  const { editing, apply } = editKit(engine, text)
+  const { editing, apply, ownFont } = editKit(engine, text)
 
   /** Where an added thing or a comment is, by its id. */
   function pageOf(
@@ -331,6 +337,7 @@ export function pdfDrawTools(engine: PdfEngine, text: EditText): AgentTool[] {
     items?: Item[]
     remove?: string[]
     move?: { id: string; dx: number; dy: number }[]
+    fontFile?: string
     keepEditable?: boolean
     lock?: LockInput
   }> = {
@@ -366,6 +373,9 @@ export function pdfDrawTools(engine: PdfEngine, text: EditText): AgentTool[] {
           description:
             "Ids of things kept editable, and how far to move each, in points.",
         },
+        fontFile: fileProperty(
+          'A TrueType or OpenType font of your own, for text with font "own".'
+        ),
         keepEditable,
         lock,
       },
@@ -381,11 +391,23 @@ export function pdfDrawTools(engine: PdfEngine, text: EditText): AgentTool[] {
         { suffix: "-edited" },
         async (session) => {
           const ops: Op[] = []
+          let own: { key: string; name: string } | null = null
+          if ((input.items ?? []).some((item) => item.font === "own")) {
+            if (!input.fontFile)
+              throw new ToolError('Give "fontFile" for font "own".')
+            const held = context.files.get(input.fontFile)
+            own = await ownFont(session, held.blob, held.ref.name)
+          }
           for (const item of input.items ?? [])
             ops.push({
               do: "add",
               page: item.page - 1,
-              object: objectOf(item, onPage(session, item.page), newId()),
+              object: objectOf(
+                item,
+                onPage(session, item.page),
+                newId(),
+                own?.key as TextObject["font"] | undefined
+              ),
             })
           const things = session.state.objects
           for (const shift of input.move ?? []) {

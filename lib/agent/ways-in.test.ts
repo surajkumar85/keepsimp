@@ -17,6 +17,7 @@ const engines = {
   pdf: new PdfEngine((onFile) => new FakePdfClient(onFile)),
   text: {
     font: async () => new ArrayBuffer(1),
+    own: async () => undefined,
     layOut: (object: never) => object,
   },
   ocr: async () => ({ read: async () => [], stop: () => undefined }),

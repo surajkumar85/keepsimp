@@ -89,6 +89,13 @@ KeepSimp's tools can be used by agents: Claude Code, Codex and other MCP clients
 - **`list_pdf_comments`** reads the comments of every page as the comment panel does, with the words a mark lies on (`wordsUnder` over the page's letters, read only for pages with marks), and the things kept editable, with their ids.
 - **`comment_on_pdf`** makes the comment panel's steps (`CommentOp`) in one change: marks on every place some words or a kind of thing are written (the redaction tool's search, `redactFind`), or on the words in an area (`selectWords`, as a drag does); notes, pen strokes, replies, changes and deletions by id. Marks take the panel's colours. What becomes of every comment on download (kept, drawn in, left out) is the download's own choice.
 
+### What a page already has (phase 6, part 2)
+
+- **`read_pdf_page_content`** reads pages as the in-page tools do: the page's own lines (`linesOf`) and paragraphs (`blocksOf`, `asLine`; "paragraphs" off makes every line alone, as the bar's switch does), the pictures it draws (`pagePictures`) and its links (`pageLinks`), at most 200 pages at a time. Each gets an id: `p3-b2` (paragraph), `p3-l5` (line), `p3-i1` (picture), `p3-k1` (link).
+- **`edit_pdf_text`** makes Change text's steps: a line is a `retext`, a paragraph a `reflow`, found again by its boxes and words, all in one step. Another size, colour or font (`LineLook`), an alignment for a paragraph, a move, or taking out. The font chosen, or the stand-ins for letters the line's own font lacks (`standIns`), are in the worker first, as the editor makes them ready. A line that cannot be retyped says why, and can still be moved or taken out.
+- **`edit_pdf_pictures`** and **`edit_pdf_links`** make the in-page steps one at a time, re-reading the page before each, since a picture or a link is named by its place in the page's list: changes first, then new links (at the end of the list), then removals from the highest place down. Pictures move (`moved`), resize about their top-left corner (`scaledAbout`), turn about their middle (`turnedAbout`), are cut (it hides) or shown whole, replaced, or taken out. Links lead only to pages and to `http`, `https`, `mailto` and `tel` (`targetFrom`); where an address leads is not checked.
+- **A font of one's own** (`ownFont` in `pdf-kit.ts`) is taken as the editor takes one: read for its name and its maker's permission (`readFont`), keyed by its bytes (`ownKey`), made ready for measuring on the page (`EditText.own`) and handed to the worker with its written name. `edit_pdf_text`, `draw_on_pdf` and `add_text_to_pdf` take it as `fontFile` with the font `own`.
+
 ### Images and animation (phase 4)
 
 - **The workers** are the pages' own, the agent's own copies with one worker each:
@@ -223,6 +230,7 @@ A package of its own, in TypeScript that Node runs as it is (type stripping), bu
   - converted to AVIF within 200 pixels, and two images made into one PDF;
   - the sample video turned into a GIF of at most 640 pixels and 15 frames a second, the GIF into a WebP at twice the speed, and three stills into an MP4.
 - **Drawing and comments** (`lib/agent/pdf-draw.test.ts`, 100%, against the stand-in worker; `e2e/agent-pdf-draw.spec.ts`, five profiles, read back by pdf.js): every kind drawn into a page and its words read back (a stamp, a call-out, a measuring line's length, a row of boxes); kept editable, ten annotations, listed, moved and removed by id; a cover that leaves the words in the file; highlights by words and underlines by area with the words they lie on, a note and a pen stroke signed by the author, a reply, a change and a deletion, and comments drawn in or left out.
+- **What a page already has** (`lib/agent/pdf-content.test.ts`, 100%; `e2e/agent-pdf-content.spec.ts`, five profiles, read back by pdf.js and pdf-lib): a heading retyped larger, a paragraph changed and flowed, an address line taken out, the rest of the page as it was; a heading set in Kalam from a font file, embedded; pictures moved, cut, replaced and taken out, where pdf.js paints them; links led to a page, added to the web and to an e-mail address, and taken away.
 - **Audio** (`lib/agent/audio.test.ts`, `lib/audio/jobs.test.ts`, 100%, against a stand-in pool; `e2e/agent-audio.spec.ts`, five profiles, the real workers, results read by FFmpeg and FFprobe):
   - the sample tune read, its loudness as `ebur128` measures it;
   - converted to an MP3 with exactly as many samples as the source, trimmed and faded to four seconds of WAV exactly, brought to −16 LUFS with true peaks under −1 dBTP, made twice as fast, and made an iPhone ringtone in AAC;
@@ -241,7 +249,7 @@ A package of its own, in TypeScript that Node runs as it is (type stripping), bu
 5. **Audio:** every job of the audio workspace but recording. Built.
 6. **Everything else the pages do**, but recording and signing:
    1. drawing and comments. Built.
-   2. the page's own text, pictures and links, and fonts of one's own;
+   2. the page's own text, pictures and links, and fonts of one's own. Built.
    3. making form fields, and trusted certificates for checking signatures;
    4. every setting of the image and animation pages;
    5. audio's silence trimming, equaliser and split times; colour gradients, brand colours, vision previews and mixing; searching JSON.

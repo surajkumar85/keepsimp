@@ -90,6 +90,13 @@ const editText: EditText = {
     // Each file is given its own copy: the worker takes what it is handed.
     return loading.then((bytes) => bytes.slice(0))
   },
+  async own(key, bytes) {
+    if (fonts.has(key)) return
+    const face = new FontFace(screenFamily(key), bytes.slice(0))
+    await face.load()
+    document.fonts.add(face)
+    fonts.set(key, Promise.resolve(bytes))
+  },
   layOut: (object) => laidOut(object),
 }
 

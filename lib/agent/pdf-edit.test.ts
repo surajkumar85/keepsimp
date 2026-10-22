@@ -58,6 +58,7 @@ function setup() {
       engine,
       {
         font: async () => new ArrayBuffer(4),
+        own: async () => undefined,
         layOut: (object) => {
           laid.push(object.text)
           return { ...object, lines: [object.text] }

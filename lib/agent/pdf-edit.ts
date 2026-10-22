@@ -94,7 +94,7 @@ export function pdfEditTools(
   text: EditText,
   ocr: StartOcr
 ): AgentTool[] {
-  const { editing, apply, targetOf } = editKit(engine, text)
+  const { editing, apply, targetOf, ownFont } = editKit(engine, text)
 
   const TURNS = [90, 180, 270]
   const organize: AgentTool<{
@@ -1399,7 +1399,8 @@ export function pdfEditTools(
     width?: number
     text: string
     size?: number
-    font?: BuiltIn
+    font?: BuiltIn | "own"
+    fontFile?: string
     bold?: boolean
     italic?: boolean
     colour?: string
@@ -1432,7 +1433,14 @@ export function pdfEditTools(
           maximum: LARGEST_TEXT,
           description: "In points (12).",
         },
-        font,
+        font: {
+          ...font,
+          enum: [...font.enum, "own"],
+          description: `${font.description} Or own: the font file given as fontFile.`,
+        },
+        fontFile: fileProperty(
+          'A TrueType or OpenType font of your own, for font "own".'
+        ),
         bold: { type: "boolean" },
         italic: { type: "boolean" },
         colour,
@@ -1456,6 +1464,13 @@ export function pdfEditTools(
             throw new ToolError(
               `That place is off page ${input.page}, which is ${Math.round(size.width)} by ${Math.round(size.height)} points.`
             )
+          let own: { key: string; name: string } | null = null
+          if (input.font === "own") {
+            if (!input.fontFile)
+              throw new ToolError('Give "fontFile" for font "own".')
+            const held = context.files.get(input.fontFile)
+            own = await ownFont(session, held.blob, held.ref.name)
+          }
           const textSize = input.size ?? 12
           const width = input.width ?? Math.max(6, size.width - input.x - 36)
           const object: TextObject = {
@@ -1471,7 +1486,9 @@ export function pdfEditTools(
             opacity: input.opacity ?? 1,
             text: input.text,
             lines: [input.text],
-            font: input.font ?? "sans",
+            font: own
+              ? (own.key as TextObject["font"])
+              : ((input.font as BuiltIn | undefined) ?? "sans"),
             bold: Boolean(input.bold),
             italic: Boolean(input.italic),
             size: textSize,

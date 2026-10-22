@@ -4,6 +4,7 @@ import { jsonTools, type RunJson } from "./json"
 import { pdfTools } from "./pdf"
 import { pdfEditTools, type EditText, type StartOcr } from "./pdf-edit"
 import { pdfDrawTools } from "./pdf-draw"
+import { pdfContentTools } from "./pdf-content"
 import type { PdfEngine } from "./pdf-engine"
 import { imageTools, type ImageEngines } from "./image"
 import { animationTools, type AnimationJob } from "./animation"
@@ -50,6 +51,7 @@ export function agentTools(engines: Engines): AgentTool[] {
     ...pdfTools(engines.pdf),
     ...pdfEditTools(engines.pdf, engines.text, engines.ocr),
     ...pdfDrawTools(engines.pdf, engines.text),
+    ...pdfContentTools(engines.pdf, engines.text),
     ...imageTools(engines.images),
     ...animationTools(engines.animation),
     ...audioTools(engines.audio),

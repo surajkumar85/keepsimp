@@ -12,6 +12,12 @@ import {
   type TextObject,
 } from "@/lib/pdf-editor/objects"
 import type { ExportReport } from "@/lib/pdf-editor/mupdf-edit"
+import {
+  isOwn,
+  LARGEST_FONT,
+  ownKey,
+  readFont,
+} from "@/lib/pdf-editor/own-font"
 import type { Change } from "@/lib/pdf-editor/tools"
 import type { Clean } from "@/lib/pdf-editor/redact"
 import type { TesseractBlock } from "@/lib/pdf-editor/ocr"
@@ -30,6 +36,8 @@ export type StartOcr = (
 export interface EditText {
   /** A font's file, made ready for measuring too. */
   font(key: string): Promise<ArrayBuffer>
+  /** A font of one's own made ready for measuring, under its key. */
+  own(key: string, bytes: ArrayBuffer): Promise<void>
   layOut(object: TextObject): TextObject
 }
 
@@ -214,7 +222,8 @@ export function editKit(engine: PdfEngine, text: EditText) {
     object: EditorObject
   ) {
     for (const key of fontsFor(object)) {
-      if (ready.has(key)) continue
+      // A font of one's own was handed over when it was read (`ownFont`).
+      if (ready.has(key) || isOwn(key)) continue
       engine.editFont(id, key, await text.font(key))
       ready.add(key)
     }
@@ -244,7 +253,38 @@ export function editKit(engine: PdfEngine, text: EditText) {
       ? [...new Set(pagesOf(given, session.pages, "pages"))]
       : Array.from({ length: session.pages }, (_, page) => page)
 
-  return { editing, fontsReady, apply, targetOf }
+  /** An editor's font in the worker, by its key, once for each file. */
+  async function fontReady(session: Session, key: string) {
+    if (isOwn(key)) return
+    engine.editFont(session.id, key, await text.font(key))
+  }
+
+  /**
+   * A font of one's own, as the editor takes one: read for its name and
+   * whether its maker allows it in documents, made ready for measuring, and
+   * handed to the worker. Of a collection, the first font is taken.
+   * @returns The key it goes by.
+   */
+  async function ownFont(session: Session, file: Blob, shown: string) {
+    const read =
+      file.size > LARGEST_FONT
+        ? null
+        : readFont(new Uint8Array(await file.arrayBuffer()))
+    if (!read)
+      throw new ToolError(
+        `${shown} is not a font the editor can use: give a TrueType or OpenType font (.ttf or .otf).`
+      )
+    if (!read.allowed)
+      throw new ToolError(
+        `The maker of "${read.name}" does not allow it to be put into documents.`
+      )
+    const key = ownKey(read.file)
+    await text.own(key, read.file.slice().buffer)
+    engine.editFont(session.id, key, read.file.slice().buffer, read.written)
+    return { key, name: read.name }
+  }
+
+  return { editing, fontsReady, fontReady, ownFont, apply, targetOf }
 }
 
 export const placeSchema = {

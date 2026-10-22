@@ -10,6 +10,7 @@ function setup() {
   const agent = new Agent(
     pdfDrawTools(engine, {
       font: async () => new ArrayBuffer(4),
+      own: async () => undefined,
       layOut: (object) => ({ ...object, lines: [object.text] }),
     })
   )

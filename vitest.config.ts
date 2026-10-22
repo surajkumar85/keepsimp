@@ -101,6 +101,7 @@ export default defineConfig({
         "lib/agent/audio.ts",
         "lib/agent/pdf-kit.ts",
         "lib/agent/pdf-draw.ts",
+        "lib/agent/pdf-content.ts",
         "lib/audio/jobs.ts",
         "lib/image-tools.ts",
         "lib/site.ts",
