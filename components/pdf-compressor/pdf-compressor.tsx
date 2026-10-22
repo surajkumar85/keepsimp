@@ -3,6 +3,7 @@
 import {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useReducer,
   useRef,
@@ -168,7 +169,10 @@ export function PdfCompressor() {
   const { pictures, need, forget } = usePagePictures(client)
   const { claims, forget: forgetLayout, readFile, readResult } = reader
 
-  useEffect(() => {
+  // A layout effect: React runs it in the task that puts the tool on the
+  // page, so a file chosen at once already finds the client. A passive
+  // effect can run after that first event, and what it asked for is lost.
+  useLayoutEffect(() => {
     const instance = new PdfClient((event) => {
       if (claims(event)) return
       if (event.id.startsWith(AFTER_ID)) {

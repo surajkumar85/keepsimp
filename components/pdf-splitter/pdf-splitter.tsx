@@ -3,6 +3,7 @@
 import {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useId,
   useMemo,
   useReducer,
@@ -257,7 +258,10 @@ export function PdfSplitter() {
     focused.current = page
   }, [])
 
-  useEffect(() => {
+  // A layout effect: React runs it in the task that puts the tool on the
+  // page, so a file chosen at once already finds the client. A passive
+  // effect can run after that first event, and what it asked for is lost.
+  useLayoutEffect(() => {
     const instance = new PdfClient((event) => {
       // A part opened only to be read is not a file to split.
       if (claims(event)) return

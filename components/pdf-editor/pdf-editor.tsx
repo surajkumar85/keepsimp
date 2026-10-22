@@ -4,6 +4,7 @@ import Link from "next/link"
 import {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useId,
   useMemo,
   useRef,
@@ -1842,7 +1843,10 @@ export function PdfEditor({ mode = "edit" }: { mode?: EditorMode }) {
     void clearDraft().catch(() => {})
   }, [])
 
-  useEffect(() => {
+  // A layout effect: React runs it in the task that puts the tool on the
+  // page, so a file chosen at once already finds the client. A passive
+  // effect can run after that first event, and what it asked for is lost.
+  useLayoutEffect(() => {
     const instance = new PdfClient((event) => {
       // A result opened only to be read is not the file being edited.
       if (claims(event)) return

@@ -3,6 +3,7 @@
 import {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useId,
   useMemo,
   useReducer,
@@ -174,7 +175,10 @@ export function PdfMerger() {
     dispatchState(action)
   }, [])
 
-  useEffect(() => {
+  // A layout effect: React runs it in the task that puts the tool on the
+  // page, so a file chosen at once already finds the client. A passive
+  // effect can run after that first event, and what it asked for is lost.
+  useLayoutEffect(() => {
     const instance = new PdfClient((event) => {
       // The merged file, opened only to be read, is not one of the files to merge.
       if (claims(event)) return
