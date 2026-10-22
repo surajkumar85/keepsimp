@@ -20,7 +20,13 @@ import type {
 } from "@/lib/animation/protocol"
 import { fileName } from "@/lib/image-resizer/naming"
 import type { PoolJobs } from "./pool-jobs"
-import { asTool, filesProperty, ToolError, type AgentTool } from "./registry"
+import {
+  asTool,
+  fileProperty,
+  filesProperty,
+  ToolError,
+  type AgentTool,
+} from "./registry"
 
 export type AnimationJob = Omit<ProcessRequest, "type" | "generation">
 
@@ -58,11 +64,36 @@ export function animationTools(
     fadeIn?: number
     fadeOut?: number
     frameMs?: number
+    gifEngine?: AnimationSettings["gifEngine"]
+    frameFormat?: AnimationSettings["frameFormat"]
+    colours?: number
+    dithering?: boolean
+    enlarge?: boolean
+    rotate?: AnimationSettings["rotation"]
+    flipX?: boolean
+    flipY?: boolean
+    background?: string
+    filter?: AnimationSettings["filter"]
+    brightness?: number
+    contrast?: number
+    saturation?: number
+    captionSize?: AnimationSettings["captionSize"]
+    captionColour?: string
+    captionOutline?: boolean
+    captionUppercase?: boolean
+    captionFrom?: number
+    captionUntil?: number
+    logo?: string
+    logoCorner?: AnimationSettings["overlayCorner"]
+    logoSize?: number
+    logoOpacity?: number
+    crop?: { x: number; y: number; width: number; height: number }
+    pattern?: string
   }> = {
     name: "convert_animation",
     title: "Convert an animation or video",
     description:
-      "Converts an animated GIF, WebP or APNG, or a short video (MP4, WebM, MOV), to GIF, WebP, APNG, MP4, WebM, its frames (a ZIP) or a sprite sheet. Several still images become one animation, in order. Can trim, change speed and frame rate, reverse, play back and forth, resize, caption and fit a size. A video is brought to at most 15 frames a second and 640 pixels on its longest side unless asked otherwise.",
+      "Converts an animated GIF, WebP or APNG, or a short video (MP4, WebM, MOV), to GIF, WebP, APNG, MP4, WebM, its frames (a ZIP) or a sprite sheet. Several still images become one animation, in order. Can trim and crop, change speed and frame rate, reverse, play back and forth, resize, turn and flip, change colours (a filter, brightness, contrast, saturation), fade in and out, caption it (size, colour, outline, capitals, from and until a time), paint a logo on every frame, fill transparency, choose the GIF encoder and colours, and fit a size. A video is brought to at most 15 frames a second and 640 pixels on its longest side unless asked otherwise.",
     inputSchema: {
       type: "object",
       properties: {
@@ -126,6 +157,111 @@ export function animationTools(
           maximum: 10000,
           description:
             "For still images: how long each is shown, in milliseconds (200).",
+        },
+        gifEngine: {
+          type: "string",
+          enum: ["fast", "best"],
+          description:
+            "For GIF: fast (KeepSimp's own) or best (gifski, slower and smoother).",
+        },
+        frameFormat: {
+          type: "string",
+          enum: ["png", "webp", "jpeg"],
+          description: "For frames and sprite sheets.",
+        },
+        colours: {
+          type: "integer",
+          minimum: 2,
+          maximum: 256,
+          description:
+            "For GIF and APNG with quality custom: at most this many colours.",
+        },
+        dithering: { type: "boolean" },
+        enlarge: {
+          type: "boolean",
+          description:
+            "Scale up an animation smaller than the size asked for (yes, except for video).",
+        },
+        rotate: { type: "integer", enum: [0, 90, 180, 270] },
+        flipX: { type: "boolean" },
+        flipY: { type: "boolean" },
+        background: {
+          type: "string",
+          pattern: "^(keep|white|black|#[0-9a-fA-F]{6})$",
+          description:
+            "What fills transparency: keep (the default), white, black or #rrggbb.",
+        },
+        filter: {
+          type: "string",
+          enum: ["none", "greyscale", "sepia", "invert"],
+        },
+        brightness: { type: "integer", minimum: -100, maximum: 100 },
+        contrast: { type: "integer", minimum: -100, maximum: 100 },
+        saturation: { type: "integer", minimum: -100, maximum: 100 },
+        captionSize: { type: "string", enum: ["small", "medium", "large"] },
+        captionColour: {
+          type: "string",
+          pattern: "^(white|black|#[0-9a-fA-F]{6})$",
+          description: "white (the default), black or #rrggbb.",
+        },
+        captionOutline: {
+          type: "boolean",
+          description: "An outline round the letters (yes by default).",
+        },
+        captionUppercase: { type: "boolean" },
+        captionFrom: {
+          type: "number",
+          minimum: 0,
+          description: "Seconds into the result the captions appear.",
+        },
+        captionUntil: {
+          type: "number",
+          exclusiveMinimum: 0,
+          description: "And go.",
+        },
+        logo: fileProperty(
+          "A picture (a logo or watermark) to paint on every frame."
+        ),
+        logoCorner: {
+          type: "string",
+          enum: [
+            "top-left",
+            "top-right",
+            "bottom-left",
+            "bottom-right",
+            "centre",
+          ],
+        },
+        logoSize: {
+          type: "integer",
+          minimum: 5,
+          maximum: 100,
+          description: "Its width, in percent of the frame (20).",
+        },
+        logoOpacity: {
+          type: "integer",
+          minimum: 10,
+          maximum: 100,
+          description: "How solid it is, in percent (80).",
+        },
+        crop: {
+          type: "object",
+          properties: {
+            x: { type: "integer", minimum: 0 },
+            y: { type: "integer", minimum: 0 },
+            width: { type: "integer", minimum: 1 },
+            height: { type: "integer", minimum: 1 },
+          },
+          required: ["x", "y", "width", "height"],
+          additionalProperties: false,
+          description:
+            "Keep only this box of the picture, in pixels as it looks after turning and flipping.",
+        },
+        pattern: {
+          type: "string",
+          maxLength: 200,
+          description:
+            "The result's name: {name}, {width}, {height}, {format}.",
         },
       },
       required: ["files", "to"],
@@ -250,6 +386,43 @@ export function animationTools(
         captionBottom: input.captionBottom ?? "",
         fadeIn: input.fadeIn ?? 0,
         fadeOut: input.fadeOut ?? 0,
+        ...(input.enlarge !== undefined ? { enlarge: input.enlarge } : {}),
+        gifEngine: input.gifEngine ?? defaultSettings.gifEngine,
+        frameFormat: input.frameFormat ?? defaultSettings.frameFormat,
+        colours: input.colours ?? defaultSettings.colours,
+        dithering: input.dithering ?? defaultSettings.dithering,
+        rotation: input.rotate ?? 0,
+        flipX: Boolean(input.flipX),
+        flipY: Boolean(input.flipY),
+        ...(input.background === undefined || input.background === "keep"
+          ? {}
+          : input.background === "white" || input.background === "black"
+            ? { background: input.background }
+            : {
+                background: "custom" as const,
+                backgroundColor: input.background,
+              }),
+        filter: input.filter ?? defaultSettings.filter,
+        brightness: input.brightness ?? defaultSettings.brightness,
+        contrast: input.contrast ?? defaultSettings.contrast,
+        saturation: input.saturation ?? defaultSettings.saturation,
+        captionSize: input.captionSize ?? defaultSettings.captionSize,
+        ...(input.captionColour === undefined || input.captionColour === "white"
+          ? {}
+          : input.captionColour === "black"
+            ? { captionColour: "black" as const }
+            : {
+                captionColour: "custom" as const,
+                captionCustomColour: input.captionColour,
+              }),
+        captionOutline: input.captionOutline ?? defaultSettings.captionOutline,
+        captionUppercase: Boolean(input.captionUppercase),
+        captionFrom: input.captionFrom ?? null,
+        captionUntil: input.captionUntil ?? null,
+        overlayCorner: input.logoCorner ?? defaultSettings.overlayCorner,
+        overlaySize: input.logoSize ?? defaultSettings.overlaySize,
+        overlayOpacity: input.logoOpacity ?? defaultSettings.overlayOpacity,
+        pattern: input.pattern ?? defaultSettings.pattern,
       }
       const problem = settingsProblem(settings)
       if (problem) throw new ToolError(problem)
@@ -258,7 +431,9 @@ export function animationTools(
       const trim = {
         start: Math.round((input.start ?? 0) * 1000),
         end: input.end !== undefined ? Math.round(input.end * 1000) : null,
+        ...(input.crop ? { crop: input.crop } : {}),
       }
+      const logo = input.logo ? files.get(input.logo) : null
       const source: SourceInput = stills
         ? {
             kind: "stills",
@@ -271,10 +446,10 @@ export function animationTools(
           input: source,
           settings,
           trim,
-          key: processingKey(settings, trim, undefined),
+          key: processingKey(settings, trim, logo?.ref.id),
           inputKey: given.map(({ ref }) => ref.id).join(","),
           describe: false,
-          overlay: null,
+          overlay: logo && { file: logo.blob, key: logo.ref.id },
         },
         {
           signal,

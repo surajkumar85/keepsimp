@@ -130,6 +130,13 @@ KeepSimp's tools can be used by agents: Claude Code, Codex and other MCP clients
   - `audio_to_video`: the sound written as the workspace writes it, then drawn; the video is handed over only when opening it again finds its picture, its sound and its length.
 - **Every result says** the plan's sentences, what was done to the level (`levelSaid`) and what the check found.
 
+### Every setting of the image pages (phase 6, part 4)
+
+- **`compress_image`** takes the compressor's sizes (a share, or a width and height in pixels or percent, kept in shape or fitted), a crop box or the largest box of a shape in the middle of the image as it is turned (`initialCrop`, `aspectValue`, as the crop panel makes it), turns and flips, and the encoder's own choices (full-resolution colour, progressive JPEG, PNG colours, dithering, resampling). All go through the page's own `buildPlan`.
+- **`resize_image`** takes print sizes in inches, cm and mm at a dpi (and writes the dpi when asked), a focus point or smart focus, turns, flips, the resampling kernel, sharpening and rounding to a multiple.
+- **`convert_image`** writes several formats at once (`multi`, `targets`), each file of its own type, and takes the dpi, dithering and the dpi pages of a PDF are placed at.
+- **`convert_animation`** takes the GIF encoder (gifski for best), the frames' format, colours and dithering, turns and flips, what fills transparency, a filter with brightness, contrast and saturation, the captions' size, colour, outline, capitals and times, a logo painted on every frame (`overlay`, with its corner, width and opacity), a crop box (in the trim, as the page keeps it) and the name pattern.
+
 ### The agent page (`/dashboard/agents/`)
 
 - **What it is:** a workspace page, not a catalogue entry, linked from the sidebar footer, in the sitemap and in the offline copy.
@@ -239,6 +246,7 @@ A package of its own, in TypeScript that Node runs as it is (type stripping), bu
 - **Drawing and comments** (`lib/agent/pdf-draw.test.ts`, 100%, against the stand-in worker; `e2e/agent-pdf-draw.spec.ts`, five profiles, read back by pdf.js): every kind drawn into a page and its words read back (a stamp, a call-out, a measuring line's length, a row of boxes); kept editable, ten annotations, listed, moved and removed by id; a cover that leaves the words in the file; highlights by words and underlines by area with the words they lie on, a note and a pen stroke signed by the author, a reply, a change and a deletion, and comments drawn in or left out.
 - **What a page already has** (`lib/agent/pdf-content.test.ts`, 100%; `e2e/agent-pdf-content.spec.ts`, five profiles, read back by pdf.js and pdf-lib): a heading retyped larger, a paragraph changed and flowed, an address line taken out, the rest of the page as it was; a heading set in Kalam from a font file, embedded; pictures moved, cut, replaced and taken out, where pdf.js paints them; links led to a page, added to the web and to an e-mail address, and taken away.
 - **Forms** (`lib/agent/pdf-forms.test.ts`, 100%; `e2e/agent-pdf-forms.spec.ts`, five profiles, read back by pdf-lib): six kinds of field made and read by pdf-lib as text, check box, radio group, dropdown and signature fields, then filled; a field renamed and widened, three lined up and the tab order set by rows; the five fields a paper form asks for suggested and added; the signed sample trusted through its authority's certificate and not through another's.
+- **Image settings** (`lib/agent/image.test.ts`, 100%; `e2e/agent-image.spec.ts`, five profiles, read by FFprobe): a photo turned and cut to its middle square (800 by 800), a box of it at half its size (200 by 150), two inches at 150 dpi (300 pixels), three formats at once, and the sample video as a greyscale GIF cut to 200 by 100 with a caption and a logo.
 - **Audio** (`lib/agent/audio.test.ts`, `lib/audio/jobs.test.ts`, 100%, against a stand-in pool; `e2e/agent-audio.spec.ts`, five profiles, the real workers, results read by FFmpeg and FFprobe):
   - the sample tune read, its loudness as `ebur128` measures it;
   - converted to an MP3 with exactly as many samples as the source, trimmed and faded to four seconds of WAV exactly, brought to −16 LUFS with true peaks under −1 dBTP, made twice as fast, and made an iPhone ringtone in AAC;
@@ -259,5 +267,5 @@ A package of its own, in TypeScript that Node runs as it is (type stripping), bu
    1. drawing and comments. Built.
    2. the page's own text, pictures and links, and fonts of one's own. Built.
    3. making form fields, and trusted certificates for checking signatures. Built.
-   4. every setting of the image and animation pages;
+   4. every setting of the image and animation pages. Built.
    5. audio's silence trimming, equaliser and split times; colour gradients, brand colours, vision previews and mixing; searching JSON.

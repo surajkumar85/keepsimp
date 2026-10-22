@@ -90,25 +90,26 @@ function setup() {
               type: "done",
               id: job.id,
               key: job.key,
-              outputs: [
-                {
-                  target: job.settings.target,
-                  bytes: new ArrayBuffer(20),
-                  width: 40,
-                  height: 30,
-                  similarity: null,
-                  ...(job.settings.target === "pdf"
-                    ? {
-                        page: {
-                          kind: "flate" as const,
-                          data: Uint8Array.of(120, 156, 3, 0, 0, 0, 0, 1),
-                          width: 1,
-                          height: 1,
-                        },
-                      }
-                    : {}),
-                },
-              ],
+              outputs: (job.settings.multi
+                ? job.settings.targets
+                : [job.settings.target]
+              ).map((target) => ({
+                target,
+                bytes: new ArrayBuffer(20),
+                width: 40,
+                height: 30,
+                similarity: null,
+                ...(job.settings.target === "pdf"
+                  ? {
+                      page: {
+                        kind: "flate" as const,
+                        data: Uint8Array.of(120, 156, 3, 0, 0, 0, 0, 1),
+                        width: 1,
+                        height: 1,
+                      },
+                    }
+                  : {}),
+              })),
             },
           ]
         )),
@@ -639,5 +640,240 @@ describe("convert_animation", () => {
       call("convert_animation", { files: [gif], to: "gif", start: 3, end: 2 })
     ).rejects.toThrow('"end" must come after "start".')
     await call("convert_animation", { files: [gif], to: "gif", end: 2 })
+  })
+})
+
+describe("every setting of the image pages", () => {
+  it("compresses with a crop or a shape, a turn, flips, a size and the encoder's choices", async () => {
+    const { add, call, compressor } = setup()
+    const file = add(JPEG, "a.jpg")
+    await call("compress_image", {
+      file,
+      width: 200,
+      height: 100,
+      fit: "cover",
+      unit: "px",
+      keepShape: false,
+      crop: { x: 10, y: 20, width: 300, height: 200 },
+      rotate: 90,
+      flipX: true,
+      flipY: true,
+      chroma444: true,
+      progressive: false,
+      pngColors: 64,
+      dithering: false,
+      resample: "mitchell",
+    })
+    const asked = compressor().compressions.at(-1)!
+    expect(asked).toMatchObject({
+      chroma444: true,
+      progressive: false,
+      pngColors: 64,
+      dithering: false,
+      resample: "mitchell",
+    })
+    expect(asked.plan).toMatchObject({
+      rotation: 90,
+      flipX: true,
+      flipY: true,
+      output: { width: 200, height: 100 },
+    })
+    // The shape is the largest box of it in the middle of the image as turned: 300 by 400 turned, so 300 by 169 at 16:9.
+    await call("compress_image", { file, aspect: "16:9", rotate: 270 })
+    expect(compressor().compressions.at(-1)!.plan.output).toMatchObject({
+      width: 300,
+      height: 169,
+    })
+    await call("compress_image", { file, scale: 50 })
+    expect(compressor().compressions.at(-1)!.plan.output).toEqual({
+      width: 200,
+      height: 150,
+    })
+    await call("compress_image", { file, height: 50, unit: "percent" })
+    expect(compressor().compressions.at(-1)!.plan.output).toEqual({
+      width: 200,
+      height: 150,
+    })
+    await expect(
+      call("compress_image", { file, scale: 50, longEdge: 100 })
+    ).rejects.toThrow(
+      "Give one way to size it: longEdge, scale, or a width and height."
+    )
+    await expect(
+      call("compress_image", {
+        file,
+        crop: { x: 0, y: 0, width: 1, height: 1 },
+        aspect: "1:1",
+      })
+    ).rejects.toThrow("Give a crop box or an aspect, not both.")
+  })
+
+  it("resizes with print units, a focus, turns, flips and the resizer's own choices", async () => {
+    const { add, call, resizer } = setup()
+    const file = add(JPEG, "a.jpg")
+    await call("resize_image", {
+      files: [file],
+      width: 2,
+      unit: "in",
+      dpi: 150,
+      embedDpi: true,
+      keepShape: false,
+      focus: { x: 0.2, y: 0.8 },
+      rotate: 180,
+      flipX: true,
+      flipY: true,
+      kernel: "nearest",
+      sharpen: "light",
+      multiple: 8,
+    })
+    expect(resizer().jobs.at(-1)!.settings).toMatchObject({
+      width: "2",
+      unit: "in",
+      dpi: 150,
+      embedDpi: true,
+      lock: false,
+      focusMode: "manual",
+      focus: { x: 0.2, y: 0.8 },
+      rotation: 180,
+      flipX: true,
+      flipY: true,
+      kernel: "nearest",
+      sharpen: "light",
+      multiple: 8,
+    })
+    await call("resize_image", { files: [file], width: 100, focus: "smart" })
+    expect(resizer().jobs.at(-1)!.settings).toMatchObject({
+      focusMode: "smart",
+      focus: { x: 0.5, y: 0.5 },
+      dpi: 300,
+    })
+  })
+
+  it("converts to several formats at once, with the converter's own choices", async () => {
+    const { add, call, converter } = setup()
+    const file = add(PNG, "a.png")
+    const done = await call("convert_image", {
+      files: [file],
+      to: "webp",
+      alsoTo: ["avif", "webp", "jpeg"],
+      embedDpi: true,
+      dpi: 72,
+      dithering: false,
+      pdfDpi: 300,
+    })
+    expect(done.summary).toBe("Converted 1 image to WebP, AVIF, JPEG.")
+    expect(done.files!.map((one) => one.type)).toEqual([
+      "image/webp",
+      "image/avif",
+      "image/jpeg",
+    ])
+    expect(converter().jobs.at(-1)!.settings).toMatchObject({
+      multi: true,
+      targets: ["webp", "avif", "jpeg"],
+      embedDpi: true,
+      dpi: 72,
+      dithering: false,
+      pdfDpi: 300,
+    })
+    await expect(
+      call("convert_image", {
+        files: [file],
+        to: "pdf",
+        onePdf: true,
+        alsoTo: ["png"],
+      })
+    ).rejects.toThrow("onePdf makes one PDF: give no other formats.")
+  })
+
+  it("converts animations with every effect, a logo on every frame and a crop", async () => {
+    const { add, call, animation } = setup()
+    const file = add(GIF, "a.gif")
+    const logo = add(PNG, "logo.png")
+    await call("convert_animation", {
+      files: [file],
+      to: "gif",
+      gifEngine: "best",
+      frameFormat: "jpeg",
+      colours: 32,
+      dithering: false,
+      enlarge: false,
+      rotate: 90,
+      flipX: true,
+      flipY: true,
+      background: "#123456",
+      filter: "sepia",
+      brightness: 10,
+      contrast: -10,
+      saturation: 20,
+      captionTop: "Hi",
+      captionSize: "large",
+      captionColour: "#ff0000",
+      captionOutline: false,
+      captionUppercase: true,
+      captionFrom: 0.5,
+      captionUntil: 2,
+      logo,
+      logoCorner: "top-left",
+      logoSize: 30,
+      logoOpacity: 50,
+      crop: { x: 1, y: 2, width: 30, height: 40 },
+      pattern: "{name}-{width}",
+    })
+    const job = animation().jobs.at(-1)!
+    expect(job.settings).toMatchObject({
+      gifEngine: "best",
+      frameFormat: "jpeg",
+      colours: 32,
+      dithering: false,
+      enlarge: false,
+      rotation: 90,
+      flipX: true,
+      flipY: true,
+      background: "custom",
+      backgroundColor: "#123456",
+      filter: "sepia",
+      brightness: 10,
+      contrast: -10,
+      saturation: 20,
+      captionSize: "large",
+      captionColour: "custom",
+      captionCustomColour: "#ff0000",
+      captionOutline: false,
+      captionUppercase: true,
+      captionFrom: 0.5,
+      captionUntil: 2,
+      overlayCorner: "top-left",
+      overlaySize: 30,
+      overlayOpacity: 50,
+      pattern: "{name}-{width}",
+    })
+    expect(job.trim).toEqual({
+      start: 0,
+      end: null,
+      crop: { x: 1, y: 2, width: 30, height: 40 },
+    })
+    expect(job.overlay).toMatchObject({ key: logo })
+    expect(job.key).toContain(logo)
+    await call("convert_animation", {
+      files: [file],
+      to: "webp",
+      background: "black",
+      captionColour: "black",
+    })
+    expect(animation().jobs.at(-1)!.settings).toMatchObject({
+      background: "black",
+      captionColour: "black",
+    })
+    await call("convert_animation", {
+      files: [file],
+      to: "webp",
+      background: "keep",
+      captionColour: "white",
+    })
+    expect(animation().jobs.at(-1)!.settings).toMatchObject({
+      background: "keep",
+      captionColour: "white",
+    })
+    expect(animation().jobs.at(-1)!.overlay).toBeNull()
   })
 })

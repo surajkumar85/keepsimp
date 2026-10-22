@@ -12,6 +12,13 @@ import {
   type OutputFormat,
 } from "@/lib/image-compressor/formats"
 import {
+  aspectValue,
+  initialCrop,
+  orientedSize,
+  type AspectPreset,
+  type Rotation,
+} from "@/lib/image-compressor/geometry"
+import {
   backgroundRgb,
   buildPlan,
   candidateFormats,
@@ -129,13 +136,29 @@ export function imageTools(engines: ImageEngines): AgentTool[] {
     targetKilobytes?: number
     allowDownscale?: boolean
     longEdge?: number
+    scale?: 75 | 50 | 25
+    width?: number
+    height?: number
+    unit?: "px" | "percent"
+    keepShape?: boolean
+    fit?: CompressorSettings["fit"]
+    crop?: { x: number; y: number; width: number; height: number }
+    aspect?: Exclude<AspectPreset, "free">
+    rotate?: Rotation
+    flipX?: boolean
+    flipY?: boolean
     effort?: "fast" | "balanced" | "max"
     background?: string
+    chroma444?: boolean
+    progressive?: boolean
+    pngColors?: number
+    dithering?: boolean
+    resample?: CompressorSettings["resample"]
   }> = {
     name: "compress_image",
     title: "Compress an image",
     description:
-      "Makes an image smaller, measured so the difference cannot be seen: smart (the default), smallest, high, lossless, or a quality of your own; or to fit a size. Can change the format (auto tries several and keeps the smallest) and shrink the long edge. When the original is already smaller, it says so and makes nothing.",
+      "Makes an image smaller, measured so the difference cannot be seen: smart (the default), smallest, high, lossless, or a quality of your own; or to fit a size. Can change the format (auto tries several and keeps the smallest), shrink it (the long edge, a share, or a width and height), crop it (a box, or a shape such as 16:9 from the middle), turn and flip it, and set the encoder's own choices as the compressor's page does. When the original is already smaller, it says so and makes nothing.",
     inputSchema: {
       type: "object",
       properties: {
@@ -172,12 +195,80 @@ export function imageTools(engines: ImageEngines): AgentTool[] {
           maximum: 16384,
           description: "Make the long edge at most this many pixels.",
         },
+        scale: {
+          type: "integer",
+          enum: [75, 50, 25],
+          description: "Instead: this share of its size, in percent.",
+        },
+        width: {
+          type: "number",
+          exclusiveMinimum: 0,
+          description: "Instead: a width, in pixels or percent (unit).",
+        },
+        height: { type: "number", exclusiveMinimum: 0 },
+        unit: { type: "string", enum: ["px", "percent"] },
+        keepShape: {
+          type: "boolean",
+          description:
+            "With only a width or a height, keep the image's shape (yes by default).",
+        },
+        fit: {
+          type: "string",
+          enum: ["contain", "cover", "stretch"],
+          description:
+            "With a width and a height: contain (the default) keeps it within, cover fills and crops, stretch changes its shape.",
+        },
+        crop: {
+          type: "object",
+          properties: {
+            x: { type: "integer", minimum: 0 },
+            y: { type: "integer", minimum: 0 },
+            width: { type: "integer", minimum: 1 },
+            height: { type: "integer", minimum: 1 },
+          },
+          required: ["x", "y", "width", "height"],
+          additionalProperties: false,
+          description:
+            "Keep only this box, in pixels of the image as it stands after any turn.",
+        },
+        aspect: {
+          type: "string",
+          enum: ["original", "1:1", "4:5", "4:3", "3:2", "16:9", "9:16"],
+          description:
+            "Instead of a crop box: the largest box of this shape, in the middle.",
+        },
+        rotate: {
+          type: "integer",
+          enum: [0, 90, 180, 270],
+          description: "Degrees clockwise.",
+        },
+        flipX: { type: "boolean", description: "Mirror left to right." },
+        flipY: { type: "boolean", description: "Mirror top to bottom." },
         effort: { type: "string", enum: ["fast", "balanced", "max"] },
         background: {
           ...hex,
           description:
             "What shows through transparency in a format that has none, as #rrggbb (white).",
         },
+        chroma444: {
+          type: "boolean",
+          description:
+            "For JPEG: keep colour at full resolution (sharper red text, larger files).",
+        },
+        progressive: {
+          type: "boolean",
+          description: "For JPEG: load in passes (yes by default).",
+        },
+        pngColors: {
+          type: "integer",
+          enum: [256, 128, 64, 32, 16],
+          description: "For PNG at smallest: at most this many colours.",
+        },
+        dithering: {
+          type: "boolean",
+          description: "With fewer colours: dither (yes by default).",
+        },
+        resample: { type: "string", enum: ["lanczos3", "mitchell", "catrom"] },
       },
       required: ["file"],
       additionalProperties: false,
@@ -189,6 +280,17 @@ export function imageTools(engines: ImageEngines): AgentTool[] {
         (input.compression ?? "custom") !== "custom"
       )
         throw new ToolError('A quality is for compression "custom".')
+      const sizes = [
+        input.longEdge !== undefined,
+        input.scale !== undefined,
+        input.width !== undefined || input.height !== undefined,
+      ].filter(Boolean).length
+      if (sizes > 1)
+        throw new ToolError(
+          "Give one way to size it: longEdge, scale, or a width and height."
+        )
+      if (input.crop && input.aspect)
+        throw new ToolError("Give a crop box or an aspect, not both.")
       const image = await source(files, input.file)
       const settings: CompressorSettings = {
         ...compressDefaults,
@@ -201,12 +303,31 @@ export function imageTools(engines: ImageEngines): AgentTool[] {
               : compressDefaults.compression)),
         quality: input.quality ?? compressDefaults.quality,
         allowDownscale: input.allowDownscale ?? compressDefaults.allowDownscale,
-        size: input.longEdge ? "long-edge" : "original",
+        size: input.longEdge
+          ? "long-edge"
+          : input.scale
+            ? (String(input.scale) as "75" | "50" | "25")
+            : input.width !== undefined || input.height !== undefined
+              ? "custom"
+              : "original",
         longEdge: input.longEdge ?? compressDefaults.longEdge,
+        customWidth: input.width !== undefined ? String(input.width) : "",
+        customHeight: input.height !== undefined ? String(input.height) : "",
+        unit: input.unit ?? compressDefaults.unit,
+        lock: input.keepShape ?? compressDefaults.lock,
+        fit: input.fit ?? compressDefaults.fit,
+        rotation: input.rotate ?? 0,
+        flipX: Boolean(input.flipX),
+        flipY: Boolean(input.flipY),
         effort: input.effort ?? compressDefaults.effort,
         ...(input.background
           ? { background: "custom" as const, backgroundColor: input.background }
           : {}),
+        chroma444: input.chroma444 ?? compressDefaults.chroma444,
+        progressive: input.progressive ?? compressDefaults.progressive,
+        pngColors: input.pngColors ?? compressDefaults.pngColors,
+        dithering: input.dithering ?? compressDefaults.dithering,
+        resample: input.resample ?? compressDefaults.resample,
       }
       const target = input.targetKilobytes
         ? Math.round(input.targetKilobytes * 1024)
@@ -214,10 +335,17 @@ export function imageTools(engines: ImageEngines): AgentTool[] {
       const { opened, done } = await engines.compressor.run(
         { file: image.blob, format: image.format, pixels: image.pixels },
         (open) => {
-          const { plan, error } = buildPlan(settings, {
-            width: open.width,
-            height: open.height,
-          })
+          // A box of a shape is the largest in the middle of the image as it is turned, as the page makes it.
+          const turned = orientedSize(open, settings.rotation)
+          const crop = input.crop
+            ? input.crop
+            : input.aspect
+              ? initialCrop(turned, aspectValue(input.aspect, turned))
+              : null
+          const { plan, error } = buildPlan(
+            { ...settings, crop },
+            { width: open.width, height: open.height }
+          )
           if (!plan) throw new Error(error!)
           return {
             plan,
@@ -256,7 +384,14 @@ export function imageTools(engines: ImageEngines): AgentTool[] {
         sameDimensions:
           result.size.width === opened.width &&
           result.size.height === opened.height,
-        edited: Boolean(input.longEdge),
+        edited: Boolean(
+          sizes ||
+          input.crop ||
+          input.aspect ||
+          input.rotate ||
+          input.flipX ||
+          input.flipY
+        ),
       })
       const data = {
         before: image.blob.size,
@@ -312,6 +447,17 @@ export function imageTools(engines: ImageEngines): AgentTool[] {
     customQuality?: number
     widths?: number[]
     pattern?: string
+    unit?: ResizerSettings["unit"]
+    dpi?: number
+    embedDpi?: boolean
+    keepShape?: boolean
+    focus?: "smart" | { x: number; y: number }
+    rotate?: Rotation
+    flipX?: boolean
+    flipY?: boolean
+    kernel?: ResizerSettings["kernel"]
+    sharpen?: ResizerSettings["sharpen"]
+    multiple?: ResizerSettings["multiple"]
   }> = {
     name: "resize_image",
     title: "Resize images",
@@ -334,8 +480,35 @@ export function imageTools(engines: ImageEngines): AgentTool[] {
           ],
           description: "dimensions (the default) takes width and/or height.",
         },
-        width: { type: "integer", minimum: 1, maximum: 16384 },
-        height: { type: "integer", minimum: 1, maximum: 16384 },
+        width: {
+          type: "number",
+          exclusiveMinimum: 0,
+          maximum: 16384,
+          description: "In unit (pixels by default).",
+        },
+        height: { type: "number", exclusiveMinimum: 0, maximum: 16384 },
+        unit: {
+          type: "string",
+          enum: ["px", "percent", "in", "cm", "mm"],
+          description:
+            "For width and height: inches, cm and mm are for print, at dpi.",
+        },
+        dpi: {
+          type: "integer",
+          minimum: 1,
+          maximum: 2400,
+          description: "Dots per inch, for print sizes (300).",
+        },
+        embedDpi: {
+          type: "boolean",
+          description:
+            "Write the dpi into the file, for printing at that size.",
+        },
+        keepShape: {
+          type: "boolean",
+          description:
+            "With only a width or a height, keep the shape (yes by default).",
+        },
         side: {
           type: "integer",
           minimum: 1,
@@ -375,6 +548,49 @@ export function imageTools(engines: ImageEngines): AgentTool[] {
           description: "Write each image at these widths.",
         },
         pattern: { type: "string", maxLength: 200 },
+        focus: {
+          description:
+            'What stays in view when cover crops: "smart" (found in each image) or a point, x and y from 0 (left, top) to 1 (right, bottom); the middle by default.',
+          anyOf: [
+            { type: "string", enum: ["smart"] },
+            {
+              type: "object",
+              properties: {
+                x: { type: "number", minimum: 0, maximum: 1 },
+                y: { type: "number", minimum: 0, maximum: 1 },
+              },
+              required: ["x", "y"],
+              additionalProperties: false,
+            },
+          ],
+        },
+        rotate: {
+          type: "integer",
+          enum: [0, 90, 180, 270],
+          description: "Degrees clockwise.",
+        },
+        flipX: { type: "boolean" },
+        flipY: { type: "boolean" },
+        kernel: {
+          type: "string",
+          enum: [
+            "auto",
+            "lanczos3",
+            "magicKernelSharp2021",
+            "mitchell",
+            "catrom",
+            "triangle",
+            "nearest",
+          ],
+          description:
+            "How pixels are worked out: auto chooses as the page does.",
+        },
+        sharpen: { type: "string", enum: ["off", "light", "medium", "strong"] },
+        multiple: {
+          type: "integer",
+          enum: [1, 2, 8],
+          description: "Round sizes to a multiple of this many pixels.",
+        },
       },
       required: ["files"],
       additionalProperties: false,
@@ -442,6 +658,21 @@ export function imageTools(engines: ImageEngines): AgentTool[] {
         pattern:
           input.pattern ??
           (input.widths ? "{name}-{width}w" : resizeDefaults.pattern),
+        unit: input.unit ?? resizeDefaults.unit,
+        ...(input.dpi ? { dpi: input.dpi } : {}),
+        embedDpi: input.embedDpi ?? resizeDefaults.embedDpi,
+        lock: input.keepShape ?? resizeDefaults.lock,
+        focusMode: input.focus === "smart" ? "smart" : "manual",
+        focus:
+          input.focus && input.focus !== "smart"
+            ? input.focus
+            : resizeDefaults.focus,
+        rotation: input.rotate ?? 0,
+        flipX: Boolean(input.flipX),
+        flipY: Boolean(input.flipY),
+        kernel: input.kernel ?? resizeDefaults.kernel,
+        sharpen: input.sharpen ?? resizeDefaults.sharpen,
+        multiple: input.multiple ?? resizeDefaults.multiple,
       }
       const made: {
         name: string
@@ -518,11 +749,16 @@ export function imageTools(engines: ImageEngines): AgentTool[] {
     pdfMargin?: ConverterSettings["pdfMargin"]
     onePdf?: boolean
     pattern?: string
+    alsoTo?: Target[]
+    embedDpi?: boolean
+    dpi?: number
+    dithering?: boolean
+    pdfDpi?: number
   }> = {
     name: "convert_image",
     title: "Convert images",
     description:
-      "Converts images to JPEG, PNG, WebP, AVIF, JPEG XL, GIF, BMP, TIFF, ICO or PDF, from any of those and HEIC and SVG. With onePdf, all the images become the pages of one PDF, in order. Can limit the longest side, turn them grey, and set the quality.",
+      "Converts images to JPEG, PNG, WebP, AVIF, JPEG XL, GIF, BMP, TIFF, ICO or PDF, from any of those and HEIC and SVG, to one format or several at once (alsoTo). With onePdf, all the images become the pages of one PDF, in order. Can limit the longest side, turn them grey, set the quality, the colours of a GIF and the sizes of an icon, and write the dpi for print.",
     inputSchema: {
       type: "object",
       properties: {
@@ -565,6 +801,30 @@ export function imageTools(engines: ImageEngines): AgentTool[] {
           description: "For PDF: every image a page of one PDF.",
         },
         pattern: { type: "string", maxLength: 200 },
+        alsoTo: {
+          type: "array",
+          items: { type: "string", enum: TARGETS },
+          minItems: 1,
+          maxItems: 9,
+          uniqueItems: true,
+          description: "More formats to write each image in, besides to.",
+        },
+        embedDpi: {
+          type: "boolean",
+          description: "Write the dpi into the file.",
+        },
+        dpi: { type: "integer", minimum: 1, maximum: 2400 },
+        dithering: {
+          type: "boolean",
+          description: "For GIF: dither (yes by default).",
+        },
+        pdfDpi: {
+          type: "integer",
+          minimum: 36,
+          maximum: 1200,
+          description:
+            "For PDF pages of A4 or Letter: dots per inch an image is placed at (150).",
+        },
       },
       required: ["files", "to"],
       additionalProperties: false,
@@ -573,6 +833,8 @@ export function imageTools(engines: ImageEngines): AgentTool[] {
     async run(input, { files, signal, progress }) {
       if (input.onePdf && input.to !== "pdf")
         throw new ToolError('onePdf is for "to": "pdf".')
+      if (input.onePdf && input.alsoTo)
+        throw new ToolError("onePdf makes one PDF: give no other formats.")
       const settings: ConverterSettings = {
         ...convertDefaults,
         target: input.to,
@@ -595,6 +857,14 @@ export function imageTools(engines: ImageEngines): AgentTool[] {
         pdfMargin: input.pdfMargin ?? convertDefaults.pdfMargin,
         pdfCombine: Boolean(input.onePdf),
         pattern: input.pattern ?? convertDefaults.pattern,
+        multi: Boolean(input.alsoTo),
+        targets: [input.to, ...(input.alsoTo ?? [])].filter(
+          (target, at, all) => all.indexOf(target) === at
+        ),
+        embedDpi: input.embedDpi ?? convertDefaults.embedDpi,
+        dpi: input.dpi ?? convertDefaults.dpi,
+        dithering: input.dithering ?? convertDefaults.dithering,
+        pdfDpi: input.pdfDpi ?? convertDefaults.pdfDpi,
       }
       const made: {
         name: string
@@ -602,6 +872,7 @@ export function imageTools(engines: ImageEngines): AgentTool[] {
         width: number
         height: number
         page?: PdfImage
+        target: Target
       }[] = []
       for (const [index, id] of input.files.entries()) {
         const image = await source(files, id)
@@ -631,6 +902,7 @@ export function imageTools(engines: ImageEngines): AgentTool[] {
             width: output.width,
             height: output.height,
             page: output.page,
+            target: output.target,
           })
       }
       const mime = targets[input.to].mime
@@ -653,10 +925,17 @@ export function imageTools(engines: ImageEngines): AgentTool[] {
       }
       const names = uniqueNames(made.map((one) => one.name))
       const refs = made.map((one, at) =>
-        files.add(new Blob([one.bytes], { type: mime }), names[at], "made")
+        files.add(
+          new Blob([one.bytes], { type: targets[one.target].mime }),
+          names[at],
+          "made"
+        )
       )
       return {
-        summary: `Converted ${plural(input.files.length, "image")} to ${targets[input.to].label}.`,
+        summary: `Converted ${plural(input.files.length, "image")} to ${settings.targets
+          .filter((target) => settings.multi || target === input.to)
+          .map((target) => targets[target].label)
+          .join(", ")}.`,
         files: refs,
         data: made.map((one, at) => ({
           name: names[at],

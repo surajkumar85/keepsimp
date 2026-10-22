@@ -226,3 +226,89 @@ test("converts a video and an animation, and builds one from stills", async ({
     /h264|vp9|vp8|av1/
   )
 })
+
+test("uses every setting of the image pages: crops, turns, print sizes, several formats, effects and a logo", async ({
+  page,
+}) => {
+  test.setTimeout(240_000)
+  await ready(page)
+  const id = await hand(
+    page,
+    "photo.jpg",
+    photo("settings.jpg", 1200, 800),
+    "image/jpeg"
+  )
+
+  // Turned a quarter, then the largest 1:1 box of its middle, as WebP.
+  const square = await ran(page, "compress_image", {
+    file: id,
+    rotate: 90,
+    aspect: "1:1",
+    format: "webp",
+  })
+  const squareFile = await probed(page, square.files![0].id)
+  expect([squareFile.stream.width, squareFile.stream.height]).toEqual([
+    800, 800,
+  ])
+  // A box of its own, and half its size.
+  const boxed = await ran(page, "compress_image", {
+    file: id,
+    crop: { x: 100, y: 100, width: 400, height: 300 },
+    width: 50,
+    unit: "percent",
+  })
+  const boxedFile = await probed(page, boxed.files![0].id)
+  expect([boxedFile.stream.width, boxedFile.stream.height]).toEqual([200, 150])
+
+  // Two inches wide at 150 dpi, turned upside down: 300 pixels.
+  const print = await ran(page, "resize_image", {
+    files: [id],
+    width: 2,
+    unit: "in",
+    dpi: 150,
+    rotate: 180,
+  })
+  const printFile = await probed(page, print.files![0].id)
+  expect(printFile.stream.width).toBe(300)
+
+  // One image, three formats at once.
+  const three = await ran(page, "convert_image", {
+    files: [id],
+    to: "png",
+    alsoTo: ["webp", "avif"],
+    maxSide: 300,
+  })
+  expect(three.files!.map((file) => file.name.split(".").pop()).sort()).toEqual(
+    ["avif", "png", "webp"]
+  )
+
+  // An animation with a logo on every frame, a filter, a caption and a crop.
+  const clip = await hand(
+    page,
+    "clip.mp4",
+    readFileSync("public/samples/keepsimp-clip.mp4"),
+    "video/mp4"
+  )
+  const logo = await hand(
+    page,
+    "logo.png",
+    photo("logo.png", 64, 64),
+    "image/png"
+  )
+  const animated = await ran(page, "convert_animation", {
+    files: [clip],
+    to: "gif",
+    end: 1,
+    crop: { x: 0, y: 0, width: 200, height: 100 },
+    filter: "greyscale",
+    captionBottom: "Hello",
+    captionSize: "large",
+    logo,
+    logoCorner: "top-right",
+  })
+  const animatedFile = await probed(page, animated.files![0].id)
+  expect(animatedFile.stream.codec_name).toBe("gif")
+  expect([animatedFile.stream.width, animatedFile.stream.height]).toEqual([
+    200, 100,
+  ])
+})
