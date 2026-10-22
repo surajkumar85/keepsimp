@@ -82,6 +82,13 @@ KeepSimp's tools can be used by agents: Claude Code, Codex and other MCP clients
 - **`add_text_to_pdf`** and **`add_image_to_pdf`**: a text box or a picture added as the editor adds one, laid out by `laidOut`, in points from the top left of the page as shown. A picture is placed at 150 pixels to the inch, at most half the page wide, unless a size is given.
 - **`ocr_pdf`**: the OCR panel's loop, moved to `lib/pdf-editor/ocr-run.ts` (`readPages`) and Tesseract's start to `lib/pdf-editor/tesseract.ts`, so the panel and the tool run the same code. The words are laid in one `editOcr` step; the download reads every one back (`report.ocr`). Stop does not wait for Tesseract, which is let go of after every run.
 
+### Drawing and comments (phase 6, part 1)
+
+- **What every editor tool shares** (`lib/agent/pdf-kit.ts`): opening a file for editing, making steps (`apply` lays out text and hands fonts over for things added or changed, and passes other steps on), and writing the file with the editor's checks, with a choice of what becomes of comments. `pdf-edit.ts` and the newer tool files use it.
+- **`draw_on_pdf`** makes what the toolbar makes, with the toolbar's own makers and default looks (`makeObject`, `makeText`, `makeCallout`, `checkMark`, `defaultStyles`, `STAMP_SIZE`): boxes, ellipses, lines, arrows, freehand strokes (their box follows their points, through `moved`), covers, stamps, call-outs, measuring lines, text (on a paper form's row of boxes too, `comb`) and ticks, crosses and dots. All in one step; things kept editable earlier are moved or removed by id. A cover says that it only hides.
+- **`list_pdf_comments`** reads the comments of every page as the comment panel does, with the words a mark lies on (`wordsUnder` over the page's letters, read only for pages with marks), and the things kept editable, with their ids.
+- **`comment_on_pdf`** makes the comment panel's steps (`CommentOp`) in one change: marks on every place some words or a kind of thing are written (the redaction tool's search, `redactFind`), or on the words in an area (`selectWords`, as a drag does); notes, pen strokes, replies, changes and deletions by id. Marks take the panel's colours. What becomes of every comment on download (kept, drawn in, left out) is the download's own choice.
+
 ### Images and animation (phase 4)
 
 - **The workers** are the pages' own, the agent's own copies with one worker each:
@@ -215,6 +222,7 @@ A package of its own, in TypeScript that Node runs as it is (type stripping), bu
   - a JPEG read, compressed to WebP at 600 by 400, fitted under 40 KB, resized to a 300 by 300 PNG, to a set of widths and to a preset;
   - converted to AVIF within 200 pixels, and two images made into one PDF;
   - the sample video turned into a GIF of at most 640 pixels and 15 frames a second, the GIF into a WebP at twice the speed, and three stills into an MP4.
+- **Drawing and comments** (`lib/agent/pdf-draw.test.ts`, 100%, against the stand-in worker; `e2e/agent-pdf-draw.spec.ts`, five profiles, read back by pdf.js): every kind drawn into a page and its words read back (a stamp, a call-out, a measuring line's length, a row of boxes); kept editable, ten annotations, listed, moved and removed by id; a cover that leaves the words in the file; highlights by words and underlines by area with the words they lie on, a note and a pen stroke signed by the author, a reply, a change and a deletion, and comments drawn in or left out.
 - **Audio** (`lib/agent/audio.test.ts`, `lib/audio/jobs.test.ts`, 100%, against a stand-in pool; `e2e/agent-audio.spec.ts`, five profiles, the real workers, results read by FFmpeg and FFprobe):
   - the sample tune read, its loudness as `ebur128` measures it;
   - converted to an MP3 with exactly as many samples as the source, trimmed and faded to four seconds of WAV exactly, brought to −16 LUFS with true peaks under −1 dBTP, made twice as fast, and made an iPhone ringtone in AAC;
@@ -231,3 +239,9 @@ A package of its own, in TypeScript that Node runs as it is (type stripping), bu
 3. **PDF editor jobs:** pages, crop, page numbers, watermarks, details, forms, signature checks, redaction, find and replace, text and pictures, OCR. Built.
 4. **Images and animation.** Built.
 5. **Audio:** every job of the audio workspace but recording. Built.
+6. **Everything else the pages do**, but recording and signing:
+   1. drawing and comments. Built.
+   2. the page's own text, pictures and links, and fonts of one's own;
+   3. making form fields, and trusted certificates for checking signatures;
+   4. every setting of the image and animation pages;
+   5. audio's silence trimming, equaliser and split times; colour gradients, brand colours, vision previews and mixing; searching JSON.

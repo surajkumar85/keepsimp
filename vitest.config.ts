@@ -99,6 +99,8 @@ export default defineConfig({
         "lib/agent/image.ts",
         "lib/agent/animation.ts",
         "lib/agent/audio.ts",
+        "lib/agent/pdf-kit.ts",
+        "lib/agent/pdf-draw.ts",
         "lib/audio/jobs.ts",
         "lib/image-tools.ts",
         "lib/site.ts",

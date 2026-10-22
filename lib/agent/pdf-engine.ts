@@ -41,6 +41,12 @@ import type { OcrChange } from "@/lib/pdf-editor/ocr"
 import type { ExportReport } from "@/lib/pdf-editor/mupdf-edit"
 import type { FoundSignature } from "@/lib/pdf-editor/signature-report"
 import type { Size } from "@/lib/image-compressor/geometry"
+import type { CommentChange, LetterLine } from "@/lib/pdf-editor/comments"
+import type { PageLine } from "@/lib/pdf-editor/retext"
+import type { LinkChange, PageLink } from "@/lib/pdf-editor/links"
+import type { PagePicture, PictureChange } from "@/lib/pdf-editor/page-pictures"
+import type { MakeFieldChange } from "@/lib/pdf-editor/form-fields"
+import type { Suggestion } from "@/lib/pdf-editor/form-suggest"
 import { ToolError } from "./registry"
 
 export type MergeOrder = Omit<
@@ -110,7 +116,7 @@ export interface PdfClientLike {
   ): Job<boolean>
   audit(id: string, size: number): Promise<unknown>
   editState(id: string): Promise<EditState | null>
-  editFont(id: string, key: string, bytes: ArrayBuffer): void
+  editFont(id: string, key: string, bytes: ArrayBuffer, name?: string): void
   editPicture(id: string, name: string, file: Blob): Promise<Size | null>
   editInsert(
     id: string,
@@ -122,6 +128,16 @@ export interface PdfClientLike {
   editPages(id: string, change: PagesChange): Promise<EditNews>
   editDocument(id: string, change: DocumentChange): Promise<EditNews>
   editField(id: string, change: FieldChange): Promise<EditNews>
+  editComment(id: string, change: CommentChange): Promise<EditNews>
+  lettersOf(id: string, page: number): Promise<LetterLine[] | null>
+  linesOf(id: string, page: number): Promise<PageLine[] | null>
+  editText(id: string, change: TextChange): Promise<EditNews>
+  pageLinks(id: string, page: number): Promise<PageLink[] | null>
+  editPageLink(id: string, change: LinkChange): Promise<EditNews>
+  pagePictures(id: string, page: number): Promise<PagePicture[] | null>
+  editPagePicture(id: string, change: PictureChange): Promise<EditNews>
+  editMakeFields(id: string, change: MakeFieldChange): Promise<EditNews>
+  suggestFields(id: string, page: number): Promise<Suggestion[] | null>
   signatures(
     id: string,
     trusted?: Uint8Array[]
@@ -322,8 +338,8 @@ export class PdfEngine {
   }
 
   /** The editor's calls, one at a time: each is awaited before the next is made. */
-  editFont(id: string, key: string, bytes: ArrayBuffer) {
-    this.client.editFont(id, key, bytes)
+  editFont(id: string, key: string, bytes: ArrayBuffer, name?: string) {
+    this.client.editFont(id, key, bytes, name)
   }
   async editPicture(id: string, name: string, file: Blob) {
     const size = await this.client.editPicture(id, name, file)
@@ -362,8 +378,46 @@ export class PdfEngine {
   editField(id: string, change: FieldChange) {
     return this.client.editField(id, change)
   }
-  async signatures(id: string) {
-    const found = await this.client.signatures(id, [])
+  editComment(id: string, change: CommentChange) {
+    return this.client.editComment(id, change)
+  }
+  /** What a page holds, as one of the editor's panels reads it; a ToolError when the page cannot be read. */
+  private async read<T>(asked: Promise<T | null>, page: number) {
+    const found = await asked
+    if (!found)
+      throw new ToolError(`Page ${page + 1} of this file could not be read.`)
+    return found
+  }
+  lettersOf(id: string, page: number) {
+    return this.read(this.client.lettersOf(id, page), page)
+  }
+  linesOf(id: string, page: number) {
+    return this.read(this.client.linesOf(id, page), page)
+  }
+  editText(id: string, change: TextChange) {
+    return this.client.editText(id, change)
+  }
+  pageLinks(id: string, page: number) {
+    return this.read(this.client.pageLinks(id, page), page)
+  }
+  editPageLink(id: string, change: LinkChange) {
+    return this.client.editPageLink(id, change)
+  }
+  pagePictures(id: string, page: number) {
+    return this.read(this.client.pagePictures(id, page), page)
+  }
+  editPagePicture(id: string, change: PictureChange) {
+    return this.client.editPagePicture(id, change)
+  }
+  editMakeFields(id: string, change: MakeFieldChange) {
+    return this.client.editMakeFields(id, change)
+  }
+  suggestFields(id: string, page: number) {
+    return this.read(this.client.suggestFields(id, page), page)
+  }
+  /** The file's signatures, each checked against the certificates trusted. */
+  async signatures(id: string, trusted: Uint8Array[] = []) {
+    const found = await this.client.signatures(id, trusted)
     if (!found)
       throw new ToolError("The signatures of this file could not be read.")
     return found

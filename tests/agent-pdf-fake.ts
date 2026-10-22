@@ -57,6 +57,16 @@ export interface FakeFile {
   /** For OCR: which pages have text, and which cannot be drawn. */
   hasText?: number[]
   undrawn?: number[]
+  /** What each page holds, as the editor's panels read it. */
+  objects?: unknown[][]
+  comments?: unknown[][]
+  letters?: unknown[][]
+  lines?: unknown[][]
+  links?: unknown[][]
+  pictures?: unknown[][]
+  suggestions?: unknown[][]
+  /** Pages (from 0) a panel cannot read. */
+  unreadable?: number[]
 }
 
 export const fakePdf = (file: FakeFile) =>
@@ -422,8 +432,14 @@ export class FakePdfClient implements PdfClientLike {
         width: 400,
         height: 600,
       })),
-      objects: [],
-      comments: [],
+      objects: Array.from(
+        { length: file.pages },
+        (_, page) => file.objects?.[page] ?? []
+      ) as never,
+      comments: Array.from(
+        { length: file.pages },
+        (_, page) => file.comments?.[page] ?? []
+      ) as never,
       fields,
       form: {
         fields: fields.flat().length,
@@ -444,8 +460,11 @@ export class FakePdfClient implements PdfClientLike {
       waiting: 0,
     }
   }
-  editFont(_id: string, key: string) {
+  /** Fonts of one's own handed over, by key: their names. */
+  fontNames = new Map<string, string>()
+  editFont(_id: string, key: string, _bytes?: ArrayBuffer, name?: string) {
     this.fonts.push(key)
+    if (name) this.fontNames.set(key, name)
   }
   async editPicture(_id: string, name: string, file: Blob) {
     this.asked.push(["picture", name])
@@ -497,7 +516,54 @@ export class FakePdfClient implements PdfClientLike {
   editField(_id: string, change: unknown) {
     return this.news("fields", change)
   }
-  async signatures(id: string) {
+  editComment(_id: string, change: unknown) {
+    return this.news("comment", change)
+  }
+  editText(_id: string, change: unknown) {
+    return this.news("text", change)
+  }
+  editPageLink(_id: string, change: unknown) {
+    return this.news("link", change)
+  }
+  editPagePicture(_id: string, change: unknown) {
+    return this.news("page-picture", change)
+  }
+  editMakeFields(_id: string, change: unknown) {
+    return this.news("make-fields", change)
+  }
+  /** What a panel reads of a page; null for a page it cannot read. */
+  private panel(
+    id: string,
+    page: number,
+    what: "letters" | "lines" | "links" | "pictures" | "suggestions"
+  ) {
+    const file = this.held.get(id)!
+    this.asked.push([what, page])
+    return Promise.resolve(
+      file.unreadable?.includes(page)
+        ? null
+        : ((file[what]?.[page] ?? []) as never)
+    )
+  }
+  lettersOf(id: string, page: number) {
+    return this.panel(id, page, "letters")
+  }
+  linesOf(id: string, page: number) {
+    return this.panel(id, page, "lines")
+  }
+  pageLinks(id: string, page: number) {
+    return this.panel(id, page, "links")
+  }
+  pagePictures(id: string, page: number) {
+    return this.panel(id, page, "pictures")
+  }
+  suggestFields(id: string, page: number) {
+    return this.panel(id, page, "suggestions")
+  }
+  /** The certificates each look at signatures trusted. */
+  trusted: Uint8Array[][] = []
+  async signatures(id: string, trusted: Uint8Array[] = []) {
+    this.trusted.push(trusted)
     const file = this.held.get(id)!
     if (file.title === "unreadable") return null
     return (file.signatures ?? []) as FoundSignature[]
