@@ -105,7 +105,44 @@ declare const self: DedicatedWorkerGlobalScope
  * here, not with an import at the top: a worker that is still waiting on its
  * imports has no message handler yet, and loses what it is sent.
  */
+// DIAG: temporary, to find where a worker stalls in WebKit on Linux.
+const diagLog: string[] = []
+;(self as unknown as { __diag: string[] }).__diag = diagLog
+const diag = (stage: string) => {
+  const line = `${Math.round(performance.now())} ${stage}`
+  diagLog.push(line)
+  self.postMessage({ type: "diag", line })
+}
+diag("module")
+{
+  const streaming = WebAssembly.instantiateStreaming
+  if (streaming)
+    WebAssembly.instantiateStreaming = async (source, imports) => {
+      diag("wasm: streaming asked")
+      const response = await source
+      diag(`wasm: response ${response.status}`)
+      try {
+        const result = await streaming(response, imports)
+        diag("wasm: streaming compiled")
+        return result
+      } catch (error) {
+        diag(`wasm: streaming failed ${String(error)}`)
+        throw error
+      }
+    }
+  const instantiate = WebAssembly.instantiate
+  WebAssembly.instantiate = (async (...args: Parameters<typeof instantiate>) => {
+    diag("wasm: instantiate asked")
+    const result = await instantiate(...args)
+    diag("wasm: instantiated")
+    return result
+  }) as typeof instantiate
+}
 const engine = import("mupdf")
+engine.then(
+  () => diag("engine ready"),
+  (error) => diag(`engine failed ${String(error)}`)
+)
 // A failure is reported by whichever request needs the engine first.
 engine.catch(() => {})
 const ENGINE_FAILED =
@@ -205,6 +242,7 @@ async function picture(mupdf: Awaited<typeof engine>, file: Blob) {
 }
 
 async function open(request: Extract<PdfRequest, { type: "open" }>) {
+  diag(`open run ${request.id}`)
   let mupdf: Awaited<typeof engine>
   try {
     mupdf = await engine
@@ -212,11 +250,13 @@ async function open(request: Extract<PdfRequest, { type: "open" }>) {
     post({ type: "open-error", id: request.id, message: ENGINE_FAILED })
     return
   }
+  diag(`open engine ${request.id}`)
   try {
     closeFile(request.id)
     const bytes = request.picture
       ? null
       : new Uint8Array(await request.file.arrayBuffer())
+    diag(`open read ${request.id} ${bytes?.length}`)
     const pdf = bytes
       ? openPdf(mupdf, bytes, request.password, request.edit)
       : await picture(mupdf, request.file)
@@ -231,7 +271,9 @@ async function open(request: Extract<PdfRequest, { type: "open" }>) {
       editing.set(request.id, session)
     }
     post({ type: "opened", id: request.id, facts: pdf.facts })
+    diag(`open posted ${request.id}`)
   } catch (error) {
+    diag(`open threw ${request.id} ${String(error)}`)
     if (error instanceof PasswordNeeded)
       post({ type: "locked", id: request.id, wrong: error.wrong })
     else
@@ -1481,8 +1523,11 @@ function enqueue(task: Task) {
   void work()
 }
 
+diag("handler set")
+self.onmessageerror = () => diag("messageerror")
 self.onmessage = (event: MessageEvent<PdfRequest>) => {
   const request = event.data
+  diag(`got ${request.type} ${"id" in request ? request.id : ""}`)
   // A cancel must not wait behind the merge it is meant to stop.
   if (request.type === "cancel") {
     cancelled = Math.max(cancelled, request.job)

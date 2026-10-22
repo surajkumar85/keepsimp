@@ -6,6 +6,7 @@ permissions:
   contents: read
 jobs:
   verify:
+    if: false
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -31,6 +32,7 @@ jobs:
   # The bridge (npm keepsimp-mcp): its own tests, then the real bridge over
   # stdio against this build, with Chromium.
   bridge:
+    if: false
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -79,14 +81,8 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - project: chromium
-            engine: chromium
-          - project: firefox
-            engine: firefox
           - project: webkit
             engine: webkit
-          - project: mobile-chrome
-            engine: chromium
           - project: mobile-safari
             engine: webkit
     steps:
@@ -107,9 +103,9 @@ jobs:
       - run: npm run build
       - run: npx playwright install --with-deps ${{ matrix.engine }}
       - run: sudo apt-get install -y --no-install-recommends ffmpeg libimage-exiftool-perl
-      - run: npm run test:e2e -- --project=${{ matrix.project }}
+      - run: npm run test:e2e -- --project=${{ matrix.project }} --retries=0 --repeat-each=2 e2e/pdf-splitter.spec.ts e2e/pdf-merger.spec.ts e2e/pdf-reader.spec.ts
       - uses: actions/upload-artifact@v7.0.2
-        if: failure()
+        if: always()
         with:
           name: playwright-report-${{ matrix.project }}
           path: |

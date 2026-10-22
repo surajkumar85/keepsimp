@@ -42,6 +42,12 @@ import type {
   SplitKeep,
 } from "./protocol"
 
+/** DIAG: temporary, to find where a worker stalls in WebKit on Linux. */
+export function pageDiag(line: string) {
+  const store = globalThis as unknown as { __pdfDiag?: string[] }
+  ;(store.__pdfDiag ??= []).push(`${Math.round(performance.now())} ${line}`)
+}
+
 /** Where a file being edited stands when it is opened. */
 /**
  * What came of handing over another PDF: how many pages it has, with the
@@ -252,17 +258,28 @@ export class PdfClient {
 
   private send(request: PdfRequest) {
     if (!this.worker) {
+      pageDiag("worker made")
       this.worker = new Worker(new URL("./pdf.worker.ts", import.meta.url), {
         type: "module",
       })
       this.worker.onmessage = (event: MessageEvent<PdfResponse>) =>
         this.receive(event.data)
-      this.worker.onerror = () => this.failed()
+      this.worker.onerror = (event) => {
+        pageDiag(`worker error ${event.message}`)
+        this.failed()
+      }
+      this.worker.onmessageerror = () => pageDiag("worker messageerror")
     }
+    if (request.type === "open") pageDiag(`sent open ${request.id}`)
     this.worker.postMessage(request)
   }
 
   private receive(message: PdfResponse) {
+    if ((message as { type: string }).type === "diag") {
+      pageDiag(`w: ${(message as unknown as { line: string }).line}`)
+      return
+    }
+    if ("id" in message) pageDiag(`answer ${message.type} ${message.id}`)
     this.answered = true
     if (message.type === "thumbnail") {
       const done = this.thumbnails.get(message.request)
@@ -1118,6 +1135,7 @@ export class PdfClient {
   }
 
   dispose() {
+    pageDiag("disposed")
     this.worker?.terminate()
     this.worker = null
     this.stopHelpers(false)

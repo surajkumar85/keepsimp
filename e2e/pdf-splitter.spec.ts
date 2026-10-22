@@ -25,9 +25,43 @@ const tool = (page: Page) => page.getByTestId("pdf-splitter")
 async function add(page: Page, ...files: Upload[]) {
   await page.goto(ROUTE)
   await page.locator("#split-file").setInputFiles(files)
-  await expect(tool(page)).toHaveAttribute("data-ready", "true", {
-    timeout: 60_000,
-  })
+  try {
+    await expect(tool(page)).toHaveAttribute("data-ready", "true", {
+      timeout: 60_000,
+    })
+  } catch (error) {
+    await dumpDiag(page)
+    throw error
+  }
+}
+
+// DIAG: temporary, to find where a worker stalls in WebKit on Linux.
+async function dumpDiag(page: Page) {
+  const within = <T>(promise: Promise<T>) =>
+    Promise.race([
+      promise,
+      new Promise<string>((done) => setTimeout(() => done("(timed out)"), 5000)),
+    ])
+  const lines: string[] = [`DIAG ${test.info().title}`]
+  lines.push(
+    `page: ${JSON.stringify(await within(page.evaluate(() => (globalThis as unknown as { __pdfDiag?: string[] }).__pdfDiag ?? null)))}`
+  )
+  const workers = page.workers()
+  lines.push(`workers: ${workers.length}`)
+  for (const worker of workers)
+    lines.push(
+      `worker ${worker.url()}: ${JSON.stringify(
+        await within(
+          worker
+            .evaluate(() => (self as unknown as { __diag?: string[] }).__diag ?? null)
+            .catch((error: Error) => `(failed ${error.message})`)
+        )
+      )}`
+    )
+  lines.push(
+    `rows: ${JSON.stringify(await within(page.getByTestId("file-row").allInnerTexts()))}`
+  )
+  console.log(lines.join("\n"))
 }
 
 /** A file of plain pages: lines of text, or nothing at all. */

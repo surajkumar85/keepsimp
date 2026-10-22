@@ -35,7 +35,7 @@ import { Input } from "@/components/ui/input"
 import { cn } from "cn"
 import { sizeLabel } from "@/lib/image-compressor/formats"
 import { createZip } from "@/lib/image-resizer/zip"
-import { PdfClient } from "@/lib/pdf-merger/client"
+import { pageDiag, PdfClient } from "@/lib/pdf-merger/client"
 import { parseRanges } from "@/lib/pdf-merger/ranges"
 import { needleOf } from "@/lib/pdf-reader/search"
 import {
@@ -275,6 +275,7 @@ export function PdfSplitter() {
       else dispatch({ type: "failed", id: event.id, message: event.message })
     })
     client.current = instance
+    pageDiag("client made")
     const made = urls.current
     return () => {
       instance.dispose()
@@ -329,6 +330,7 @@ export function PdfSplitter() {
       )
       if (!items.length) return
       dispatch({ type: "add", items })
+      if (!client.current) pageDiag("add: no client")
       for (const item of items) client.current?.open(item.id, item.file)
     },
     [limits]
