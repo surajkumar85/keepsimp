@@ -60,9 +60,9 @@ import {
   type Plan,
 } from "@/lib/audio/settings"
 import { defaultSound, type SoundSettings } from "@/lib/audio/sound"
-import { TONE_PRESETS, type TonePreset } from "@/lib/audio/tone"
+import { MOST_BAND, TONE_PRESETS, type TonePreset } from "@/lib/audio/tone"
 import { noRepair } from "@/lib/audio/repair"
-import { silentRuns } from "@/lib/audio/silence"
+import { shortenPauses, silentRuns, trimEnds } from "@/lib/audio/silence"
 import { partNames, partsOf, type SplitRule } from "@/lib/audio/split"
 import {
   tagProblem,
@@ -122,6 +122,8 @@ export interface AudioEngines {
 /** How long the file is to look for pauses in, and how quiet a pause is: the splitter's own. */
 const PAUSE_LEVEL = -50
 const SHORTEST_PAUSE = 0.2
+/** The shortest silence the editor trims at an end, as the waveform editor looks for it. */
+const ENDS_AT_LEAST = 0.2
 
 const plural = (count: number, word: string) =>
   `${count.toLocaleString("en")} ${word}${count === 1 ? "" : "s"}`
@@ -510,44 +512,167 @@ export function audioTools(engines: AudioEngines): AgentTool[] {
         "An equaliser preset: flat, voice (clarity), bass, telephone or rumble (cut).",
     },
     compressor: { type: "string", enum: ["off", "gentle", "voice", "music"] },
+    equaliser: {
+      type: "object",
+      properties: {
+        highPass: {
+          type: "number",
+          minimum: 20,
+          maximum: 1000,
+          description: "Cut under this many Hz.",
+        },
+        lowPass: {
+          type: "number",
+          minimum: 1000,
+          maximum: 20000,
+          description: "Cut over this many Hz.",
+        },
+        bass: {
+          type: "number",
+          minimum: -MOST_BAND,
+          maximum: MOST_BAND,
+          description: "dB under 120 Hz.",
+        },
+        mid: {
+          type: "number",
+          minimum: -MOST_BAND,
+          maximum: MOST_BAND,
+          description: "dB about 1 kHz.",
+        },
+        treble: {
+          type: "number",
+          minimum: -MOST_BAND,
+          maximum: MOST_BAND,
+          description: "dB over 8 kHz.",
+        },
+      },
+      additionalProperties: false,
+      description:
+        "Instead of a preset: the equaliser's own settings, flat where left out.",
+    },
   }
+  type Equaliser = Partial<{
+    highPass: number
+    lowPass: number
+    bass: number
+    mid: number
+    treble: number
+  }>
   const soundOf = (given: {
     tone?: TonePreset
     compressor?: SoundSettings["compressor"]
-  }): SoundSettings => ({
-    ...defaultSound,
-    tone: given.tone ? TONE_PRESETS[given.tone].tone : defaultSound.tone,
-    compressor: given.compressor ?? defaultSound.compressor,
-  })
+    equaliser?: Equaliser
+  }): SoundSettings => {
+    if (given.tone && given.equaliser)
+      throw new ToolError(
+        'Give an equaliser preset ("tone") or its settings ("equaliser"), not both.'
+      )
+    return {
+      ...defaultSound,
+      tone: given.equaliser
+        ? {
+            highPass: given.equaliser.highPass ?? null,
+            lowPass: given.equaliser.lowPass ?? null,
+            bass: given.equaliser.bass ?? 0,
+            mid: given.equaliser.mid ?? 0,
+            treble: given.equaliser.treble ?? 0,
+          }
+        : given.tone
+          ? TONE_PRESETS[given.tone].tone
+          : defaultSound.tone,
+      compressor: given.compressor ?? defaultSound.compressor,
+    }
+  }
 
   const edit: AgentTool<
     Output & {
       file: string
-      steps: StepInput[]
+      steps?: StepInput[]
+      trimSilence?: boolean
+      shortenPauses?: number
+      silentUnder?: number
       tone?: TonePreset
       compressor?: SoundSettings["compressor"]
+      equaliser?: Equaliser
     }
   > = {
     name: "edit_audio",
     title: "Edit sound: trim, cut, silence, fade, volume",
     description:
-      "Edits a sound as the waveform editor does, in steps: keep a part (trim), cut a part out, silence a part, fade in or out, or change a part's volume in dB; each step in the times of the sound as the steps before left it. Every cut fades over 4 ms so it never clicks. Can also shape the sound with an equaliser preset or a compressor. The file itself is never changed.",
+      "Edits a sound as the waveform editor does, in steps: keep a part (trim), cut a part out, silence a part, fade in or out, or change a part's volume in dB; each step in the times of the sound as the steps before left it. Every cut fades over 4 ms so it never clicks. After the steps, it can trim the silence at both ends and shorten pauses longer than some seconds, found as the editor finds them. Can also shape the sound with an equaliser (a preset or its own settings) or a compressor. The file itself is never changed.",
     inputSchema: {
       type: "object",
       properties: {
         file: fileProperty("The sound or video file."),
         steps: { type: "array", items: stepSchema, minItems: 1, maxItems: 100 },
+        trimSilence: {
+          type: "boolean",
+          description: "Take the silence off both ends, leaving 0.1 s.",
+        },
+        shortenPauses: {
+          type: "number",
+          minimum: 0.5,
+          maximum: 10,
+          description:
+            "Shorten every pause longer than this many seconds to 0.4 s.",
+        },
+        silentUnder: {
+          type: "integer",
+          enum: [-60, -50, -40],
+          description: "What counts as silence, in dBFS (-50).",
+        },
         ...soundSchema,
         ...output("same"),
       },
-      required: ["file", "steps"],
+      required: ["file"],
       additionalProperties: false,
     },
     annotations: { readOnlyHint: true },
     async run(input, context) {
       const settings = settingsOf(input, "same", { sound: soundOf(input) })
+      if (!input.steps && !input.trimSilence && !input.shortenPauses)
+        throw new ToolError('Give "steps", "trimSilence" or "shortenPauses".')
       const opened = await open(context.files, input.file, context.signal)
-      opened.edits = stepsOf(input.steps, opened.facts.duration)
+      const { duration } = opened.facts
+      opened.edits = input.steps ? stepsOf(input.steps, duration) : []
+      // Silence is found as the editor finds it, in the sound as the steps left it, and taken out with ordinary steps.
+      const level = input.silentUnder ?? -50
+      const runs = () =>
+        opened.peaks
+          ? silentRuns(
+              opened.peaks,
+              duration,
+              editedBy(duration, opened.edits),
+              level,
+              ENDS_AT_LEAST
+            )
+          : []
+      const silence: string[] = []
+      if (input.trimSilence) {
+        const step = trimEnds(
+          runs(),
+          lengthOf(editedBy(duration, opened.edits))
+        )
+        if (step) {
+          opened.edits = [...opened.edits, step]
+          silence.push("The silence at the ends was trimmed.")
+        } else silence.push("There was no silence at the ends to trim.")
+      }
+      if (input.shortenPauses) {
+        const { steps, removed } = shortenPauses(
+          runs(),
+          lengthOf(editedBy(duration, opened.edits)),
+          input.shortenPauses
+        )
+        opened.edits = [...opened.edits, ...steps]
+        silence.push(
+          steps.length
+            ? `${plural(steps.length, "pause")} shortened, ${seconds(removed)} taken out.`
+            : `No pause was longer than ${input.shortenPauses} s.`
+        )
+      }
+      if (!opened.edits.length)
+        throw new ToolError(`${silence.join(" ")} Nothing was changed.`)
       const { ref, problems, format, done } = await write(
         context,
         opened,
@@ -555,7 +680,7 @@ export function audioTools(engines: AudioEngines): AgentTool[] {
         `${baseOf(opened.name)}-edited`
       )
       return {
-        summary: said(done, { ref, problems, format }),
+        summary: [...silence, said(done, { ref, problems, format })].join(" "),
         files: [ref],
         data: {
           problems,
@@ -772,6 +897,7 @@ export function audioTools(engines: AudioEngines): AgentTool[] {
       hum?: 0 | 50 | 60
       declick?: boolean
       deess?: "off" | "gentle" | "strong"
+      equaliser?: Equaliser
       tone?: TonePreset
     }
   > = {
@@ -793,6 +919,7 @@ export function audioTools(engines: AudioEngines): AgentTool[] {
         declick: { type: "boolean" },
         deess: { type: "string", enum: ["off", "gentle", "strong"] },
         tone: soundSchema.tone,
+        equaliser: soundSchema.equaliser,
         ...output("same"),
       },
       required: ["file"],
@@ -902,7 +1029,8 @@ export function audioTools(engines: AudioEngines): AgentTool[] {
   const split: AgentTool<
     Output & {
       file: string
-      by: "every" | "count" | "silence"
+      by: "every" | "count" | "silence" | "times"
+      at?: number[]
       minutes?: number
       parts?: number
       pause?: number
@@ -912,12 +1040,19 @@ export function audioTools(engines: AudioEngines): AgentTool[] {
     name: "split_audio",
     title: "Split a sound into parts",
     description:
-      "Splits a sound into parts every N minutes, into N equal parts, or at its pauses (silences of at least some seconds), each part written and checked.",
+      "Splits a sound into parts every N minutes, into N equal parts, at its pauses (silences of at least some seconds), or at times given (as the editor's markers do), each part written and checked.",
     inputSchema: {
       type: "object",
       properties: {
         file: fileProperty("The sound or video file."),
-        by: { type: "string", enum: ["every", "count", "silence"] },
+        by: { type: "string", enum: ["every", "count", "silence", "times"] },
+        at: {
+          type: "array",
+          items: { type: "number", exclusiveMinimum: 0 },
+          minItems: 1,
+          maxItems: 499,
+          description: "For times: the seconds to split at.",
+        },
         minutes: { type: "number", minimum: 0.1, maximum: 600 },
         parts: { type: "integer", minimum: 2, maximum: 500 },
         pause: {
@@ -943,11 +1078,15 @@ export function audioTools(engines: AudioEngines): AgentTool[] {
           ? { by: "every", minutes: input.minutes ?? 5 }
           : input.by === "count"
             ? { by: "count", parts: input.parts ?? 2 }
-            : {
-                by: "silence",
-                pause: input.pause ?? 1,
-                drop: Boolean(input.dropPauses),
-              }
+            : input.by === "times"
+              ? { by: "marks" }
+              : {
+                  by: "silence",
+                  pause: input.pause ?? 1,
+                  drop: Boolean(input.dropPauses),
+                }
+      if (input.by === "times" && !input.at)
+        throw new ToolError('Give the times to split at as "at".')
       // The schema holds the rule to the splitter's own bounds.
       const settings = settingsOf(input, "same")
       const opened = await open(context.files, input.file, context.signal)
@@ -962,7 +1101,7 @@ export function audioTools(engines: AudioEngines): AgentTool[] {
               SHORTEST_PAUSE
             )
           : []
-      const parts = partsOf(rule, lengthOf(edited), [], pauses)
+      const parts = partsOf(rule, lengthOf(edited), input.at ?? [], pauses)
       if (parts.length < 2)
         throw new ToolError(
           "That rule gives this sound only one part; nothing to split."
@@ -1182,6 +1321,7 @@ export function audioTools(engines: AudioEngines): AgentTool[] {
     waveform?: boolean
     title?: boolean
     picture?: string
+    cover?: boolean
   }> = {
     name: "audio_to_video",
     title: "Turn sound into a video",
@@ -1204,6 +1344,11 @@ export function audioTools(engines: AudioEngines): AgentTool[] {
         picture: fileProperty(
           "A JPEG, PNG or WebP picture instead of the cover."
         ),
+        cover: {
+          type: "boolean",
+          description:
+            "Show the sound's own cover (yes by default); without it and without a picture, the theme's colour.",
+        },
       },
       required: ["file"],
       additionalProperties: false,
@@ -1214,7 +1359,7 @@ export function audioTools(engines: AudioEngines): AgentTool[] {
       const { facts } = opened
       const picture = input.picture
         ? context.files.get(input.picture).blob
-        : facts.cover
+        : facts.cover && input.cover !== false
           ? new Blob([facts.cover.data as BlobPart], {
               type: facts.cover.mimeType,
             })

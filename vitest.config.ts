@@ -69,6 +69,7 @@ export default defineConfig({
         "lib/color/picker.ts",
         "lib/color/palette.ts",
         "lib/color/vision.ts",
+        "lib/color/strip.ts",
         "lib/json-tools.ts",
         "lib/json-workspace/document.ts",
         "lib/json-workspace/numbers.ts",

@@ -27,6 +27,7 @@ import type { ConverterResponse } from "@/lib/image-converter/protocol"
 import type { AnimationResponse } from "@/lib/animation/protocol"
 import { recognise, startTesseract } from "@/lib/pdf-editor/tesseract"
 import { sampleSize } from "@/lib/color/sample"
+import { drawStrip, stripSize } from "@/lib/color/strip"
 import { Agent } from "./agent"
 import { bridgeApi, type BridgeApi } from "./bridge-api"
 import { agentTools } from "./tools"
@@ -51,10 +52,18 @@ async function sampleImage(file: Blob) {
     const canvas = new OffscreenCanvas(width, height)
     const context = canvas.getContext("2d", { willReadFrequently: true })!
     context.drawImage(bitmap, 0, 0, width, height)
-    return context.getImageData(0, 0, width, height).data
+    return context.getImageData(0, 0, width, height)
   } finally {
     bitmap.close()
   }
+}
+
+/** The palette page's PNG strip, drawn the same way. */
+function paletteStrip(colors: string[]) {
+  const { width, height } = stripSize(colors.length)
+  const canvas = new OffscreenCanvas(width, height)
+  drawStrip(canvas.getContext("2d")!, colors)
+  return canvas.convertToBlob({ type: "image/png" })
 }
 
 /** Saves a file as a download, as the tools' pages do: an untyped link to the bytes. */
@@ -170,6 +179,7 @@ export function startAgent(): Started {
     agentTools({
       runJson: (job) => json.run(job),
       sampleImage,
+      paletteStrip,
       pdf,
       text: editText,
       ocr: startOcr,

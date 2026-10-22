@@ -7,7 +7,7 @@ import { MAX_JSON_FILE_BYTES } from "@/lib/json-workspace/document"
 import type { JsonJob, JsonResult } from "@/lib/json-workspace/protocol"
 import type { Conversion } from "@/lib/json-workspace/convert"
 import type { Transform } from "@/lib/json-workspace/transforms"
-import { asTool, type AgentTool, type FileRef } from "./registry"
+import { asTool, ToolError, type AgentTool, type FileRef } from "./registry"
 import { textOrFile, wordsMade, wordsOf } from "./text"
 import type { FileStore } from "./files"
 
@@ -44,6 +44,9 @@ function made(
 }
 
 const JSON_FILE = { extension: "json", type: "application/json" }
+
+const plural = (count: number, word: string) =>
+  `${count.toLocaleString("en")} ${word}${count === 1 ? "" : "s"}`
 
 export function jsonTools(run: RunJson): AgentTool[] {
   const formatJson: AgentTool<{
@@ -432,6 +435,100 @@ export function jsonTools(run: RunJson): AgentTool[] {
     },
   }
 
+  const inspectJson: AgentTool<{
+    text?: string
+    file?: string
+    search?: string
+    expand?: string[]
+    offset?: number
+  }> = {
+    name: "inspect_json",
+    title: "Look through JSON",
+    description:
+      "Checks that JSON parses strictly (no comments or trailing commas) and describes it: how many values, how deep, its size, duplicate keys and numbers JavaScript cannot hold exactly. Then, as the page's tree, lists its values (each with its JSON Pointer, type and a preview), 100 at a time: those whose key, path or value contains the search, or else the top level and the containers named in expand.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        ...textOrFile("The JSON"),
+        search: {
+          type: "string",
+          maxLength: 2000,
+          description: "Text to find in keys, paths and values, any case.",
+        },
+        expand: {
+          type: "array",
+          items: { type: "string", maxLength: 2000 },
+          maxItems: 1000,
+          description:
+            "JSON Pointers of the objects and arrays to open (the root is always open); a value shows only when every container above it is open.",
+        },
+        offset: {
+          type: "integer",
+          minimum: 0,
+          description: "How many listed values to skip, for the next 100.",
+        },
+      },
+      additionalProperties: false,
+    },
+    annotations: { readOnlyHint: true, untrustedContentHint: true },
+    async run(input, { files }) {
+      if (input.search && input.expand)
+        throw new ToolError(
+          'A search lists every match wherever it is; give "search" or "expand", not both.'
+        )
+      const { words } = await document(input, files)
+      const offset = input.offset ?? 0
+      const result = await run({
+        action: "inspect",
+        input: words,
+        expanded: ["", ...(input.expand ?? [])],
+        search: input.search,
+        offset,
+      })
+      const stats = result.stats!
+      const rows = result.rows!
+      const total = result.total!
+      const notes = [
+        `Valid JSON: ${plural(stats.nodes, "value")}, ${stats.depth} deep, ${plural(stats.bytes, "byte")}.`,
+        stats.duplicates.length &&
+          `${plural(stats.duplicates.length, "duplicate key")}.`,
+        stats.unsafeNumbers.length &&
+          `${stats.unsafeNumbers.length} ${stats.unsafeNumbers.length === 1 ? "number is" : "numbers are"} kept exactly here but cannot be held exactly by JavaScript.`,
+        input.search
+          ? `${total.toLocaleString("en")} ${total === 1 ? "match" : "matches"}${total ? `; ${rows.length ? `${offset + 1} to ${offset + rows.length}` : "none"} listed` : ""}.`
+          : rows.length
+            ? `Values ${offset + 1} to ${offset + rows.length} of ${total.toLocaleString("en")} listed.`
+            : `None listed after the first ${offset.toLocaleString("en")}; there are ${total.toLocaleString("en")}.`,
+      ]
+      return {
+        summary: notes.filter(Boolean).join(" "),
+        data: { ...stats, rows, total },
+      }
+    },
+  }
+
+  const tableJson: AgentTool<{ text?: string; file?: string }> = {
+    name: "json_table",
+    title: "See JSON as a table",
+    description:
+      "Lays an array of objects out as the page's table: a column for each key found, a row for each item, values as text. Gives the columns and the first 100 rows with the count of all; for the whole table as a file, convert the JSON to CSV with convert_json.",
+    inputSchema: {
+      type: "object",
+      properties: { ...textOrFile("The JSON: an array of objects") },
+      additionalProperties: false,
+    },
+    annotations: { readOnlyHint: true, untrustedContentHint: true },
+    async run(input, { files }) {
+      const { words } = await document(input, files)
+      const { table } = await run({ action: "table", input: words })
+      const { columns, rows, total } = table!
+      return {
+        summary: `${plural(total, "row")} and ${plural(columns.length, "column")}${total > rows.length ? `; the first ${rows.length} rows are given` : ""}.`,
+        data: table,
+      }
+    },
+  }
+
   return [
     formatJson,
     repairJson,
@@ -441,5 +538,7 @@ export function jsonTools(run: RunJson): AgentTool[] {
     compareJson,
     patchJson,
     convertJson,
+    inspectJson,
+    tableJson,
   ].map((tool) => asTool(tool as AgentTool<never>))
 }

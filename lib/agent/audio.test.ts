@@ -950,3 +950,134 @@ describe("audio_to_video", () => {
     expect(stopped.video).toBe(before + 1)
   })
 })
+
+describe("the editor's silence tools, its own equaliser, split times and a plain video", () => {
+  /** 10 s: silent for the first second, loud, a pause from 4 to 5 s, loud, silent for the last second. */
+  function quietEnds(): Peaks {
+    const peaks = peaksWithPause()
+    peaks.min.fill(0, 0, 100)
+    peaks.max.fill(0, 0, 100)
+    peaks.min.fill(0, 900, 1000)
+    peaks.max.fill(0, 900, 1000)
+    return peaks
+  }
+
+  it("trims silence at the ends and shortens pauses, after the steps given", async () => {
+    const { add, call, pool, told } = setup()
+    told.peaks = quietEnds()
+    const done = await call("edit_audio", {
+      file: add(ID3, "a.mp3"),
+      trimSilence: true,
+      shortenPauses: 0.5,
+      silentUnder: -60,
+    })
+    expect(done.summary).toMatch(
+      /^The silence at the ends was trimmed\. 1 pause shortened, 0\.60 s taken out\. /
+    )
+    const job = pool().jobs.at(-1) as Extract<AudioJob, { job: "convert" }>
+    expect(job.edits[0]).toMatchObject({ do: "keep" })
+    expect(job.edits[0].from).toBeCloseTo(0.9, 1)
+    expect(job.edits[1]).toMatchObject({ do: "cut" })
+    // A file with no silence at its ends and no long pause is left as it was.
+    told.peaks = peaksWithPause()
+    await expect(
+      call("edit_audio", {
+        file: add(ID3, "b.mp3"),
+        trimSilence: true,
+        shortenPauses: 2,
+      })
+    ).rejects.toThrow(
+      "There was no silence at the ends to trim. No pause was longer than 2 s. Nothing was changed."
+    )
+    // Without a waveform there is no silence to find.
+    told.peaks = null
+    await expect(
+      call("edit_audio", { file: add(ID3, "c.mp3"), trimSilence: true })
+    ).rejects.toThrow(
+      "There was no silence at the ends to trim. Nothing was changed."
+    )
+    await expect(
+      call("edit_audio", { file: add(ID3, "d.mp3") })
+    ).rejects.toThrow('Give "steps", "trimSilence" or "shortenPauses".')
+  })
+
+  it("takes the equaliser's own settings, or a preset, not both", async () => {
+    const { add, call, pool } = setup()
+    await call("edit_audio", {
+      file: add(ID3, "a.mp3"),
+      steps: [{ do: "cut", from: 0, to: 1 }],
+      equaliser: { highPass: 60, bass: -3, treble: 2 },
+    })
+    expect(
+      (pool().jobs.at(-1) as Extract<AudioJob, { job: "convert" }>).sound.tone
+    ).toEqual({
+      highPass: 60,
+      lowPass: null,
+      bass: -3,
+      mid: 0,
+      treble: 2,
+    })
+    await call("remove_background_noise", {
+      file: add(ID3, "b.mp3"),
+      equaliser: { lowPass: 8000, mid: 4 },
+    })
+    expect(
+      (pool().jobs.at(-1) as Extract<AudioJob, { job: "convert" }>).sound.tone
+    ).toEqual({
+      highPass: null,
+      lowPass: 8000,
+      bass: 0,
+      mid: 4,
+      treble: 0,
+    })
+    await expect(
+      call("edit_audio", {
+        file: add(ID3, "c.mp3"),
+        steps: [{ do: "cut", from: 0, to: 1 }],
+        tone: "voice",
+        equaliser: { bass: 1 },
+      })
+    ).rejects.toThrow(
+      'Give an equaliser preset ("tone") or its settings ("equaliser"), not both.'
+    )
+  })
+
+  it("splits at the times given, and asks for them", async () => {
+    const { add, call } = setup()
+    const done = await call("split_audio", {
+      file: add(ID3, "a.mp3"),
+      by: "times",
+      at: [2, 7],
+    })
+    expect(
+      (done.data as { parts: { from: number; to: number }[] }).parts.map(
+        (part) => [part.from, part.to]
+      )
+    ).toEqual([
+      [0, 2],
+      [2, 7],
+      [7, 10],
+    ])
+    await expect(
+      call("split_audio", { file: add(ID3, "b.mp3"), by: "times" })
+    ).rejects.toThrow('Give the times to split at as "at".')
+  })
+
+  it("leaves the cover out of a video when asked", async () => {
+    const { add, call, videos, drawing, settle } = setup()
+    const running = call("audio_to_video", {
+      file: add(ID3, "a.mp3", {
+        cover: { data: JPEG, mimeType: "image/jpeg" },
+      }),
+      cover: false,
+    })
+    while (!videos.length) await settle()
+    expect(videos[0].picture).toBeNull()
+    drawing({
+      type: "done",
+      video: { bytes: new Uint8Array(10), container: "mp4", seconds: 10 },
+      check: { video: true, audio: true, seconds: 10 },
+    })
+    await running
+  })
+})

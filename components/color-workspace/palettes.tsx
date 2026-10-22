@@ -13,7 +13,6 @@ import { ColorControl } from "./picker"
 import { ChoiceChips } from "@/components/ui/choice-chips"
 import {
   defaults,
-  hex,
   inspect,
   mixColors,
   parseColor,
@@ -26,6 +25,7 @@ import {
   type ExportFormat,
   type Harmony,
 } from "@/lib/color/palette"
+import { drawStrip, stripSize } from "@/lib/color/strip"
 import {
   attempt,
   copy,
@@ -101,13 +101,11 @@ export function PalettePanel({
   }
   async function png() {
     const canvas = document.createElement("canvas")
-    canvas.width = items.length * 160
-    canvas.height = 160
-    const context = canvas.getContext("2d")!
-    items.forEach((item, i) => {
-      context.fillStyle = hex(parseColor(item.color))
-      context.fillRect(i * 160, 0, 160, 160)
-    })
+    Object.assign(canvas, stripSize(items.length))
+    drawStrip(
+      canvas.getContext("2d")!,
+      items.map((item) => item.color)
+    )
     const blob = await new Promise<Blob | null>((resolve) =>
       canvas.toBlob(resolve, "image/png")
     )

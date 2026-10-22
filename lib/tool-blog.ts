@@ -3128,7 +3128,7 @@ export const agentsPost: BlogPost = {
       id: "tools",
       title: "The tools.",
       paragraphs: [
-        "JSON: format, repair, query, validate against a schema, compare, patch and convert, with every number kept exactly. Colour: convert between spaces, check contrast, make palettes and find the colours of an image. PDF: read a file's facts and text, merge, split every way the splitter does, compress, organise pages, crop, add page numbers, headers and watermarks, change details and bookmarks, fill forms, redact, find and replace, add text and pictures, recognise scans and check signatures, each result checked. Images: read, compress, resize and convert, and turn animations and short videos into GIF, WebP, APNG, MP4 or WebM. Audio: read loudness, convert, trim and fade, make ringtones, normalise, change speed, take out noise, edit tags, split, join, transcribe with Whisper and make a video of a sound. Signing and recording stay for you to do yourself.",
+        "JSON: format, repair, look through, lay out as a table, query, validate against a schema, compare, patch and convert, with every number kept exactly. Colour: convert between spaces, check contrast with ΔE2000 and colour-vision previews, make palettes, mix, write gradients, give companies' published colours, find the colours of an image and read one pixel. PDF: read a file's facts and text, merge, split every way the splitter does, compress, organise pages, crop, add page numbers, headers and watermarks, change details and bookmarks, draw and comment, change the words, pictures and links a page already has, make and fill forms, redact, find and replace, add text and pictures, recognise scans and check signatures, each result checked. Images: read, compress, resize and convert with every setting of their pages, and turn animations and short videos into GIF, WebP, APNG, MP4 or WebM. Audio: read loudness, convert, trim, fade and trim silence, equalise, make ringtones, normalise, change speed, take out noise, edit tags, split, join, transcribe with Whisper and make a video of a sound. Signing and recording stay for you to do yourself.",
       ],
       links: [
         {
@@ -3147,6 +3147,10 @@ export const agentsPost: BlogPost = {
           label: "Open the audio editor",
           href: "/dashboard/audio-editor/",
         },
+        {
+          label: "Batches, chains and design checks",
+          href: "/blog/automate-file-chores-with-an-ai-agent/",
+        },
       ],
     },
   ],
@@ -3158,6 +3162,144 @@ export const agentsPost: BlogPost = {
     {
       title: "Chrome for Developers: WebMCP",
       url: "https://developer.chrome.com/docs/ai/webmcp",
+    },
+  ],
+}
+
+export const agentWorkflowsPost: BlogPost = {
+  published: "2026-10-22",
+  slug: "automate-file-chores-with-an-ai-agent",
+  title: "Give your agent the chores. Keep your files at home.",
+  searchTitle:
+    "Automate PDF, image, audio and JSON chores with Claude Code or Codex",
+  description:
+    "Batches, chains of jobs and design-system checks: how to have Claude Code or Codex do file chores with KeepSimp's tools, on your own computer.",
+  keywords: [
+    "automate pdf tasks with ai",
+    "batch process files with claude code",
+    "codex mcp automation",
+    "ai agent productivity",
+    "check design tokens contrast",
+    "batch compress pdf locally",
+    "mcp file tools",
+  ],
+  category: "A little know-how",
+  readingTime: "6 min read",
+  image: "/images/agent-workflows-guide.svg",
+  imageAlt:
+    "A request in a terminal becoming three checked KeepSimp steps, a folder of finished PDFs beside the originals, and design tokens checked for contrast",
+  tool: "",
+  intro:
+    "One file is quick to do by hand. Forty are an afternoon. An agent such as Claude Code or Codex can do the forty, if it has tools it can trust. With the KeepSimp bridge it uses the same engines as KeepSimp's pages, on your computer, and every result is checked before it is handed back.",
+  sections: [
+    {
+      id: "connect",
+      title: "Connect it once.",
+      paragraphs: [
+        "Add the bridge to your agent, then ask in plain words. It works in the folder you start the agent in. To let it reach another folder, add --allow and the folder's path to the command.",
+        "The first start downloads the bridge and, when Google Chrome is not installed, a browser of about 150 MB. After that it starts in seconds.",
+      ],
+      example: {
+        label: "Claude Code, then Codex (~/.codex/config.toml)",
+        code: 'claude mcp add keepsimp -- npx -y keepsimp-mcp\n\n[mcp_servers.keepsimp]\ncommand = "npx"\nargs = ["-y", "keepsimp-mcp"]\nstartup_timeout_sec = 120\ntool_timeout_sec = 300',
+      },
+      links: [
+        {
+          label: "How the bridge works",
+          href: "/blog/keepsimp-tools-for-ai-agents/",
+        },
+        { label: "The agent page", href: "/dashboard/agents/" },
+      ],
+    },
+    {
+      id: "batches",
+      title: "Do the same thing to a whole folder.",
+      paragraphs: [
+        "This is where an agent saves the most time. It lists the folder itself and calls a KeepSimp tool for each file, so a job you would repeat forty times becomes one sentence. Say where the results go: they are saved there, or beside each file, and a file that is already there is never written over.",
+        "Be exact about what you want. A size, a format, a loudness or a page range gives the same result for every file; a word like smaller leaves the choice to the agent.",
+      ],
+      example: {
+        label: "Things to ask",
+        code: "Compress every PDF in contracts/ to under 2 MB\nand save them in contracts/small/.\n\nResize every photo in shoot/ to 640, 1280 and 1920\npixels wide, as AVIF and WebP.\n\nConvert every WAV in interviews/ to MP3 at -16 LUFS.\n\nFormat every JSON file in fixtures/ with sorted keys.",
+      },
+      links: [
+        {
+          label: "Open the PDF compressor",
+          href: "/dashboard/pdf-compressor/",
+        },
+        { label: "Open the image resizer", href: "/dashboard/image-resizer/" },
+      ],
+    },
+    {
+      id: "chains",
+      title: "Put several jobs into one request.",
+      paragraphs: [
+        "A request can name steps in order, and the agent passes each result on to the next tool. A pile of scans can be recognised, have its e-mail addresses redacted, get page numbers and be compressed. A recording can have the silence at its ends trimmed and its long pauses shortened, be brought to a loudness, be written down as subtitles and become a video with its waveform.",
+        "Each tool checks its own result before it hands it over: recognised words are read back, a redaction is refused while a letter can still be read under its mark, a split part must have its pages, and a sound is decoded again. When a step fails, the agent is told why in words, and nothing half-made is saved.",
+      ],
+      example: {
+        label: "A chain, in one sentence",
+        code: "For each scan in invoices/:\nmake it searchable, redact the e-mail addresses,\nnumber the pages and keep it under 1 MB.\nSave the results in invoices/done/.",
+      },
+      links: [
+        { label: "Open OCR PDF", href: "/dashboard/ocr-pdf/" },
+        { label: "Open Redact PDF", href: "/dashboard/redact-pdf/" },
+        { label: "Open the audio editor", href: "/dashboard/audio-editor/" },
+      ],
+    },
+    {
+      id: "design-system",
+      title: "Keep a design system honest.",
+      paragraphs: [
+        "Design tokens are a list of colours, and a list is something an agent can work through. Ask it to read your tokens file and check every text colour on every background it is used on. The contrast tool gives the WCAG 2 ratio with transparency counted, suggests the nearest lightness that reaches 3:1, 4.5:1 or 7:1, and shows how a pair may look with protan, deutan and tritan colour vision and in grayscale. Those are approximate previews, not a prediction of every person's vision.",
+        "It can also build what the system needs: a scale of eleven tones from one brand colour, a mix of two colours in OKLab, a gradient with a fallback for older browsers, or a palette written as CSS variables, Design Tokens JSON, a Tailwind theme or a PNG strip. It can find the main colours of a logo, read one pixel of a picture, and give a company's published colours with their source. Values outside sRGB keep their wide-gamut numbers and say when they were mapped.",
+        "The agent still needs your judgement. A passing ratio is one rule of readable text, not proof that a whole screen is accessible.",
+      ],
+      example: {
+        label: "Things to ask",
+        code: "Read tokens.json and check every text colour against\nevery background it is paired with, at 4.5:1.\nList the pairs that fail, with the nearest colour that passes.\n\nMake a scale of eleven tones from #00786f\nand write it as Design Tokens JSON.\n\nFind the five main colours of brand/logo.png\nand check each on white.",
+      },
+      links: [
+        { label: "Open the colour utility", href: "/dashboard/color-utility/" },
+        {
+          label: "Checking contrast, explained",
+          href: "/blog/check-color-contrast-wcag/",
+        },
+      ],
+    },
+    {
+      id: "repeat",
+      title: "Write it down, and run it again.",
+      paragraphs: [
+        "A request that works can be kept. Claude Code reads a project's CLAUDE.md and Codex its AGENTS.md, so a line there such as: before a release, check the contrast of tokens.json and compress the PDFs in docs/, becomes something you ask for in three words.",
+        "Keep the inputs in the project and the results in a folder of their own, and the same request gives the same files each time. Look at the first results before you trust a long batch.",
+      ],
+    },
+    {
+      id: "limits",
+      title: "What it will not do.",
+      paragraphs: [
+        "Signing a PDF, placing a signature and recording sound are not given to agents: they are a person's own acts. The bridge reads and writes only inside the folders your agent works in and those you allow, and its browser opens the KeepSimp site and refuses every other address, so your files are never uploaded.",
+        "Recognising scans and transcribing can mishear, and the agent can misread what you meant. Read what it made, especially before you send it to someone else.",
+      ],
+    },
+  ],
+  sources: [
+    {
+      title: "Model Context Protocol",
+      url: "https://modelcontextprotocol.io/",
+    },
+    {
+      title: "keepsimp-mcp on npm",
+      url: "https://www.npmjs.com/package/keepsimp-mcp",
+    },
+    {
+      title: "W3C: WCAG 2.2, contrast (minimum)",
+      url: "https://www.w3.org/TR/WCAG22/#contrast-minimum",
+    },
+    {
+      title: "Design Tokens Community Group: format",
+      url: "https://www.designtokens.org/tr/drafts/format/",
     },
   ],
 }

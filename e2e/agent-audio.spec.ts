@@ -222,3 +222,76 @@ test("turns sound into a video, checked by FFprobe", async ({ page }) => {
     (listed.data as unknown as { name: string }[]).map((one) => one.name)
   ).toEqual(["tone.wav", file.name])
 })
+
+test("trims silence, shortens pauses, splits at times and shapes the sound with the editor's own tools", async ({
+  page,
+}) => {
+  test.setTimeout(240_000)
+  await ready(page)
+  // A second of silence, the tune, two seconds of silence, the tune again, and a second of silence.
+  const path = join(folder, "agent-gappy.wav")
+  execFileSync("ffmpeg", [
+    "-v",
+    "error",
+    "-y",
+    "-f",
+    "lavfi",
+    "-i",
+    "anullsrc=r=44100:cl=stereo:d=1",
+    "-i",
+    "public/samples/keepsimp-tune.flac",
+    "-f",
+    "lavfi",
+    "-i",
+    "anullsrc=r=44100:cl=stereo:d=2",
+    "-i",
+    "public/samples/keepsimp-tune.flac",
+    "-f",
+    "lavfi",
+    "-i",
+    "anullsrc=r=44100:cl=stereo:d=1",
+    "-filter_complex",
+    "[0][1][2][3][4]concat=n=5:v=0:a=1",
+    "-c:a",
+    "pcm_s16le",
+    path,
+  ])
+  const gappy = readFileSync(path)
+  const id = await hand(page, "gappy.wav", gappy, "audio/wav")
+  const before = samples(gappy, "agent-gappy-in.wav") / 44100
+
+  const tidied = await ran(page, "edit_audio", {
+    file: id,
+    trimSilence: true,
+    shortenPauses: 1,
+    equaliser: { highPass: 80, treble: 2 },
+  })
+  expect(tidied.summary).toMatch(
+    /^The silence at the ends was trimmed\. 1 pause shortened/
+  )
+  const after =
+    samples(
+      (await saved(page, tidied.files![0].id)).bytes,
+      "agent-tidied.wav"
+    ) / 44100
+  // About 0.9 s off each end and 1.6 s out of the pause.
+  expect(before - after).toBeGreaterThan(3)
+  expect(before - after).toBeLessThan(4.2)
+
+  const parts = await ran(page, "split_audio", {
+    file: id,
+    by: "times",
+    at: [3, 12],
+  })
+  const lengths = []
+  for (const [at, file] of parts.files!.entries())
+    lengths.push(
+      samples((await saved(page, file.id)).bytes, `agent-time-${at}.wav`) /
+        44100
+    )
+  expect(lengths.map((one) => Math.round(one * 10) / 10)).toEqual([
+    3,
+    9,
+    Math.round((before - 12) * 10) / 10,
+  ])
+})

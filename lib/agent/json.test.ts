@@ -270,3 +270,112 @@ describe("the JSON tools", () => {
     expect(yaml.summary).toMatch(/^Converted\. Quoted keys/)
   })
 })
+
+describe("looking through JSON as the page's tree and table", () => {
+  const doc = '{"a":1,"a":2,"b":{"c":[1,2]},"big":12345678901234567890}'
+
+  it("describes the document and lists its top level", async () => {
+    const result = await call(agent(), "inspect_json", { text: doc })
+    expect(result.summary).toBe(
+      "Valid JSON: 8 values, 3 deep, 56 bytes. 1 duplicate key. 1 number is kept exactly here but cannot be held exactly by JavaScript. Values 1 to 5 of 5 listed."
+    )
+    const data = result.data as {
+      duplicates: string[]
+      unsafeNumbers: string[]
+      rows: { pointer: string; preview: string }[]
+    }
+    expect(data.duplicates).toEqual(["/a"])
+    expect(data.unsafeNumbers).toEqual(["/big"])
+    // The number keeps every digit.
+    expect(data.rows.at(-1)).toMatchObject({
+      pointer: "/big",
+      preview: "12345678901234567890",
+    })
+    const many = await call(agent(), "inspect_json", {
+      text: '{"a":1,"a":2,"a":3,"n":[9007199254740993,9007199254740995]}',
+    })
+    expect(many.summary).toMatch(
+      / 2 duplicate keys\. 2 numbers are kept exactly here /
+    )
+    const one = await call(agent(), "inspect_json", { text: "1" })
+    expect(one.summary).toBe(
+      "Valid JSON: 1 value, 0 deep, 1 byte. Values 1 to 1 of 1 listed."
+    )
+  })
+
+  it("opens the containers asked for, and pages", async () => {
+    const opened = await call(agent(), "inspect_json", {
+      text: doc,
+      expand: ["/b"],
+    })
+    expect(
+      (opened.data as { rows: { pointer: string }[] }).rows.map(
+        (row) => row.pointer
+      )
+    ).toEqual(["", "/a", "/a", "/b", "/b/c", "/big"])
+    const past = await call(agent(), "inspect_json", { text: doc, offset: 50 })
+    expect(past.summary).toMatch(
+      /None listed after the first 50; there are 5\.$/
+    )
+  })
+
+  it("searches keys, paths and values", async () => {
+    const found = await call(agent(), "inspect_json", {
+      text: doc,
+      search: "C",
+    })
+    expect(found.summary).toMatch(/3 matches; 1 to 3 listed\.$/)
+    expect(
+      (found.data as { rows: { pointer: string }[] }).rows.map(
+        (row) => row.pointer
+      )
+    ).toEqual(["/b/c", "/b/c/0", "/b/c/1"])
+    const single = await call(agent(), "inspect_json", {
+      text: doc,
+      search: "big",
+    })
+    expect(single.summary).toMatch(/1 match; 1 to 1 listed\.$/)
+    const later = await call(agent(), "inspect_json", {
+      text: doc,
+      search: "c",
+      offset: 3,
+    })
+    expect(later.summary).toMatch(/3 matches; none listed\.$/)
+    const none = await call(agent(), "inspect_json", {
+      text: doc,
+      search: "zzz",
+    })
+    expect(none.summary).toMatch(/ 0 matches\.$/)
+    await expect(
+      call(agent(), "inspect_json", { text: doc, search: "a", expand: ["/b"] })
+    ).rejects.toThrow(/not both/)
+    await expect(
+      call(agent(), "inspect_json", { text: "{a:1}" })
+    ).rejects.toThrow()
+  })
+
+  it("lays an array of objects out as a table", async () => {
+    const small = await call(agent(), "json_table", {
+      text: '[{"a":1,"b":{"x":"y"}},{"a":"two"}]',
+    })
+    expect(small.summary).toBe("2 rows and 2 columns.")
+    expect(small.data).toEqual({
+      columns: ["a", "b"],
+      rows: [
+        ["1", '{"x":"y"}'],
+        ["two", ""],
+      ],
+      total: 2,
+    })
+    const long = await call(agent(), "json_table", {
+      text: JSON.stringify(Array.from({ length: 150 }, (_, n) => ({ n }))),
+    })
+    expect(long.summary).toBe(
+      "150 rows and 1 column; the first 100 rows are given."
+    )
+    expect((long.data as { rows: unknown[] }).rows).toHaveLength(100)
+    await expect(
+      call(agent(), "json_table", { text: "[1, 2]" })
+    ).rejects.toThrow(/array of objects/)
+  })
+})

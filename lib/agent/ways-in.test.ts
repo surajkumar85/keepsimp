@@ -13,7 +13,12 @@ import { modelContextOf, registerTools, type WebMcpTool } from "./webmcp"
 
 const engines = {
   runJson: (job: Parameters<typeof runJob>[0]) => Promise.resolve(runJob(job)),
-  sampleImage: async () => new Uint8ClampedArray(4),
+  sampleImage: async () => ({
+    data: new Uint8ClampedArray(4),
+    width: 1,
+    height: 1,
+  }),
+  paletteStrip: async () => new Blob(),
   pdf: new PdfEngine((onFile) => new FakePdfClient(onFile)),
   text: {
     font: async () => new ArrayBuffer(1),

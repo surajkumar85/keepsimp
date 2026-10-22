@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 600" role="img" aria-labelledby="title desc">
+  <title id="title">Chores handed to an agent</title><desc id="desc">One request in a terminal becomes three KeepSimp steps, each checked: scans recognised, email addresses redacted, files compressed. Twelve finished PDFs wait in a folder beside the originals, and a row of colour tokens is marked as checked for contrast.</desc>
+  <rect width="900" height="600" rx="24" fill="#f5f5f0"/>
+  <rect x="40" y="56" width="400" height="236" rx="14" fill="#171717"/>
+  <circle cx="66" cy="80" r="6" fill="#525252"/><circle cx="86" cy="80" r="6" fill="#525252"/><circle cx="106" cy="80" r="6" fill="#525252"/>
+  <text x="64" y="132" font-family="monospace" font-size="17" fill="#a3a3a3">&gt; for every scan in invoices/:</text>
+  <text x="64" y="160" font-family="monospace" font-size="17" fill="#a3a3a3">  make it searchable, hide the</text>
+  <text x="64" y="188" font-family="monospace" font-size="17" fill="#a3a3a3">  e-mail addresses, keep it</text>
+  <text x="64" y="216" font-family="monospace" font-size="17" fill="#a3a3a3">  under 1 MB, save in done/</text>
+  <text x="64" y="262" font-family="monospace" font-size="17" fill="#fafafa">keepsimp · 36 calls · 12 files</text>
+  <g font-family="sans-serif" font-size="17">
+    <rect x="490" y="56" width="370" height="64" rx="14" fill="#ffffff" stroke="#d4d4d4" stroke-width="2"/>
+    <circle cx="526" cy="88" r="14" fill="#00786f"/><path d="M519 88 l5 5 l9 -10" fill="none" stroke="#ffffff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+    <text x="554" y="94" fill="#171717">ocr_pdf · words read back</text>
+    <rect x="490" y="142" width="370" height="64" rx="14" fill="#ffffff" stroke="#d4d4d4" stroke-width="2"/>
+    <circle cx="526" cy="174" r="14" fill="#00786f"/><path d="M519 174 l5 5 l9 -10" fill="none" stroke="#ffffff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+    <text x="554" y="180" fill="#171717">redact_pdf · nothing left under</text>
+    <rect x="490" y="228" width="370" height="64" rx="14" fill="#ffffff" stroke="#d4d4d4" stroke-width="2"/>
+    <circle cx="526" cy="260" r="14" fill="#00786f"/><path d="M519 260 l5 5 l9 -10" fill="none" stroke="#ffffff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+    <text x="554" y="266" fill="#171717">compress_pdf · same text, smaller</text>
+  </g>
+  <path d="M446 174 H478" stroke="#00786f" stroke-width="6" stroke-linecap="round"/>
+  <path d="M464 160 L480 174 L464 188" fill="none" stroke="#00786f" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+  <rect x="40" y="330" width="400" height="220" rx="14" fill="#ffffff" stroke="#d4d4d4" stroke-width="2"/>
+  <path d="M68 356 h52 l12 14 h112 v40 h-176 z" fill="#e6f2f1" stroke="#00786f" stroke-width="3" stroke-linejoin="round"/>
+  <text x="68" y="440" font-family="sans-serif" font-size="20" font-weight="600" fill="#171717">done/</text>
+  <text x="68" y="472" font-family="sans-serif" font-size="16" fill="#525252">12 PDFs beside invoices/</text>
+  <text x="68" y="500" font-family="sans-serif" font-size="16" fill="#525252">Nothing uploaded, nothing</text>
+  <text x="68" y="524" font-family="sans-serif" font-size="16" fill="#525252">written over.</text>
+  <rect x="490" y="330" width="370" height="220" rx="14" fill="#ffffff" stroke="#d4d4d4" stroke-width="2"/>
+  <text x="518" y="372" font-family="sans-serif" font-size="20" font-weight="600" fill="#171717">tokens.json</text>
+  <rect x="518" y="394" width="64" height="64" rx="12" fill="#00786f"/>
+  <rect x="594" y="394" width="64" height="64" rx="12" fill="#00564f"/>
+  <rect x="670" y="394" width="64" height="64" rx="12" fill="#e6f2f1"/>
+  <rect x="746" y="394" width="64" height="64" rx="12" fill="#171717"/>
+  <rect x="518" y="480" width="214" height="40" rx="20" fill="#e6f2f1"/>
+  <text x="536" y="506" font-family="sans-serif" font-size="16" fill="#00564f">Contrast checked, WCAG 2</text>
+</svg>

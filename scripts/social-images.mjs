@@ -265,6 +265,12 @@ const cards = [
     "/images/agent-tools-guide.svg",
   ],
   [
+    "automate-file-chores-with-an-ai-agent",
+    "Give your agent the chores.",
+    "Batches, chains and design checks, on your computer.",
+    "/images/agent-workflows-guide.svg",
+  ],
+  [
     "gapless-mp3-and-aac",
     "Why a converted MP3 starts late, and ours does not.",
     "Gapless MP3 and AAC, checked before download.",

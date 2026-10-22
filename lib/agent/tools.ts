@@ -1,5 +1,5 @@
 /** Every tool given to agents, made with the engines it needs. */
-import { colorTools, type SampleImage } from "./color"
+import { colorTools, type PaletteStrip, type SampleImage } from "./color"
 import { jsonTools, type RunJson } from "./json"
 import { pdfTools } from "./pdf"
 import { pdfEditTools, type EditText, type StartOcr } from "./pdf-edit"
@@ -17,6 +17,7 @@ import { asTool, type AgentTool } from "./registry"
 export interface Engines {
   runJson: RunJson
   sampleImage: SampleImage
+  paletteStrip: PaletteStrip
   pdf: PdfEngine
   text: EditText
   ocr: StartOcr
@@ -48,7 +49,7 @@ export function agentTools(engines: Engines): AgentTool[] {
   return [
     asTool(listFiles),
     ...jsonTools(engines.runJson),
-    ...colorTools(engines.sampleImage),
+    ...colorTools(engines.sampleImage, engines.paletteStrip),
     ...pdfTools(engines.pdf),
     ...pdfEditTools(engines.pdf, engines.text, engines.ocr),
     ...pdfDrawTools(engines.pdf, engines.text),

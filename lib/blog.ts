@@ -611,6 +611,7 @@ export const posts: readonly BlogPost[] = [
   transcribePost,
   videoPost,
   agentsPost,
+  agentWorkflowsPost,
   gaplessPost,
   {
     slug: "format-json-without-losing-precision",
@@ -729,6 +730,7 @@ import {
   transcribePost,
   videoPost,
   agentsPost,
+  agentWorkflowsPost,
   gaplessPost,
   overviewPost,
   resizePost,

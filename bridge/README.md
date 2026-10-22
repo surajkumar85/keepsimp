@@ -29,8 +29,8 @@ Then ask in plain words: "merge a.pdf and b.pdf", "split book.pdf at its bookmar
 
 The bridge asks the KeepSimp page which tools there are, so the list is always the site's own. Today:
 
-- **JSON:** `format_json`, `repair_json`, `transform_json`, `query_json` (JSONPath and JSON Pointer), `validate_json` (JSON Schema), `compare_json`, `patch_json`, `convert_json` (YAML, CSV, JSON Lines, TypeScript, JSON Schema). Numbers keep their exact digits.
-- **Colour:** `convert_color`, `check_contrast` (WCAG 2), `make_palette`, `colors_from_image`.
+- **JSON:** `format_json`, `repair_json`, `transform_json`, `query_json` (JSONPath and JSON Pointer), `validate_json` (JSON Schema), `compare_json`, `patch_json`, `convert_json` (YAML, CSV, JSON Lines, TypeScript, JSON Schema), `inspect_json` (counts, search, the tree) and `json_table`. Numbers keep their exact digits.
+- **Colour:** `convert_color`, `check_contrast` (WCAG 2, ΔE2000, colour-vision previews), `make_palette` (also as a PNG strip), `mix_colors`, `make_gradient`, `brand_colors`, `colors_from_image` and `pick_image_color`.
 
 - **PDF:** `pdf_info` (facts, bookmarks and text), `merge_pdfs` (with page ranges, turns, pictures as pages, contents, page numbers and a lock), `split_pdf` (every N pages, equal parts, ranges, odd and even, extract or remove, bookmarks, blank pages, words, size) and `compress_pdf` (levels, a size, or your own resolution and quality). Every page is compared with the original before a compressed file is handed over.
 

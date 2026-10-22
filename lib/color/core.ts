@@ -156,6 +156,14 @@ export function inspect(text: string) {
     inP3: color.inGamut("p3"),
   }
 }
+/** A colour in one of the batch formats; HEX and RGB are the sRGB fallback. */
+export function asFormat(color: Color, format: "hex" | "rgb" | "oklch") {
+  return format === "hex"
+    ? hex(color)
+    : format === "rgb"
+      ? srgb(color).toString({ precision: 7 })
+      : css(color)
+}
 export function bulkConvert(text: string, format: "hex" | "rgb" | "oklch") {
   if (text.length > 52000)
     throw new Error("Keep the list under 52,000 characters.")
@@ -164,16 +172,7 @@ export function bulkConvert(text: string, format: "hex" | "rgb" | "oklch") {
     throw new Error("Convert up to 100 colors at once, one per line.")
   return lines.map((line, index) => {
     try {
-      const c = parseColor(line)
-      return {
-        line: index + 1,
-        value:
-          format === "hex"
-            ? hex(c)
-            : format === "rgb"
-              ? srgb(c).toString({ precision: 7 })
-              : css(c),
-      }
+      return { line: index + 1, value: asFormat(parseColor(line), format) }
     } catch (e) {
       return { line: index + 1, error: (e as Error).message }
     }

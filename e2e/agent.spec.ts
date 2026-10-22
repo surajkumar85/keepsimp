@@ -23,10 +23,16 @@ test("the page offers its tools to the bridge, runs them and hands their files b
     "compare_json",
     "patch_json",
     "convert_json",
+    "inspect_json",
+    "json_table",
     "convert_color",
     "check_contrast",
     "make_palette",
+    "mix_colors",
+    "make_gradient",
+    "brand_colors",
     "colors_from_image",
+    "pick_image_color",
     "pdf_info",
     "merge_pdfs",
     "split_pdf",
@@ -194,6 +200,119 @@ test("the page offers its tools to the bridge, runs them and hands their files b
   expect(outside).toEqual([])
 })
 
+test("looks through JSON, mixes colours, writes gradients and brand palettes, and reads pixels", async ({
+  page,
+}) => {
+  await ready(page)
+  const data = await hand(
+    page,
+    "orders.json",
+    '{"total":10.500000000000000001,"items":[{"sku":"a","n":2},{"sku":"b","n":5}]}',
+    "application/json"
+  )
+  const looked = await ran(page, "inspect_json", { file: data, search: "sku" })
+  expect(looked.summary).toBe(
+    "Valid JSON: 9 values, 3 deep, 77 bytes. 1 number is kept exactly here but cannot be held exactly by JavaScript. 2 matches; 1 to 2 listed."
+  )
+  expect(
+    (looked.data as unknown as { rows: { pointer: string }[] }).rows.map(
+      (row) => row.pointer
+    )
+  ).toEqual(["/items/0/sku", "/items/1/sku"])
+  const tree = await ran(page, "inspect_json", { file: data })
+  expect(
+    (tree.data as unknown as { rows: { preview: string }[] }).rows[1].preview
+  ).toBe("10.500000000000000001")
+  const table = await ran(page, "json_table", {
+    text: '[{"sku":"a","n":2},{"sku":"b","n":5}]',
+  })
+  expect(table.data).toEqual({
+    columns: ["sku", "n"],
+    rows: [
+      ["a", "2"],
+      ["b", "5"],
+    ],
+    total: 2,
+  })
+
+  const contrast = await ran(page, "check_contrast", {
+    foreground: "#666",
+    background: "white",
+    target: 7,
+  })
+  expect(contrast.data).toMatchObject({
+    target: 7,
+    difference: 43.13,
+    vision: { grayscale: { foreground: "#666666", background: "#ffffff" } },
+  })
+  const mixed = await ran(page, "mix_colors", {
+    first: "black",
+    second: "white",
+    space: "srgb",
+  })
+  expect(mixed.data).toMatchObject({ hex: "#808080", inSrgb: true })
+  const gradient = await ran(page, "make_gradient", {
+    stops: [
+      { color: "#00786f", position: 0 },
+      { color: "white", position: 100 },
+    ],
+    kind: "radial",
+  })
+  const css = gradient.data as unknown as { modern: string; css: string }
+  expect(css.modern).toBe(
+    "radial-gradient(circle in oklab, #00786f 0%, #ffffff 100%)"
+  )
+  // The browser takes both declarations as they are written.
+  expect(
+    await page.evaluate(
+      (modern) => CSS.supports("background", modern),
+      css.modern
+    )
+  ).toBe(true)
+  const brand = await ran(page, "brand_colors", {
+    brand: "Microsoft",
+    format: "css",
+  })
+  expect((await saved(page, brand.files![0].id)).text).toContain(
+    "--color-1: #0078d4;"
+  )
+
+  // The PNG strip, drawn by the page, read back as an image by the pixel picker.
+  const strip = await ran(page, "make_palette", {
+    colors: ["#00786f", "rgb(255 0 0 / 0.5)"],
+    format: "png",
+  })
+  const png = await saved(page, strip.files![0].id)
+  expect(png.name).toBe("palette.png")
+  expect([png.bytes.readUInt32BE(16), png.bytes.readUInt32BE(20)]).toEqual([
+    320, 160,
+  ])
+  const back = await hand(page, "strip.png", png.bytes, "image/png")
+  const left = await ran(page, "pick_image_color", { file: back, x: 10, y: 10 })
+  expect(left.data).toMatchObject({
+    hex: "#00786f",
+    sample: { width: 256, height: 128 },
+  })
+  const right = await ran(page, "pick_image_color", {
+    file: back,
+    x: 250,
+    y: 100,
+  })
+  expect((right.data as unknown as { color: string }).color).toMatch(
+    /^rgb\(255 0 0 \/ 0\.(49|50)/
+  )
+  const two = await hand(page, "two.png", twoColourPng(), "image/png")
+  expect(
+    (await ran(page, "pick_image_color", { file: two, x: 40, y: 5 })).data
+  ).toMatchObject({ hex: "#ffffff", sample: { width: 64, height: 32 } })
+  expect(
+    await run(page, "pick_image_color", { file: two, x: 64, y: 0 })
+  ).toEqual({
+    ok: false,
+    problem: "two.png is drawn 64 × 32 pixels; give x under 64 and y under 32.",
+  })
+})
+
 test("the person adds files, and sees what agents asked", async ({ page }) => {
   await ready(page)
   await page.locator("#agent-file").setInputFiles({
@@ -216,7 +335,7 @@ test("the person adds files, and sees what agents asked", async ({ page }) => {
   // The person can take a file away.
   await page.getByRole("button", { name: "Remove notes.json" }).click()
   await expect(row).toHaveCount(1)
-  await expect(page.getByTestId("agent-tools").locator("li")).toHaveCount(58)
+  await expect(page.getByTestId("agent-tools").locator("li")).toHaveCount(64)
 })
 
 test("an agent in the browser calls the tools through WebMCP", async ({
@@ -231,7 +350,7 @@ test("an agent in the browser calls the tools through WebMCP", async ({
     const page = await context.newPage()
     await ready(page)
     await expect(page.getByTestId("webmcp-status")).toContainText(
-      "has given 58 tools to agents in this browser"
+      "has given 64 tools to agents in this browser"
     )
     const tools = await page.webmcp.tools()
     expect(tools.map((tool) => tool.name)).toContain("list_files")

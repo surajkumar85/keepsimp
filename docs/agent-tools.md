@@ -30,8 +30,8 @@ KeepSimp's tools can be used by agents: Claude Code, Codex and other MCP clients
   - Each call can be stopped. A tool that finishes after Stop still counts as stopped.
   - The last 50 calls are kept for the page, with who asked: the page, an agent in the browser, or the bridge.
 - **Tools by family**, each calling the engines its page uses:
-  - `json.ts`: the JSON workspace's worker jobs, through `JsonClient` (`lib/json-workspace/client.ts`), which the workspace's hook also uses.
-  - `color.ts`: the colour utility's functions, and the image sampling rules in `lib/color/sample.ts`, which the workspace's image panel also uses.
+  - `json.ts`: the JSON workspace's worker jobs, through `JsonClient` (`lib/json-workspace/client.ts`), which the workspace's hook also uses. `inspect_json` is the Explore tab's tree (the `inspect` job: the document's counts, duplicate keys and numbers JavaScript cannot hold, then its values 100 at a time, searched or opened by pointer), and `json_table` its table (the `table` job, first 100 rows).
+  - `color.ts`: the colour utility's functions, and the image sampling rules in `lib/color/sample.ts`, which the workspace's image panel also uses. Every tab is reached: conversion (all spaces, or one batch format with `asFormat`), contrast with a target, ΔE2000 and the four vision previews (`simulate`), palettes, mixing (`mixColors`), gradients with their fallback (`gradient`, `gradientFallback`), the brand references with their sources (`brands`), main colours and one pixel of an image as it is drawn for sampling. A palette's PNG strip is drawn by `drawStrip` (`lib/color/strip.ts`), which the palette page also uses.
 - **Words as text or a file** (`text.ts`):
   - A tool takes words either way.
   - Its answer comes back in the result when the source was text and the answer is short (at most 50,000 characters).
@@ -123,11 +123,11 @@ KeepSimp's tools can be used by agents: Claude Code, Codex and other MCP clients
 - **The worker** is the workspace's `AudioPool`, the agent's own with one worker, through `PoolJobs`. Sound the worker cannot decode is decoded on the page (`decodeOnPage`), with its waveform and loudness measured there, as the workspace does. Whisper and the video maker run in workers of their own (`startTranscription`, `startVideo`), ended with the page; a video takes the theme's colours (`themeColours`, `lib/audio/theme-colours.ts`, shared with the video panel).
 - **The tools** (`lib/agent/audio.ts`) lay what is asked over the workspace's defaults (`settingsOf`), with each door's first format:
   - `audio_info`: the reader's facts, tags and cover, and the loudness measured as BS.1770 says (`loudnessOf`, in the page's words: `loudnessSaid`);
-  - `convert_audio` (MP3 by default; `same` copies a video's sound out where its codec allows), `edit_audio` (keep, cut, silence, fade and gain steps, each in the times the steps before left, checked by `stepProblem`; an equaliser preset and a compressor), `make_ringtone` (`ringtonePart`, `ringtoneSteps`), `normalize_audio` (loudness, peak or louder, with the true-peak limiter), `change_audio_speed`, `remove_background_noise` (RNNoise, hum, clicks, harsh s sounds) and `edit_audio_tags` (written in place where the format allows);
-  - `split_audio`: every N minutes, N parts or at pauses found as the splitter finds them (`silentRuns` under −50 dBFS, `partsOf`), named by `partNames`;
+  - `convert_audio` (MP3 by default; `same` copies a video's sound out where its codec allows), `edit_audio` (keep, cut, silence, fade and gain steps, each in the times the steps before left, checked by `stepProblem`; then the silence at the ends trimmed and long pauses shortened as the editor finds them, `trimEnds` and `shortenPauses` over `silentRuns`, as ordinary steps; an equaliser preset or the equaliser's own settings, and a compressor), `make_ringtone` (`ringtonePart`, `ringtoneSteps`), `normalize_audio` (loudness, peak or louder, with the true-peak limiter), `change_audio_speed`, `remove_background_noise` (RNNoise, hum, clicks, harsh s sounds) and `edit_audio_tags` (written in place where the format allows);
+  - `split_audio`: every N minutes, N parts, at pauses found as the splitter finds them (`silentRuns` under −50 dBFS, `partsOf`) or at given times (the markers' rule), named by `partNames`;
   - `join_audio`: in order, with a gap or a crossfade, and chapters;
   - `transcribe_audio`: text, SRT and VTT (`toText`, `toSrt`, `toVtt`), from a decoded copy when the worker cannot decode the file;
-  - `audio_to_video`: the sound written as the workspace writes it, then drawn; the video is handed over only when opening it again finds its picture, its sound and its length.
+  - `audio_to_video`: the sound written as the workspace writes it, then drawn, over the sound's cover, a picture or (with `cover: false`) the theme's colour; the video is handed over only when opening it again finds its picture, its sound and its length.
 - **Every result says** the plan's sentences, what was done to the level (`levelSaid`) and what the check found.
 
 ### Every setting of the image pages (phase 6, part 4)
@@ -254,6 +254,11 @@ A package of its own, in TypeScript that Node runs as it is (type stripping), bu
   - noise taken out of speech, every sample kept, and the speech written down by Whisper;
   - a video of the sound, 1920 by 1080, with its sound, and the sound written on the way not left among the files.
   - This found a fault in Mediabunny's FLAC reader: a last frame shorter than 16 bytes (a silent one is 13) was dropped, so a file ending in silence lost up to a tenth of a second. It is patched (`patches/mediabunny+1.61.4.patch`, read in `lib/audio/audio.node.test.ts`) until Mediabunny fixes it.
+- **Colour, JSON and audio, phase 6 part 5** (`lib/agent/color.test.ts`, `json.test.ts`, `audio.test.ts`, 100%; `e2e/agent.spec.ts` and `e2e/agent-audio.spec.ts`, five profiles):
+  - JSON searched and browsed with its exact digits, and an array of objects laid out as a table;
+  - a contrast aimed at 7:1, with ΔE2000 and the vision previews; black and white mixed in sRGB; a radial gradient the browser accepts as CSS; Microsoft's colours written as CSS;
+  - a palette's PNG strip drawn by the page, then read back pixel by pixel through `pick_image_color` (the colour, and half opacity kept);
+  - a sound with silence at both ends and a long pause trimmed and shortened (3 to 4.2 s shorter, measured by FFmpeg) and split at 3 s and 12 s into parts of those lengths.
 - **A real agent:** Codex (`codex exec` with the bridge as its MCP server) formatted a JSON file with sorted keys and checked a contrast. It kept every digit and saved the result beside the file. Then Codex merged two PDFs into `combined.pdf` and compressed the brochure through the bridge. Poppler (`pdfinfo`, `pdftotext`) read 5 pages (3 + 2) and the same text in the compressed brochure, 90% smaller. Asked in plain words to make the sample tune an MP3 at −16 LUFS and to write down what the voice note says as subtitles, Codex called `normalize_audio` and `transcribe_audio`; FFmpeg's `ebur128` measured −16.0 LUFS, and the SRT had both sentences word for word.
 
 ## Phases
@@ -268,4 +273,4 @@ A package of its own, in TypeScript that Node runs as it is (type stripping), bu
    2. the page's own text, pictures and links, and fonts of one's own. Built.
    3. making form fields, and trusted certificates for checking signatures. Built.
    4. every setting of the image and animation pages. Built.
-   5. audio's silence trimming, equaliser and split times; colour gradients, brand colours, vision previews and mixing; searching JSON.
+   5. audio's silence trimming, equaliser and split times; colour gradients, brand colours, vision previews and mixing; searching JSON. Built.

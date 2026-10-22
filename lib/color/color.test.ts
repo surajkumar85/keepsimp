@@ -28,6 +28,7 @@ import {
 } from "./palette"
 import { simulate } from "./vision"
 import { brands } from "./brands"
+import { drawStrip, STRIP_SIDE, stripSize } from "./strip"
 
 describe("color conversion", () => {
   it.each([
@@ -366,6 +367,27 @@ describe("gradients and image sampling", () => {
     ).toThrow()
     expect(() => paletteFromPixels(new Uint8ClampedArray(4), 2.5)).toThrow()
     expect(() => paletteFromPixels(new Uint8ClampedArray(4), 13)).toThrow()
+  })
+})
+
+describe("the PNG palette strip", () => {
+  it("draws one square swatch for each colour, opacity kept", () => {
+    const drawn: string[] = []
+    const context = {
+      fillStyle: "",
+      fillRect(x: number, y: number, width: number, height: number) {
+        drawn.push(`${this.fillStyle} ${x} ${y} ${width} ${height}`)
+      },
+    }
+    drawStrip(context as unknown as CanvasRenderingContext2D, [
+      "red",
+      "rgb(0 0 255 / 0.5)",
+    ])
+    expect(drawn).toEqual([
+      `#ff0000 0 0 ${STRIP_SIDE} ${STRIP_SIDE}`,
+      `#0000ff80 ${STRIP_SIDE} 0 ${STRIP_SIDE} ${STRIP_SIDE}`,
+    ])
+    expect(stripSize(3)).toEqual({ width: 480, height: 160 })
   })
 })
 
