@@ -4,6 +4,7 @@ import {
   useCallback,
   useEffect,
   useEffectEvent,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -265,7 +266,10 @@ export function ImageResizer() {
     }
   })
 
-  useEffect(() => {
+  // A layout effect: React runs it in the task that puts the tool on the
+  // page, so a file chosen at once already finds the client. A passive
+  // effect can run after that first event, and what it asked for is lost.
+  useLayoutEffect(() => {
     const instance = new ResizerPool(
       poolSize(navigator.hardwareConcurrency),
       (message) => handleMessage(message),

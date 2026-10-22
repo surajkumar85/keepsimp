@@ -3,6 +3,7 @@
 import {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useReducer,
   useRef,
@@ -848,7 +849,10 @@ export function AudioWorkspace({ mode = "editor" }: { mode?: AudioMode }) {
       : writeJob(item.id, source, settings, itemKey(current.key, item)!)
   }, [joinFiles])
 
-  useEffect(() => {
+  // A layout effect: React runs it in the task that puts the tool on the
+  // page, so a file chosen at once already finds the pool. A passive
+  // effect can run after that first event, and what it asked for is lost.
+  useLayoutEffect(() => {
     const made = new AudioPool(
       audioPoolSize(navigator.hardwareConcurrency),
       listener,
