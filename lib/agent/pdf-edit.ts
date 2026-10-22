@@ -40,6 +40,7 @@ import {
   type FieldOp,
   type FormField,
 } from "@/lib/pdf-editor/forms"
+import { readTrusted } from "@/lib/pdf-editor/trust"
 import {
   changesSaid,
   signerSaid,
@@ -939,6 +940,11 @@ export function pdfEditTools(
             required: entry.field.required,
             readOnly: entry.field.readOnly || !fillable(entry.field),
             page: entry.page + 1,
+            // Where it is, for the form designer's tools: each choice of a radio group is a place.
+            places: entry.places.map((place) => ({
+              page: place.page + 1,
+              box: place.field.box,
+            })),
           }))
           const { form } = session.state
           return {
@@ -1083,14 +1089,26 @@ export function pdfEditTools(
       ),
   }
 
-  const verify: AgentTool<{ file: string; password?: string }> = {
+  const verify: AgentTool<{
+    file: string
+    password?: string
+    trusted?: string[]
+  }> = {
     name: "verify_pdf_signatures",
     title: "Check a PDF's signatures",
     description:
-      "Checks the digital signatures a PDF carries: whether each still holds for what it covers, who its certificate names, when it says it was signed, and what was changed after it. Whether a certificate can be trusted is for the reader to judge; KeepSimp keeps no list of trusted issuers, and nothing is asked of the network. A signature that holds is not proof of who signed.",
+      "Checks the digital signatures a PDF carries: whether each still holds for what it covers, who its certificate names, when it says it was signed, and what was changed after it. Whether a certificate can be trusted is for the reader to judge: give the certificates you trust as trusted, and each signer's chain is checked against them by signature, dates and right to issue. KeepSimp keeps no list of trusted issuers of its own, and nothing is asked of the network. A signature that holds is not proof of who signed.",
     inputSchema: {
       type: "object",
-      properties: { file: fileProperty("The PDF."), password },
+      properties: {
+        file: fileProperty("The PDF."),
+        password,
+        trusted: filesProperty(
+          "Certificates you trust: .cer, .crt, .der or .pem.",
+          1,
+          20
+        ),
+      },
       required: ["file"],
       additionalProperties: false,
     },
@@ -1102,7 +1120,19 @@ export function pdfEditTools(
         input,
         { suffix: "" },
         async (session) => {
-          const found = await engine.signatures(session.id)
+          const trusted: Uint8Array[] = []
+          for (const id of input.trusted ?? []) {
+            const { blob, ref } = context.files.get(id)
+            try {
+              for (const one of await readTrusted(
+                new Uint8Array(await blob.arrayBuffer())
+              ))
+                trusted.push(one.der)
+            } catch (error) {
+              throw new ToolError(`${ref.name}: ${(error as Error).message}`)
+            }
+          }
+          const found = await engine.signatures(session.id, trusted)
           const data = found.map((signature) => {
             const verdict = verdictSaid(signature)
             return {
@@ -1118,6 +1148,9 @@ export function pdfEditTools(
               changedAfter: signature.changes
                 ? changesSaid(signature.changes)
                 : null,
+              ...(trusted.length && signature.verdict.checked
+                ? { trusted: signature.verdict.trust?.trusted ?? false }
+                : {}),
             }
           })
           return {

@@ -96,6 +96,13 @@ KeepSimp's tools can be used by agents: Claude Code, Codex and other MCP clients
 - **`edit_pdf_pictures`** and **`edit_pdf_links`** make the in-page steps one at a time, re-reading the page before each, since a picture or a link is named by its place in the page's list: changes first, then new links (at the end of the list), then removals from the highest place down. Pictures move (`moved`), resize about their top-left corner (`scaledAbout`), turn about their middle (`turnedAbout`), are cut (it hides) or shown whole, replaced, or taken out. Links lead only to pages and to `http`, `https`, `mailto` and `tel` (`targetFrom`); where an address leads is not checked.
 - **A font of one's own** (`ownFont` in `pdf-kit.ts`) is taken as the editor takes one: read for its name and its maker's permission (`readFont`), keyed by its bytes (`ownKey`), made ready for measuring on the page (`EditText.own`) and handed to the worker with its written name. `edit_pdf_text`, `draw_on_pdf` and `add_text_to_pdf` take it as `fontFile` with the font `own`.
 
+### Making forms, and trusted certificates (phase 6, part 3)
+
+- **`create_pdf_form_fields`** makes the designer's `add` steps (`MakeFieldOp`): every kind (`MAKE_KINDS`), named by `defaultSpec` and `offeredName` unless named, unique across the form (`nameTaken`), at the place given in points with the designer's usual size, kept on the page (`fitField`). `fromSuggestions` adds what the page's judge suggests (`suggestFields`), names made unique. A form with an XFA part is refused, as the designer refuses it.
+- **`suggest_pdf_form_fields`** only lists what is suggested; nothing is added unasked.
+- **`edit_pdf_form_fields`** makes `reshape`, `properties`, `delete`, `copy` and `order` steps in one change, by field names (`list_pdf_form_fields` now gives every place of a field). Moves and the layouts (`aligned`, `spread`, `sized`) start from where the last left each field, as on the page, and end as one move for each field that is somewhere else; tab order is the names given (the rest after them) or `readingOrder`. A tooltip that is only the name made readable is not kept as a tooltip. A field holding a certificate signature is not changed.
+- **`verify_pdf_signatures`** takes `trusted` certificate files (DER or PEM, read by `readTrusted`), checked against as the panel checks: by signature, dates and right to issue.
+
 ### Images and animation (phase 4)
 
 - **The workers** are the pages' own, the agent's own copies with one worker each:
@@ -231,6 +238,7 @@ A package of its own, in TypeScript that Node runs as it is (type stripping), bu
   - the sample video turned into a GIF of at most 640 pixels and 15 frames a second, the GIF into a WebP at twice the speed, and three stills into an MP4.
 - **Drawing and comments** (`lib/agent/pdf-draw.test.ts`, 100%, against the stand-in worker; `e2e/agent-pdf-draw.spec.ts`, five profiles, read back by pdf.js): every kind drawn into a page and its words read back (a stamp, a call-out, a measuring line's length, a row of boxes); kept editable, ten annotations, listed, moved and removed by id; a cover that leaves the words in the file; highlights by words and underlines by area with the words they lie on, a note and a pen stroke signed by the author, a reply, a change and a deletion, and comments drawn in or left out.
 - **What a page already has** (`lib/agent/pdf-content.test.ts`, 100%; `e2e/agent-pdf-content.spec.ts`, five profiles, read back by pdf.js and pdf-lib): a heading retyped larger, a paragraph changed and flowed, an address line taken out, the rest of the page as it was; a heading set in Kalam from a font file, embedded; pictures moved, cut, replaced and taken out, where pdf.js paints them; links led to a page, added to the web and to an e-mail address, and taken away.
+- **Forms** (`lib/agent/pdf-forms.test.ts`, 100%; `e2e/agent-pdf-forms.spec.ts`, five profiles, read back by pdf-lib): six kinds of field made and read by pdf-lib as text, check box, radio group, dropdown and signature fields, then filled; a field renamed and widened, three lined up and the tab order set by rows; the five fields a paper form asks for suggested and added; the signed sample trusted through its authority's certificate and not through another's.
 - **Audio** (`lib/agent/audio.test.ts`, `lib/audio/jobs.test.ts`, 100%, against a stand-in pool; `e2e/agent-audio.spec.ts`, five profiles, the real workers, results read by FFmpeg and FFprobe):
   - the sample tune read, its loudness as `ebur128` measures it;
   - converted to an MP3 with exactly as many samples as the source, trimmed and faded to four seconds of WAV exactly, brought to −16 LUFS with true peaks under −1 dBTP, made twice as fast, and made an iPhone ringtone in AAC;
@@ -250,6 +258,6 @@ A package of its own, in TypeScript that Node runs as it is (type stripping), bu
 6. **Everything else the pages do**, but recording and signing:
    1. drawing and comments. Built.
    2. the page's own text, pictures and links, and fonts of one's own. Built.
-   3. making form fields, and trusted certificates for checking signatures;
+   3. making form fields, and trusted certificates for checking signatures. Built.
    4. every setting of the image and animation pages;
    5. audio's silence trimming, equaliser and split times; colour gradients, brand colours, vision previews and mixing; searching JSON.
