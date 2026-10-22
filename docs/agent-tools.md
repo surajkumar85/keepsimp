@@ -131,6 +131,8 @@ KeepSimp's tools can be used by agents: Claude Code, Codex and other MCP clients
 
 ### The bridge (`bridge/`, npm `keepsimp-mcp`)
 
+Published on npm as `keepsimp-mcp` (0.1.0 on 2026-10-22). Its first start downloads the package, and Playwright's Chromium when Chrome is missing, which takes longer than Codex waits by default (10 s); the setup we give Codex therefore sets `startup_timeout_sec = 120`, and `tool_timeout_sec = 300` for long jobs such as transcription. Codex then read a PDF and converted a FLAC through `npx -y keepsimp-mcp`.
+
 A package of its own, in TypeScript that Node runs as it is (type stripping), built to `dist/` for npm. Dependencies: `@modelcontextprotocol/sdk` and `playwright-core`.
 
 - **`server.ts`:**

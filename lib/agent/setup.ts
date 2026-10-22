@@ -6,7 +6,10 @@ export const BRIDGE_COMMAND = `claude mcp add keepsimp -- npx -y ${BRIDGE_PACKAG
 
 export const CODEX_CONFIG = `[mcp_servers.keepsimp]
 command = "npx"
-args = ["-y", "${BRIDGE_PACKAGE}"]`
+args = ["-y", "${BRIDGE_PACKAGE}"]
+# The first start downloads the bridge and a browser; transcribing can take minutes.
+startup_timeout_sec = 120
+tool_timeout_sec = 300`
 
 /**
  * The WebMCP origin-trial token for keepsimp.vercel.app (Chrome 149 to 156),

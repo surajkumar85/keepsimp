@@ -16,6 +16,9 @@ Codex, in `~/.codex/config.toml`:
 [mcp_servers.keepsimp]
 command = "npx"
 args = ["-y", "keepsimp-mcp"]
+# The first start downloads the bridge and a browser; transcribing can take minutes.
+startup_timeout_sec = 120
+tool_timeout_sec = 300
 ```
 
 Any other client: run `npx -y keepsimp-mcp` as a stdio server.
