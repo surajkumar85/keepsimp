@@ -22,9 +22,9 @@ export default function PrivacyPage() {
           hand you the results through your browser. The JSON formatter
           processes pasted text in the current tab. KeepSimp’s application does
           not upload this content or store it on a server, and it saves none of
-          it in browser storage unless you ask it to (see below). Otherwise,
-          leaving or refreshing a tool page clears what you were working on.
-          Downloads are saved wherever your browser normally saves them.
+          it in browser storage except as described below. Otherwise, leaving or
+          refreshing a tool page clears what you were working on. Downloads are
+          saved wherever your browser normally saves them.
         </p>
         <h2>What is kept only when you ask.</h2>
         <p>
@@ -52,6 +52,15 @@ export default function PrivacyPage() {
           deleted when the take is finished or you delete it, and it is never
           sent anywhere. The microphone is used only after you press Record and
           the browser asks you, and only until you press Stop.
+        </p>
+        <p>
+          The video editor writes each video it makes to this browser’s own
+          private storage on this device while it makes it, so that long videos
+          do not fill the memory. That copy is deleted when you remove the video
+          or its result is replaced, and when you close the page; if the browser
+          stops before it can, the next time the video editor opens. It is never
+          sent anywhere. In a private window, where that storage may not be
+          offered, results are held in memory instead.
         </p>
         <h2>The website still loads from a host.</h2>
         <p>

@@ -10,6 +10,7 @@ import type { PdfEngine } from "./pdf-engine"
 import { imageTools, type ImageEngines } from "./image"
 import { animationTools, type AnimationJob } from "./animation"
 import { audioTools, type AudioEngines } from "./audio"
+import { videoTools, type VideoEngines } from "./video"
 import type { PoolJobs } from "./pool-jobs"
 import type { AnimationResponse } from "@/lib/animation/protocol"
 import { asTool, type AgentTool } from "./registry"
@@ -24,6 +25,7 @@ export interface Engines {
   images: ImageEngines
   animation: PoolJobs<AnimationJob, AnimationResponse>
   audio: AudioEngines
+  video: VideoEngines
 }
 
 const listFiles: AgentTool<Record<string, never>> = {
@@ -58,5 +60,6 @@ export function agentTools(engines: Engines): AgentTool[] {
     ...imageTools(engines.images),
     ...animationTools(engines.animation),
     ...audioTools(engines.audio),
+    ...videoTools(engines.video),
   ]
 }

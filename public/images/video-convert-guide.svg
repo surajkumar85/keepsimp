@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 600" role="img" aria-labelledby="title desc">
+  <title id="title">Converting video on your own device</title><desc id="desc">A video frame with a play button becomes three files, MP4, WebM and MKV, each with a tick, and a note that the picture was copied as it is, nothing lost.</desc>
+  <rect width="900" height="600" rx="24" fill="#f5f5f0"/>
+  <rect x="48" y="96" width="400" height="260" rx="16" fill="#171717"/>
+  <rect x="72" y="120" width="352" height="198" rx="10" fill="#00564f"/>
+  <path d="M72 260 L170 190 L250 250 L320 205 L424 280 V318 H72 Z" fill="#00786f"/>
+  <circle cx="352" cy="160" r="18" fill="#e6f2f1"/>
+  <circle cx="248" cy="219" r="34" fill="#fafafa" opacity="0.92"/>
+  <path d="M238 201 L266 219 L238 237 Z" fill="#171717"/>
+  <rect x="72" y="330" width="352" height="6" rx="3" fill="#404040"/>
+  <rect x="72" y="330" width="150" height="6" rx="3" fill="#00786f"/>
+  <text x="72" y="398" font-family="sans-serif" font-size="20" font-weight="600" fill="#171717">holiday.mov</text>
+  <text x="72" y="426" font-family="sans-serif" font-size="16" fill="#525252">HEVC · 1920 × 1080 · 2:14</text>
+  <path d="M470 226 H530" stroke="#00786f" stroke-width="6" stroke-linecap="round"/>
+  <path d="M514 208 L534 226 L514 244" fill="none" stroke="#00786f" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+  <g font-family="sans-serif">
+    <rect x="560" y="96" width="292" height="72" rx="14" fill="#ffffff" stroke="#d4d4d4" stroke-width="2"/>
+    <circle cx="596" cy="132" r="15" fill="#00786f"/><path d="M589 132 l5 5 l9 -10" fill="none" stroke="#ffffff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+    <text x="624" y="128" font-size="19" font-weight="600" fill="#171717">holiday.mp4</text>
+    <text x="624" y="152" font-size="15" fill="#525252">H.264 · plays everywhere</text>
+    <rect x="560" y="190" width="292" height="72" rx="14" fill="#ffffff" stroke="#d4d4d4" stroke-width="2"/>
+    <circle cx="596" cy="226" r="15" fill="#00786f"/><path d="M589 226 l5 5 l9 -10" fill="none" stroke="#ffffff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+    <text x="624" y="222" font-size="19" font-weight="600" fill="#171717">holiday.webm</text>
+    <text x="624" y="246" font-size="15" fill="#525252">VP9 and Opus · for the web</text>
+    <rect x="560" y="284" width="292" height="72" rx="14" fill="#ffffff" stroke="#d4d4d4" stroke-width="2"/>
+    <circle cx="596" cy="320" r="15" fill="#00786f"/><path d="M589 320 l5 5 l9 -10" fill="none" stroke="#ffffff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+    <text x="624" y="316" font-size="19" font-weight="600" fill="#171717">holiday.mkv</text>
+    <text x="624" y="340" font-size="15" fill="#525252">HEVC copied · nothing lost</text>
+  </g>
+  <rect x="48" y="468" width="804" height="84" rx="16" fill="#e6f2f1"/>
+  <text x="76" y="504" font-family="sans-serif" font-size="18" font-weight="600" fill="#00564f">Copied where nothing has to change, encoded where it must</text>
+  <text x="76" y="532" font-family="sans-serif" font-size="16" fill="#00564f">Every file opened again and checked · on your device, never uploaded</text>
+</svg>

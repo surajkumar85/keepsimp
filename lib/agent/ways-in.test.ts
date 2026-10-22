@@ -63,6 +63,14 @@ const engines = {
       accent: "rgb(0, 128, 128)",
     }),
   },
+  video: {
+    pool: new PoolJobs(
+      (listener, next) => new FakePool(listener, next, () => []),
+      "v"
+    ) as never,
+    ask: { video: async () => true, sound: async () => true },
+    folder: "test",
+  },
 }
 
 describe("every tool", () => {

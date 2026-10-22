@@ -160,7 +160,7 @@ Each result is opened again and decoded from start to end (`hearAudio`, with the
 - **Downloads use a second, untyped link to the same bytes:** with `audio/mp4`, Firefox saves an M4R as `.mp4`, and Safari on a phone opens sound to play instead of saving it. The page plays from the typed link.
 - **The player has a fixed height,** since it grows when it has read a file and moved the list under it.
 - Port 4190 is ManageSieve, which Firefox and WebKit refuse to load.
-- **Mediabunny dropped a FLAC file's last frame when it was shorter than 16 bytes** (a silent one is 13), so a recording that ends in silence lost up to a tenth of a second, and the check could not see it because the reader gave the shortened length too. Found when the agent tools' results were counted with FFmpeg; patched in `patches/mediabunny+1.61.4.patch` (still in 1.62.0) and held by `lib/audio/audio.node.test.ts`. Drop the patch when Mediabunny reads `tests/fixtures/audio/speech.flac` to its end.
+- **Mediabunny dropped a FLAC file's last frame when it was shorter than 16 bytes** (a silent one is 13), so a recording that ends in silence lost up to a tenth of a second, and the check could not see it because the reader gave the shortened length too. Found when the agent tools' results were counted with FFmpeg; patched in `patches/mediabunny+1.62.1.patch` (still in 1.62.0) and held by `lib/audio/audio.node.test.ts`. Drop the patch when Mediabunny reads `tests/fixtures/audio/speech.flac` to its end.
 
 ## Tests
 

@@ -6,6 +6,11 @@ import { pageMetadata, absoluteUrl } from "@/lib/site"
 import { StructuredData } from "@/components/structured-data"
 import { AnimationConverter } from "@/components/animation-converter/animation-converter"
 import { AudioWorkspace } from "@/components/audio/audio-workspace"
+import { VideoWorkspace } from "@/components/video/video-workspace"
+import {
+  VideoConverterTutorial,
+  VideoEditorTutorial,
+} from "@/components/video/tutorial"
 import {
   AudioConverterTutorial,
   AudioEditorTutorial,
@@ -90,6 +95,18 @@ export async function generateMetadata({
     return pageMetadata(
       "Free JSON formatter, validator & viewer",
       "Format, repair, explore and query JSON. Compare documents, apply JSON Patch, validate schemas and convert YAML, CSV or JSON Lines locally. No uploads.",
+      `/dashboard/${id}/`
+    )
+  if (id === "video-editor")
+    return pageMetadata(
+      "Free video converter and editor, with no uploads",
+      "Convert videos to MP4, WebM, MOV or MKV, change their size, frame rate and quality, turn them or take the sound out, many at once, in your browser. Copied as they are wherever nothing has to change, and every video checked before you download it. No account, no uploads.",
+      `/dashboard/${id}/`
+    )
+  if (id === "video-converter")
+    return pageMetadata(
+      "Video converter online for free: MOV, WebM, MKV to MP4",
+      "Convert MOV, WebM, MKV and MPEG-TS videos to MP4 and back in your browser, copied as they are wherever nothing has to change, with H.264, HEVC, VP9 or AV1. Any length, no account, no uploads.",
       `/dashboard/${id}/`
     )
   if (id === "audio-editor")
@@ -326,6 +343,10 @@ export default async function ToolPage({
         <ImageConverter />
       ) : id === "animation-converter" ? (
         <AnimationConverter />
+      ) : id === "video-editor" ? (
+        <VideoWorkspace mode="editor" />
+      ) : id === "video-converter" ? (
+        <VideoWorkspace mode="converter" />
       ) : id === "audio-editor" ? (
         <AudioWorkspace mode="editor" />
       ) : id === "audio-converter" ? (
@@ -397,6 +418,10 @@ export default async function ToolPage({
         <ImageConverterTutorial />
       ) : id === "animation-converter" ? (
         <AnimationConverterTutorial />
+      ) : id === "video-editor" ? (
+        <VideoEditorTutorial />
+      ) : id === "video-converter" ? (
+        <VideoConverterTutorial />
       ) : id === "audio-editor" ? (
         <AudioEditorTutorial />
       ) : id === "audio-converter" ? (

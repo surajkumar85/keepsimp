@@ -17,6 +17,13 @@ import { AudioPool, decodeOnPage } from "@/lib/audio/client"
 import type { AudioJob, AudioResponse } from "@/lib/audio/protocol"
 import { startTranscription } from "@/lib/audio/transcribe-client"
 import { startVideo } from "@/lib/audio/video-client"
+import { VideoPool } from "@/lib/video/client"
+import type {
+  VideoJob as VideoFileJob,
+  VideoResponse,
+} from "@/lib/video/protocol"
+import { browserAsker } from "@/lib/video/probe"
+import { clearScratch } from "@/lib/video/scratch"
 import { themeColours } from "@/lib/audio/theme-colours"
 import { CompressorEngine } from "./image-engines"
 import { PoolJobs } from "./pool-jobs"
@@ -153,6 +160,13 @@ export function startAgent(): Started {
     (listener, next) => new AudioPool(1, listener, next),
     "audio"
   )
+  const videoPool = new PoolJobs<VideoFileJob, VideoResponse>(
+    (listener, next) => new VideoPool(listener, next, 1),
+    "video"
+  )
+  // Results being written go to a folder of the page's own, emptied when it goes.
+  const videoFolder = `agent-${crypto.randomUUID()}`
+  void clearScratch(null)
   // Transcriptions and videos run in workers of their own, ended with the page.
   const running = new Set<() => void>()
   const own =
@@ -186,6 +200,7 @@ export function startAgent(): Started {
       images,
       animation,
       audio,
+      video: { pool: videoPool, ask: browserAsker, folder: videoFolder },
     })
   )
   window.keepsimp = bridgeApi(agent, {
@@ -219,6 +234,8 @@ export function startAgent(): Started {
       images.converter.dispose()
       animation.dispose()
       audioPool.dispose()
+      videoPool.dispose()
+      void clearScratch(videoFolder)
       running.forEach((end) => end())
       delete window.keepsimp
     },

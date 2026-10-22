@@ -249,6 +249,27 @@ export const overviewPost: BlogPost = {
       ],
     },
     {
+      id: "video-editor",
+      title: "Video editor: any video, in the format you need.",
+      paragraphs: [
+        "Convert videos between MP4, WebM, MOV and MKV, many at once and of any length, with the picture copied as it is wherever nothing has to change. Change the quality, the size or the frame rate, turn a video or leave its sound out; every result is opened again and checked before you download it.",
+      ],
+      links: [
+        {
+          label: "Open the video editor",
+          href: "/dashboard/video-editor/",
+        },
+        {
+          label: "Convert MOV, WebM or MKV to MP4",
+          href: "/dashboard/video-converter/",
+        },
+        {
+          label: "Guide: convert video without uploading",
+          href: "/blog/convert-video-without-uploading/",
+        },
+      ],
+    },
+    {
       id: "audio-editor",
       title:
         "Audio editor: sound cut, faded, as loud as it should be and in the format you need.",

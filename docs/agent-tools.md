@@ -130,6 +130,12 @@ KeepSimp's tools can be used by agents: Claude Code, Codex and other MCP clients
   - `audio_to_video`: the sound written as the workspace writes it, then drawn, over the sound's cover, a picture or (with `cover: false`) the theme's colour; the video is handed over only when opening it again finds its picture, its sound and its length.
 - **Every result says** the plan's sentences, what was done to the level (`levelSaid`) and what the check found.
 
+### Video (phase 7, part 1)
+
+- **The tools** (`lib/agent/video.ts`): `video_info` (the workspace's facts: kind, codecs, size as shown, turn, frame rate, bitrate, HDR, sound, length, what this browser can play) and `convert_video` (every setting of the video editor: format, codec, quality or a bitrate, size, frame rate, turn, mirror, sound, details).
+- **The same way as the page:** jobs are built by `lib/video/jobs.ts` (`readJob`, `convertJob`) and run on the workspace's own worker (`VideoPool`, the agent's own pool of one, through `PoolJobs`); each file is planned with the workspace's own `planFor` through `browserPlan`, which asks the browser what it can write (`browserAsker`, `lib/video/probe.ts`) as the plan needs, first choice first. A plan the browser cannot write is refused in the page's own words. Results are written to the agent page's own folder on disk, emptied when the page goes.
+- **Handed over only when it holds:** the worker opens every result again (`writtenProblems`); one not as asked is refused with what is wrong.
+
 ### Every setting of the image pages (phase 6, part 4)
 
 - **`compress_image`** takes the compressor's sizes (a share, or a width and height in pixels or percent, kept in shape or fitted), a crop box or the largest box of a shape in the middle of the image as it is turned (`initialCrop`, `aspectValue`, as the crop panel makes it), turns and flips, and the encoder's own choices (full-resolution colour, progressive JPEG, PNG colours, dithering, resampling). All go through the page's own `buildPlan`.
@@ -253,7 +259,7 @@ A package of its own, in TypeScript that Node runs as it is (type stripping), bu
   - tags written in place; split into two parts of four seconds each, joined into an MP3 with a chapter for each, exactly eight seconds;
   - noise taken out of speech, every sample kept, and the speech written down by Whisper;
   - a video of the sound, 1920 by 1080, with its sound, and the sound written on the way not left among the files.
-  - This found a fault in Mediabunny's FLAC reader: a last frame shorter than 16 bytes (a silent one is 13) was dropped, so a file ending in silence lost up to a tenth of a second. It is patched (`patches/mediabunny+1.61.4.patch`, read in `lib/audio/audio.node.test.ts`) until Mediabunny fixes it.
+  - This found a fault in Mediabunny's FLAC reader: a last frame shorter than 16 bytes (a silent one is 13) was dropped, so a file ending in silence lost up to a tenth of a second. It is patched (`patches/mediabunny+1.62.1.patch`, read in `lib/audio/audio.node.test.ts`) until Mediabunny fixes it.
 - **Colour, JSON and audio, phase 6 part 5** (`lib/agent/color.test.ts`, `json.test.ts`, `audio.test.ts`, 100%; `e2e/agent.spec.ts` and `e2e/agent-audio.spec.ts`, five profiles):
   - JSON searched and browsed with its exact digits, and an array of objects laid out as a table;
   - a contrast aimed at 7:1, with ΔE2000 and the vision previews; black and white mixed in sRGB; a radial gradient the browser accepts as CSS; Microsoft's colours written as CSS;
@@ -274,3 +280,4 @@ A package of its own, in TypeScript that Node runs as it is (type stripping), bu
    3. making form fields, and trusted certificates for checking signatures. Built.
    4. every setting of the image and animation pages. Built.
    5. audio's silence trimming, equaliser and split times; colour gradients, brand colours, vision previews and mixing; searching JSON. Built.
+7. **Video:** each phase of the video workspace as it ships. Part 1 (reading and converting) built.

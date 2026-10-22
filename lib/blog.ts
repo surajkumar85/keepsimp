@@ -33,6 +33,7 @@ export type BlogPost = {
 
 export const posts: readonly BlogPost[] = [
   ...colorPosts,
+  ...videoPosts,
   overviewPost,
   {
     slug: "compress-images-without-uploading",
@@ -738,3 +739,4 @@ import {
 } from "./tool-blog"
 
 import { colorPosts } from "./color-blog"
+import { videoPosts } from "./video-blog"

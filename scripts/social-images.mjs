@@ -259,6 +259,18 @@ const cards = [
     "/images/audio-video-guide.svg",
   ],
   [
+    "convert-video-without-uploading",
+    "Any video, in the format you need.",
+    "Convert video on your device, copied where it can be.",
+    "/images/video-convert-guide.svg",
+  ],
+  [
+    "convert-mov-webm-mkv-to-mp4",
+    "An MP4 that plays everywhere.",
+    "MOV, WebM and MKV to MP4, without uploading.",
+    "/images/video-mp4-guide.svg",
+  ],
+  [
     "keepsimp-tools-for-ai-agents",
     "Ask your agent. The work stays here.",
     "KeepSimp's tools in Claude Code, Codex and WebMCP.",

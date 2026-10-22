@@ -26,12 +26,50 @@ export type Tool = {
 
 export const tools: readonly Tool[] = [
   {
+    id: "video-editor",
+    name: "Video editor",
+    description:
+      "Convert videos to MP4, WebM, MOV or MKV, change their size, frame rate and quality, turn them or take the sound out, many at once, on your device.",
+    category: "video",
+    keywords: [
+      "video",
+      "convert",
+      "mp4",
+      "webm",
+      "mov",
+      "mkv",
+      "h.264",
+      "hevc",
+      "av1",
+      "vp9",
+      "resize video",
+      "rotate video",
+      "frame rate",
+      "mute video",
+    ],
+    status: "available",
+  },
+  {
     id: "video-converter",
     name: "Video converter",
-    description: "Find the right format for your next video.",
+    description:
+      "Change videos between MP4, WebM, MOV and MKV, copied as they are wherever nothing has to change, on your device.",
+    partOf: "video-editor",
     category: "video",
-    keywords: ["mp4", "webm", "mov", "convert"],
-    status: "planned",
+    keywords: [
+      "video converter",
+      "convert",
+      "mp4",
+      "webm",
+      "mov",
+      "mkv",
+      "mov to mp4",
+      "webm to mp4",
+      "mkv to mp4",
+      "mp4 to webm",
+      "hevc to h264",
+    ],
+    status: "available",
   },
   {
     id: "video-compressor",

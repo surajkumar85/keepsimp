@@ -13,9 +13,9 @@ test("tools are grouped, coloured by kind, and follow validated category URLs", 
   await expect(ready.getByRole("heading", { level: 3 }).first()).toContainText(
     "Ready to use"
   )
-  await expect(ready.getByTestId("tool-card")).toHaveCount(11)
-  await expect(planned.getByTestId("tool-card")).toHaveCount(3)
-  await expect(ready.getByRole("link")).toHaveCount(11)
+  await expect(ready.getByTestId("tool-card")).toHaveCount(12)
+  await expect(planned.getByTestId("tool-card")).toHaveCount(2)
+  await expect(ready.getByRole("link")).toHaveCount(12)
   await expect(planned.getByRole("link")).toHaveCount(0)
   // Each kind of tool has its own colour, taken from the tokens.
   const colourOf = (name: string) =>
@@ -42,7 +42,10 @@ test("tools are grouped, coloured by kind, and follow validated category URLs", 
 
   await page.goto("/dashboard/?category=video")
   await expect(page.getByTestId("tool-card")).toHaveCount(3)
-  await expect(page.getByTestId("tools-ready")).toHaveCount(0)
+  // The Video editor is ready; the compressor and trimmer are still to come.
+  await expect(
+    page.getByTestId("tools-ready").getByTestId("tool-card")
+  ).toHaveText([/Video editor/])
   await page.goto("/dashboard/?category=invalid")
   await expect(page.getByTestId("tool-card")).toHaveCount(14)
 })
@@ -58,8 +61,8 @@ test("the search in the top bar finds tools and opens them", async ({
   await expect(box).toBeFocused()
   const options = dialog.getByRole("option")
   // With nothing typed, every tool is offered, working tools first.
-  await expect(options).toHaveCount(38)
-  await expect(options.first()).toContainText("Audio editor")
+  await expect(options).toHaveCount(39)
+  await expect(options.first()).toContainText("Video editor")
   await expect(options.first()).toHaveAttribute("aria-selected", "true")
   // Both converters write WebP; only one of them makes boomerangs.
   await box.fill("WEBP")
@@ -128,7 +131,7 @@ test("search results scroll inside a bounded dialog on short and narrow screens"
     const dialog = page.getByRole("dialog", { name: "Search tools" })
     const input = dialog.getByRole("combobox"),
       list = dialog.getByRole("listbox")
-    await expect(dialog.getByRole("option")).toHaveCount(38)
+    await expect(dialog.getByRole("option")).toHaveCount(39)
     const bounds = (await dialog.boundingBox())!
     expect(bounds.y).toBeGreaterThanOrEqual(0)
     expect(bounds.y + bounds.height).toBeLessThanOrEqual(height - 8)
@@ -209,7 +212,7 @@ test("⌘K or Ctrl+K opens the search from anywhere, also while typing", async (
   await page.getByLabel("Your JSON", { exact: true }).click()
   await page.keyboard.press(keys)
   await expect(dialog.getByRole("combobox")).toBeFocused()
-  await page.keyboard.type("resize")
+  await page.keyboard.type("resize image")
   await page.keyboard.press("Enter")
   await expect(page).toHaveURL(/\/dashboard\/image-resizer\/$/)
   // The plain letter does nothing by itself.
@@ -266,7 +269,7 @@ test("theme persists and both themes pass accessibility checks", async ({
     // The search, with its list open and a tool chosen.
     await page.getByTestId("search-button").click()
     const search = page.getByRole("dialog", { name: "Search tools" })
-    await expect(search.getByRole("option")).toHaveCount(38)
+    await expect(search.getByRole("option")).toHaveCount(39)
     const open = await new AxeBuilder({ page })
       .include("[role=dialog]")
       .withTags(["wcag2a", "wcag2aa", "wcag21aa"])
@@ -393,7 +396,7 @@ test("navigation remains usable at 320px", async ({ page }) => {
   // The search still fits, as a round button, and its list fits the screen.
   await page.getByTestId("search-button").click()
   const search = page.getByRole("dialog", { name: "Search tools" })
-  await expect(search.getByRole("option")).toHaveCount(38)
+  await expect(search.getByRole("option")).toHaveCount(39)
   const box = await search.boundingBox()
   expect(box!.x).toBeGreaterThanOrEqual(0)
   expect(box!.x + box!.width).toBeLessThanOrEqual(320)

@@ -12,6 +12,7 @@ describe("doors", () => {
   it("lists every tool once, without the pages that open another tool for one job", () => {
     const doors = tools.filter((tool) => tool.partOf)
     expect(doors.map((tool) => tool.id)).toEqual([
+      "video-converter",
       "audio-converter",
       "audio-extractor",
       "audio-trimmer",
@@ -89,7 +90,7 @@ describe("catalogue search", () => {
   it("combines all query terms with the selected category", () => {
     expect(
       filterTools(" VIDEO   CONVERT ", "video").map((tool) => tool.id)
-    ).toEqual(["video-converter"])
+    ).toEqual(["video-editor", "video-converter"])
     expect(filterTools("mp3", "video")).toEqual([])
   })
   it("matches aliases and descriptions", () => {

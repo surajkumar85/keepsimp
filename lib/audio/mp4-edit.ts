@@ -41,7 +41,7 @@ export const child = (bytes: Uint8Array, parent: Box, type: string) =>
   ) ?? null
 
 /** A full box's timescale and where its duration is, by its version. */
-function timing(view: DataView, box: Box, durationAt: [number, number]) {
+export function timing(view: DataView, box: Box, durationAt: [number, number]) {
   const version = view.getUint8(box.body)
   const timescale = view.getUint32(box.body + (version ? 20 : 12))
   return {
@@ -52,7 +52,7 @@ function timing(view: DataView, box: Box, durationAt: [number, number]) {
 }
 
 /** The edit list: play `length` (movie timescale) from `start` (media timescale). */
-function editBox(length: number, start: number) {
+export function editBox(length: number, start: number) {
   const wide = length > 0xffffffff || start > 0x7fffffff
   const elstSize = 16 + (wide ? 20 : 12)
   const out = new Uint8Array(8 + elstSize)

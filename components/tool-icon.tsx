@@ -29,6 +29,7 @@ import {
   IconTags,
   IconMicrophone,
   IconSubtitlesAi,
+  IconVideo,
   IconVideoPlus,
   IconVolume2,
   IconScissors,
@@ -44,6 +45,7 @@ import type { Category, Tool } from "@/lib/catalogue"
 
 /** Every tool has a picture of its own, so cards can be told apart at a glance. */
 const icons: Record<string, typeof IconBraces> = {
+  "video-editor": IconVideo,
   "video-converter": IconMovie,
   "video-compressor": IconFileZip,
   "video-trimmer": IconCut,
