@@ -28,6 +28,7 @@ import type { VideoJob, VideoResponse } from "@/lib/video/protocol"
 import {
   factsLine,
   itemMessage,
+  MAX_FILES,
   itemState,
   nextVideoJob,
   outputName,
@@ -55,7 +56,6 @@ import { SettingsPanel } from "./settings-panel"
 /** What the workspace is opened for: everything, or one job through a door. */
 export type VideoMode = "editor" | "converter"
 
-export const MAX_FILES = 20
 const INPUT_ID = "video-file"
 /** Settings are taken up this long after the last change, so a run of choices starts one job. */
 const SETTLE_MS = 600

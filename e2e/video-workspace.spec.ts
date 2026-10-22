@@ -45,6 +45,10 @@ test("copies the sample into an MP4 as it is, index first, every packet unchange
   )
   const order = topOrder(result.bytes)
   expect(order.indexOf("moov")).toBeLessThan(order.indexOf("mdat"))
+  // The help is written out, the numbers in it too.
+  const help = page.locator("#tutorial-title").locator("..")
+  await expect(help).toContainText("Up to 20 at once.")
+  await expect(help).not.toContainText("function")
   // The door says what it is.
   await page.getByRole("button", { name: "Clear all" }).click()
   await expect(page.getByTestId("video-focused")).toContainText(

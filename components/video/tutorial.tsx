@@ -5,7 +5,7 @@ import {
   KEYFRAME_SECONDS,
   PRESET_SHARE,
 } from "@/lib/video/settings"
-import { MAX_FILES } from "./video-workspace"
+import { MAX_FILES } from "@/lib/video/queue"
 
 const mbit = (kbit: number) =>
   `${(kbit / 1000).toLocaleString("en", { maximumFractionDigits: 1 })}`

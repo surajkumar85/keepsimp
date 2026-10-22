@@ -8,6 +8,9 @@ import { containerLabels, outputInfo, type Container } from "./formats"
 import type { IndexPlace } from "./protocol"
 import { videoCodecLabels, type Plan, type VideoFacts } from "./settings"
 
+/** Videos open at once. Shared by the page and its help, which is drawn on the server. */
+export const MAX_FILES = 20
+
 export interface VideoResult {
   /** The plan it was written by (`planKey`). */
   key: string
