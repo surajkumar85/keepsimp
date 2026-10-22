@@ -37,7 +37,9 @@ Also `redact_pdf` (words, e-mail addresses, phone and card numbers or shapes tak
 
 - **Images and animation:** `image_info`, `compress_image` (measured so the difference cannot be seen, or to a size), `resize_image` (sizes, presets, sets of widths), `convert_image` (to JPEG, PNG, WebP, AVIF, JPEG XL, GIF, BMP, TIFF, ICO or PDF, several images into one PDF) and `convert_animation` (GIF, WebP, APNG and short videos to GIF, WebP, APNG, MP4, WebM, frames or a sprite sheet, or stills into one).
 
-Audio tools follow.
+- **Audio:** `audio_info` (facts, tags and loudness), `convert_audio` (MP3, M4A, Opus, FLAC, WAV or M4R, gapless, or a video's sound copied out), `edit_audio` (trim, cut, silence, fade and volume, an equaliser and a compressor), `make_ringtone`, `normalize_audio` (to −14 LUFS or another loudness, a peak, or louder, never clipping), `change_audio_speed` (speed, pitch, channels, reverse, karaoke), `remove_background_noise` (RNNoise, hum, clicks), `edit_audio_tags` (in place, with a cover), `split_audio` (every N minutes, N parts or at pauses), `join_audio` (with a gap or a crossfade, and chapters), `transcribe_audio` (Whisper on your computer: text, SRT and VTT) and `audio_to_video`. Every result is decoded again and checked.
+
+Signing a PDF and recording stay for you to do yourself.
 
 ## What it may touch
 

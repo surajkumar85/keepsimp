@@ -13,6 +13,11 @@ import { CompressorClient, rasteriseSvg } from "@/lib/image-compressor/client"
 import { ResizerPool } from "@/lib/image-resizer/client"
 import { ConverterPool } from "@/lib/image-converter/client"
 import { AnimationPool } from "@/lib/animation/client"
+import { AudioPool, decodeOnPage } from "@/lib/audio/client"
+import type { AudioJob, AudioResponse } from "@/lib/audio/protocol"
+import { startTranscription } from "@/lib/audio/transcribe-client"
+import { startVideo } from "@/lib/audio/video-client"
+import { themeColours } from "@/lib/audio/theme-colours"
 import { CompressorEngine } from "./image-engines"
 import { PoolJobs } from "./pool-jobs"
 import type { ConvertJob, ResizeJob } from "./image"
@@ -128,6 +133,32 @@ export function startAgent(): Started {
     (listener, next) => new AnimationPool(1, listener, next),
     "animation"
   )
+  const audioPool = new PoolJobs<AudioJob, AudioResponse>(
+    (listener, next) => new AudioPool(1, listener, next),
+    "audio"
+  )
+  // Transcriptions and videos run in workers of their own, ended with the page.
+  const running = new Set<() => void>()
+  const own =
+    <Job, Message>(
+      start: (job: Job, onMessage: (message: Message) => void) => () => void
+    ) =>
+    (job: Job, onMessage: (message: Message) => void) => {
+      const stop = start(job, onMessage)
+      const end = () => {
+        running.delete(end)
+        stop()
+      }
+      running.add(end)
+      return end
+    }
+  const audio = {
+    pool: audioPool,
+    decode: decodeOnPage,
+    transcribe: own(startTranscription),
+    video: own(startVideo),
+    colours: () => themeColours(document.documentElement),
+  }
   const agent = new Agent(
     agentTools({
       runJson: (job) => json.run(job),
@@ -137,6 +168,7 @@ export function startAgent(): Started {
       ocr: startOcr,
       images,
       animation,
+      audio,
     })
   )
   window.keepsimp = bridgeApi(agent, {
@@ -169,6 +201,8 @@ export function startAgent(): Started {
       images.resizer.dispose()
       images.converter.dispose()
       animation.dispose()
+      audioPool.dispose()
+      running.forEach((end) => end())
       delete window.keepsimp
     },
   }

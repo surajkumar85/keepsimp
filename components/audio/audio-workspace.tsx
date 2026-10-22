@@ -24,7 +24,6 @@ import {
   IconStack2,
   IconTransform,
 } from "@tabler/icons-react"
-import type { MetadataTags } from "mediabunny"
 import { QueueList, type QueueRow } from "@/components/image-batch/queue-list"
 import { SummaryBar } from "@/components/image-batch/summary-bar"
 import {
@@ -33,7 +32,7 @@ import {
 } from "@/components/image-compressor/drop-zone"
 import { Button } from "@/components/ui/button"
 import { ChoiceChips } from "@/components/ui/choice-chips"
-import { checkResult } from "@/lib/audio/check"
+import { joinJob, joinPlan, resultProblems, writeJob } from "@/lib/audio/jobs"
 import { AudioPool, audioPoolSize, decodeOnPage } from "@/lib/audio/client"
 import {
   ACCEPT,
@@ -94,23 +93,19 @@ import {
   settingsProblem,
   type AudioSettings,
   type Plan,
-  type SourceFacts,
 } from "@/lib/audio/settings"
 import {
   dbLabel,
   levelSaid,
   loudnessSaid,
-  SAFE_CEILING,
   type Level,
   type LevelResult,
 } from "@/lib/audio/level"
 import { LoudnessMeter, loudnessOf, SILENT } from "@/lib/audio/loudness"
-import { isPlain } from "@/lib/audio/sound"
 import {
   changed,
   isTagChanged,
   noTagChange,
-  withChange,
   type Cover,
   type TagField,
 } from "@/lib/audio/tags"
@@ -412,11 +407,6 @@ const FIRST_LEVEL: Partial<Record<AudioMode, Partial<Level>>> = {
   booster: { mode: "louder" },
 }
 
-/** The tags of a file, to be written into what the page decoded (whose WAV has none). */
-function tagsOf(facts: ReadFacts): MetadataTags {
-  return withChange({}, { fields: facts.tags, cover: facts.cover ?? undefined })
-}
-
 /** A small picture of a file for the list: its cover, or its waveform. */
 async function thumbnailOf(facts: ReadFacts, peaks: Peaks | null) {
   try {
@@ -469,30 +459,6 @@ interface Joined {
 const NOT_JOINED: Joined = { wanted: null, result: null, resultKey: null }
 
 /**
- * The plan for a joined file: as for the first file, with as many channels
- * as the file that has most, and its length; always encoded again.
- */
-function joinPlan(parts: AudioItem[], settings: AudioSettings, length: number) {
-  const first = parts[0]?.facts
-  const facts: SourceFacts = first
-    ? {
-        ...first,
-        channels: Math.max(...parts.map((part) => part.facts!.channels)),
-        hasVideo: false,
-        duration: length,
-      }
-    : {
-        container: "wav",
-        codec: null,
-        sampleRate: 44100,
-        channels: 2,
-        duration: length,
-        hasVideo: false,
-      }
-  return planFor(settings, facts, true)
-}
-
-/**
  * A written file as the page keeps it: its bytes under a typed link to play
  * and an untyped one to save, and what the check found, held against the
  * length it should have and the settings it was written with.
@@ -510,8 +476,6 @@ function resultOf(
   const format = writtenFormats[plan.format]
   const blob = new Blob([written.bytes as BlobPart], { type: format.mime })
   const audible = item.peaks ? peakLevel(item.peaks) > 1e-4 : true
-  const { level } = settings
-  const lossless = format.lossless
   return {
     blob,
     url: URL.createObjectURL(blob),
@@ -523,34 +487,15 @@ function resultOf(
     plan,
     heard: written.heard,
     level: written.level,
-    problems: written.heard
-      ? checkResult(
-          {
-            // As long as the sound, at the speed it was written at.
-            duration: atSpeed ? duration : duration / settings.changes.tempo,
-            sampleRate: plan.sampleRate,
-            channels: plan.channels,
-            copy: plan.copy,
-            audible,
-            bitrate: plan.codec === "mp3" ? plan.bitrate : null,
-            bytes: blob.size,
-            // Held to its loudness unless the page said why not.
-            loudness:
-              level.mode === "loudness" && !written.level?.notes.length
-                ? level.target
-                : null,
-            // Lossy encoders raise peaks a little: only lossless is held to the ceiling.
-            ceiling: !lossless
-              ? null
-              : level.mode !== "same"
-                ? level.ceiling
-                : !isPlain(settings.sound)
-                  ? SAFE_CEILING
-                  : null,
-          },
-          written.heard
-        )
-      : [],
+    problems: resultProblems({
+      plan,
+      written,
+      bytes: blob.size,
+      duration,
+      settings,
+      audible,
+      atSpeed,
+    }),
   }
 }
 
@@ -828,39 +773,20 @@ export function AudioWorkspace({ mode = "editor" }: { mode?: AudioMode }) {
   )
 
   /** The job that joins files, by what was asked. */
-  const joinJob = useCallback(
-    (parts: AudioItem[], want: JoinWanted): JoinJob => {
-      const plan = joinPlan(parts, want.settings, want.length)
-      const first = parts[0].facts!
-      return {
-        job: "join",
-        id: JOIN_ID,
-        parts: parts.map((part) => {
-          const facts = part.facts!
-          const decoded = part.decoded
-          return {
-            file: decoded ?? part.file,
-            container: decoded ? "wav" : containers.current.get(part.id)!,
-            facts: decoded ? { ...facts, kept: null } : facts,
-            edits: stepsOf(part),
-            title: facts.tags.title || baseName(part.file.name),
-          }
-        }),
-        plan,
-        level: want.settings.level,
-        sound: want.settings.sound,
-        changes: want.settings.changes,
-        joining: want.joining,
-        tags: want.settings.keepTags
-          ? withChange(tagsOf(first), parts[0].tagChange ?? noTagChange)
-          : undefined,
-        chapters:
-          want.chapters &&
-          !want.settings.changes.reverse &&
-          holdsChapters(plan.format),
-        key: want.key,
-      }
-    },
+  const joinFiles = useCallback(
+    (parts: AudioItem[], want: JoinWanted): JoinJob =>
+      joinJob(
+        parts.map((part) => ({
+          file: part.file,
+          container: containers.current.get(part.id)!,
+          facts: part.facts!,
+          decoded: part.decoded,
+          edits: stepsOf(part),
+          change: part.tagChange,
+          title: part.facts!.tags.title || baseName(part.file.name),
+        })),
+        want
+      ),
     []
   )
 
@@ -892,7 +818,7 @@ export function AudioWorkspace({ mode = "editor" }: { mode?: AudioMode }) {
         current.items.find((one) => one.id === id)
       )
       if (parts.every((one) => one?.status === "ready" && one.facts))
-        return joinJob(parts as AudioItem[], want)
+        return joinFiles(parts as AudioItem[], want)
     }
     if (!found) return null
     const { item, job } = found
@@ -903,42 +829,24 @@ export function AudioWorkspace({ mode = "editor" }: { mode?: AudioMode }) {
     const asked = job === "split" ? splitAsked.current.get(item.id) : undefined
     if (job === "split" && !asked) return null
     const settings = asked?.settings ?? current.settings
-    const plan = planFor(
-      settings,
-      { ...facts, duration: lengthOf(editedBy(facts.duration, edits)) },
-      edits.length > 0 || job === "split"
-    )
-    // Sound the page decoded is written from its WAV; a copy needs no
-    // decoding, so it is always taken from the file itself.
-    const decoded = plan.copy ? undefined : item.decoded
-    const common = {
-      file: decoded ?? item.file,
-      container: decoded ? ("wav" as const) : container,
-      facts: decoded ? { ...facts, kept: null } : facts,
-      plan,
-      keepTags: settings.keepTags,
-      level: settings.level,
-      sound: settings.sound,
-      changes: settings.changes,
-      tags: decoded ? tagsOf(facts) : undefined,
-      change: item.tagChange ?? noTagChange,
+    const source = {
+      file: item.file,
+      container,
+      facts,
+      decoded: item.decoded,
       edits,
+      change: item.tagChange,
     }
-    if (asked)
-      return {
-        job: "split",
-        id: splitId(item.id),
-        ...common,
-        parts: asked.parts,
-        key: item.splitWanted!.key,
-      }
-    return {
-      job: "convert",
-      id: item.id,
-      ...common,
-      key: itemKey(current.key, item)!,
-    }
-  }, [joinJob])
+    return asked
+      ? writeJob(
+          splitId(item.id),
+          source,
+          settings,
+          item.splitWanted!.key,
+          asked.parts
+        )
+      : writeJob(item.id, source, settings, itemKey(current.key, item)!)
+  }, [joinFiles])
 
   useEffect(() => {
     const made = new AudioPool(
@@ -1809,7 +1717,13 @@ export function AudioWorkspace({ mode = "editor" }: { mode?: AudioMode }) {
             holdsChapters={
               !problem &&
               !settings.changes.reverse &&
-              holdsChapters(joinPlan(joinable, settings, joinLength).format)
+              holdsChapters(
+                joinPlan(
+                  joinable.map((part) => part.facts!),
+                  settings,
+                  joinLength
+                ).format
+              )
             }
             onMove={(id, by) => dispatch({ type: "move", id, by })}
             onJoin={() => {

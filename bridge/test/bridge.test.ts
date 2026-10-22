@@ -312,6 +312,18 @@ describe("the KeepSimp bridge", () => {
     assert.equal((await readFile(saved)).subarray(8, 12).toString(), "WEBP")
   })
 
+  it("converts sound from disk, checked by decoding it again", async () => {
+    const samples = new URL("../../public/samples/", import.meta.url).pathname
+    await copyFile(join(samples, "keepsimp-tune.flac"), join(work, "tune.flac"))
+    const converted = await call("convert_audio", { file: "tune.flac" })
+    assert.equal(converted.isError, undefined, converted.content[0].text)
+    assert.match(converted.content[0].text, /Checked: decoded again/)
+    const saved = converted.structuredContent!.files[0].path
+    assert.equal(saved, join(work, "tune.mp3"))
+    // An MP3 with its tags first.
+    assert.equal((await readFile(saved)).subarray(0, 3).toString(), "ID3")
+  })
+
   it("never lets the browser leave the site", () => {
     assert.doesNotMatch(said, /Refused a request/)
   })

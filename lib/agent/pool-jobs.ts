@@ -22,6 +22,9 @@ export interface JobMessage {
   message?: string
 }
 
+/** A job without its id, for each kind of job in a union. */
+export type WithoutId<Job> = Job extends unknown ? Omit<Job, "id"> : never
+
 interface Waiting<Message> {
   job: { id: string }
   resolve: (done: Message) => void
@@ -71,13 +74,13 @@ export class PoolJobs<Job extends { id: string }, Message extends JobMessage> {
 
   /** Runs one job: its "done" answer, or the worker's problem as a ToolError. */
   run(
-    job: Omit<Job, "id">,
+    job: WithoutId<Job>,
     options: { signal: AbortSignal; onMessage?: (message: Message) => void }
   ): Promise<Message> {
     const id = `${this.prefix}-${++this.count}`
     const promise = new Promise<Message>((resolve, reject) => {
       this.waiting.set(id, {
-        job: { ...job, id } as Job,
+        job: { ...job, id } as unknown as Job,
         resolve,
         reject,
         onMessage: options.onMessage,

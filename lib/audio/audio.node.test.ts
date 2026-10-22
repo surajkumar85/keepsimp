@@ -141,6 +141,17 @@ describe("reading", () => {
     // Node cannot decode MP3; a browser can.
     expect(facts.decodable).toBe(false)
   })
+
+  it("reads a FLAC to its end when its last frame is a short silent one", async () => {
+    // FFmpeg wrote this speech in blocks of 4424 samples; it ends with 1105
+    // samples of silence in a 13-byte frame, which Mediabunny (1.62 too) drops
+    // unless patched (patches/mediabunny+*.patch).
+    const flac = fixture("speech.flac")
+    const facts = await readAudio(mediabunny, blob(flac), "flac")
+    expect(Math.round(facts.duration * facts.sampleRate)).toBe(
+      ffmpegFrames(flac, "speech.flac", 1)
+    )
+  })
 })
 
 describe("writing", () => {

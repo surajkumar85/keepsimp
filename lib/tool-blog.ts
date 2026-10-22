@@ -3085,6 +3085,7 @@ export const agentsPost: BlogPost = {
     "webmcp",
     "local ai agent tools",
     "format json with ai agent",
+    "convert audio with ai agent",
   ],
   category: "A little know-how",
   readingTime: "3 min read",
@@ -3093,7 +3094,7 @@ export const agentsPost: BlogPost = {
     "A terminal asking an agent to format a file, a KeepSimp page in a hidden browser, and the formatted file saved beside the first",
   tool: "",
   intro:
-    "An agent that writes code can also format a file, check a colour, or merge, split and compress PDFs, and soon clean up a recording. KeepSimp's tools can be handed to it, and they still run on your device.",
+    "An agent that writes code can also format a file, check a colour, or merge, split and compress PDFs, or clean up a recording. KeepSimp's tools can be handed to it, and they still run on your device.",
   sections: [
     {
       id: "connect",
@@ -3125,9 +3126,9 @@ export const agentsPost: BlogPost = {
     },
     {
       id: "tools",
-      title: "The tools so far.",
+      title: "The tools.",
       paragraphs: [
-        "JSON: format, repair, query, validate against a schema, compare, patch and convert, with every number kept exactly. Colour: convert between spaces, check contrast, make palettes and find the colours of an image. PDF: read a file's facts and text, merge, split every way the splitter does, compress, organise pages, crop, add page numbers, headers and watermarks, change details and bookmarks, fill forms, redact, find and replace, add text and pictures, recognise scans and check signatures, each result checked. Images: read, compress, resize and convert, and turn animations and short videos into GIF, WebP, APNG, MP4 or WebM. Audio comes next; signing and recording stay for you to do yourself.",
+        "JSON: format, repair, query, validate against a schema, compare, patch and convert, with every number kept exactly. Colour: convert between spaces, check contrast, make palettes and find the colours of an image. PDF: read a file's facts and text, merge, split every way the splitter does, compress, organise pages, crop, add page numbers, headers and watermarks, change details and bookmarks, fill forms, redact, find and replace, add text and pictures, recognise scans and check signatures, each result checked. Images: read, compress, resize and convert, and turn animations and short videos into GIF, WebP, APNG, MP4 or WebM. Audio: read loudness, convert, trim and fade, make ringtones, normalise, change speed, take out noise, edit tags, split, join, transcribe with Whisper and make a video of a sound. Signing and recording stay for you to do yourself.",
       ],
       links: [
         {
@@ -3141,6 +3142,10 @@ export const agentsPost: BlogPost = {
         {
           label: "Open the colour utility",
           href: "/dashboard/color-utility/",
+        },
+        {
+          label: "Open the audio editor",
+          href: "/dashboard/audio-editor/",
         },
       ],
     },

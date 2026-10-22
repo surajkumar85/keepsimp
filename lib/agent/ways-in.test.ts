@@ -42,6 +42,21 @@ const engines = {
     (listener, next) => new FakePool(listener, next, () => []),
     "a"
   ) as never,
+  audio: {
+    pool: new PoolJobs(
+      (listener, next) => new FakePool(listener, next, () => []),
+      "s"
+    ) as never,
+    decode: async () => ({ planes: [], sampleRate: 44100 }),
+    transcribe: () => () => undefined,
+    video: () => () => undefined,
+    colours: () => ({
+      background: "rgb(0, 0, 0)",
+      foreground: "rgb(255, 255, 255)",
+      muted: "rgb(128, 128, 128)",
+      accent: "rgb(0, 128, 128)",
+    }),
+  },
 }
 
 describe("every tool", () => {

@@ -6,6 +6,7 @@ import { pdfEditTools, type EditText, type StartOcr } from "./pdf-edit"
 import type { PdfEngine } from "./pdf-engine"
 import { imageTools, type ImageEngines } from "./image"
 import { animationTools, type AnimationJob } from "./animation"
+import { audioTools, type AudioEngines } from "./audio"
 import type { PoolJobs } from "./pool-jobs"
 import type { AnimationResponse } from "@/lib/animation/protocol"
 import { asTool, type AgentTool } from "./registry"
@@ -18,6 +19,7 @@ export interface Engines {
   ocr: StartOcr
   images: ImageEngines
   animation: PoolJobs<AnimationJob, AnimationResponse>
+  audio: AudioEngines
 }
 
 const listFiles: AgentTool<Record<string, never>> = {
@@ -48,5 +50,6 @@ export function agentTools(engines: Engines): AgentTool[] {
     ...pdfEditTools(engines.pdf, engines.text, engines.ocr),
     ...imageTools(engines.images),
     ...animationTools(engines.animation),
+    ...audioTools(engines.audio),
   ]
 }

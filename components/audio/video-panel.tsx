@@ -13,12 +13,12 @@ import { ChoiceChips } from "@/components/ui/choice-chips"
 import type { Cover } from "@/lib/audio/tags"
 import { clock } from "@/lib/audio/transcript"
 import { startVideo } from "@/lib/audio/video-client"
+import { themeColours } from "@/lib/audio/theme-colours"
 import { decodeOnPage } from "@/lib/audio/client"
 import { wavFromPlanes } from "@/lib/audio/wav"
 import {
   defaultLook,
   SHAPES,
-  type VideoColours,
   type VideoLook,
   type VideoShape,
 } from "@/lib/audio/video"
@@ -43,19 +43,6 @@ interface Made {
   container: "mp4" | "webm"
   seconds: number
   sound: Blob
-}
-
-/** A theme colour as rgb(), read by drawing it, for the canvas in the worker. */
-function colourOf(element: Element, name: string) {
-  const probe = document.createElement("canvas")
-  probe.width = probe.height = 1
-  const context = probe.getContext("2d", { willReadFrequently: true })
-  const value = getComputedStyle(element).getPropertyValue(name).trim()
-  if (!context || !value) return "rgb(128, 128, 128)"
-  context.fillStyle = value
-  context.fillRect(0, 0, 1, 1)
-  const [red, green, blue] = context.getImageData(0, 0, 1, 1).data
-  return `rgb(${red}, ${green}, ${blue})`
 }
 
 const PICTURE_TYPES = ["image/jpeg", "image/png", "image/webp"]
@@ -109,12 +96,7 @@ export function VideoPanel({ source }: { source: VideoSource }) {
     setMade(null)
     setProgress(0)
     const element = panel.current
-    const colours: VideoColours = {
-      background: colourOf(element, "--background"),
-      foreground: colourOf(element, "--foreground"),
-      muted: colourOf(element, "--muted-foreground"),
-      accent: colourOf(element, "--primary"),
-    }
+    const colours = themeColours(element)
     stop.current = startVideo(
       {
         file: sound,

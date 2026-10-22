@@ -98,6 +98,8 @@ export default defineConfig({
         "lib/agent/image-engines.ts",
         "lib/agent/image.ts",
         "lib/agent/animation.ts",
+        "lib/agent/audio.ts",
+        "lib/audio/jobs.ts",
         "lib/image-tools.ts",
         "lib/site.ts",
         "lib/tool-search.ts",

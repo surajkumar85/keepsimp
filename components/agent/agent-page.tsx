@@ -345,7 +345,7 @@ export function AgentPage() {
           The tools
         </h2>
         <p className="text-sm text-muted-foreground">
-          Audio comes next. Signing and recording stay for you to do yourself.
+          Signing and recording stay for you to do yourself.
         </p>
         <ul className="divide-y" data-testid="agent-tools">
           {tools.map((tool) => (

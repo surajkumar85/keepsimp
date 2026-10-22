@@ -1,0 +1,14 @@
+diff --git a/node_modules/mediabunny/dist/modules/src/flac/flac-demuxer.js b/node_modules/mediabunny/dist/modules/src/flac/flac-demuxer.js
+index 6dd81d4..8ba3e09 100644
+--- a/node_modules/mediabunny/dist/modules/src/flac/flac-demuxer.js
++++ b/node_modules/mediabunny/dist/modules/src/flac/flac-demuxer.js
+@@ -215,7 +215,8 @@ export class FlacDemuxer extends Demuxer {
+         const effectiveMinFrameSize = this.audioInfo.minimumFrameSize || minimumFrameLength;
+         const effectiveMaxFrameSize = this.audioInfo.maximumFrameSize || maximumFrameLength;
+         const maximumSliceLength = effectiveMaxFrameSize + maximumHeaderLength;
+-        const slice = await this.reader.requestSliceRange(startPos, maximumHeaderLength, maximumSliceLength);
++        // A last frame can be shorter than the longest header: a silent one is 13 bytes.
++        const slice = await this.reader.requestSliceRange(startPos, minimumFrameLength, maximumSliceLength);
+         if (!slice) {
+             return null;
+         }

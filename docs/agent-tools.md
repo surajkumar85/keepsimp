@@ -93,6 +93,22 @@ KeepSimp's tools can be used by agents: Claude Code, Codex and other MCP clients
   - `resize_image` and `convert_image` name their files by the pages' own `fileName` and `uniqueNames`; several images become one PDF by `createPdf`;
   - `convert_animation` takes the page's own limits for a video as caps: at most 15 frames a second and 640 pixels on the longest side, never enlarged, unless asked otherwise. Several stills are shown 200 ms each.
 
+### Audio (phase 5)
+
+- **The jobs are the page's own.** The audio workspace's job-building moved into `lib/audio/jobs.ts`, which the page and the tools both use:
+  - `writeJob` makes the job that writes one file, or its parts, from the file, the WAV the page decoded (when the worker cannot decode it here), its edit steps and its tag change;
+  - `joinJob` and `joinPlan` make a join, titling each chapter by the file's tag or name;
+  - `resultProblems` holds a written file to what was asked (length at the speed written, rate, channels, bitrate, loudness, a lossless file's ceiling), as `checkResult` does on the page.
+- **The worker** is the workspace's `AudioPool`, the agent's own with one worker, through `PoolJobs`. Sound the worker cannot decode is decoded on the page (`decodeOnPage`), with its waveform and loudness measured there, as the workspace does. Whisper and the video maker run in workers of their own (`startTranscription`, `startVideo`), ended with the page; a video takes the theme's colours (`themeColours`, `lib/audio/theme-colours.ts`, shared with the video panel).
+- **The tools** (`lib/agent/audio.ts`) lay what is asked over the workspace's defaults (`settingsOf`), with each door's first format:
+  - `audio_info`: the reader's facts, tags and cover, and the loudness measured as BS.1770 says (`loudnessOf`, in the page's words: `loudnessSaid`);
+  - `convert_audio` (MP3 by default; `same` copies a video's sound out where its codec allows), `edit_audio` (keep, cut, silence, fade and gain steps, each in the times the steps before left, checked by `stepProblem`; an equaliser preset and a compressor), `make_ringtone` (`ringtonePart`, `ringtoneSteps`), `normalize_audio` (loudness, peak or louder, with the true-peak limiter), `change_audio_speed`, `remove_background_noise` (RNNoise, hum, clicks, harsh s sounds) and `edit_audio_tags` (written in place where the format allows);
+  - `split_audio`: every N minutes, N parts or at pauses found as the splitter finds them (`silentRuns` under −50 dBFS, `partsOf`), named by `partNames`;
+  - `join_audio`: in order, with a gap or a crossfade, and chapters;
+  - `transcribe_audio`: text, SRT and VTT (`toText`, `toSrt`, `toVtt`), from a decoded copy when the worker cannot decode the file;
+  - `audio_to_video`: the sound written as the workspace writes it, then drawn; the video is handed over only when opening it again finds its picture, its sound and its length.
+- **Every result says** the plan's sentences, what was done to the level (`levelSaid`) and what the check found.
+
 ### The agent page (`/dashboard/agents/`)
 
 - **What it is:** a workspace page, not a catalogue entry, linked from the sidebar footer, in the sitemap and in the offline copy.
@@ -197,7 +213,14 @@ A package of its own, in TypeScript that Node runs as it is (type stripping), bu
   - a JPEG read, compressed to WebP at 600 by 400, fitted under 40 KB, resized to a 300 by 300 PNG, to a set of widths and to a preset;
   - converted to AVIF within 200 pixels, and two images made into one PDF;
   - the sample video turned into a GIF of at most 640 pixels and 15 frames a second, the GIF into a WebP at twice the speed, and three stills into an MP4.
-- **A real agent:** Codex (`codex exec` with the bridge as its MCP server) formatted a JSON file with sorted keys and checked a contrast. It kept every digit and saved the result beside the file. Then Codex merged two PDFs into `combined.pdf` and compressed the brochure through the bridge. Poppler (`pdfinfo`, `pdftotext`) read 5 pages (3 + 2) and the same text in the compressed brochure, 90% smaller.
+- **Audio** (`lib/agent/audio.test.ts`, `lib/audio/jobs.test.ts`, 100%, against a stand-in pool; `e2e/agent-audio.spec.ts`, five profiles, the real workers, results read by FFmpeg and FFprobe):
+  - the sample tune read, its loudness as `ebur128` measures it;
+  - converted to an MP3 with exactly as many samples as the source, trimmed and faded to four seconds of WAV exactly, brought to −16 LUFS with true peaks under −1 dBTP, made twice as fast, and made an iPhone ringtone in AAC;
+  - tags written in place; split into two parts of four seconds each, joined into an MP3 with a chapter for each, exactly eight seconds;
+  - noise taken out of speech, every sample kept, and the speech written down by Whisper;
+  - a video of the sound, 1920 by 1080, with its sound, and the sound written on the way not left among the files.
+  - This found a fault in Mediabunny's FLAC reader: a last frame shorter than 16 bytes (a silent one is 13) was dropped, so a file ending in silence lost up to a tenth of a second. It is patched (`patches/mediabunny+1.61.4.patch`, read in `lib/audio/audio.node.test.ts`) until Mediabunny fixes it.
+- **A real agent:** Codex (`codex exec` with the bridge as its MCP server) formatted a JSON file with sorted keys and checked a contrast. It kept every digit and saved the result beside the file. Then Codex merged two PDFs into `combined.pdf` and compressed the brochure through the bridge. Poppler (`pdfinfo`, `pdftotext`) read 5 pages (3 + 2) and the same text in the compressed brochure, 90% smaller. Asked in plain words to make the sample tune an MP3 at −16 LUFS and to write down what the voice note says as subtitles, Codex called `normalize_audio` and `transcribe_audio`; FFmpeg's `ebur128` measured −16.0 LUFS, and the SRT had both sentences word for word.
 
 ## Phases
 
@@ -205,4 +228,4 @@ A package of its own, in TypeScript that Node runs as it is (type stripping), bu
 2. **PDF files:** information, merge, split, compress. Built.
 3. **PDF editor jobs:** pages, crop, page numbers, watermarks, details, forms, signature checks, redaction, find and replace, text and pictures, OCR. Built.
 4. **Images and animation.** Built.
-5. **Audio:** every job of the audio workspace, after its job-building moves into `lib/audio/`.
+5. **Audio:** every job of the audio workspace but recording. Built.
