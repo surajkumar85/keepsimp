@@ -1,4 +1,5 @@
 import { chromium, expect, test, type BrowserContext } from "@playwright/test"
+import { ORIGIN_TRIAL_TOKEN } from "@/lib/agent/setup"
 import AxeBuilder from "@axe-core/playwright"
 import { parse as parseYaml } from "yaml"
 import { hand, ran, ready, run, saved, twoColourPng } from "./agent"
@@ -295,4 +296,18 @@ test("the page is accessible in both themes and fits a phone", async ({
       () => document.documentElement.scrollWidth <= innerWidth
     )
   ).toBe(true)
+})
+
+test("asks Chrome for WebMCP with the site's origin-trial token, in the page's head", async ({
+  page,
+}) => {
+  await ready(page)
+  expect(
+    await page.evaluate(
+      () =>
+        document.head.querySelector<HTMLMetaElement>(
+          'meta[http-equiv="origin-trial"]'
+        )?.content
+    )
+  ).toBe(ORIGIN_TRIAL_TOKEN)
 })
