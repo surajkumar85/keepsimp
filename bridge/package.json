@@ -9,6 +9,7 @@
   },
   "files": [
     "dist",
+    "!dist/**/* [2-9].js",
     "README.md",
     "LICENSE"
   ],
