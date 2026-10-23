@@ -12,6 +12,7 @@ import { Changer, defaultChanges } from "@/lib/audio/change"
 import { Limiter } from "@/lib/audio/limiter"
 import { decibels } from "@/lib/audio/loudness"
 import type { Fade } from "./settings"
+import { cueAt, type Cue } from "./subtitles"
 
 /** How far up a fade is at a time of the result: 0 is black or silent, 1 untouched. */
 export function fadeGain(time: number, length: number, fade: Fade) {
@@ -57,7 +58,8 @@ export function shapePicture(
         ? layers.caption.layer
         : null
     const logo = layers?.logo ?? null
-    if (gain >= 1 && !text && !logo) return sample
+    const cue = layers?.subtitles ? cueAt(layers.subtitles.cues, middle) : null
+    if (gain >= 1 && !text && !logo && !cue) return sample
     const width = sample.displayWidth
     const height = sample.displayHeight
     if (!canvas || canvas.width !== width || canvas.height !== height)
@@ -67,6 +69,7 @@ export function shapePicture(
     sample.draw(context, 0, 0, width, height)
     if (logo) context.drawImage(logo, 0, 0, width, height)
     if (text) context.drawImage(text, 0, 0, width, height)
+    if (cue) layers!.subtitles!.draw(context, cue.text, width, height)
     if (gain < 1) {
       context.fillStyle = `rgba(0, 0, 0, ${Number((1 - gain).toFixed(3))})`
       context.fillRect(0, 0, width, height)
@@ -135,6 +138,16 @@ function planesOf(sample: Mediabunny.AudioSample) {
 /** Pictures the size of a frame, drawn over it: a logo, and text with the seconds it shows. */
 export interface Layers {
   logo: CanvasImageSource | null
+  /** Subtitles on the result's clock, and how one is drawn. */
+  subtitles?: {
+    cues: Cue[]
+    draw: (
+      context: OffscreenCanvasRenderingContext2D | CanvasRenderingContext2D,
+      text: string,
+      width: number,
+      height: number
+    ) => void
+  } | null
   caption: {
     layer: CanvasImageSource
     from: number | null

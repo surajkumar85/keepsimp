@@ -5,6 +5,7 @@
 import type { Container } from "./formats"
 import type { Box } from "./frame"
 import type { Soundtrack, TrackFacts } from "./soundtrack"
+import type { Cue } from "./subtitles"
 import type { ConvertJob, ReadJob } from "./protocol"
 import { planKey } from "./queue"
 import {
@@ -39,7 +40,8 @@ export async function browserPlan(
   cut: Cut | null = null,
   box: Box | null = null,
   track: (TrackFacts & Soundtrack) | null = null,
-  logo: LogoFacts | null = null
+  logo: LogoFacts | null = null,
+  subtitles: { name: string; cues: Cue[] } | null = null
 ): Promise<Plan> {
   const sounds = new Map<SoundCodec, boolean>([["aac", true]])
   let plan = planFor(
@@ -50,7 +52,8 @@ export async function browserPlan(
     cut,
     box,
     track,
-    logo
+    logo,
+    subtitles
   )
   for (let round = 0; round < MOST_ROUNDS; round++) {
     const waiting = plan.pending[0]
@@ -74,7 +77,8 @@ export async function browserPlan(
       cut,
       box,
       track,
-      logo
+      logo,
+      subtitles
     )
   }
   return plan

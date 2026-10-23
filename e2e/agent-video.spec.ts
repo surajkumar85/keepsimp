@@ -10,6 +10,7 @@ import {
   reportWorkerErrors,
   frameAt,
   plainPicture,
+  plainClip,
   soundOf,
   toneFile,
   toneLevel,
@@ -253,4 +254,34 @@ test("joins two videos into one, for an agent", async ({ page }) => {
   expect(out.name).toBe("one-joined.mp4")
   const once = frameHashes(clip, "agent-join-in.mp4")
   expect(frameHashes(out.bytes, "agent-joined.mp4")).toEqual([...once, ...once])
+})
+
+test("writes subtitles on a video, for an agent", async ({ page }) => {
+  test.setTimeout(120_000)
+  await ready(page)
+  const blue = plainClip("agent-blue.mp4", "blue", 3)
+  const file = await hand(page, blue.name, blue.buffer, "video/mp4")
+  const srt = await hand(
+    page,
+    "agent.srt",
+    Buffer.from("1\n00:00:01,000 --> 00:00:02,000\nHELLO HELLO\n"),
+    "application/x-subrip"
+  )
+  const done = await ran(page, "convert_video", { file, subtitles: srt })
+  expect(done.summary).toContain(
+    "1 subtitle from agent.srt is written on the picture."
+  )
+  const out = await saved(page, done.files![0].id)
+  const white = (seconds: number) => {
+    const frame = frameAt(out.bytes, `agent-subs-${seconds}.mp4`, seconds)
+    let count = 0
+    for (let y = 250; y < 360; y++)
+      for (let x = 0; x < 640; x += 2) {
+        const [r, g, b] = frame.at(x, y)
+        if (r > 200 && g > 200 && b > 200) count++
+      }
+    return count
+  }
+  expect(white(0.5)).toBe(0)
+  expect(white(1.5)).toBeGreaterThan(200)
 })

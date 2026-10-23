@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 600" role="img" aria-labelledby="title desc">
+  <title id="title">Subtitles written on a video</title><desc id="desc">A subtitle file's timed lines joining a video's frame, written white with a black outline along its bottom.</desc>
+  <rect width="900" height="600" rx="24" fill="#f5f5f0"/>
+  <g font-family="sans-serif">
+    <rect x="60" y="110" width="230" height="300" rx="14" fill="#ffffff" stroke="#d4d4d4" stroke-width="2"/>
+    <text x="84" y="150" font-size="18" font-weight="700" fill="#171717">film.srt</text>
+    <text x="84" y="190" font-size="14" font-family="monospace" fill="#525252">00:00:01,000 --&gt;</text>
+    <text x="84" y="212" font-size="15" fill="#171717">Where are we going?</text>
+    <text x="84" y="252" font-size="14" font-family="monospace" fill="#525252">00:00:03,500 --&gt;</text>
+    <text x="84" y="274" font-size="15" fill="#171717">Somewhere quiet.</text>
+    <path d="M310 260 H370" stroke="#00786f" stroke-width="6" stroke-linecap="round"/>
+    <path d="M354 242 L374 260 L354 278" fill="none" stroke="#00786f" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+    <rect x="400" y="110" width="440" height="300" rx="14" fill="#00564f"/>
+    <path d="M400 330 L520 240 L620 300 L720 220 L840 300 V410 H400 Z" fill="#00786f"/>
+    <text x="620" y="380" text-anchor="middle" font-size="26" font-weight="700" fill="#ffffff" stroke="#000000" stroke-width="5" paint-order="stroke" stroke-linejoin="round">Where are we going?</text>
+    <rect x="60" y="470" width="780" height="70" rx="16" fill="#e6f2f1"/>
+    <text x="450" y="512" text-anchor="middle" font-size="18" fill="#00564f">SRT or WebVTT · in time with any trim or speed · in every player</text>
+  </g>
+</svg>

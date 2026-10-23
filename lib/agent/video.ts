@@ -63,6 +63,7 @@ import {
   type AgentTool,
 } from "./registry"
 import { joinName, joinPlan, LEAST_TO_JOIN } from "@/lib/video/join"
+import { parseSubtitles } from "@/lib/video/subtitles"
 import type { FileStore } from "./files"
 
 export interface VideoEngines {
@@ -87,6 +88,8 @@ interface Crop {
 }
 
 interface SoundtrackAsked {
+  /** An SRT or WebVTT file written on the picture. */
+  subtitles?: string
   /** A picture drawn on every frame. */
   logo?: string
   /** The file whose sound goes under the video. */
@@ -125,6 +128,7 @@ type Settings = { crop?: Crop } & SoundtrackAsked &
       | "logoCorner"
       | "logoSize"
       | "logoOpacity"
+      | "subtitleSize"
     >
   >
 
@@ -240,6 +244,14 @@ const settingsSchema = {
     exclusiveMinimum: 0,
     description:
       "Seconds of the result the text shows until (the end when left out).",
+  },
+  subtitles: fileProperty(
+    "An SRT or WebVTT file whose subtitles are written on the picture (white, outlined, along the bottom), at the times they give in the video's own seconds, moved with any trim and speed."
+  ),
+  subtitleSize: {
+    type: "string",
+    enum: ["small", "medium", "large"],
+    description: "How large subtitles are written (medium by default).",
   },
   logo: fileProperty(
     "A picture (PNG, JPEG, WebP, GIF or AVIF) drawn on every frame, at logoCorner, logoSize and logoOpacity."
@@ -419,6 +431,9 @@ export function videoTools(engines: VideoEngines): AgentTool[] {
       ? await soundtrackOf(context.files, music)
       : null
     const logo = music.logo ? await logoOf(context.files, music.logo) : null
+    const subtitles = music.subtitles
+      ? await subtitlesOf(context.files, music.subtitles)
+      : null
     const plan = await browserPlan(
       opened.facts,
       settings,
@@ -427,7 +442,8 @@ export function videoTools(engines: VideoEngines): AgentTool[] {
       cutFor(opened.facts),
       crop ? boxOf(crop, opened.facts, opened.ref.name) : null,
       track && track.facts,
-      logo && logo.facts
+      logo && logo.facts,
+      subtitles
     )
     if (plan.problem) throw new ToolError(plan.problem)
     const done = (await engines.pool.run(
@@ -514,6 +530,17 @@ export function videoTools(engines: VideoEngines): AgentTool[] {
     }
   }
 
+  /** Subtitles asked for, read as the workspace reads them. */
+  async function subtitlesOf(files: FileStore, id: string) {
+    const { blob, ref } = files.get(id)
+    const cues = parseSubtitles(await blob.text())
+    if (!cues.length)
+      throw new ToolError(
+        `${ref.name} has no subtitles in it that can be read. Give an SRT or WebVTT file.`
+      )
+    return { name: ref.name, cues }
+  }
+
   /** A logo asked for: its picture's size, read as the workspace reads one. */
   async function logoOf(files: FileStore, id: string) {
     const { blob, ref } = files.get(id)
@@ -534,9 +561,10 @@ export function videoTools(engines: VideoEngines): AgentTool[] {
       soundtrackVolume: _volume,
       soundtrackLoop: _loop,
       logo: _logo,
+      subtitles: _subtitles,
       ...settings
     } = asked
-    void [_crop, _soundtrack, _mode, _volume, _loop, _logo]
+    void [_crop, _soundtrack, _mode, _volume, _loop, _logo, _subtitles]
     return { ...defaultSettings, ...settings }
   }
 

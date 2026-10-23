@@ -174,6 +174,17 @@ export function OverlayPanel({
           </p>
         </>
       )}
+      <ChoiceChips
+        label="Subtitle size"
+        hint="For subtitles added to a video (Add subtitles, under its player): white with a black outline along the bottom."
+        value={settings.subtitleSize}
+        onValueChange={(subtitleSize) => update({ subtitleSize })}
+        options={[
+          { value: "small", label: "Small" },
+          { value: "medium", label: "Medium" },
+          { value: "large", label: "Large" },
+        ]}
+      />
       {logo ? (
         <div className="space-y-4" data-testid="logo">
           <div className="flex items-center justify-between gap-2">

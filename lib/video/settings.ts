@@ -12,6 +12,12 @@ import {
 import { fitToSize, MOST_PASSES } from "./target"
 import type { CaptionSize, Corner } from "@/lib/animation/effects"
 import { trackSaid, type Soundtrack, type TrackFacts } from "./soundtrack"
+import {
+  placedCues,
+  subtitlesSaid,
+  type Cue,
+  type SubtitleSize,
+} from "./subtitles"
 import { boxCrop, isWholeBox, type Box } from "./frame"
 import {
   clock,
@@ -200,6 +206,8 @@ export interface VideoSettings {
   logoCorner: Corner
   logoSize: number
   logoOpacity: number
+  /** How large subtitles are written. */
+  subtitleSize: SubtitleSize
 }
 
 export type Limit = null | { bytes: number } | { share: number }
@@ -240,6 +248,7 @@ export const defaultSettings: VideoSettings = {
   logoCorner: "bottom-right",
   logoSize: 15,
   logoOpacity: 100,
+  subtitleSize: "medium",
 }
 
 /** A logo's file as read on the page: its name there and its size. */
@@ -356,6 +365,12 @@ export interface Plan {
       size: number
       opacity: number
     } | null
+  } | null
+  /** Subtitles written on the picture, on the result's clock; null for none. */
+  subtitles: {
+    name: string
+    cues: Cue[]
+    size: SubtitleSize
   } | null
   /** Another file's sound under the video, and how; null for none. */
   track:
@@ -571,7 +586,9 @@ export function planFor(
   /** Another file's sound to put under the video, and how. */
   track: (TrackFacts & Soundtrack) | null = null,
   /** A picture to draw on every frame: the page's name for it and its size. */
-  logo: LogoFacts | null = null
+  logo: LogoFacts | null = null,
+  /** Subtitles read from a file, in the source's own seconds. */
+  subtitles: { name: string; cues: Cue[] } | null = null
 ): Plan {
   const container =
     settings.format === "same"
@@ -650,6 +667,7 @@ export function planFor(
           settings.quality !== "original" && "the quality was chosen",
           over && `it is to fit under ${sizeSaid(target!)}`,
           caption && "text is written on it",
+          subtitles && "subtitles are written on it",
           logo && "a logo is drawn on it",
           shown.crop &&
             (box && !isWholeBox(box)
@@ -1008,6 +1026,15 @@ export function planFor(
         )}${sound && settings.sound !== "none" ? ", the sound with it" : ""}.`
     )
 
+  // Subtitles on the result's clock: through the parts kept and the speed.
+  const placed =
+    subtitles && facts.video
+      ? placedCues(subtitles.cues, parts, settings.speed)
+      : null
+  if (subtitles && placed)
+    notes.push(
+      subtitlesSaid(subtitles.name, subtitles.cues.length, placed.length)
+    )
   if (!source && !sound)
     fail("This file has neither a picture nor sound in it.")
   if (!settings.keepTags)
@@ -1028,6 +1055,14 @@ export function planFor(
     crop: why?.shown.crop ?? null,
     speed: settings.speed,
     fade: { in: settings.fadeIn, out: settings.fadeOut },
+    subtitles:
+      subtitles && placed
+        ? {
+            name: subtitles.name,
+            cues: placed,
+            size: settings.subtitleSize,
+          }
+        : null,
     overlay:
       (caption || logo) && facts.video
         ? {

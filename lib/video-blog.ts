@@ -867,4 +867,72 @@ export const videoPosts: readonly BlogPost[] = [
     ],
     sources: [sources.mediabunny, sources.webcodecs],
   },
+  {
+    published: "2026-10-23",
+    slug: "add-subtitles-to-a-video",
+    title: "Words on the picture, in every player.",
+    searchTitle:
+      "How to burn subtitles into a video, free and without uploading",
+    description:
+      "Burn the subtitles from an SRT or WebVTT file into a video in your browser, so they show on every site and player. They follow any trim or speed change. Nothing is uploaded.",
+    keywords: [
+      "add subtitles to video",
+      "burn subtitles into video",
+      "hardcode subtitles",
+      "srt to mp4",
+      "permanent subtitles",
+    ],
+    category: "A little know-how",
+    readingTime: "3 min read",
+    image: "/images/video-subtitles-guide.svg",
+    imageAlt:
+      "A subtitle file's lines joining a video's frames, written white with a black outline along the bottom",
+    tool: "add-subtitles-to-video",
+    intro:
+      "Most videos are watched with the sound off, and many sites ignore a separate subtitle file. Writing the subtitles onto the picture means everyone sees them, everywhere. KeepSimp does it from your SRT or WebVTT file, on your device.",
+    sections: [
+      {
+        id: "burned",
+        title: "Written on, not alongside.",
+        paragraphs: [
+          'A subtitle file beside a video is a track a player may or may not show. Written on the picture ("burned in"), the words are part of every frame: they show on every site and in every player, and cannot be turned off, so keep the file if you also want a version without them.',
+          "They are drawn white with a black outline, centred along the bottom, in the site's Outfit typeface, wrapped to the picture's width and made smaller if a word will not fit. Small, medium or large, as you like.",
+        ],
+        links: [
+          {
+            label: "Open Add subtitles to video",
+            href: "/dashboard/add-subtitles-to-video/",
+          },
+        ],
+      },
+      {
+        id: "timing",
+        title: "In time, however it is cut.",
+        paragraphs: [
+          "The times in the file are the video's own. Trim the video and the subtitles move with it: those in parts cut out are left out, and one across a cut keeps its kept part. Speed it up and they speed up too.",
+          "Making the file itself is up to you: write it by hand, or, for the sound of a video, let the Audio editor's transcription (Whisper, on your device) write an SRT for you, then check it before you burn it in.",
+        ],
+        links: [
+          {
+            label: "Guide: transcribe audio to text on your device",
+            href: "/blog/transcribe-audio-on-your-device/",
+          },
+        ],
+      },
+      {
+        id: "how",
+        title: "How to do it.",
+        paragraphs: [
+          "Open Add subtitles to video and drop your video. Under its player, Add subtitles and choose the SRT or WebVTT file. Each subtitle is drawn on the frames it covers, the video is written and checked, and you download it. The picture is encoded again; the sound is copied as it is.",
+        ],
+      },
+    ],
+    sources: [
+      {
+        title: "W3C: WebVTT, the Web Video Text Tracks format",
+        url: "https://www.w3.org/TR/webvtt1/",
+      },
+      sources.webcodecs,
+    ],
+  },
 ]

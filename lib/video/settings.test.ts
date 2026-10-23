@@ -1207,3 +1207,48 @@ describe("text and a logo", () => {
     expect(settingsProblem(set({ captionFrom: 1, captionUntil: 4 }))).toBeNull()
   })
 })
+
+describe("subtitles", () => {
+  const subtitles = {
+    name: "film.srt",
+    cues: [
+      { start: 1, end: 2, text: "one" },
+      { start: 5, end: 6, text: "two" },
+    ],
+  }
+  it("are written on the picture, on the result's clock, which is encoded", () => {
+    const plan = planFor(
+      clip,
+      set({ subtitleSize: "large" }),
+      all,
+      undefined,
+      { parts: [{ start: 0, end: 3 }], exact: false },
+      null,
+      null,
+      null,
+      subtitles
+    )
+    expect(plan.subtitles).toEqual({
+      name: "film.srt",
+      cues: [{ start: 1, end: 2, text: "one" }],
+      size: "large",
+    })
+    expect(plan.notes[0]).toMatch(/because subtitles are written on it\./)
+    expect(plan.notes).toContain(
+      "1 subtitle from film.srt is written on the picture; 1 in parts cut out is left out."
+    )
+    expect(
+      planFor(
+        { ...clip, video: null },
+        set({}),
+        all,
+        undefined,
+        null,
+        null,
+        null,
+        null,
+        subtitles
+      ).subtitles
+    ).toBeNull()
+  })
+})

@@ -86,6 +86,10 @@ const options: TutorialContent["options"] = [
     detail: `Text along the top and the bottom of the picture is written with the animation converter's own captions: the site's Outfit, wrapped to fit, small, medium or large, white or black with an outline of the other colour, for the whole video or between two times of the result. A logo (PNG, JPEG, WebP, GIF or AVIF) sits in a corner or the middle, ${LOGO_SIZES.join(", ")}% of the picture's width in its own shape, solid or see-through. Both are drawn on every frame, so the picture is encoded again. A logo marks a video; it does not stop it being copied.`,
   },
   {
+    term: "Subtitles",
+    detail: `Add subtitles, under a video's player, reads an SRT or WebVTT file for that video and writes its subtitles on the picture: white with a black outline, centred along the bottom, wrapped to fit, small, medium or large. Their times are the video's own seconds; with a trim or a speed change they move with it, and those in parts cut out are left out. Tags such as italics are taken out. Written on the picture, they show in every player and on every site, but cannot be turned off; the file's own subtitle tracks are not kept.`,
+  },
+  {
     term: "Join into one video",
     detail:
       "With two or more videos written, Join puts them end to end in one file, in the order shown (move each earlier or later). It joins the results, so each video's own trims, crops and edits are kept. When every video was written alike (the same codec, size, turn and decoder setup, as videos from one camera usually are), the pictures are copied packet for packet; otherwise they are encoded again at the first video's size, others fitted inside it with black bars. The sound is written again in one piece, each video's sound for exactly as long as its picture, silent where a video has none, so it never drifts. The joined file is the first video's kind, and is opened again and checked.",
@@ -426,6 +430,36 @@ const merging: TutorialContent = {
     },
   ],
   guideHref: "/blog/merge-videos-without-uploading/",
+}
+
+const subtitling: TutorialContent = {
+  ...editor,
+  name: "How to add subtitles to a video",
+  description:
+    "Write an SRT or WebVTT file's subtitles onto a video in your browser. Nothing is uploaded.",
+  steps: [
+    {
+      title: "Add your video",
+      text: "Drop it or choose it: MP4, MOV, WebM, MKV or MPEG-TS, of any length.",
+    },
+    {
+      title: "Add its subtitles",
+      text: "Under the player, Add subtitles and choose its SRT or WebVTT file.",
+    },
+    {
+      title: "Choose the size",
+      text: "Small, medium or large, under Text and logo; trim it or change its speed if you like.",
+    },
+    {
+      title: "Download",
+      text: "The video is written with them on the picture, checked and offered.",
+    },
+  ],
+  guideHref: "/blog/add-subtitles-to-a-video/",
+}
+
+export function SubtitlesTutorial() {
+  return <ToolTutorial content={subtitling} />
 }
 
 export function MergeTutorial() {

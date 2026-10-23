@@ -196,7 +196,8 @@ const DISCARDED: Record<string, string> = {
 const timed = (plan: Plan) =>
   plan.speed !== 1 || plan.fade.in > 0 || plan.fade.out > 0
 /** As are text and a logo on the picture. */
-const drawn = (plan: Plan) => timed(plan) || plan.overlay !== null
+const drawn = (plan: Plan) =>
+  timed(plan) || plan.overlay !== null || plan.subtitles !== null
 
 /** Hooks one after the other: what one drops, the next never sees; the last may give a canvas. */
 function chained<T>(

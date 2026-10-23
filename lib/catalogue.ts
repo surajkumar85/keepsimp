@@ -222,6 +222,22 @@ export const tools: readonly Tool[] = [
     status: "available",
   },
   {
+    id: "add-subtitles-to-video",
+    name: "Add subtitles to video",
+    description:
+      "Write an SRT or WebVTT file's subtitles onto a video, so they show in every player, on your device.",
+    partOf: "video-editor",
+    category: "video",
+    keywords: [
+      "add subtitles to video",
+      "burn subtitles",
+      "hardcode subtitles",
+      "srt to video",
+      "captions on video",
+    ],
+    status: "available",
+  },
+  {
     id: "audio-editor",
     name: "Audio editor",
     description:

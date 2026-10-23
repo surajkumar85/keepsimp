@@ -19,6 +19,7 @@ import {
   TextTutorial,
   GifTutorial,
   MergeTutorial,
+  SubtitlesTutorial,
 } from "@/components/video/tutorial"
 import {
   AudioConverterTutorial,
@@ -128,6 +129,12 @@ export async function generateMetadata({
     return pageMetadata(
       "Change video speed online: speed up or slow down, free",
       "Speed a video up to twice as fast or slow it to half speed in your browser, the sound keeping its pitch, with fades if you like. Every result is checked. No account, no uploads.",
+      `/dashboard/${id}/`
+    )
+  if (id === "add-subtitles-to-video")
+    return pageMetadata(
+      "Add subtitles to a video: burn in SRT or VTT, free and without uploading",
+      "Write the subtitles from an SRT or WebVTT file onto your video in your browser, so they show in every player and on every site. They follow any trim or speed change. No account, no uploads.",
       `/dashboard/${id}/`
     )
   if (id === "merge-videos")
@@ -428,6 +435,8 @@ export default async function ToolPage({
         <VideoWorkspace mode="gif" />
       ) : id === "merge-videos" ? (
         <VideoWorkspace mode="merge" />
+      ) : id === "add-subtitles-to-video" ? (
+        <VideoWorkspace mode="subtitles" />
       ) : id === "audio-editor" ? (
         <AudioWorkspace mode="editor" />
       ) : id === "audio-converter" ? (
@@ -521,6 +530,8 @@ export default async function ToolPage({
         <GifTutorial />
       ) : id === "merge-videos" ? (
         <MergeTutorial />
+      ) : id === "add-subtitles-to-video" ? (
+        <SubtitlesTutorial />
       ) : id === "audio-editor" ? (
         <AudioEditorTutorial />
       ) : id === "audio-converter" ? (

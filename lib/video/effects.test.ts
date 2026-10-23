@@ -302,3 +302,23 @@ describe("text and a logo on the picture", () => {
     expect(toEnd(end.sample as never)).not.toBe(end.sample)
   })
 })
+
+describe("subtitles on the picture", () => {
+  it("draw the cue showing at a frame's middle, and leave other frames whole", () => {
+    const { canvasOf } = canvases()
+    const drawnCues: string[] = []
+    const hook = shapePicture(1, { in: 0, out: 0 }, 10, canvasOf, {
+      logo: null,
+      caption: null,
+      subtitles: {
+        cues: [{ start: 1, end: 2, text: "Hello" }],
+        draw: (_context, text, width, height) =>
+          drawnCues.push(`${text} ${width}×${height}`),
+      },
+    })
+    const before = drawn(0.5)
+    expect(hook(before.sample as never)).toBe(before.sample)
+    hook(drawn(1.4).sample as never)
+    expect(drawnCues).toEqual(["Hello 4×2"])
+  })
+})

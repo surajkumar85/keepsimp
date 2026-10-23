@@ -22,7 +22,8 @@ import { removeScratch, scratchFile } from "./scratch"
 import type { Plan } from "./settings"
 import type { Layers, SoundGain } from "./effects"
 import { captionLayout, overlayRect } from "@/lib/animation/effects"
-import { renderCaption } from "@/lib/animation/caption"
+import { captionFont, renderCaption } from "@/lib/animation/caption"
+import { drawCue } from "./subtitles"
 import { gainFor, SAFE_CEILING } from "@/lib/audio/level"
 import type { Looks } from "./looks"
 import { MOST_PASSES, nextPass, passStands, willMiss } from "./target"
@@ -201,7 +202,26 @@ async function layersFor(
   logo: Blob | null
 ): Promise<Layers | null> {
   const overlay = plan.overlay
-  if (!overlay || plan.video.action !== "encode") return null
+  if ((!overlay && !plan.subtitles) || plan.video.action !== "encode")
+    return null
+  // Subtitles are drawn on each frame they show over, in the captions' font.
+  const subtitles = plan.subtitles
+    ? await (async () => {
+        const family = await captionFont()
+        const { cues, size } = plan.subtitles!
+        return {
+          cues,
+          draw: (
+            context:
+              OffscreenCanvasRenderingContext2D | CanvasRenderingContext2D,
+            text: string,
+            width: number,
+            height: number
+          ) => drawCue(context, text, width, height, size, family),
+        }
+      })()
+    : null
+  if (!overlay) return { logo: null, caption: null, subtitles }
   const { width, height } = plan.video
   let caption: Layers["caption"] = null
   const layout =
@@ -244,7 +264,7 @@ async function layersFor(
     context.drawImage(bitmap, place.x, place.y, place.width, place.height)
     bitmap.close()
   }
-  return { logo: logoLayer, caption }
+  return { logo: logoLayer, caption, subtitles }
 }
 
 /** The picture alone, written by the plan with no sound, into a file of its own to put together with a soundtrack. */
@@ -595,6 +615,7 @@ async function writeJob(
       !plan.flip &&
       !plan.crop &&
       !plan.overlay &&
+      !plan.subtitles &&
       !plan.fade.in &&
       !plan.fade.out
     )

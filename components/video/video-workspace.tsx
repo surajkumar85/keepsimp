@@ -69,6 +69,7 @@ import { browserAsker } from "@/lib/video/probe"
 import { SettingsPanel } from "./settings-panel"
 import { TrimPanel } from "./trim-panel"
 import { GifPanel } from "./gif-panel"
+import { SubtitlesControl } from "./subtitles-control"
 import { JoinPanel, type Joined } from "./join-panel"
 import { joinName, joinPlan, LEAST_TO_JOIN, moved } from "@/lib/video/join"
 import { SoundtrackPanel, type ChosenTrack } from "./soundtrack-panel"
@@ -81,6 +82,7 @@ import { isWholeBox, WHOLE, type Box } from "@/lib/video/frame"
 export type VideoMode =
   | "gif"
   | "merge"
+  | "subtitles"
   | "editor"
   | "converter"
   | "compressor"
@@ -135,6 +137,14 @@ const COPY: Record<VideoMode, DropZoneCopy> = {
     dropping: "Drop to change these videos' speed",
     body: "From half to twice their speed, the sound keeping its pitch, with fades in and out if you like.",
     inputLabel: "Choose video files to change their speed",
+    action: "Choose videos",
+    limits: `Stays on your device · up to ${MAX_FILES} videos at once · any length`,
+  },
+  subtitles: {
+    heading: "Drop a video to add subtitles to",
+    dropping: "Drop to add subtitles to these videos",
+    body: "Then add its SRT or WebVTT file, under the player: the subtitles are written on the picture, so every player shows them.",
+    inputLabel: "Choose video files to add subtitles to",
     action: "Choose videos",
     limits: `Stays on your device · up to ${MAX_FILES} videos at once · any length`,
   },
@@ -200,6 +210,7 @@ const SAMPLES: Record<VideoMode, string> = {
   text: "keepsimp-scene.mp4",
   gif: "keepsimp-scene.mp4",
   merge: "keepsimp-scene.mp4",
+  subtitles: "keepsimp-scene.mp4",
 }
 
 /** What each door starts with. */
@@ -215,6 +226,7 @@ const FIRST: Record<VideoMode, Partial<VideoSettings>> = {
   text: { format: "same" },
   gif: { format: "same" },
   merge: { format: "same" },
+  subtitles: { format: "same" },
 }
 
 const OPENED_FOR: Record<VideoMode, string> = {
@@ -229,6 +241,7 @@ const OPENED_FOR: Record<VideoMode, string> = {
   text: "adding text",
   gif: "making GIFs",
   merge: "merging",
+  subtitles: "adding subtitles",
 }
 
 /** The doors that show the trimmer at once; the others have it one press away. */
@@ -244,6 +257,7 @@ const TRIMS: Record<VideoMode, boolean> = {
   text: false,
   gif: true,
   merge: false,
+  subtitles: false,
 }
 
 let counter = 0
@@ -362,7 +376,8 @@ export function VideoWorkspace({ mode }: { mode: VideoMode }) {
                   volume: soundtrack.volume,
                   loop: soundtrack.loop,
                 },
-                logo?.facts ?? null
+                logo?.facts ?? null,
+                item.subtitles
               )
             : null,
         ])
@@ -658,6 +673,7 @@ export function VideoWorkspace({ mode }: { mode: VideoMode }) {
           trimApplied: null,
           part: null,
           box: null,
+          subtitles: null,
           progress: null,
           result: null,
         })
@@ -973,6 +989,14 @@ export function VideoWorkspace({ mode }: { mode: VideoMode }) {
                 )
               )
             }}
+            onSubtitles={(subtitles) => {
+              pool.current?.forget(selected.id)
+              change((current) =>
+                current.map((one) =>
+                  one.id === selected.id ? { ...one, subtitles } : one
+                )
+              )
+            }}
           />
         )}
         {notice && (
@@ -1073,6 +1097,7 @@ function Selected({
   onUndo,
   onSplit,
   onBox,
+  onSubtitles,
 }: {
   item: VideoItem
   plan: Plan | null
@@ -1086,6 +1111,7 @@ function Selected({
   onUndo: (back: boolean) => void
   onSplit: (points: number[]) => void
   onBox: (box: Box | null) => void
+  onSubtitles: (subtitles: VideoItem["subtitles"]) => void
 }) {
   const original = useMemo(() => URL.createObjectURL(item.file), [item.file])
   useEffect(() => () => URL.revokeObjectURL(original), [original])
@@ -1286,6 +1312,12 @@ function Selected({
                 <IconScissors aria-hidden="true" /> Trim
               </Button>
             ))}
+          {show === "original" && item.facts.video && (
+            <SubtitlesControl
+              subtitles={item.subtitles}
+              onSubtitles={onSubtitles}
+            />
+          )}
           {frameProblem && (
             <p role="alert" className="text-sm text-destructive">
               {frameProblem}

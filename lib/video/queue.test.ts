@@ -63,6 +63,7 @@ const item = (change: Partial<VideoItem> = {}): VideoItem => ({
   trimApplied: null,
   part: null,
   box: null,
+  subtitles: null,
   progress: null,
   result: null,
   ...change,

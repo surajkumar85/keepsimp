@@ -748,3 +748,36 @@ describe("joining videos for an agent", () => {
     )
   })
 })
+
+describe("subtitles for an agent", () => {
+  it("are read from an SRT file and planned on the picture", async () => {
+    const { call, add, jobs, agent } = setup()
+    const srt = agent.files.add(
+      new Blob(["1\n00:00:01,000 --> 00:00:02,000\nHello\n"]),
+      "film.srt"
+    )
+    const result = await call("convert_video", {
+      file: add(MP4, "clip.mp4").id,
+      subtitles: srt.id,
+      subtitleSize: "small",
+    })
+    const job = jobs().find((one) => one.job === "convert")!
+    expect(job.job === "convert" && job.plan.subtitles).toEqual({
+      name: "film.srt",
+      cues: [{ start: 1, end: 2, text: "Hello" }],
+      size: "small",
+    })
+    expect(result.summary).toContain(
+      "1 subtitle from film.srt is written on the picture."
+    )
+    const empty = agent.files.add(new Blob(["nothing"]), "empty.srt")
+    await expect(
+      call("convert_video", {
+        file: add(MP4, "clip.mp4").id,
+        subtitles: empty.id,
+      })
+    ).rejects.toThrow(
+      "empty.srt has no subtitles in it that can be read. Give an SRT or WebVTT file."
+    )
+  })
+})

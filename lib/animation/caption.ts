@@ -11,7 +11,7 @@ export const CANNOT_DRAW_TEXT =
 let family: Promise<string> | null = null
 
 /** The site's heading font, loaded once; the system's own when it cannot be. */
-function captionFont() {
+export function captionFont() {
   family ??= (async () => {
     try {
       const face = new FontFace(

@@ -10,6 +10,7 @@ import { videoCodecLabels, type Plan, type VideoFacts } from "./settings"
 import { MOST_PASSES } from "./target"
 import { keepOnly, splitAt, whole, type Part } from "./trim"
 import type { Box } from "./frame"
+import type { Cue } from "./subtitles"
 import type { Looks } from "./looks"
 
 /** What the trimmer keeps, with the edits that can be undone and done again. */
@@ -100,6 +101,8 @@ export interface VideoItem {
   part: number | null
   /** A crop box of one's own, over the picture as shown; null for none. */
   box: Box | null
+  /** Subtitles read from a file for this video, in its own seconds; null for none. */
+  subtitles: { name: string; cues: Cue[] } | null
   /** How far the job writing it is, for the plan named. */
   progress: { key: string; fraction: number; pass?: number } | null
   result: VideoResult | null

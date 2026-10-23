@@ -102,7 +102,10 @@ test("makes a 720p clip 360p at 15 frames a second, small, as H.264", async ({
   if (!(await canEncode(page, "avc", 640, 360))) test.skip()
   await page.locator("#video-file").setInputFiles([source])
   await settled(page)
-  await chip(page, "Small").click()
+  await page
+    .getByRole("radiogroup", { name: "Quality" })
+    .getByRole("radio", { name: "Small", exact: true })
+    .click()
   await chip(page, "360p").click()
   await chip(page, "15 fps").click()
   await expect(page.getByTestId("video-plan")).toContainText(

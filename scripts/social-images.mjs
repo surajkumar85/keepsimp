@@ -331,6 +331,12 @@ const cards = [
     "/images/video-merge-guide.svg",
   ],
   [
+    "add-subtitles-to-a-video",
+    "Words on the picture, in every player.",
+    "Add subtitles to a video, on your device.",
+    "/images/video-subtitles-guide.svg",
+  ],
+  [
     "keepsimp-tools-for-ai-agents",
     "Ask your agent. The work stays here.",
     "KeepSimp's tools in Claude Code, Codex and WebMCP.",
