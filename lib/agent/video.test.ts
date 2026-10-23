@@ -74,6 +74,27 @@ function setup({
   const videoPool = new PoolJobs<VideoJob, VideoResponse>(
     (listener, next) =>
       (pool = new FakePool<VideoJob, VideoResponse>(listener, next, (job) => {
+        if (job.job === "join")
+          return [
+            { type: "retired", id: job.id } as never,
+            { type: "progress", id: job.id, key: job.key, fraction: 0.5 },
+            {
+              type: "done",
+              id: job.id,
+              job: "join",
+              key: job.key,
+              file: new Blob([new Uint8Array(size)], { type: "video/x-test" }),
+              scratch: null,
+              written: {
+                ...readFacts,
+                duration: job.plan.length,
+                container: job.plan.container,
+              },
+              problems,
+              index: "front",
+              copied: job.plan.copyable,
+            },
+          ]
         if (job.job === "read")
           return [
             {
@@ -677,5 +698,53 @@ describe("text and a logo for an agent", () => {
     await expect(
       call("convert_video", { file: add(MP4, "clip.mp4").id, logo: broken.id })
     ).rejects.toThrow("broken.png could not be read as a picture.")
+  })
+})
+
+describe("joining videos for an agent", () => {
+  it("joins in the order given and hands over the checked file", async () => {
+    const { call, add, jobs, progress } = setup()
+    const first = add(MP4, "a.mp4")
+    const second = add(MP4, "b.mp4")
+    const result = await call("join_videos", { files: [first.id, second.id] })
+    const job = jobs().find((one) => one.job === "join")!
+    expect(job.job === "join" && job.files).toHaveLength(2)
+    expect(job.job === "join" && job.plan.length).toBe(12)
+    expect(result.summary).toMatch(
+      /^2 videos joined in order, 0:12\.00 in all, as MP4\. .*Written and checked: .* the pictures copied as they are\.$/
+    )
+    expect(result.files).toHaveLength(1)
+    expect(Math.max(...progress)).toBeLessThanOrEqual(1)
+  })
+
+  it("says when the pictures were encoded again", async () => {
+    const unknown = setup({
+      readFacts: { ...facts, video: { ...facts.video!, codec: null } },
+    })
+    const result = await unknown.call("join_videos", {
+      files: [unknown.add(MP4, "a.mp4").id, unknown.add(MP4, "b.mp4").id],
+    })
+    expect(result.summary).toMatch(/the pictures encoded again\.$/)
+  })
+
+  it("asks for two videos with pictures, and refuses a file not as planned", async () => {
+    const { call, add } = setup()
+    await expect(
+      call("join_videos", { files: [add(MP4, "a.mp4").id] })
+    ).rejects.toThrow("Give at least two videos to join.")
+    const silent = setup({ readFacts: { ...facts, video: null } })
+    await expect(
+      silent.call("join_videos", {
+        files: [silent.add(MP4, "a.mp4").id, silent.add(MP4, "b.mp4").id],
+      })
+    ).rejects.toThrow("a.mp4 has no picture to join.")
+    const off = setup({ problems: ["The file written has no sound."] })
+    await expect(
+      off.call("join_videos", {
+        files: [off.add(MP4, "a.mp4").id, off.add(MP4, "b.mp4").id],
+      })
+    ).rejects.toThrow(
+      "The videos were joined but not as planned, so the file is not handed over: The file written has no sound."
+    )
   })
 })

@@ -28,7 +28,7 @@ import {
   SNIFF_BYTES,
   sniffContainer,
 } from "@/lib/video/formats"
-import type { VideoJob, VideoResponse } from "@/lib/video/protocol"
+import type { JoinJob, VideoJob, VideoResponse } from "@/lib/video/protocol"
 import {
   factsLine,
   cutOf,
@@ -69,6 +69,8 @@ import { browserAsker } from "@/lib/video/probe"
 import { SettingsPanel } from "./settings-panel"
 import { TrimPanel } from "./trim-panel"
 import { GifPanel } from "./gif-panel"
+import { JoinPanel, type Joined } from "./join-panel"
+import { joinName, joinPlan, LEAST_TO_JOIN, moved } from "@/lib/video/join"
 import { SoundtrackPanel, type ChosenTrack } from "./soundtrack-panel"
 import { OverlayPanel, type ChosenLogo } from "./overlay-panel"
 import { defaultSoundtrack } from "@/lib/video/soundtrack"
@@ -78,6 +80,7 @@ import { isWholeBox, WHOLE, type Box } from "@/lib/video/frame"
 /** What the workspace is opened for: everything, or one job through a door. */
 export type VideoMode =
   | "gif"
+  | "merge"
   | "editor"
   | "converter"
   | "compressor"
@@ -89,6 +92,8 @@ export type VideoMode =
   | "text"
 
 const INPUT_ID = "video-file"
+/** The worker's name for the join, apart from every file's own. */
+const JOIN_ID = "video-join"
 /** Settings are taken up this long after the last change, so a run of choices starts one job. */
 const SETTLE_MS = 600
 
@@ -132,6 +137,14 @@ const COPY: Record<VideoMode, DropZoneCopy> = {
     inputLabel: "Choose video files to change their speed",
     action: "Choose videos",
     limits: `Stays on your device · up to ${MAX_FILES} videos at once · any length`,
+  },
+  merge: {
+    heading: "Drop the videos to merge",
+    dropping: "Drop to merge these videos",
+    body: "They are joined end to end in the order you choose, copied as they are when they match. Trim any of them first if you like.",
+    inputLabel: "Choose video files to merge",
+    action: "Choose videos",
+    limits: `Stays on your device · up to ${MAX_FILES} videos · any length`,
   },
   gif: {
     heading: "Drop a video to make a GIF",
@@ -186,6 +199,7 @@ const SAMPLES: Record<VideoMode, string> = {
   music: "keepsimp-scene.mp4",
   text: "keepsimp-scene.mp4",
   gif: "keepsimp-scene.mp4",
+  merge: "keepsimp-scene.mp4",
 }
 
 /** What each door starts with. */
@@ -200,6 +214,7 @@ const FIRST: Record<VideoMode, Partial<VideoSettings>> = {
   music: { format: "same" },
   text: { format: "same" },
   gif: { format: "same" },
+  merge: { format: "same" },
 }
 
 const OPENED_FOR: Record<VideoMode, string> = {
@@ -213,6 +228,7 @@ const OPENED_FOR: Record<VideoMode, string> = {
   music: "adding music",
   text: "adding text",
   gif: "making GIFs",
+  merge: "merging",
 }
 
 /** The doors that show the trimmer at once; the others have it one press away. */
@@ -227,6 +243,7 @@ const TRIMS: Record<VideoMode, boolean> = {
   music: false,
   text: false,
   gif: true,
+  merge: false,
 }
 
 let counter = 0
@@ -262,6 +279,52 @@ export function VideoWorkspace({ mode }: { mode: VideoMode }) {
   const [logo, setLogo] = useState<ChosenLogo | null>(null)
   const [logoReading, setLogoReading] = useState(false)
   const [logoProblem, setLogoProblem] = useState<string | null>(null)
+  const [joinOrder, setJoinOrder] = useState<string[]>([])
+  const [joined, setJoined] = useState<Joined | null>(null)
+  const [joinProgress, setJoinProgress] = useState<number | null>(null)
+  const [joinProblem, setJoinProblem] = useState<string | null>(null)
+  const joinWanted = useRef<(JoinJob & { name: string }) | null>(null)
+  const joinSent = useRef<string | null>(null)
+
+  // What the worker says of a join.
+  const joinHeard = useCallback((message: VideoResponse) => {
+    const wanted = joinWanted.current
+    if (!wanted || !("key" in message) || message.key !== wanted.key) {
+      if (message.type === "abandoned") setJoinProgress(null)
+      return
+    }
+    if (message.type === "progress") setJoinProgress(message.fraction)
+    else if (message.type === "error") {
+      setJoinProblem(message.message)
+      setJoinProgress(null)
+      joinWanted.current = null
+    } else if (message.type === "done" && message.job === "join") {
+      setJoined({
+        key: message.key,
+        file: message.file,
+        url: URL.createObjectURL(message.file),
+        downloadUrl: URL.createObjectURL(
+          new Blob([message.file], { type: "application/octet-stream" })
+        ),
+        name: wanted.name,
+        scratch: message.scratch,
+        written: message.written,
+        problems: message.problems,
+        copied: message.copied,
+      })
+      setJoinProgress(null)
+      joinWanted.current = null
+    }
+  }, [])
+  // A joined file let go of is released: its links, and its file on disk.
+  useEffect(() => {
+    if (!joined) return
+    return () => {
+      URL.revokeObjectURL(joined.url)
+      URL.revokeObjectURL(joined.downloadUrl)
+      if (joined.scratch) void removeScratch(folder, joined.scratch)
+    }
+  }, [joined, folder])
 
   // Settings settle before they are taken up.
   useEffect(() => {
@@ -367,78 +430,88 @@ export function VideoWorkspace({ mode }: { mode: VideoMode }) {
 
   const listen = useCallback(
     (message: VideoResponse) =>
-      change((current) =>
-        current.map((item) => {
-          if (item.id !== message.id) return item
-          if (message.type === "open-error")
-            return { ...item, status: "error", message: message.message }
-          if (message.type === "progress")
-            return {
-              ...item,
-              progress: {
-                key: message.key,
-                fraction: message.fraction,
-                pass: message.pass,
-              },
-            }
-          if (message.type === "error")
-            return {
-              ...item,
-              progress: null,
-              result: {
-                key: message.key,
-                file: null,
-                url: null,
-                downloadUrl: null,
-                scratch: null,
-                written: null,
-                problems: [],
-                index: null,
-                passes: 0,
-                resized: null,
-                level: null,
-                looks: null,
-                error: message.message,
-              },
-            }
-          if (message.type !== "done") return item
-          if (message.job === "read")
-            return {
-              ...item,
-              status: "ready",
-              facts: message.facts,
-              poster: message.poster,
-            }
-          return {
-            ...item,
-            progress: null,
-            result: {
-              key: message.key,
-              file: message.file,
-              url: URL.createObjectURL(message.file),
-              downloadUrl: URL.createObjectURL(
-                new Blob([message.file], { type: "application/octet-stream" })
-              ),
-              scratch: message.scratch,
-              written: message.written,
-              problems: message.problems,
-              index: message.index,
-              passes: message.passes,
-              resized: message.resized,
-              level: message.level,
-              looks: message.looks,
-              error: null,
-            },
-          }
-        })
-      ),
-    [change]
+      message.id === JOIN_ID
+        ? joinHeard(message)
+        : change((current) =>
+            current.map((item) => {
+              if (item.id !== message.id) return item
+              if (message.type === "open-error")
+                return { ...item, status: "error", message: message.message }
+              if (message.type === "progress")
+                return {
+                  ...item,
+                  progress: {
+                    key: message.key,
+                    fraction: message.fraction,
+                    pass: message.pass,
+                  },
+                }
+              if (message.type === "error")
+                return {
+                  ...item,
+                  progress: null,
+                  result: {
+                    key: message.key,
+                    file: null,
+                    url: null,
+                    downloadUrl: null,
+                    scratch: null,
+                    written: null,
+                    problems: [],
+                    index: null,
+                    passes: 0,
+                    resized: null,
+                    level: null,
+                    looks: null,
+                    error: message.message,
+                  },
+                }
+              if (message.type !== "done" || message.job === "join") return item
+              if (message.job === "read")
+                return {
+                  ...item,
+                  status: "ready",
+                  facts: message.facts,
+                  poster: message.poster,
+                }
+              return {
+                ...item,
+                progress: null,
+                result: {
+                  key: message.key,
+                  file: message.file,
+                  url: URL.createObjectURL(message.file),
+                  downloadUrl: URL.createObjectURL(
+                    new Blob([message.file], {
+                      type: "application/octet-stream",
+                    })
+                  ),
+                  scratch: message.scratch,
+                  written: message.written,
+                  problems: message.problems,
+                  index: message.index,
+                  passes: message.passes,
+                  resized: message.resized,
+                  level: message.level,
+                  looks: message.looks,
+                  error: null,
+                },
+              }
+            })
+          ),
+    [change, joinHeard]
   )
 
   const pool = useRef<VideoPool | null>(null)
   useEffect(() => {
     void clearScratch(null)
     const made = new VideoPool(listen, () => {
+      // A join asked for goes first, once.
+      const wanted = joinWanted.current
+      if (wanted && joinSent.current !== wanted.key) {
+        joinSent.current = wanted.key
+        return wanted
+      }
       const next = nextVideoJob(
         live.current.items,
         (item) => live.current.plans.get(item.id) ?? null,
@@ -626,6 +699,37 @@ export function VideoWorkspace({ mode }: { mode: VideoMode }) {
   const finished = items.filter(
     (item) => itemState(item, planOf(item)) === "done"
   )
+  // The finished videos in the order they are joined: the order chosen, then any new ones.
+  const joinable = [
+    ...joinOrder
+      .map((id) => finished.find((item) => item.id === id))
+      .filter((item): item is VideoItem => Boolean(item)),
+    ...finished.filter((item) => !joinOrder.includes(item.id)),
+  ].filter((item) => item.result?.written && !item.result.problems.length)
+  const pieces = joinable.map((item) => ({
+    name: item.name,
+    facts: item.result!.written!,
+  }))
+  const joining = pieces.length >= LEAST_TO_JOIN ? joinPlan(pieces) : null
+  const join = () => {
+    if (!joining) return
+    const key = joinable
+      .map((item) => `${item.id}:${item.result!.key}`)
+      .join("|")
+    joinWanted.current = {
+      job: "join",
+      id: JOIN_ID,
+      files: joinable.map((item) => item.result!.file!),
+      plan: joining,
+      key,
+      folder,
+      name: joinName(pieces, joining.container),
+    }
+    joinSent.current = null
+    setJoinProblem(null)
+    setJoinProgress(0)
+    pool.current?.kick()
+  }
   const names = uniqueNames(
     finished.map((item) =>
       outputName(item.name, planOf(item)!, item.part !== null)
@@ -907,6 +1011,25 @@ export function VideoWorkspace({ mode }: { mode: VideoMode }) {
           onRemove={remove}
           label="Videos"
         />
+        {joining && (
+          <JoinPanel
+            names={joinable.map((item) => item.name)}
+            plan={joining}
+            onMove={(index, by) =>
+              setJoinOrder(
+                moved(
+                  joinable.map((item) => item.id),
+                  index,
+                  by
+                )
+              )
+            }
+            onJoin={join}
+            progress={joinProgress}
+            joined={joined}
+            problem={joinProblem}
+          />
+        )}
       </div>
       <div className="min-w-0 lg:col-span-2">
         <div className="rounded-xl border bg-card p-4">

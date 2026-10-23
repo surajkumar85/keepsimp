@@ -539,7 +539,7 @@ const mbps = (bits: number) =>
  * in MKV would play a few hundredths of a second late (measured: 21 ms for
  * FFmpeg's encoder, 44 ms for Apple's).
  */
-function soundFor(container: OutContainer, channels: number) {
+export function soundFor(container: OutContainer, channels: number) {
   return container === "webm" || container === "mkv"
     ? { codec: "opus" as const, bitrate: channels === 1 ? 64_000 : 128_000 }
     : { codec: "aac" as const, bitrate: channels === 1 ? 96_000 : 160_000 }

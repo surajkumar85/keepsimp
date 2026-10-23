@@ -86,6 +86,11 @@ const options: TutorialContent["options"] = [
     detail: `Text along the top and the bottom of the picture is written with the animation converter's own captions: the site's Outfit, wrapped to fit, small, medium or large, white or black with an outline of the other colour, for the whole video or between two times of the result. A logo (PNG, JPEG, WebP, GIF or AVIF) sits in a corner or the middle, ${LOGO_SIZES.join(", ")}% of the picture's width in its own shape, solid or see-through. Both are drawn on every frame, so the picture is encoded again. A logo marks a video; it does not stop it being copied.`,
   },
   {
+    term: "Join into one video",
+    detail:
+      "With two or more videos written, Join puts them end to end in one file, in the order shown (move each earlier or later). It joins the results, so each video's own trims, crops and edits are kept. When every video was written alike (the same codec, size, turn and decoder setup, as videos from one camera usually are), the pictures are copied packet for packet; otherwise they are encoded again at the first video's size, others fitted inside it with black bars. The sound is written again in one piece, each video's sound for exactly as long as its picture, silent where a video has none, so it never drifts. The joined file is the first video's kind, and is opened again and checked.",
+  },
+  {
     term: "Make a GIF",
     detail: `Make a GIF of the result hands the video, as written with every edit, to the animation converter's own engine: a GIF (plays everywhere), an animated WebP (far smaller, plays in every browser) or an APNG (full colour), ${GIF_SIDES.join(", ")} pixels on its longest side or as the video, at ${GIF_RATES.join(", ")} frames a second, played for ever. An animation holds every frame as a picture, so keep it short: trim to the moment first. The sound is left out.`,
   },
@@ -395,6 +400,36 @@ const gifing: TutorialContent = {
     },
   ],
   guideHref: "/blog/make-a-gif-from-a-video/",
+}
+
+const merging: TutorialContent = {
+  ...editor,
+  name: "How to merge videos into one",
+  description:
+    "Join videos end to end in your browser, in the order you choose. Nothing is uploaded.",
+  steps: [
+    {
+      title: "Add your videos",
+      text: `Drop them or choose them: MP4, MOV, WebM, MKV or MPEG-TS, up to ${MAX_FILES}.`,
+    },
+    {
+      title: "Trim any of them",
+      text: "Each is written by itself first, with its own trims and edits.",
+    },
+    {
+      title: "Put them in order",
+      text: "Move each earlier or later in Join into one video.",
+    },
+    {
+      title: "Join and download",
+      text: "Join writes one file, checks it and offers it.",
+    },
+  ],
+  guideHref: "/blog/merge-videos-without-uploading/",
+}
+
+export function MergeTutorial() {
+  return <ToolTutorial content={merging} />
 }
 
 export function GifTutorial() {

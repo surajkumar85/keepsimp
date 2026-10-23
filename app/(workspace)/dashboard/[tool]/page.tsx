@@ -18,6 +18,7 @@ import {
   MusicTutorial,
   TextTutorial,
   GifTutorial,
+  MergeTutorial,
 } from "@/components/video/tutorial"
 import {
   AudioConverterTutorial,
@@ -127,6 +128,12 @@ export async function generateMetadata({
     return pageMetadata(
       "Change video speed online: speed up or slow down, free",
       "Speed a video up to twice as fast or slow it to half speed in your browser, the sound keeping its pitch, with fades if you like. Every result is checked. No account, no uploads.",
+      `/dashboard/${id}/`
+    )
+  if (id === "merge-videos")
+    return pageMetadata(
+      "Merge videos online for free: join MP4, MOV, WebM without uploading",
+      "Join videos end to end in your browser, in the order you choose: copied packet for packet when they match, otherwise brought to one size, the sound in step. Trim each first if you like. No account, no uploads.",
       `/dashboard/${id}/`
     )
   if (id === "video-to-gif")
@@ -419,6 +426,8 @@ export default async function ToolPage({
         <VideoWorkspace mode="text" />
       ) : id === "video-to-gif" ? (
         <VideoWorkspace mode="gif" />
+      ) : id === "merge-videos" ? (
+        <VideoWorkspace mode="merge" />
       ) : id === "audio-editor" ? (
         <AudioWorkspace mode="editor" />
       ) : id === "audio-converter" ? (
@@ -510,6 +519,8 @@ export default async function ToolPage({
         <TextTutorial />
       ) : id === "video-to-gif" ? (
         <GifTutorial />
+      ) : id === "merge-videos" ? (
+        <MergeTutorial />
       ) : id === "audio-editor" ? (
         <AudioEditorTutorial />
       ) : id === "audio-converter" ? (

@@ -37,6 +37,7 @@ export default defineConfig({
         "lib/video/frame.ts",
         "lib/video/soundtrack.ts",
         "lib/video/gif.ts",
+        "lib/video/join.ts",
         "lib/audio/formats.ts",
         "lib/audio/settings.ts",
         "lib/audio/target-size.ts",

@@ -7,6 +7,7 @@ import type * as Mediabunny from "mediabunny"
 import type { Container, OutContainer } from "./formats"
 import type { Decoded } from "./check"
 import type { Plan, Turn, VideoCodec, VideoFacts } from "./settings"
+import type { JoinPlan } from "./join"
 import { lookSize, moments, type Looks } from "./looks"
 import { cutPicture, cutSound } from "./cut"
 import {
@@ -1037,5 +1038,256 @@ export async function joinParts(
     await output.finalize()
   } finally {
     input.dispose()
+  }
+}
+
+/** Whether two decoder setups are the same: codec, size and their bytes. */
+function sameSetup(a: VideoDecoderConfig | null, b: VideoDecoderConfig | null) {
+  if (!a || !b) return false
+  if (a.codec !== b.codec || a.codedWidth !== b.codedWidth) return false
+  if (a.codedHeight !== b.codedHeight) return false
+  const bytes = (config: VideoDecoderConfig) =>
+    config.description
+      ? new Uint8Array(
+          ArrayBuffer.isView(config.description)
+            ? config.description.buffer.slice(
+                config.description.byteOffset,
+                config.description.byteOffset + config.description.byteLength
+              )
+            : config.description
+        )
+      : new Uint8Array(0)
+  const left = bytes(a)
+  const right = bytes(b)
+  return (
+    left.length === right.length &&
+    left.every((value, index) => value === right[index])
+  )
+}
+
+/**
+ * One video's sound for a joined file: decoded, its channels matched,
+ * resampled to the joined rate, and exactly `frames` long (silence where
+ * it is shorter or has none), on the joined clock from `start` frames.
+ */
+async function* segmentSound(
+  engine: Engine,
+  input: Mediabunny.Input,
+  sound: NonNullable<JoinPlan["sound"]>,
+  start: number,
+  frames: number,
+  signal?: AbortSignal
+): AsyncGenerator<Mediabunny.AudioSample> {
+  const { sampleRate: rate, channels } = sound
+  const track = await input.getPrimaryAudioTrack()
+  const playable = track && (await track.canDecode()) ? track : null
+  const queue = new FrameQueue(channels)
+  const resampler =
+    playable && playable.sampleRate !== rate
+      ? new Resampler(channels, playable.sampleRate / rate)
+      : null
+  const runs = playable ? new engine.AudioSampleSink(playable).samples() : null
+  let ended = !runs
+  let given = 0
+  try {
+    while (given < frames) {
+      signal?.throwIfAborted()
+      const wanted = Math.min(RUN, frames - given)
+      while (!ended && queue.size < wanted) {
+        const next = await runs!.next()
+        if (next.done) {
+          if (resampler) queue.push(resampler.flush())
+          ended = true
+          break
+        }
+        const planes = matchChannels(planesOfSample(next.value), channels)
+        next.value.close()
+        queue.push(resampler ? resampler.process(planes) : planes)
+      }
+      const planes = queue.take(wanted)
+      const data = new Float32Array(wanted * channels)
+      planes.forEach((plane, channel) => data.set(plane, channel * wanted))
+      yield new engine.AudioSample({
+        data,
+        format: "f32-planar",
+        numberOfChannels: channels,
+        sampleRate: rate,
+        timestamp: (start + given) / rate,
+      })
+      given += wanted
+    }
+  } finally {
+    await runs?.return(undefined)
+  }
+}
+
+/**
+ * Videos joined in order into one file (`joinPlan`): the pictures' packets
+ * copied when every one was written alike (the codec, size, turn and
+ * decoder setup), each frame drawn at the joined size and encoded
+ * otherwise; the sound written anew. Says which was done.
+ */
+export async function joinVideos(
+  engine: Engine,
+  files: Blob[],
+  plan: JoinPlan,
+  target: Mediabunny.Target,
+  {
+    signal,
+    onProgress,
+    software = false,
+  }: {
+    signal?: AbortSignal
+    onProgress?: (fraction: number) => void
+    software?: boolean
+  } = {}
+): Promise<{ copied: boolean }> {
+  const inputs = files.map((file) => opened(engine, file))
+  try {
+    const pictures = await Promise.all(
+      inputs.map(async (input) => (await input.getPrimaryVideoTrack())!)
+    )
+    const setups = await Promise.all(
+      pictures.map((picture) => picture.getDecoderConfig())
+    )
+    const turns = await Promise.all(
+      pictures.map(async (picture) => ({
+        rotation: await picture.getRotation(),
+        flip: await picture.getFlip(),
+      }))
+    )
+    const copied =
+      plan.copyable &&
+      setups.every((setup) => sameSetup(setup, setups[0])) &&
+      turns.every(
+        (turn) =>
+          turn.rotation === turns[0].rotation && turn.flip === turns[0].flip
+      )
+    const output = new engine.Output({
+      format: formatFor(engine, plan.container),
+      target,
+    })
+    let packetSource: Mediabunny.EncodedVideoPacketSource | null = null
+    let frameSource: Mediabunny.VideoSampleSource | null = null
+    if (copied) {
+      packetSource = new engine.EncodedVideoPacketSource(
+        (await pictures[0].getCodec())!
+      )
+      output.addVideoTrack(packetSource, {
+        rotation: turns[0].rotation as Turn,
+        flip: turns[0].flip,
+      })
+    } else {
+      let codec: VideoCodec | null = null
+      for (const candidate of plan.codecs)
+        if (
+          await engine.canEncodeVideo(candidate, {
+            width: plan.width,
+            height: plan.height,
+            bitrate: plan.bitrate,
+          })
+        ) {
+          codec = candidate
+          break
+        }
+      if (!codec)
+        throw new VideoProblem(
+          `This browser cannot write a picture ${plan.container.toUpperCase()} holds at ${plan.width} × ${plan.height}.`
+        )
+      frameSource = new engine.VideoSampleSource({
+        codec,
+        quality: new engine.Quality({ bitrate: plan.bitrate }),
+        keyFrameInterval: 2,
+        ...(software
+          ? { hardwareAcceleration: "prefer-software" as const }
+          : {}),
+      })
+      output.addVideoTrack(frameSource)
+    }
+    const soundSource = plan.sound
+      ? new engine.AudioSampleSource({
+          codec: plan.sound.codec,
+          quality: new engine.Quality({ bitrate: plan.sound.bitrate }),
+        })
+      : null
+    if (soundSource) output.addAudioTrack(soundSource)
+    await output.start()
+    const canvas = copied ? null : new OffscreenCanvas(plan.width, plan.height)
+    const context = canvas?.getContext("2d") ?? null
+    let offset = 0
+    let soundFrames = 0
+    let config: VideoDecoderConfig | null = setups[0]
+    for (const [index, picture] of pictures.entries()) {
+      const length = await picture.computeDuration()
+      const start = await picture.getFirstTimestamp()
+      // The picture's frames or packets, and the sound for as long as it.
+      const frames: AsyncGenerator<
+        Mediabunny.EncodedPacket | Mediabunny.VideoSample
+      > = copied
+        ? new engine.EncodedPacketSink(picture).packets()
+        : new engine.VideoSampleSink(picture).samples()
+      const until = plan.sound
+        ? Math.round((offset + length - start) * plan.sound.sampleRate)
+        : 0
+      const sound =
+        plan.sound && soundSource
+          ? segmentSound(
+              engine,
+              inputs[index],
+              plan.sound,
+              soundFrames,
+              until - soundFrames,
+              signal
+            )
+          : null
+      soundFrames = until
+      let nextFrame = await frames.next()
+      let nextSound = sound
+        ? await sound.next()
+        : { done: true as const, value: undefined }
+      while (!nextFrame.done || !nextSound.done) {
+        signal?.throwIfAborted()
+        const at = nextFrame.done
+          ? Infinity
+          : offset + nextFrame.value.timestamp - start
+        if (!nextSound.done && nextSound.value.timestamp < at) {
+          await soundSource!.add(nextSound.value)
+          nextSound.value.close()
+          nextSound = await sound!.next()
+          continue
+        }
+        if (nextFrame.done) break
+        const frame = nextFrame.value
+        if (copied) {
+          await packetSource!.add(
+            (frame as Mediabunny.EncodedPacket).clone({ timestamp: at }),
+            config ? { decoderConfig: config } : undefined
+          )
+          config = null
+        } else {
+          const sample = frame as Mediabunny.VideoSample
+          context!.fillStyle = "black"
+          context!.fillRect(0, 0, plan.width, plan.height)
+          sample.drawWithFit(context!, { fit: "contain" })
+          const drawn = new engine.VideoSample(canvas!, {
+            timestamp: at,
+            duration: sample.duration,
+          })
+          await frameSource!.add(drawn)
+          drawn.close()
+          sample.close()
+        }
+        onProgress?.(Math.min(1, at / plan.length))
+        nextFrame = await frames.next()
+      }
+      offset += length - start
+    }
+    packetSource?.close()
+    frameSource?.close()
+    soundSource?.close()
+    await output.finalize()
+    return { copied }
+  } finally {
+    for (const input of inputs) input.dispose()
   }
 }

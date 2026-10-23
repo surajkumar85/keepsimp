@@ -1,6 +1,7 @@
 import type { Container } from "./formats"
 import type { Plan, VideoFacts } from "./settings"
 import type { Looks } from "./looks"
+import type { JoinPlan } from "./join"
 import type { Loudness } from "@/lib/audio/loudness"
 
 /** What was done to the sound's level: measured before, the gain, measured after. */
@@ -44,7 +45,18 @@ export interface ConvertJob {
   logo?: Blob | null
 }
 
-export type VideoJob = ReadJob | ConvertJob
+/** Join written videos in order into one file. */
+export interface JoinJob {
+  job: "join"
+  id: string
+  files: Blob[]
+  plan: JoinPlan
+  /** Names the videos and their order, so a late result can be told from a current one. */
+  key: string
+  folder: string
+}
+
+export type VideoJob = ReadJob | ConvertJob | JoinJob
 
 export type VideoRequest =
   | (VideoJob & { type: "process"; generation: number })
@@ -64,6 +76,19 @@ export type VideoResponse =
       poster: ImageBitmap | null
     }
   | { type: "open-error"; id: string; message: string }
+  | {
+      type: "done"
+      id: string
+      job: "join"
+      key: string
+      file: Blob
+      scratch: string | null
+      written: VideoFacts
+      problems: string[]
+      index: IndexPlace | null
+      /** Whether the pictures were copied as they are. */
+      copied: boolean
+    }
   | {
       type: "progress"
       id: string

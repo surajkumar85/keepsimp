@@ -55,7 +55,14 @@ import {
   type TrackFacts,
   type TrackMode,
 } from "@/lib/video/soundtrack"
-import { asTool, fileProperty, ToolError, type AgentTool } from "./registry"
+import {
+  asTool,
+  fileProperty,
+  filesProperty,
+  ToolError,
+  type AgentTool,
+} from "./registry"
+import { joinName, joinPlan, LEAST_TO_JOIN } from "@/lib/video/join"
 import type { FileStore } from "./files"
 
 export interface VideoEngines {
@@ -802,7 +809,71 @@ export function videoTools(engines: VideoEngines): AgentTool[] {
     },
   }
 
-  return [info, convert, compress, trim, split, frame].map((tool) =>
+  const joining: AgentTool<{ files: string[] }> = {
+    name: "join_videos",
+    title: "Join videos into one",
+    description:
+      "Joins videos end to end, in the order given, into one file, as the video editor's Join does: the pictures' packets are copied as they are when every video was written alike (the same codec, size, turn and decoder setup), and encoded again at the first one's size otherwise, others fitted inside it; the sound is written again in one piece, each video's sound for exactly as long as its picture. The joined file is of the first video's kind and is opened again and checked (size, sound, length) before it is handed over. To trim, crop or change a video first, give it to another video tool and join the results.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        files: filesProperty(
+          "The videos, in the order they are joined: two or more."
+        ),
+      },
+      required: ["files"],
+      additionalProperties: false,
+    },
+    annotations: { readOnlyHint: true },
+    async run({ files: ids }, context) {
+      if (ids.length < LEAST_TO_JOIN)
+        throw new ToolError("Give at least two videos to join.")
+      const videos = []
+      for (const id of ids)
+        videos.push(await open(context.files, id, context.signal))
+      const pieces = videos.map((video) => ({
+        name: video.ref.name,
+        facts: video.facts,
+      }))
+      const plan = joinPlan(pieces)
+      if (plan.problem) throw new ToolError(plan.problem)
+      const done = (await engines.pool.run(
+        {
+          job: "join",
+          files: videos.map((video) => video.blob),
+          plan,
+          key: ids.join("|"),
+          folder: engines.folder,
+        },
+        {
+          signal: context.signal,
+          onMessage: (message) => {
+            if (message.type === "progress")
+              context.progress(message.fraction, "Joining the videos")
+          },
+        }
+      )) as Extract<VideoResponse, { type: "done"; job: "join" }>
+      if (done.problems.length)
+        throw new ToolError(
+          `The videos were joined but not as planned, so the file is not handed over: ${done.problems.join(" ")}`
+        )
+      const ref = context.files.add(
+        done.file,
+        joinName(pieces, plan.container),
+        "made"
+      )
+      return {
+        summary: [
+          ...plan.notes,
+          `Written and checked: ${factsLine(done.written)}, ${bytes(done.file.size)}, the pictures ${done.copied ? "copied as they are" : "encoded again"}.`,
+        ].join(" "),
+        files: [ref],
+        data: { plan, written: done.written, copied: done.copied },
+      }
+    },
+  }
+
+  return [info, convert, compress, trim, split, joining, frame].map((tool) =>
     asTool(tool as AgentTool<never>)
   )
 }

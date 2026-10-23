@@ -810,4 +810,61 @@ export const videoPosts: readonly BlogPost[] = [
       sources.mediabunny,
     ],
   },
+  {
+    published: "2026-10-23",
+    slug: "merge-videos-without-uploading",
+    title: "Many clips, one video.",
+    searchTitle: "How to merge videos into one, free and without uploading",
+    description:
+      "Join MP4, MOV, WebM or MKV clips end to end in your browser, in the order you choose: copied without encoding when they match, the sound in step. Nothing is uploaded.",
+    keywords: [
+      "merge videos",
+      "join videos",
+      "combine videos",
+      "merge mp4 files",
+      "put clips together",
+    ],
+    category: "A little know-how",
+    readingTime: "3 min read",
+    image: "/images/video-merge-guide.svg",
+    imageAlt:
+      "Three clips in a row joining into one longer video, the pictures copied and the sound in one piece",
+    tool: "merge-videos",
+    intro:
+      "Several clips from a phone, the parts of a screen recording, a series of short takes: they are easier to share as one video. KeepSimp joins them on your device, without uploading anything, and without encoding them again when it does not have to.",
+    sections: [
+      {
+        id: "copy",
+        title: "Copied when they match.",
+        paragraphs: [
+          "Clips from the same camera or app are usually written alike: the same codec, the same size, the same setup. Then their pictures are copied into the joined file packet for packet, so nothing is lost and an hour of video joins in seconds.",
+          "When they differ (a phone video upright and one on its side, or one from another app), the pictures are encoded again at the first clip's size, and the others are fitted inside it with black bars. The page says which before you join.",
+        ],
+        links: [
+          { label: "Open Merge videos", href: "/dashboard/merge-videos/" },
+        ],
+      },
+      {
+        id: "sound",
+        title: "The sound, in step at every join.",
+        paragraphs: [
+          "Joining sound packet for packet can leave small gaps or overlaps at each join, as encoders put a short run of samples before the sound. So the sound is written again in one piece: each clip's sound for exactly as long as its picture, silent where a clip has none. It never drifts, however many clips there are.",
+        ],
+      },
+      {
+        id: "how",
+        title: "How to do it.",
+        paragraphs: [
+          "Open Merge videos and drop your clips. Each is written by itself first, so you can trim the start and end of each, crop it or speed it up, all as usual. Then, in Join into one video, move the clips into order and Join. The joined file is opened again and checked (its size, its sound and its length) before you download it.",
+        ],
+        links: [
+          {
+            label: "Guide: trim a video without losing quality",
+            href: "/blog/trim-video-without-losing-quality/",
+          },
+        ],
+      },
+    ],
+    sources: [sources.mediabunny, sources.webcodecs],
+  },
 ]

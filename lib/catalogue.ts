@@ -206,6 +206,22 @@ export const tools: readonly Tool[] = [
     status: "available",
   },
   {
+    id: "merge-videos",
+    name: "Merge videos",
+    description:
+      "Join videos end to end in the order you choose, copied without encoding when they match, on your device.",
+    partOf: "video-editor",
+    category: "video",
+    keywords: [
+      "merge videos",
+      "join videos",
+      "combine videos",
+      "put videos together",
+      "concatenate video",
+    ],
+    status: "available",
+  },
+  {
     id: "audio-editor",
     name: "Audio editor",
     description:

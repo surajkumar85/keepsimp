@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 600" role="img" aria-labelledby="title desc">
+  <title id="title">Merging videos into one</title><desc id="desc">Three clips in a row joining into one longer video, the pictures copied and the sound in one piece.</desc>
+  <rect width="900" height="600" rx="24" fill="#f5f5f0"/>
+  <g font-family="sans-serif">
+    <rect x="70" y="100" width="220" height="124" rx="12" fill="#00786f"/>
+    <text x="180" y="170" text-anchor="middle" font-size="22" font-weight="700" fill="#ffffff">1</text>
+    <rect x="340" y="100" width="220" height="124" rx="12" fill="#00564f"/>
+    <text x="450" y="170" text-anchor="middle" font-size="22" font-weight="700" fill="#ffffff">2</text>
+    <rect x="610" y="100" width="220" height="124" rx="12" fill="#00786f" opacity="0.75"/>
+    <text x="720" y="170" text-anchor="middle" font-size="22" font-weight="700" fill="#ffffff">3</text>
+    <path d="M180 240 L450 320 L720 240 M450 240 V320" fill="none" stroke="#00786f" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+    <rect x="70" y="340" width="760" height="90" rx="12" fill="#ffffff" stroke="#d4d4d4" stroke-width="2"/>
+    <rect x="80" y="350" width="240" height="70" rx="6" fill="#00786f"/>
+    <rect x="320" y="350" width="260" height="70" fill="#00564f"/>
+    <rect x="580" y="350" width="240" height="70" rx="6" fill="#00786f" opacity="0.75"/>
+    <path d="M90 470 q12 -18 24 0 t24 0 t24 0 t24 0 t24 0 t24 0 t24 0 t24 0 t24 0 t24 0 t24 0 t24 0 t24 0 t24 0 t24 0 t24 0 t24 0 t24 0 t24 0 t24 0 t24 0 t24 0 t24 0 t24 0 t24 0 t24 0 t24 0 t24 0 t24 0 t24 0" fill="none" stroke="#00786f" stroke-width="4"/>
+    <rect x="70" y="510" width="760" height="56" rx="14" fill="#e6f2f1"/>
+    <text x="450" y="544" text-anchor="middle" font-size="18" fill="#00564f">Pictures copied when they match · the sound in one piece, in step</text>
+  </g>
+</svg>

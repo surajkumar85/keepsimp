@@ -241,3 +241,16 @@ test("trims a video and makes a GIF of it with convert_animation, for an agent",
   })
   expect(Number(said.format.duration)).toBeCloseTo(2, 0)
 })
+
+test("joins two videos into one, for an agent", async ({ page }) => {
+  test.setTimeout(120_000)
+  await ready(page)
+  const first = await hand(page, "one.mp4", clip, "video/mp4")
+  const second = await hand(page, "two.mp4", clip, "video/mp4")
+  const done = await ran(page, "join_videos", { files: [first, second] })
+  expect(done.summary).toContain("the pictures copied as they are.")
+  const out = await saved(page, done.files![0].id)
+  expect(out.name).toBe("one-joined.mp4")
+  const once = frameHashes(clip, "agent-join-in.mp4")
+  expect(frameHashes(out.bytes, "agent-joined.mp4")).toEqual([...once, ...once])
+})

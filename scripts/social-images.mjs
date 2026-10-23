@@ -325,6 +325,12 @@ const cards = [
     "/images/video-gif-guide.svg",
   ],
   [
+    "merge-videos-without-uploading",
+    "Many clips, one video.",
+    "Merge videos into one, on your device.",
+    "/images/video-merge-guide.svg",
+  ],
+  [
     "keepsimp-tools-for-ai-agents",
     "Ask your agent. The work stays here.",
     "KeepSimp's tools in Claude Code, Codex and WebMCP.",

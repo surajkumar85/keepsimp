@@ -21,6 +21,7 @@ describe("doors", () => {
       "add-music-to-video",
       "add-text-to-video",
       "video-to-gif",
+      "merge-videos",
       "audio-converter",
       "audio-extractor",
       "audio-trimmer",

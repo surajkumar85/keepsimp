@@ -5,10 +5,12 @@
  * and checked before they are handed over.
  */
 import { levelProblems, writtenProblems } from "./check"
+import { joinProblems } from "./join"
 import { fastStart } from "./faststart"
 import { outputInfo } from "./formats"
 import { VideoProblem } from "./mediabunny-video"
 import type {
+  JoinJob,
   VideoLevel,
   ConvertJob,
   IndexPlace,
@@ -39,7 +41,7 @@ let written = 0
 /** The job running now, and how to stop it. */
 let running: {
   id: string
-  job: "read" | "convert"
+  job: "read" | "convert" | "join"
   generation: number
   stop: AbortController
 } | null = null
@@ -281,6 +283,96 @@ async function pictureFirst(
     ? await scratch.file()
     : new Blob([memory!.buffer!], { type: outputInfo[plan.container].mime })
   return { file, remove }
+}
+
+/** Join written videos in order (`joinVideos`), then check the file as any result is checked. */
+async function join(job: JoinJob, stop: AbortController) {
+  const send = (message: VideoResponse) => {
+    if (!stop.signal.aborted) post(message)
+  }
+  const plan = job.plan
+  let name = ""
+  try {
+    const mediabunny = await engine()
+    const { joinVideos, readBack } = await engineFiles()
+    let priming = 0
+    if (plan.sound?.codec === "aac") {
+      const { aacEncoding, readyEncoder } = await soundFiles()
+      if (safe.sound) await readyEncoder(mediabunny, "aac")
+      priming =
+        (await aacEncoding(
+          mediabunny,
+          plan.sound.sampleRate,
+          plan.sound.channels,
+          plan.sound.bitrate
+        )) / plan.sound.sampleRate
+    }
+    name = `${job.id}-${++written}.${outputInfo[plan.container].extension}`
+    const scratch = await scratchFile(job.folder, name)
+    const memory = scratch ? null : new mediabunny.BufferTarget()
+    const target =
+      memory ??
+      new mediabunny.StreamTarget(scratch!.writable, { chunked: true })
+    let last = 0
+    let copied: boolean
+    try {
+      ;({ copied } = await joinVideos(mediabunny, job.files, plan, target, {
+        signal: stop.signal,
+        software: safe.picture,
+        onProgress: (fraction) => {
+          const now = Date.now()
+          if (now - last < 250) return
+          last = now
+          send({ type: "progress", id: job.id, key: job.key, fraction })
+        },
+      }))
+    } catch (error) {
+      scratch?.close()
+      if (scratch) await removeScratch(job.folder, name)
+      throw error
+    }
+    let file: Blob = scratch
+      ? await scratch.file()
+      : new Blob([memory!.buffer!], { type: outputInfo[plan.container].mime })
+    file = new Blob([file], { type: outputInfo[plan.container].mime })
+    let index: IndexPlace | null = null
+    if (plan.container === "mp4" || plan.container === "mov") {
+      const moved = await fastStart(file, {
+        edit: priming ? (held) => soundStart(held, priming) : undefined,
+      })
+      file = moved.file
+      index = moved.moved ? "front" : moved.reason
+    }
+    const back = await readBack(mediabunny, file, plan.container)
+    if (stop.signal.aborted) return
+    send({
+      type: "done",
+      id: job.id,
+      job: "join",
+      key: job.key,
+      file,
+      scratch: scratch ? name : null,
+      written: back.facts,
+      problems: joinProblems(plan, job.files.length, back.facts, back.decoded),
+      index,
+      copied,
+    })
+  } catch (error) {
+    if (stop.signal.aborted) send({ type: "abandoned", id: job.id })
+    else {
+      if (!(error instanceof VideoProblem))
+        console.error(
+          "The videos could not be joined:",
+          error instanceof Error ? `${error.name}: ${error.message}` : error
+        )
+      send({
+        type: "error",
+        id: job.id,
+        key: job.key,
+        message: said(error, UNWRITTEN),
+      })
+    }
+  }
 }
 
 /** Encoders that failed in this worker are not asked again. */
@@ -583,6 +675,7 @@ self.onmessage = (event: MessageEvent<VideoRequest>) => {
     if (running?.stop === stop) running = null
   }
   if (message.job === "read") void read(message, stop).finally(done)
+  else if (message.job === "join") void join(message, stop).finally(done)
   else if (message.generation < generation) {
     post({ type: "abandoned", id: message.id })
     done()
