@@ -4,11 +4,17 @@ import { Section, ToggleRow } from "@/components/image-batch/controls"
 import { ChoiceChips } from "@/components/ui/choice-chips"
 import { Input } from "@/components/ui/input"
 import { outputInfo, type OutContainer } from "@/lib/video/formats"
+import { useState } from "react"
 import {
   FRAME_RATES,
   HOLDS,
   LEAST_BITRATE,
+  LEAST_LIMIT,
+  LIMIT_SHARES,
+  LIMIT_SIZES,
+  MB,
   MOST_BITRATE,
+  MOST_LIMIT,
   SHORT_SIDES,
   videoCodecLabels,
   type Quality,
@@ -42,21 +48,112 @@ const TURNS: { value: string; label: string }[] = [
   { value: "270", label: "90° left" },
 ]
 
+const SHARE_LABELS: Record<number, string> = {
+  0.5: "Half",
+  0.25: "A quarter",
+}
+
+/** A size to fit under: none, a size in MB, a share of each file, or one's own. */
+function LimitChoice({
+  settings,
+  update,
+}: {
+  settings: VideoSettings
+  update: Update
+}) {
+  const limit = settings.limit
+  const chosen =
+    limit === null
+      ? "none"
+      : "share" in limit
+        ? `share:${limit.share}`
+        : LIMIT_SIZES.some((size) => size * MB === limit.bytes)
+          ? `mb:${limit.bytes / MB}`
+          : "custom"
+  const [custom, setCustom] = useState(
+    limit && "bytes" in limit ? String(limit.bytes / MB) : "5"
+  )
+  return (
+    <>
+      <ChoiceChips
+        label="Size limit"
+        hideLabel
+        hint={
+          limit === null
+            ? "No limit: the quality and size above decide."
+            : "Each file is written to fit under this: its bitrate is chosen for it, and its frame rate and size lowered if need be. A file already under it is copied as it is."
+        }
+        value={chosen}
+        onValueChange={(value) => {
+          if (value === "none") update({ limit: null })
+          else if (value === "custom")
+            update({ limit: { bytes: Math.round(Number(custom) * MB) } })
+          else if (value.startsWith("share:"))
+            update({ limit: { share: Number(value.slice(6)) } })
+          else update({ limit: { bytes: Number(value.slice(3)) * MB } })
+        }}
+        options={[
+          { value: "none", label: "None" },
+          ...LIMIT_SIZES.map((size) => ({
+            value: `mb:${size}`,
+            label: `${size} MB`,
+          })),
+          ...LIMIT_SHARES.map((share) => ({
+            value: `share:${share}`,
+            label: SHARE_LABELS[share],
+          })),
+          { value: "custom", label: "Custom" },
+        ]}
+      />
+      {chosen === "custom" && (
+        <label className="block max-w-60 space-y-2 text-sm font-medium">
+          <span>Size limit (MB)</span>
+          <Input
+            type="number"
+            inputMode="decimal"
+            min={LEAST_LIMIT}
+            max={MOST_LIMIT}
+            step={0.5}
+            value={custom}
+            onChange={(event) => {
+              setCustom(event.target.value)
+              update({
+                limit: {
+                  bytes: Math.round(event.target.valueAsNumber * MB),
+                },
+              })
+            }}
+          />
+        </label>
+      )}
+    </>
+  )
+}
+
 /** How each file is written: kind, codec, quality, size, frame rate, turn and sound. */
 export function SettingsPanel({
   settings,
   update,
   problem,
+  limitFirst = false,
 }: {
   settings: VideoSettings
   update: Update
   problem: string | null
+  /** The size limit at the top, for the page opened to compress. */
+  limitFirst?: boolean
 }) {
+  const limitSection = (
+    <Section title="Size limit">
+      <LimitChoice settings={settings} update={update} />
+    </Section>
+  )
   const container: OutContainer | null =
     settings.format === "same" ? null : settings.format
   const codecs = container ? HOLDS[container].video : null
   return (
     <div className="space-y-5">
+      {limitFirst && limitSection}
       <Section title="Format">
         <ChoiceChips
           label="Format"
@@ -172,6 +269,8 @@ export function SettingsPanel({
           ]}
         />
       </Section>
+
+      {!limitFirst && limitSection}
 
       <Section title="Turn">
         <ChoiceChips

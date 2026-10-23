@@ -49,12 +49,13 @@ import {
   type VideoSettings,
 } from "@/lib/video/settings"
 import { zipBlobs } from "@/lib/video/zip-blobs"
+import { looksSaid } from "@/lib/video/looks"
 import { convertJob, readJob } from "@/lib/video/jobs"
 import { browserAsker } from "@/lib/video/probe"
 import { SettingsPanel } from "./settings-panel"
 
 /** What the workspace is opened for: everything, or one job through a door. */
-export type VideoMode = "editor" | "converter"
+export type VideoMode = "editor" | "converter" | "compressor"
 
 const INPUT_ID = "video-file"
 /** Settings are taken up this long after the last change, so a run of choices starts one job. */
@@ -77,9 +78,34 @@ const COPY: Record<VideoMode, DropZoneCopy> = {
     action: "Choose videos",
     limits: `Stays on your device · up to ${MAX_FILES} videos at once · any length`,
   },
+  compressor: {
+    heading: "Drop videos to make smaller",
+    dropping: "Drop to make these videos smaller",
+    body: "Fit each under a size (8, 10, 25 MB, half…) or choose a quality: the bitrate, frame rate and size are chosen for it, and every result is checked.",
+    inputLabel: "Choose video files to compress",
+    action: "Choose videos",
+    limits: `Stays on your device · up to ${MAX_FILES} videos at once · any length`,
+  },
 }
 
-const SAMPLE = { name: "keepsimp-clip.mp4", type: "video/mp4" }
+const SAMPLES: Record<VideoMode, string> = {
+  editor: "keepsimp-clip.mp4",
+  converter: "keepsimp-clip.mp4",
+  compressor: "keepsimp-scene.mp4",
+}
+
+/** What each door starts with. */
+const FIRST: Record<VideoMode, Partial<VideoSettings>> = {
+  editor: {},
+  converter: {},
+  compressor: { limit: { share: 0.5 } },
+}
+
+const OPENED_FOR: Record<VideoMode, string> = {
+  editor: "",
+  converter: "converting",
+  compressor: "making videos smaller",
+}
 
 let counter = 0
 const nextId = () => `video-${++counter}`
@@ -93,8 +119,11 @@ const folderName = () =>
 export function VideoWorkspace({ mode }: { mode: VideoMode }) {
   const [items, setItems] = useState<VideoItem[]>([])
   const [selectedId, setSelectedId] = useState<string | null>(null)
-  const [settings, setSettings] = useState<VideoSettings>(defaultSettings)
-  const [applied, setApplied] = useState<VideoSettings>(defaultSettings)
+  const [settings, setSettings] = useState<VideoSettings>(() => ({
+    ...defaultSettings,
+    ...FIRST[mode],
+  }))
+  const [applied, setApplied] = useState<VideoSettings>(settings)
   const [encodes, setEncodes] = useState<ReadonlyMap<string, boolean>>(
     new Map()
   )
@@ -198,7 +227,11 @@ export function VideoWorkspace({ mode }: { mode: VideoMode }) {
           if (message.type === "progress")
             return {
               ...item,
-              progress: { key: message.key, fraction: message.fraction },
+              progress: {
+                key: message.key,
+                fraction: message.fraction,
+                pass: message.pass,
+              },
             }
           if (message.type === "error")
             return {
@@ -213,6 +246,8 @@ export function VideoWorkspace({ mode }: { mode: VideoMode }) {
                 written: null,
                 problems: [],
                 index: null,
+                passes: 0,
+                looks: null,
                 error: message.message,
               },
             }
@@ -238,6 +273,8 @@ export function VideoWorkspace({ mode }: { mode: VideoMode }) {
               written: message.written,
               problems: message.problems,
               index: message.index,
+              passes: message.passes,
+              looks: message.looks,
               error: null,
             },
           }
@@ -337,10 +374,11 @@ export function VideoWorkspace({ mode }: { mode: VideoMode }) {
   )
 
   const loadSample = useCallback(async () => {
-    const response = await fetch(`/samples/${SAMPLE.name}`)
+    const name = SAMPLES[mode]
+    const response = await fetch(`/samples/${name}`)
     const blob = await response.blob()
-    await addFiles([new File([blob], SAMPLE.name, { type: SAMPLE.type })])
-  }, [addFiles])
+    await addFiles([new File([blob], name, { type: "video/mp4" })])
+  }, [addFiles, mode])
 
   const remove = useCallback(
     (id: string) => {
@@ -423,7 +461,7 @@ export function VideoWorkspace({ mode }: { mode: VideoMode }) {
               >
                 Video editor
               </Link>
-              , opened for converting.
+              , opened for {OPENED_FOR[mode]}.
             </p>
           )}
         </div>
@@ -433,6 +471,7 @@ export function VideoWorkspace({ mode }: { mode: VideoMode }) {
               settings={settings}
               update={update}
               problem={problem}
+              limitFirst={mode === "compressor"}
             />
           </div>
         </div>
@@ -537,6 +576,7 @@ export function VideoWorkspace({ mode }: { mode: VideoMode }) {
             settings={settings}
             update={update}
             problem={problem}
+            limitFirst={mode === "compressor"}
           />
         </div>
       </div>
@@ -649,9 +689,12 @@ function Selected({
               {!plan.problem && (
                 <p>
                   {result
-                    ? `Written and checked: ${sizeLabel(result.file!.size)}.`
+                    ? `Written and checked: ${sizeLabel(result.file!.size)}${result.passes > 1 ? `, in ${result.passes} passes` : ""}.`
                     : `About ${sizeLabel(plan.estimate)}.`}
                 </p>
+              )}
+              {result?.looks && (
+                <p data-testid="video-looks">{looksSaid(result.looks)}</p>
               )}
               {result?.index && INDEX_NOTES[result.index] && (
                 <p>{INDEX_NOTES[result.index]}</p>

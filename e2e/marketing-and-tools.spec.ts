@@ -22,13 +22,13 @@ test("landing CTA opens the working dashboard", async ({ page }) => {
     .first()
     .click()
   await expect(page).toHaveURL(/\/dashboard\/$/)
-  await expect(page.getByTestId("tool-card")).toHaveCount(14)
+  await expect(page.getByTestId("tool-card")).toHaveCount(13)
   await expect(
     page.getByTestId("tools-ready").getByTestId("tool-card")
   ).toHaveCount(12)
   await expect(
     page.getByTestId("tools-planned").getByTestId("tool-card")
-  ).toHaveCount(2)
+  ).toHaveCount(1)
   await page.getByRole("link", { name: "JSON formatter", exact: true }).click()
   await expect(page.getByLabel("Your JSON", { exact: true })).toBeVisible()
 })
@@ -190,7 +190,9 @@ test("sitemap, robots and social graphics are production ready", async ({
   expect(sitemap).toContain(
     "https://keepsimp.vercel.app/dashboard/video-converter/"
   )
-  expect(sitemap).not.toContain("video-compressor")
+  expect(sitemap).toContain(
+    "https://keepsimp.vercel.app/dashboard/video-compressor/"
+  )
   expect(sitemap).not.toContain("video-trimmer")
   const robots = await (await request.get("/robots.txt")).text()
   expect(robots).toContain("Allow: /")

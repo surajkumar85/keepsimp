@@ -259,6 +259,12 @@ const cards = [
     "/images/audio-video-guide.svg",
   ],
   [
+    "compress-video-to-a-size",
+    "Under the limit, still worth watching.",
+    "Compress video to 25, 10 or 8 MB, on your device.",
+    "/images/video-compress-guide.svg",
+  ],
+  [
     "convert-video-without-uploading",
     "Any video, in the format you need.",
     "Convert video on your device, copied where it can be.",

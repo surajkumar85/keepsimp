@@ -1,7 +1,13 @@
 import { ToolTutorial, type TutorialContent } from "@/components/tool-tutorial"
 import { lengthTolerance } from "@/lib/video/check"
 import {
+  LEAST_BITS_PER_PIXEL,
+  MOST_PASSES,
+  SIZE_STEPS,
+} from "@/lib/video/target"
+import {
   HIGH_BITRATES,
+  LIMIT_SIZES,
   KEYFRAME_SECONDS,
   PRESET_SHARE,
 } from "@/lib/video/settings"
@@ -34,6 +40,10 @@ const options: TutorialContent["options"] = [
   {
     term: "Quality",
     detail: `High is YouTube's recommended upload bitrate for the size and frame rate: for H.264, ${HIGH_BITRATES.map((row) => `${row.side}p ${mbit(row.normal)} Mbit/s (${mbit(row.fast)} over 30 fps)`).join(", ")}. Balanced is ${PRESET_SHARE.balanced * 100}% of that and Small ${PRESET_SHARE.small * 100}%, KeepSimp's own choices. HEVC and VP9 get 60% of H.264's bitrate and AV1 40%, for the same look. A file is never given more than it holds. Custom takes a bitrate of your own. A keyframe is written every ${KEYFRAME_SECONDS} seconds.`,
+  },
+  {
+    term: "Size limit",
+    detail: `Each file is written to fit under the size chosen (${LIMIT_SIZES.join(", ")} MB, half or a quarter of its own size, or a size of your own). The sound gets its share first (converted smaller when it would take more than a fifth), then the picture gets the rest as its bitrate. When that leaves fewer than ${LEAST_BITS_PER_PIXEL} bits for each pixel of each frame in H.264 (the share HandBrake's presets for sharing work to), more than 30 frames a second become 30, then the size steps down (${SIZE_STEPS.join("p, ")}p). Browser encoders do not always keep to a bitrate, so each pass is watched as it is written, and a file that misses is written again with a corrected bitrate, ${MOST_PASSES} passes at most; a result is never offered as fitting when it does not. A file already under its limit is copied as it is. If a limit is too small even at the smallest size, the page says how small the video can be made.`,
   },
   {
     term: "Size and frame rate",
@@ -98,6 +108,36 @@ const converting: TutorialContent = {
   description:
     "Convert MOV, WebM, MKV and MPEG-TS videos to MP4 and back in your browser, copied as they are wherever nothing has to change. Nothing is uploaded.",
   guideHref: "/blog/convert-mov-webm-mkv-to-mp4/",
+}
+
+const compressing: TutorialContent = {
+  ...editor,
+  name: "How to compress a video to a size with KeepSimp",
+  description:
+    "Make a video smaller in your browser, to fit under 8, 10 or 25 MB or half its size, with the bitrate, frame rate and size chosen for it. Nothing is uploaded.",
+  steps: [
+    {
+      title: "Add your videos",
+      text: `Drop them or choose them: MP4, MOV, WebM, MKV or MPEG-TS, of any length. Up to ${MAX_FILES} at once.`,
+    },
+    {
+      title: "Choose a size limit",
+      text: "8, 10, 25, 50 or 100 MB, half or a quarter of each file, or your own. Or leave it and choose a quality.",
+    },
+    {
+      title: "Read what will be done",
+      text: "The sentence under the player says the bitrate, and the frame rate and size if they must come down.",
+    },
+    {
+      title: "Download",
+      text: "Each video is checked against its limit and opened again before it is offered.",
+    },
+  ],
+  guideHref: "/blog/compress-video-to-a-size/",
+}
+
+export function VideoCompressorTutorial() {
+  return <ToolTutorial content={compressing} />
 }
 
 export function VideoEditorTutorial() {

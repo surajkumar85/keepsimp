@@ -28,6 +28,9 @@ const A_KIND = {
 export const lengthTolerance = (fps: number | null) =>
   Math.max(0.15, 2.5 / (fps ?? 30))
 
+const megabytes = (bytes: number) =>
+  `${(bytes / 1024 / 1024).toLocaleString("en", { maximumFractionDigits: 2 })} MB`
+
 const seconds = (value: number) =>
   `${value.toLocaleString("en", { maximumFractionDigits: 2 })} s`
 
@@ -80,6 +83,12 @@ export function writtenProblems(
     if (decoded.sound === false)
       problems.push("The sound written could not be played back.")
   }
+
+  const limit = plan.video.action === "encode" ? plan.video.target : null
+  if (limit !== null && written.size > limit)
+    problems.push(
+      `The file written is ${megabytes(written.size)}, over the limit of ${megabytes(limit)}.`
+    )
 
   const fps =
     (plan.video.action === "encode" ? plan.video.frameRate : null) ??

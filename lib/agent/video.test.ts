@@ -56,6 +56,7 @@ function setup({
   canWrite = true,
   readFacts = facts,
   size = 1000,
+  passes = 1,
 } = {}) {
   let pool!: FakePool<VideoJob, VideoResponse>
   const videoPool = new PoolJobs<VideoJob, VideoResponse>(
@@ -76,6 +77,13 @@ function setup({
           // Something the tool was not asked about, then how far it is.
           { type: "retired", id: job.id } as never,
           { type: "progress", id: job.id, key: job.key, fraction: 0.5 },
+          {
+            type: "progress",
+            id: job.id,
+            key: job.key,
+            fraction: 0.2,
+            pass: 2,
+          },
           {
             type: "done",
             id: job.id,
@@ -98,6 +106,12 @@ function setup({
             },
             problems,
             index: "front",
+            passes,
+            // Measured only for a picture encoded again, as the worker does.
+            looks:
+              plan.video.action === "encode"
+                ? { mean: 0.97, least: 0.95, frames: 6 }
+                : null,
           },
         ]
       })),
@@ -220,5 +234,53 @@ describe("converting a video", () => {
     await expect(
       call("convert_video", { file: add(MP4, "clip.mp4").id, size: 999 })
     ).rejects.toThrow()
+  })
+})
+
+describe("compressing a video for an agent", () => {
+  it("copies a file already under its limit, and refuses one it cannot fit", async () => {
+    const { call, add, jobs, progress } = setup()
+    const done = await call("compress_video", {
+      file: add(MP4, "clip.mp4").id,
+      megabytes: 1,
+    })
+    const job = jobs().find((one) => one.job === "convert")!
+    expect(job.job === "convert" && job.plan.video).toEqual({ action: "copy" })
+    expect(done.summary).toContain(
+      "It is already under 1 MB, so nothing is taken from it."
+    )
+    expect(progress.length).toBeGreaterThan(0)
+    await expect(
+      call("compress_video", { file: add(MP4, "clip.mp4").id, share: 0.5 })
+    ).rejects.toThrow(
+      /^This video cannot be made smaller than about \d+ KB, even at 320 × 180\./
+    )
+  })
+
+  it("asks for one limit, not both or neither", async () => {
+    const { call, add } = setup()
+    for (const input of [{}, { megabytes: 5, share: 0.5 }])
+      await expect(
+        call("compress_video", { file: add(MP4, "clip.mp4").id, ...input })
+      ).rejects.toThrow('Give either "megabytes" or "share".')
+  })
+
+  it("encodes to fit a larger file under its limit", async () => {
+    const big: VideoFacts = {
+      ...facts,
+      size: 4 * 1024 * 1024,
+      video: { ...facts.video!, bitrate: 5_000_000 },
+    }
+    const { call, add, jobs } = setup({ readFacts: big, passes: 2 })
+    const result = await call("compress_video", {
+      file: add(MP4, "clip.mp4").id,
+      megabytes: 1,
+    })
+    const job = jobs().find((one) => one.job === "convert")!
+    expect(job.job === "convert" && job.plan.video).toMatchObject({
+      action: "encode",
+      target: 1024 * 1024,
+    })
+    expect(result.summary).toMatch(/, in 2 passes\. Looks very close/)
   })
 })

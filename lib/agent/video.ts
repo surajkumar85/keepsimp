@@ -13,11 +13,15 @@ import {
 import { browserPlan, convertJob, readJob, type Asker } from "@/lib/video/jobs"
 import type { VideoJob, VideoResponse } from "@/lib/video/protocol"
 import { factsLine, outputName } from "@/lib/video/queue"
+import { looksSaid } from "@/lib/video/looks"
 import {
   defaultSettings,
   FRAME_RATES,
   LEAST_BITRATE,
+  LEAST_LIMIT,
+  MB,
   MOST_BITRATE,
+  MOST_LIMIT,
   SHORT_SIDES,
   type VideoSettings,
 } from "@/lib/video/settings"
@@ -142,6 +146,74 @@ export function videoTools(engines: VideoEngines): AgentTool[] {
     },
   }
 
+  /** Write a file by settings, as the workspace does, and hand over the checked result. */
+  async function write(
+    file: string,
+    settings: VideoSettings,
+    context: Parameters<AgentTool["run"]>[1]
+  ) {
+    const opened = await open(context.files, file, context.signal)
+    const plan = await browserPlan(opened.facts, settings, engines.ask)
+    if (plan.problem) throw new ToolError(plan.problem)
+    const done = (await engines.pool.run(
+      convertJob(
+        opened.blob,
+        opened.container,
+        opened.facts,
+        plan,
+        engines.folder
+      ),
+      {
+        signal: context.signal,
+        onMessage: (message) => {
+          if (message.type === "progress")
+            context.progress(
+              message.fraction,
+              message.pass && message.pass > 1
+                ? `Writing the video again (pass ${message.pass})`
+                : "Writing the video"
+            )
+        },
+      }
+    )) as Extract<VideoResponse, { type: "done"; job: "convert" }>
+    if (done.problems.length)
+      throw new ToolError(
+        `The video was written but not as asked, so it is not handed over: ${done.problems.join(" ")}`
+      )
+    const ref = context.files.add(
+      done.file,
+      outputName(opened.ref.name, plan),
+      "made"
+    )
+    return {
+      summary: [
+        ...plan.notes,
+        `Written and checked: ${factsLine(done.written)}, ${bytes(done.file.size)}${done.passes > 1 ? `, in ${done.passes} passes` : ""}.`,
+        ...(done.looks ? [looksSaid(done.looks)] : []),
+      ].join(" "),
+      files: [ref],
+      data: {
+        plan: {
+          container: plan.container,
+          video: plan.video,
+          audio: plan.audio,
+          width: plan.width,
+          height: plan.height,
+        },
+        written: done.written,
+        passes: done.passes,
+        looks: done.looks,
+      },
+    }
+  }
+
+  /** The settings asked for, laid over the workspace's. */
+  function settingsOf(asked: Settings): VideoSettings {
+    if (asked.quality === "custom" && asked.bitrate === undefined)
+      throw new ToolError(`Give the picture's "bitrate" with quality custom.`)
+    return { ...defaultSettings, ...asked }
+  }
+
   const convert: AgentTool<Settings & { file: string }> = {
     name: "convert_video",
     title: "Convert a video",
@@ -157,56 +229,58 @@ export function videoTools(engines: VideoEngines): AgentTool[] {
       additionalProperties: false,
     },
     annotations: { readOnlyHint: true },
-    async run(input, context) {
-      const { file: _file, ...asked } = input
-      void _file
-      const settings: VideoSettings = { ...defaultSettings, ...asked }
-      if (settings.quality === "custom" && asked.bitrate === undefined)
-        throw new ToolError(`Give the picture's "bitrate" with quality custom.`)
-      const opened = await open(context.files, input.file, context.signal)
-      const plan = await browserPlan(opened.facts, settings, engines.ask)
-      if (plan.problem) throw new ToolError(plan.problem)
-      const done = (await engines.pool.run(
-        convertJob(
-          opened.blob,
-          opened.container,
-          opened.facts,
-          plan,
-          engines.folder
-        ),
-        {
-          signal: context.signal,
-          onMessage: (message) => {
-            if (message.type === "progress")
-              context.progress(message.fraction, "Writing the video")
-          },
-        }
-      )) as Extract<VideoResponse, { type: "done"; job: "convert" }>
-      if (done.problems.length)
-        throw new ToolError(
-          `The video was written but not as asked, so it is not handed over: ${done.problems.join(" ")}`
-        )
-      const ref = context.files.add(
-        done.file,
-        outputName(opened.ref.name, plan),
-        "made"
-      )
-      return {
-        summary: `${[...plan.notes, `Written and checked: ${factsLine(done.written)}, ${bytes(done.file.size)}.`].join(" ")}`,
-        files: [ref],
-        data: {
-          plan: {
-            container: plan.container,
-            video: plan.video,
-            audio: plan.audio,
-            width: plan.width,
-            height: plan.height,
-          },
-          written: done.written,
-        },
-      }
+    async run({ file, ...asked }, context) {
+      return write(file, settingsOf(asked), context)
     },
   }
 
-  return [info, convert].map((tool) => asTool(tool as AgentTool<never>))
+  const compress: AgentTool<
+    Settings & { file: string; megabytes?: number; share?: number }
+  > = {
+    name: "compress_video",
+    title: "Make a video smaller, to a size",
+    description:
+      "Writes a video to fit under a size (megabytes) or a share of its own size, as the video compressor does: the sound gets its share, the picture the rest as its bitrate, and more than 30 frames a second become 30, then the size steps down, when that leaves too few bits for the picture. The file is written again with a corrected bitrate when the browser's encoder misses (three passes at most), and is never handed over larger than the limit. A file already under it is copied. Says how close the result looks (SSIM on frames through the clip).",
+    inputSchema: {
+      type: "object",
+      properties: {
+        file: fileProperty("The video file."),
+        megabytes: {
+          type: "number",
+          minimum: LEAST_LIMIT,
+          maximum: MOST_LIMIT,
+          description: "The size to fit under, in MB (1 MB = 1,048,576 bytes).",
+        },
+        share: {
+          type: "number",
+          exclusiveMinimum: 0,
+          exclusiveMaximum: 1,
+          description: "Or a share of the file's own size: 0.5 for half.",
+        },
+        ...settingsSchema,
+      },
+      required: ["file"],
+      additionalProperties: false,
+    },
+    annotations: { readOnlyHint: true },
+    async run({ file, megabytes, share, ...asked }, context) {
+      if ((megabytes === undefined) === (share === undefined))
+        throw new ToolError('Give either "megabytes" or "share".')
+      return write(
+        file,
+        {
+          ...settingsOf(asked),
+          limit:
+            megabytes !== undefined
+              ? { bytes: Math.round(megabytes * MB) }
+              : { share: share! },
+        },
+        context
+      )
+    },
+  }
+
+  return [info, convert, compress].map((tool) =>
+    asTool(tool as AgentTool<never>)
+  )
 }

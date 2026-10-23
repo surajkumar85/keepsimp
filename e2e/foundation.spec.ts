@@ -6,7 +6,7 @@ test("tools are grouped, coloured by kind, and follow validated category URLs", 
   page,
 }) => {
   await page.goto("/dashboard/")
-  await expect(page.getByTestId("tool-card")).toHaveCount(14)
+  await expect(page.getByTestId("tool-card")).toHaveCount(13)
   // What works comes first; what is still to come is kept apart and quiet.
   const ready = page.getByTestId("tools-ready")
   const planned = page.getByTestId("tools-planned")
@@ -14,7 +14,7 @@ test("tools are grouped, coloured by kind, and follow validated category URLs", 
     "Ready to use"
   )
   await expect(ready.getByTestId("tool-card")).toHaveCount(12)
-  await expect(planned.getByTestId("tool-card")).toHaveCount(2)
+  await expect(planned.getByTestId("tool-card")).toHaveCount(1)
   await expect(ready.getByRole("link")).toHaveCount(12)
   await expect(planned.getByRole("link")).toHaveCount(0)
   // Each kind of tool has its own colour, taken from the tokens.
@@ -41,13 +41,13 @@ test("tools are grouped, coloured by kind, and follow validated category URLs", 
   await expect(card).not.toHaveCSS("box-shadow", "none")
 
   await page.goto("/dashboard/?category=video")
-  await expect(page.getByTestId("tool-card")).toHaveCount(3)
-  // The Video editor is ready; the compressor and trimmer are still to come.
+  await expect(page.getByTestId("tool-card")).toHaveCount(2)
+  // The Video editor is ready (its doors are not cards); the trimmer is still to come.
   await expect(
     page.getByTestId("tools-ready").getByTestId("tool-card")
   ).toHaveText([/Video editor/])
   await page.goto("/dashboard/?category=invalid")
-  await expect(page.getByTestId("tool-card")).toHaveCount(14)
+  await expect(page.getByTestId("tool-card")).toHaveCount(13)
 })
 
 test("the search in the top bar finds tools and opens them", async ({

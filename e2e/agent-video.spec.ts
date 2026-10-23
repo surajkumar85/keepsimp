@@ -1,7 +1,16 @@
 import { readFileSync } from "node:fs"
 import { expect, test } from "@playwright/test"
 import { hand, ran, ready, run, saved } from "./agent"
-import { canEncode, decodesCleanly, packets, probe, topOrder } from "./video"
+import {
+  canEncode,
+  decodesCleanly,
+  packets,
+  probe,
+  reportWorkerErrors,
+  topOrder,
+} from "./video"
+
+reportWorkerErrors()
 
 const clip = readFileSync("public/samples/keepsimp-clip.mp4")
 
@@ -73,4 +82,22 @@ test("encodes for an agent, or says what this browser cannot write", async ({
     ok: false,
     problem: expect.stringContaining("AVI files are not read here"),
   })
+})
+
+test("compresses a video under a size for an agent", async ({ page }) => {
+  test.setTimeout(240_000)
+  await ready(page)
+  if (!(await canEncode(page, "avc", 960, 540))) test.skip()
+  const scene = readFileSync("public/samples/keepsimp-scene.mp4")
+  const file = await hand(page, "scene.mp4", scene, "video/mp4")
+  expect(await run(page, "compress_video", { file })).toMatchObject({
+    ok: false,
+    problem: expect.stringContaining('Give either "megabytes" or "share".'),
+  })
+  const smaller = await ran(page, "compress_video", { file, megabytes: 0.5 })
+  expect(smaller.summary).toMatch(/because it is to fit under 512 KB/)
+  expect(smaller.summary).toMatch(/Looks /)
+  const out = await saved(page, smaller.files![0].id)
+  expect(out.bytes.length).toBeLessThanOrEqual(512 * 1024)
+  expect(decodesCleanly(out.bytes, "agent-small.mp4")).toBe(true)
 })

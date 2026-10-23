@@ -7,6 +7,7 @@ import {
   canEncode,
   chip,
   clip,
+  COMPRESSOR,
   CONVERTER,
   decodesCleanly,
   download,
@@ -20,7 +21,10 @@ import {
   syncClip,
   syncOffset,
   topOrder,
+  reportWorkerErrors,
 } from "./video"
+
+reportWorkerErrors()
 
 test("copies the sample into an MP4 as it is, index first, every packet unchanged", async ({
   page,
@@ -68,6 +72,10 @@ test("writes WebM with VP9 and Opus, every frame there and decoding cleanly", as
     )
     return
   }
+  // New settings are taken up after a moment: wait for the plan to follow.
+  await expect(page.getByTestId("video-plan")).toContainText(
+    "encoded again as VP9"
+  )
   await settled(page)
   await expect(page.getByTestId("video-result")).toContainText(
     "WebM · VP9 · 320 × 180 · 15 fps · 0:06"
@@ -177,6 +185,47 @@ test("keeps the sound in step with the picture when it is encoded again", async 
       4
     )
   }
+})
+
+test("compresses the sample to half its size and to a quarter, checked and measured", async ({
+  page,
+}) => {
+  test.setTimeout(240_000)
+  await page.goto(COMPRESSOR)
+  const original = readFileSync("public/samples/keepsimp-scene.mp4")
+  if (!(await canEncode(page, "avc", 960, 540))) test.skip()
+  await page.getByRole("button", { name: "Try a sample" }).click()
+  await settled(page, 180_000)
+  const plan = page.getByTestId("video-plan")
+  await expect(plan).toContainText("because it is to fit under")
+  const half = await download(page, "keepsimp-scene.mp4")
+  expect(half.bytes.length).toBeLessThanOrEqual(Math.floor(original.length / 2))
+  const said = probe(half.bytes, "half.mp4")
+  expect(said.streams.find((one) => one.codec_type === "video")).toMatchObject({
+    codec_name: "h264",
+    width: 960,
+    height: 540,
+  })
+  expect(decodesCleanly(half.bytes, "half.mp4")).toBe(true)
+  await expect(page.getByTestId("video-looks")).toContainText(
+    /^Looks .*: SSIM 0\.\d{3} on average over 6 frames/
+  )
+
+  await chip(page, "A quarter").click()
+  await expect(plan).toContainText("640 × 360", { timeout: 10_000 })
+  await expect(plan).toContainText("to leave room for the picture")
+  await settled(page, 180_000)
+  const quarter = await download(page, "keepsimp-scene.mp4")
+  expect(quarter.bytes.length).toBeLessThanOrEqual(
+    Math.floor(original.length / 4)
+  )
+  const small = probe(quarter.bytes, "quarter.mp4")
+  expect(small.streams.find((one) => one.codec_type === "video")).toMatchObject(
+    { width: 640, height: 360 }
+  )
+  expect(small.streams.find((one) => one.codec_type === "audio")).toMatchObject(
+    { codec_name: "aac" }
+  )
 })
 
 test("says why a file cannot be opened, and zips the rest", async ({

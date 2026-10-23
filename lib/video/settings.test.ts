@@ -553,3 +553,117 @@ describe("the parts", () => {
     expect(settingsKey(defaultSettings)).toBe(JSON.stringify(defaultSettings))
   })
 })
+
+describe("a size limit", () => {
+  const MB = 1024 * 1024
+  const long = { ...clip, duration: 120, size: 200 * MB }
+
+  it("fits the picture into what the sound leaves, and says it", () => {
+    const plan = planFor(long, set({ limit: { bytes: 25 * MB } }), all)
+    expect(plan.video).toMatchObject({
+      action: "encode",
+      codec: "avc",
+      width: 1280,
+      height: 720,
+      target: 25 * MB,
+    })
+    expect(plan.notes[0]).toMatch(/because it is to fit under 25 MB\.$/)
+    expect(plan.notes[1]).toBe(
+      "If the browser's encoder overshoots, the file is written again with less (3 times at most), and it is never handed over larger than 25 MB."
+    )
+    expect(plan.estimate).toBe(25 * MB)
+    expect(plan.audio).toEqual({ action: "copy" })
+  })
+
+  it("takes a share of the file's own size", () => {
+    const plan = planFor(long, set({ limit: { share: 0.25 } }), all)
+    expect(plan.video).toMatchObject({ target: 50 * MB })
+  })
+
+  it("copies a file already under its limit", () => {
+    const plan = planFor(clip, set({ limit: { bytes: 25 * MB } }), all)
+    expect(plan.video).toEqual({ action: "copy" })
+    expect(plan.notes).toContain(
+      "It is already under 25 MB, so nothing is taken from it."
+    )
+  })
+
+  it("converts sound smaller when it would take more than a fifth", () => {
+    const plan = planFor(long, set({ limit: { bytes: 5 * MB } }), all)
+    expect(plan.audio).toEqual({
+      action: "encode",
+      codec: "aac",
+      bitrate: 48_000,
+    })
+    expect(plan.notes).toContain(
+      "The sound is converted to AAC at 48 kbit/s, to leave room for the picture."
+    )
+    const opus = planFor(
+      long,
+      set({ format: "webm", limit: { bytes: 20 * MB } }),
+      all
+    )
+    expect(opus.audio).toMatchObject({ codec: "opus", bitrate: 128_000 })
+  })
+
+  it("asks the browser at the size it would write, codec by codec", () => {
+    const asked: string[] = []
+    planFor(long, set({ limit: { bytes: 25 * MB } }), (codec, w, h) => {
+      asked.push(`${codec}@${w}x${h}`)
+      return codec === "av1"
+    })
+    // H.264 and HEVC at 720p; AV1 needs fewer bits, so it keeps 1080p.
+    expect(asked).toEqual(["avc@1280x720", "hevc@1280x720", "av1@1920x1080"])
+    const pending = planFor(
+      long,
+      set({ limit: { bytes: 25 * MB } }),
+      () => null
+    )
+    expect(pending.pending).toEqual([
+      { codec: "avc", width: 1280, height: 720 },
+    ])
+  })
+
+  it("says how small a video can be made when the limit is too small", () => {
+    const plan = planFor(
+      { ...long, duration: 3600 },
+      set({ limit: { bytes: 5 * MB } }),
+      all
+    )
+    expect(plan.problem).toMatch(
+      /^This video cannot be made smaller than about [\d.]+ MB, even at 426 × 240\. Choose a limit of at least that, or leave the sound out\.$/
+    )
+  })
+
+  it("lowers the frame rate before the size", () => {
+    const fast = { ...long, video: { ...long.video!, frameRate: 60 } }
+    const plan = planFor(fast, set({ limit: { bytes: 60 * MB } }), all)
+    expect(plan.video).toMatchObject({ frameRate: 30, width: 1920 })
+  })
+
+  it("says small limits in KB, and counts sound of no stated bitrate as 128 kbit/s", () => {
+    const plan = planFor(
+      { ...clip, size: 300_000 },
+      set({ limit: { bytes: 512 * 1024 } }),
+      all
+    )
+    expect(plan.notes).toContain(
+      "It is already under 512 KB, so nothing is taken from it."
+    )
+    const unknown = planFor(
+      { ...long, audio: { ...long.audio!, bitrate: null } },
+      set({ limit: { bytes: 25 * MB } }),
+      all
+    )
+    expect(unknown.audio).toEqual({ action: "copy" })
+  })
+
+  it("checks a size of one's own", () => {
+    expect(settingsProblem(set({ limit: { bytes: 5 * MB } }))).toBeNull()
+    expect(settingsProblem(set({ limit: { share: 0.5 } }))).toBeNull()
+    for (const bytes of [0.1 * MB, 200_000 * MB, Number.NaN])
+      expect(settingsProblem(set({ limit: { bytes } }))).toBe(
+        "Give a size from 0.25 to 100,000 MB."
+      )
+  })
+})

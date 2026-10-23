@@ -124,6 +124,29 @@ describe("holding a written file to its plan", () => {
     ).toEqual([])
   })
 
+  it("holds a result to its size limit", () => {
+    const limited: Plan = {
+      ...encode,
+      video: {
+        ...(encode.video as Extract<Plan["video"], { action: "encode" }>),
+        target: 1024 * 1024,
+      },
+    }
+    const webm: VideoFacts = {
+      ...source,
+      container: "webm",
+      size: 1.5 * 1024 * 1024,
+      video: { ...source.video!, codec: "vp9", frameRate: 24 },
+      audio: { ...source.audio!, codec: "opus" },
+    }
+    expect(writtenProblems(limited, webm, expected, ok)).toEqual([
+      "The file written is 1.5 MB, over the limit of 1 MB.",
+    ])
+    expect(
+      writtenProblems(limited, { ...webm, size: 1024 * 1024 }, expected, ok)
+    ).toEqual([])
+  })
+
   it("allows the length two and a half frames, or 0.15 s at least", () => {
     expect(lengthTolerance(30)).toBeCloseTo(0.15)
     expect(lengthTolerance(10)).toBe(0.25)

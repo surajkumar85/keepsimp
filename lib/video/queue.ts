@@ -7,6 +7,8 @@ import type { ItemState } from "@/lib/image-batch/queue"
 import { containerLabels, outputInfo, type Container } from "./formats"
 import type { IndexPlace } from "./protocol"
 import { videoCodecLabels, type Plan, type VideoFacts } from "./settings"
+import { MOST_PASSES } from "./target"
+import type { Looks } from "./looks"
 
 /** Videos open at once. Shared by the page and its help, which is drawn on the server. */
 export const MAX_FILES = 20
@@ -24,6 +26,10 @@ export interface VideoResult {
   written: VideoFacts | null
   problems: string[]
   index: IndexPlace | null
+  /** Passes written to reach a size limit. */
+  passes: number
+  /** How close it looks to the original; null when not measured. */
+  looks: Looks | null
   error: string | null
 }
 
@@ -37,7 +43,7 @@ export interface VideoItem {
   poster: ImageBitmap | null
   message: string | null
   /** How far the job writing it is, for the plan named. */
-  progress: { key: string; fraction: number } | null
+  progress: { key: string; fraction: number; pass?: number } | null
   result: VideoResult | null
 }
 
@@ -83,7 +89,7 @@ export function itemMessage(item: VideoItem, plan: Plan | null) {
     return null
   }
   if (item.progress?.key === key)
-    return `Writing… ${Math.round(item.progress.fraction * 100)}%`
+    return `Writing… ${Math.round(item.progress.fraction * 100)}%${item.progress.pass && item.progress.pass > 1 ? `, pass ${item.progress.pass} of ${MOST_PASSES}` : ""}`
   return "Waiting…"
 }
 

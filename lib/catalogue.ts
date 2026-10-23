@@ -74,10 +74,21 @@ export const tools: readonly Tool[] = [
   {
     id: "video-compressor",
     name: "Video compressor",
-    description: "Smaller files. More room for your ideas.",
+    description:
+      "Make videos smaller, to fit under 8, 10 or 25 MB or a size of your own, with the quality checked, on your device.",
+    partOf: "video-editor",
     category: "video",
-    keywords: ["compress", "size", "reduce"],
-    status: "planned",
+    keywords: [
+      "compress",
+      "compress video",
+      "reduce video size",
+      "video under 25 mb",
+      "video under 10 mb",
+      "video under 8 mb",
+      "shrink video",
+      "smaller mp4",
+    ],
+    status: "available",
   },
   {
     id: "video-trimmer",

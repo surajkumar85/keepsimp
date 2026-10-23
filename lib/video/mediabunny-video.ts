@@ -7,6 +7,8 @@ import type * as Mediabunny from "mediabunny"
 import type { Container, OutContainer } from "./formats"
 import type { Decoded } from "./check"
 import type { Plan, Turn, VideoCodec, VideoFacts } from "./settings"
+import { lookSize, moments, type Looks } from "./looks"
+import { similarity } from "@/lib/image-compressor/ssim"
 
 type Engine = typeof Mediabunny
 
@@ -147,7 +149,8 @@ const DISCARDED: Record<string, string> = {
 
 function videoOptions(
   engine: Engine,
-  plan: Plan
+  plan: Plan,
+  software: boolean
 ): Mediabunny.ConversionVideoOptions | undefined {
   const video = plan.video
   if (video.action === "none") return undefined
@@ -165,6 +168,8 @@ function videoOptions(
     // Turned as it is drawn, so players that ignore the setting show it upright too.
     allowTransformationMetadata: false,
     forceTranscode: true,
+    // Hardware encoders have few sessions; another program may hold them.
+    ...(software ? { hardwareAcceleration: "prefer-software" as const } : {}),
   }
 }
 
@@ -192,7 +197,13 @@ export async function convertVideo(
   {
     signal,
     onProgress,
-  }: { signal?: AbortSignal; onProgress?: (fraction: number) => void } = {}
+    software = false,
+  }: {
+    signal?: AbortSignal
+    onProgress?: (fraction: number) => void
+    /** Encode the picture in software, after the hardware failed. */
+    software?: boolean
+  } = {}
 ) {
   const input = opened(engine, file)
   try {
@@ -208,7 +219,7 @@ export async function convertVideo(
       // encoder's priming, say): every track is shifted together, so the
       // picture and the sound stay in step.
       copy: { shiftTolerance: 1 },
-      video: videoOptions(engine, plan),
+      video: videoOptions(engine, plan, software),
       audio: audioOptions(engine, plan),
       tags: plan.keepTags ? undefined : {},
       showWarnings: false,
@@ -274,5 +285,64 @@ export async function readBack(
     return { facts, decoded }
   } finally {
     input.dispose()
+  }
+}
+
+/** The frames of a file drawn at moments, all at one size. */
+async function framesAt(
+  engine: Engine,
+  file: Blob,
+  times: number[],
+  size: { width: number; height: number }
+) {
+  const input = opened(engine, file)
+  try {
+    const track = await input.getPrimaryVideoTrack()
+    if (!track || !(await track.canDecode())) return null
+    const sink = new engine.CanvasSink(track, { ...size, fit: "fill" })
+    const frames: ImageData[] = []
+    for (const time of times) {
+      const frame = await sink.getCanvas(time)
+      if (!frame) return null
+      const context = (frame.canvas as OffscreenCanvas).getContext("2d", {
+        willReadFrequently: true,
+      })!
+      frames.push(context.getImageData(0, 0, size.width, size.height))
+    }
+    return frames
+  } finally {
+    input.dispose()
+  }
+}
+
+/**
+ * How close a result looks to its original, frame by frame at the same
+ * moments; null where either cannot be decoded here.
+ */
+export async function looksAlike(
+  engine: Engine,
+  original: Blob,
+  result: Blob,
+  shown: { width: number; height: number; duration: number; start: number }
+): Promise<Looks | null> {
+  if (typeof OffscreenCanvas === "undefined") return null
+  const size = lookSize(shown.width, shown.height)
+  const times = moments(shown.start, shown.duration)
+  const [before, after] = await Promise.all([
+    framesAt(engine, original, times, size),
+    framesAt(engine, result, times, size),
+  ])
+  if (!before || !after) return null
+  const scores = before.map(
+    (frame, index) =>
+      similarity(
+        frame as unknown as Parameters<typeof similarity>[0],
+        after[index] as unknown as Parameters<typeof similarity>[0]
+      ).mean
+  )
+  return {
+    mean: scores.reduce((sum, score) => sum + score, 0) / scores.length,
+    least: Math.min(...scores),
+    frames: scores.length,
   }
 }

@@ -13,6 +13,7 @@ describe("doors", () => {
     const doors = tools.filter((tool) => tool.partOf)
     expect(doors.map((tool) => tool.id)).toEqual([
       "video-converter",
+      "video-compressor",
       "audio-converter",
       "audio-extractor",
       "audio-trimmer",

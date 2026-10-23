@@ -15,7 +15,10 @@ import type {
   VideoRequest,
   VideoResponse,
 } from "./protocol"
-import { scratchFile } from "./scratch"
+import { removeScratch, scratchFile } from "./scratch"
+import type { Plan } from "./settings"
+import type { Looks } from "./looks"
+import { correctedBitrate, MOST_PASSES, passStands, willMiss } from "./target"
 import { soundStart } from "./sound-start"
 
 declare const self: DedicatedWorkerGlobalScope
@@ -66,21 +69,147 @@ async function read(job: ReadJob, stop: AbortController) {
   }
 }
 
+/** One pass: the file written with a bitrate, or null when it was stopped because it would miss. */
+async function writePass(
+  job: ConvertJob,
+  plan: Plan,
+  stop: AbortController,
+  pass: { number: number; of: number; limit: number | null },
+  send: (message: VideoResponse) => void,
+  software: boolean
+): Promise<{ missed: number } | { file: Blob; scratch: string | null }> {
+  const mediabunny = await engine()
+  const { convertVideo } = await engineFiles()
+  const name = `${job.id}-${++written}.${outputInfo[plan.container].extension}`
+  const scratch = await scratchFile(job.folder, name)
+  const memory = scratch ? null : new mediabunny.BufferTarget()
+  const target =
+    memory ?? new mediabunny.StreamTarget(scratch!.writable, { chunked: true })
+  let bytes = 0
+  target.on("write", ({ end }) => {
+    if (end > bytes) bytes = end
+  })
+  // A pass that will miss its limit is stopped early; the job's Stop ends it too.
+  const own = new AbortController()
+  const end = () => own.abort()
+  stop.signal.addEventListener("abort", end, { once: true })
+  const watch: { miss: number | null } = { miss: null }
+  let last = 0
+  try {
+    await convertVideo(mediabunny, job.file, plan, target, {
+      signal: own.signal,
+      software,
+      onProgress: (fraction) => {
+        if (
+          pass.limit !== null &&
+          pass.number < pass.of &&
+          watch.miss === null &&
+          willMiss(pass.limit, bytes, fraction)
+        ) {
+          watch.miss = bytes / fraction
+          own.abort()
+          return
+        }
+        const now = Date.now()
+        if (now - last < 250) return
+        last = now
+        send({
+          type: "progress",
+          id: job.id,
+          key: job.key,
+          fraction,
+          pass: pass.number,
+        })
+      },
+    })
+  } catch (error) {
+    scratch?.close()
+    if (scratch) await removeScratch(job.folder, name)
+    if (watch.miss !== null && !stop.signal.aborted)
+      return { missed: watch.miss }
+    throw error
+  } finally {
+    stop.signal.removeEventListener("abort", end)
+  }
+  const file = scratch
+    ? await scratch.file()
+    : new Blob([memory!.buffer!], { type: outputInfo[plan.container].mime })
+  return {
+    file: new Blob([file], { type: outputInfo[plan.container].mime }),
+    scratch: scratch ? name : null,
+  }
+}
+
+/** Encoders that failed in this worker are not asked again. */
+const safe = { sound: false, picture: false }
+
 async function convert(job: ConvertJob, stop: AbortController) {
   const send = (message: VideoResponse) => {
     if (!stop.signal.aborted) post(message)
   }
+  try {
+    await writeJob(job, stop, send)
+  } catch (first) {
+    let error = first
+    // An encoder can fail when another program holds the device's own
+    // (a video call, a screen recorder) or many run at once: once, the job
+    // is written again with ours for the sound and software for the picture.
+    const encoding =
+      error instanceof DOMException && !(error instanceof VideoProblem)
+    if (!stop.signal.aborted && encoding && !(safe.sound && safe.picture)) {
+      console.error(
+        "An encoder failed; writing again with the safe ones:",
+        `${(error as DOMException).name}: ${(error as DOMException).message}`
+      )
+      safe.sound = true
+      safe.picture = true
+      try {
+        await writeJob(job, stop, send)
+        return
+      } catch (again) {
+        error = again
+      }
+    }
+    // The page shows a plain sentence; what the browser said is kept for whoever looks.
+    if (!(error instanceof VideoProblem) && !stop.signal.aborted)
+      console.error(
+        "The video could not be written:",
+        error instanceof Error
+          ? `${error.name}: ${error.message}\n${error.stack}`
+          : error
+      )
+    if (stop.signal.aborted) send({ type: "abandoned", id: job.id })
+    else
+      send({
+        type: "error",
+        id: job.id,
+        key: job.key,
+        message: said(error, UNWRITTEN),
+      })
+  }
+}
+
+/** Write a job's file, in passes for a size limit, and say what was made. Throws what it cannot. */
+async function writeJob(
+  job: ConvertJob,
+  stop: AbortController,
+  send: (message: VideoResponse) => void
+) {
   const { plan } = job
-  const name = `${job.id}-${++written}.${outputInfo[plan.container].extension}`
-  let scratch: Awaited<ReturnType<typeof scratchFile>> = null
+  const made: {
+    file: Blob
+    scratch: string | null
+    index: IndexPlace | null
+  }[] = []
   try {
     const mediabunny = await engine()
-    const { convertVideo, readBack } = await engineFiles()
+    const { readBack, looksAlike } = await engineFiles()
     // Seconds the sound encoder puts before the sound, skipped by an edit list.
     let priming = 0
     if (plan.audio.action === "encode" && plan.audio.codec === "aac") {
+      const { aacEncoding, readyEncoder } = await soundFiles()
+      if (safe.sound) await readyEncoder(mediabunny, "aac")
       // An encoder that keeps all of the sound (the browser's, or ours), and its priming.
-      const { aacEncoding } = await soundFiles()
       const samples = await aacEncoding(
         mediabunny,
         job.facts.audio!.sampleRate,
@@ -89,35 +218,50 @@ async function convert(job: ConvertJob, stop: AbortController) {
       )
       priming = samples / job.facts.audio!.sampleRate
     }
-    scratch = await scratchFile(job.folder, name)
-    const memory = scratch ? null : new mediabunny.BufferTarget()
-    const target =
-      memory ??
-      new mediabunny.StreamTarget(scratch!.writable, { chunked: true })
-    let last = 0
-    await convertVideo(mediabunny, job.file, plan, target, {
-      signal: stop.signal,
-      onProgress: (fraction) => {
-        const now = Date.now()
-        if (now - last < 250) return
-        last = now
-        send({ type: "progress", id: job.id, key: job.key, fraction })
-      },
-    })
-    if (stop.signal.aborted) return
-    let file: Blob = scratch
-      ? await scratch.file()
-      : new Blob([memory!.buffer!], { type: outputInfo[plan.container].mime })
-    file = new Blob([file], { type: outputInfo[plan.container].mime })
-    let index: IndexPlace | null = null
-    if (plan.container === "mp4" || plan.container === "mov") {
-      const moved = await fastStart(file, {
-        edit: priming ? (index) => soundStart(index, priming) : undefined,
-      })
-      file = moved.file
-      index = moved.moved ? "front" : moved.reason
+    const limit = plan.video.action === "encode" ? plan.video.target : null
+    const passes = limit === null ? 1 : MOST_PASSES
+    let bitrate = plan.video.action === "encode" ? plan.video.bitrate : 0
+    let chosen: (typeof made)[number] | null = null
+    for (let number = 1; number <= passes && !chosen; number++) {
+      const passPlan: Plan =
+        plan.video.action === "encode"
+          ? { ...plan, video: { ...plan.video, bitrate } }
+          : plan
+      const pass = await writePass(
+        job,
+        passPlan,
+        stop,
+        { number, of: passes, limit },
+        send,
+        safe.picture
+      )
+      if (stop.signal.aborted) return
+      if ("missed" in pass) {
+        bitrate = correctedBitrate(bitrate, limit!, pass.missed)
+        continue
+      }
+      let file = pass.file
+      let index: IndexPlace | null = null
+      if (plan.container === "mp4" || plan.container === "mov") {
+        const moved = await fastStart(file, {
+          edit: priming ? (held) => soundStart(held, priming) : undefined,
+        })
+        file = moved.file
+        index = moved.moved ? "front" : moved.reason
+      }
+      const result = { file, scratch: pass.scratch, index }
+      made.push(result)
+      if (limit === null || passStands(limit, file.size, number === passes))
+        chosen = result
+      else bitrate = correctedBitrate(bitrate, limit, file.size)
     }
-    const back = await readBack(mediabunny, file, plan.container)
+    // The last pass, unless an earlier one kept under the limit and it did not.
+    const under = made.filter((one) => limit === null || one.file.size <= limit)
+    chosen ??= under.at(-1) ?? made.at(-1)!
+    for (const other of made)
+      if (other !== chosen && other.scratch)
+        await removeScratch(job.folder, other.scratch)
+    const back = await readBack(mediabunny, chosen.file, plan.container)
     const problems = writtenProblems(
       plan,
       back.facts,
@@ -127,27 +271,37 @@ async function convert(job: ConvertJob, stop: AbortController) {
       },
       back.decoded
     )
+    // How close it looks, for a picture encoded again and not turned.
+    let looks: Looks | null = null
+    if (plan.video.action === "encode" && !plan.rotate && !plan.flip)
+      try {
+        looks = await looksAlike(mediabunny, job.file, chosen.file, {
+          width: plan.width,
+          height: plan.height,
+          duration: job.facts.duration,
+          start: 0,
+        })
+      } catch {
+        looks = null
+      }
+    if (stop.signal.aborted) return
     send({
       type: "done",
       id: job.id,
       job: "convert",
       key: job.key,
-      file,
-      scratch: scratch ? name : null,
+      file: chosen.file,
+      looks,
+      scratch: chosen.scratch,
       written: back.facts,
       problems,
-      index,
+      index: chosen.index,
+      passes: made.length,
     })
   } catch (error) {
-    scratch?.close()
-    if (stop.signal.aborted) send({ type: "abandoned", id: job.id })
-    else
-      send({
-        type: "error",
-        id: job.id,
-        key: job.key,
-        message: said(error, UNWRITTEN),
-      })
+    for (const one of made)
+      if (one.scratch) await removeScratch(job.folder, one.scratch)
+    throw error
   }
 }
 

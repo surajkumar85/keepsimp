@@ -66,6 +66,8 @@ const result = (change: Partial<NonNullable<VideoItem["result"]>> = {}) => ({
   written: facts,
   problems: [],
   index: "front" as const,
+  passes: 1,
+  looks: null,
   error: null,
   ...change,
 })
@@ -99,6 +101,12 @@ describe("where a file stands", () => {
       progress: { key: planKey(plan), fraction: 0.426 },
     })
     expect(itemMessage(writing, plan)).toBe("Writing… 43%")
+    expect(
+      itemMessage(
+        item({ progress: { key: planKey(plan), fraction: 0.5, pass: 2 } }),
+        plan
+      )
+    ).toBe("Writing… 50%, pass 2 of 3")
     expect(
       itemMessage(item({ progress: { key: "old", fraction: 0.9 } }), plan)
     ).toBe("Waiting…")

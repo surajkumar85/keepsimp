@@ -28,6 +28,8 @@ export default defineConfig({
         "lib/video/zip-blobs.ts",
         "lib/video/sound-start.ts",
         "lib/video/jobs.ts",
+        "lib/video/target.ts",
+        "lib/video/looks.ts",
         "lib/audio/formats.ts",
         "lib/audio/settings.ts",
         "lib/audio/target-size.ts",

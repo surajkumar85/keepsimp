@@ -3,6 +3,7 @@
  * said in words. The page shows the sentence; the worker follows the plan;
  * the check holds the result to it.
  */
+import { fitToSize, MOST_PASSES } from "./target"
 import {
   containerLabels,
   outputInfo,
@@ -123,7 +124,20 @@ export interface VideoSettings {
   flip: boolean
   sound: "keep" | "convert" | "none"
   keepTags: boolean
+  /** A size the file must fit under: bytes, or a share of the file's own size. */
+  limit: Limit
 }
+
+export type Limit = null | { bytes: number } | { share: number }
+
+/** Limits offered as chips, in MB (KeepSimp's own choice of common ones). */
+export const LIMIT_SIZES = [8, 10, 25, 50, 100] as const
+/** Shares of the file's own size offered as chips. */
+export const LIMIT_SHARES = [0.5, 0.25] as const
+export const MB = 1024 * 1024
+/** A limit of one's own, in MB. */
+export const LEAST_LIMIT = 0.25
+export const MOST_LIMIT = 100_000
 
 export const defaultSettings: VideoSettings = {
   format: "mp4",
@@ -136,6 +150,7 @@ export const defaultSettings: VideoSettings = {
   flip: false,
   sound: "keep",
   keepTags: true,
+  limit: null,
 }
 
 export const LEAST_BITRATE = 100
@@ -196,6 +211,8 @@ export interface Plan {
         bitrate: number
         /** Seconds between keyframes. */
         keyFrameInterval: number
+        /** The size the file must fit under, in bytes; null with no limit. */
+        target: number | null
       }
   /** Turn and mirror asked for, on top of the file's own. */
   rotate: Turn
@@ -306,9 +323,8 @@ const mbps = (bits: number) =>
     ? `${(bits / 1_000_000).toLocaleString("en", { maximumFractionDigits: 1 })} Mbit/s`
     : `${Math.round(bits / 1000).toLocaleString("en")} kbit/s`
 
-/** The sound's codec and bitrate when it is encoded for a kind. */
 /**
- * WebM and MKV get Opus: its own header says how much of its start to skip.
+ * The sound's codec and bitrate when it is encoded for a kind. WebM and MKV get Opus: its own header says how much of its start to skip.
  * An AAC encoder's start can only be skipped by an MP4's edit list, so AAC
  * in MKV would play a few hundredths of a second late (measured: 21 ms for
  * FFmpeg's encoder, 44 ms for Apple's).
@@ -318,6 +334,19 @@ function soundFor(container: OutContainer, channels: number) {
     ? { codec: "opus" as const, bitrate: channels === 1 ? 64_000 : 128_000 }
     : { codec: "aac" as const, bitrate: channels === 1 ? 96_000 : 160_000 }
 }
+
+const sizeSaid = (bytes: number) =>
+  bytes >= MB
+    ? `${(bytes / MB).toLocaleString("en", { maximumFractionDigits: 1 })} MB`
+    : `${Math.max(1, Math.round(bytes / 1024))} KB`
+
+/** The bytes a file must fit under, or null. */
+export const targetOf = (limit: Limit, size: number) =>
+  limit === null
+    ? null
+    : "bytes" in limit
+      ? limit.bytes
+      : Math.floor(size * limit.share)
 
 /** Work out how a file is written. */
 export function planFor(
@@ -332,14 +361,89 @@ export function planFor(
       : settings.format
   const label = outputInfo[container].label
   const notes: string[] = []
+  const soundNotes: string[] = []
   const pending: Plan["pending"] = []
   let problem: string | null = null
   const fail = (reason: string) => (problem ??= reason)
+  const target = targetOf(settings.limit, facts.size)
+  const totalBits = target ? (target * 8) / Math.max(facts.duration, 0.001) : 0
 
   if (settings.format === "same" && container !== facts.container)
     notes.push(
       `${containerLabels[facts.container]} is read here but not written, so it becomes an MP4.`
     )
+
+  // The sound first: a size limit shares its bits between the two.
+  let audio: Plan["audio"] = { action: "none" }
+  let soundBits = 0
+  const sound = facts.audio
+  if (sound) {
+    if (settings.sound === "none") {
+      audio = { action: "drop" }
+      soundNotes.push("The sound is left out.")
+    } else {
+      const copies =
+        settings.sound === "keep" &&
+        sound.codec !== null &&
+        PLAYS_EVERYWHERE[container].includes(sound.codec) &&
+        // Under a limit, sound that would take a fifth of it is converted smaller.
+        (!target || (sound.bitrate ?? 128_000) <= totalBits * 0.2)
+      if (copies) {
+        audio = { action: "copy" }
+        soundBits = sound.bitrate ?? 128_000
+        soundNotes.push(
+          `The sound (${soundLabel(sound.codec)}) is copied as it is.`
+        )
+      } else {
+        let chosen: { codec: SoundCodec; bitrate: number } = soundFor(
+          container,
+          sound.channels
+        )
+        const can = canEncodeSound(chosen.codec)
+        let late = false
+        if (
+          can === false &&
+          chosen.codec === "opus" &&
+          canEncodeSound("vorbis")
+        )
+          chosen = { codec: "vorbis", bitrate: chosen.bitrate }
+        else if (can === false && container === "mkv") {
+          chosen = soundFor("mp4", sound.channels)
+          late = true
+        } else if (can === false)
+          fail(
+            `This browser cannot write ${soundLabel(chosen.codec)} sound for ${label}. Choose another format, or leave the sound out.`
+          )
+        if (!sound.decodable)
+          fail(
+            `This browser cannot play this video's sound (${soundLabel(sound.codec)}), so it cannot be converted. Choose MKV, which keeps it as it is, or leave the sound out.`
+          )
+        const least = chosen.codec === "aac" ? 48_000 : 32_000
+        // Never more than the file's own sound holds, to the next 8 kbit/s.
+        const soundCapped =
+          sound.bitrate !== null && sound.bitrate < chosen.bitrate
+        if (soundCapped)
+          chosen = {
+            ...chosen,
+            bitrate: Math.max(least, Math.ceil(sound.bitrate! / 8000) * 8000),
+          }
+        // Under a limit, a tenth of it at most, to the next 8 kbit/s below.
+        const roomy = target ? Math.floor((totalBits * 0.1) / 8000) * 8000 : 0
+        const squeezed =
+          target !== null && chosen.bitrate > Math.max(least, roomy)
+        if (squeezed) chosen = { ...chosen, bitrate: Math.max(least, roomy) }
+        audio = { action: "encode", ...chosen }
+        soundBits = chosen.bitrate
+        soundNotes.push(
+          `The sound is converted to ${soundLabel(chosen.codec)} at ${Math.round(chosen.bitrate / 1000)} kbit/s${squeezed ? ", to leave room for the picture" : soundCapped ? ", no more than the file holds" : ""}${settings.sound === "keep" && sound.codec && !PLAYS_EVERYWHERE[container].includes(sound.codec) ? `, as ${label} would not play ${soundLabel(sound.codec)} everywhere` : ""}.`
+        )
+        if (late)
+          soundNotes.push(
+            "This browser cannot write Opus, so the sound is AAC, which in MKV starts a few hundredths of a second late. Choose MP4 to keep it in step."
+          )
+      }
+    }
+  }
 
   // The picture.
   let video: Plan["video"] = { action: "none" }
@@ -369,8 +473,11 @@ export function planFor(
       source.codec !== null &&
       (settings.codec === source.codec ||
         PICTURE_PLAYS_EVERYWHERE[container].includes(source.codec))
+    // A file already under its limit needs nothing for it.
+    const over = target !== null && facts.size > target
     const reasons = [
       settings.quality !== "original" && "the quality was chosen",
+      over && `it is to fit under ${sizeSaid(target!)}`,
       shown.scaled && `it is made ${width} × ${height}`,
       slower && `it is made ${settings.frameRate} frames a second`,
       asked && `${videoCodecLabels[asked]} was chosen`,
@@ -388,6 +495,10 @@ export function planFor(
       notes.push(
         `The picture (${videoCodecLabels[source.codec!]}) is copied as it is, without encoding it again: nothing is lost and it is quick.`
       )
+      if (target !== null)
+        notes.push(
+          `It is already under ${sizeSaid(target)}, so nothing is taken from it.`
+        )
       if (turns)
         notes.push(
           `The turn is written as a setting that players follow; the picture itself is not redrawn.`
@@ -404,16 +515,32 @@ export function planFor(
         fail(
           `${label} cannot hold ${videoCodecLabels[asked]}. It holds ${HOLDS[container].video.map((codec) => videoCodecLabels[codec]).join(", ")}.`
         )
-      // Without a choice, the most widely played codec the kind holds.
+      let fps = slower ? (settings.frameRate as number) : null
+      const fitFor = (codec: VideoCodec) =>
+        over
+          ? fitToSize({
+              target: target!,
+              duration: facts.duration,
+              soundBits,
+              width: shown.width,
+              height: shown.height,
+              frameRate: fps ?? sourceRate,
+              efficiency: CODEC_EFFICIENCY[codec],
+            })
+          : null
+      // Without a choice, the most widely played codec the kind holds,
+      // asked of the browser at the size it would be written.
       const tried =
         settings.codec !== "auto"
           ? [settings.codec]
           : [...ENCODE_ORDER[container]]
       let codec: VideoCodec | null = null
       for (const candidate of tried) {
-        const can = canEncode(candidate, width, height)
+        const fit = fitFor(candidate)
+        const [w, h] = fit ? [fit.width, fit.height] : [width, height]
+        const can = canEncode(candidate, w, h)
         if (can === null) {
-          pending.push({ codec: candidate, width, height })
+          pending.push({ codec: candidate, width: w, height: h })
           break
         }
         if (can) {
@@ -427,12 +554,20 @@ export function planFor(
             ? `This browser cannot write ${videoCodecLabels[tried[0]]} at ${width} × ${height}. Choose another codec or a smaller size.`
             : `This browser cannot write a picture ${label} holds at ${width} × ${height}. Choose another format or a smaller size.`
         )
-      const fps = slower ? (settings.frameRate as number) : null
-      const rate = fps ?? sourceRate
       const chosen = codec ?? tried[0]
+      const fit = fitFor(chosen)
       let bits: number
       let capped = false
-      if (settings.quality === "custom") {
+      if (fit) {
+        width = fit.width
+        height = fit.height
+        fps = fit.frameRate ?? fps
+        bits = fit.bitrate
+        if (fit.short)
+          fail(
+            `This video cannot be made smaller than about ${sizeSaid(fit.short.least)}, even at ${fit.width} × ${fit.height}. Choose a limit of at least that, or leave the sound out.`
+          )
+      } else if (settings.quality === "custom") {
         bits =
           Math.min(MOST_BITRATE, Math.max(LEAST_BITRATE, settings.bitrate)) *
           1000
@@ -441,6 +576,7 @@ export function planFor(
           PRESET_SHARE[
             settings.quality === "original" ? "high" : settings.quality
           ]
+        const rate = fps ?? sourceRate
         bits = Math.round(
           highBitrate(width, height, rate) * share * CODEC_EFFICIENCY[chosen]
         )
@@ -467,10 +603,15 @@ export function planFor(
         frameRate: fps,
         bitrate: bits,
         keyFrameInterval: KEYFRAME_SECONDS,
+        target: over ? target : null,
       }
       notes.push(
         `The picture is encoded again as ${videoCodecLabels[chosen]}, ${width} × ${height}${fps ? ` at ${fps} frames a second` : ""}, at ${mbps(bits)}${capped ? ", no more than the file holds" : ""}, because ${reasons.join(" and ")}.`
       )
+      if (over)
+        notes.push(
+          `If the browser's encoder overshoots, the file is written again with less (${MOST_PASSES} times at most), and it is never handed over larger than ${sizeSaid(target!)}.`
+        )
       if (turns || ownTurn)
         notes.push(
           "The picture is turned as it is drawn, so every player shows it upright."
@@ -483,69 +624,7 @@ export function planFor(
         notes.push("Its frames keep their own times, which vary.")
     }
   }
-
-  // The sound.
-  let audio: Plan["audio"] = { action: "none" }
-  let soundBits = 0
-  const sound = facts.audio
-  if (sound) {
-    if (settings.sound === "none") {
-      audio = { action: "drop" }
-      notes.push("The sound is left out.")
-    } else {
-      const copies =
-        settings.sound === "keep" &&
-        sound.codec !== null &&
-        PLAYS_EVERYWHERE[container].includes(sound.codec)
-      if (copies) {
-        audio = { action: "copy" }
-        soundBits = sound.bitrate ?? 128_000
-        notes.push(`The sound (${soundLabel(sound.codec)}) is copied as it is.`)
-      } else {
-        let target: { codec: SoundCodec; bitrate: number } = soundFor(
-          container,
-          sound.channels
-        )
-        const can = canEncodeSound(target.codec)
-        let late = false
-        if (
-          can === false &&
-          target.codec === "opus" &&
-          canEncodeSound("vorbis")
-        )
-          target = { codec: "vorbis", bitrate: target.bitrate }
-        else if (can === false && container === "mkv") {
-          target = soundFor("mp4", sound.channels)
-          late = true
-        } else if (can === false)
-          fail(
-            `This browser cannot write ${soundLabel(target.codec)} sound for ${label}. Choose another format, or leave the sound out.`
-          )
-        if (!sound.decodable)
-          fail(
-            `This browser cannot play this video's sound (${soundLabel(sound.codec)}), so it cannot be converted. Choose MKV, which keeps it as it is, or leave the sound out.`
-          )
-        // Never more than the file's own sound holds, to the next 8 kbit/s.
-        const least = target.codec === "aac" ? 48_000 : 32_000
-        const soundCapped =
-          sound.bitrate !== null && sound.bitrate < target.bitrate
-        if (soundCapped)
-          target = {
-            ...target,
-            bitrate: Math.max(least, Math.ceil(sound.bitrate! / 8000) * 8000),
-          }
-        audio = { action: "encode", ...target }
-        soundBits = target.bitrate
-        notes.push(
-          `The sound is converted to ${soundLabel(target.codec)} at ${Math.round(target.bitrate / 1000)} kbit/s${soundCapped ? ", no more than the file holds" : ""}${settings.sound === "keep" && sound.codec ? `, as ${label} would not play ${soundLabel(sound.codec)} everywhere` : ""}.`
-        )
-        if (late)
-          notes.push(
-            "This browser cannot write Opus, so the sound is AAC, which in MKV starts a few hundredths of a second late. Choose MP4 to keep it in step."
-          )
-      }
-    }
-  }
+  notes.push(...soundNotes)
 
   if (!source && !sound)
     fail("This file has neither a picture nor sound in it.")
@@ -555,7 +634,9 @@ export function planFor(
   const copying = video.action === "copy" && audio.action !== "encode"
   const estimate = copying
     ? facts.size
-    : Math.round((((videoBits + soundBits) * facts.duration) / 8) * 1.01)
+    : video.action === "encode" && video.target
+      ? video.target
+      : Math.round((((videoBits + soundBits) * facts.duration) / 8) * 1.01)
 
   return {
     container,
@@ -585,5 +666,14 @@ export function settingsProblem(settings: VideoSettings): string | null {
       settings.bitrate > MOST_BITRATE)
   )
     return `Give a bitrate from ${LEAST_BITRATE} to ${MOST_BITRATE.toLocaleString("en")} kbit/s.`
+  const limit = settings.limit
+  if (
+    limit &&
+    "bytes" in limit &&
+    (!Number.isFinite(limit.bytes) ||
+      limit.bytes < LEAST_LIMIT * MB ||
+      limit.bytes > MOST_LIMIT * MB)
+  )
+    return `Give a size from ${LEAST_LIMIT} to ${MOST_LIMIT.toLocaleString("en")} MB.`
   return null
 }

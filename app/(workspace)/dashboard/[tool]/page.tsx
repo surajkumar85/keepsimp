@@ -8,6 +8,7 @@ import { AnimationConverter } from "@/components/animation-converter/animation-c
 import { AudioWorkspace } from "@/components/audio/audio-workspace"
 import { VideoWorkspace } from "@/components/video/video-workspace"
 import {
+  VideoCompressorTutorial,
   VideoConverterTutorial,
   VideoEditorTutorial,
 } from "@/components/video/tutorial"
@@ -101,6 +102,12 @@ export async function generateMetadata({
     return pageMetadata(
       "Free video converter and editor, with no uploads",
       "Convert videos to MP4, WebM, MOV or MKV, change their size, frame rate and quality, turn them or take the sound out, many at once, in your browser. Copied as they are wherever nothing has to change, and every video checked before you download it. No account, no uploads.",
+      `/dashboard/${id}/`
+    )
+  if (id === "video-compressor")
+    return pageMetadata(
+      "Compress video online for free: under 8, 10 or 25 MB",
+      "Make a video smaller in your browser, to fit under 8, 10 or 25 MB, half its size or a size of your own, with the bitrate, frame rate and size chosen for it and the quality measured. Any length, no account, no uploads.",
       `/dashboard/${id}/`
     )
   if (id === "video-converter")
@@ -347,6 +354,8 @@ export default async function ToolPage({
         <VideoWorkspace mode="editor" />
       ) : id === "video-converter" ? (
         <VideoWorkspace mode="converter" />
+      ) : id === "video-compressor" ? (
+        <VideoWorkspace mode="compressor" />
       ) : id === "audio-editor" ? (
         <AudioWorkspace mode="editor" />
       ) : id === "audio-converter" ? (
@@ -422,6 +431,8 @@ export default async function ToolPage({
         <VideoEditorTutorial />
       ) : id === "video-converter" ? (
         <VideoConverterTutorial />
+      ) : id === "video-compressor" ? (
+        <VideoCompressorTutorial />
       ) : id === "audio-editor" ? (
         <AudioEditorTutorial />
       ) : id === "audio-converter" ? (

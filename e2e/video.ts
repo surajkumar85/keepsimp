@@ -3,11 +3,12 @@ import { execFileSync } from "node:child_process"
 import { mkdtempSync, readFileSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import { expect, type Page } from "@playwright/test"
+import { expect, test, type Page } from "@playwright/test"
 import { bytesOf, type Upload } from "./pdf"
 
 export const EDITOR = "/dashboard/video-editor/"
 export const CONVERTER = "/dashboard/video-converter/"
+export const COMPRESSOR = "/dashboard/video-compressor/"
 export const folder = mkdtempSync(join(tmpdir(), "keepsimp-video-e2e-"))
 
 export const workspace = (page: Page) => page.getByTestId("video-workspace")
@@ -269,4 +270,18 @@ export function syncOffset(bytes: Uint8Array, name: string) {
   const sound = new Float32Array(pcm.buffer, pcm.byteOffset, pcm.length / 4)
   const onset = sound.findIndex((value) => Math.abs(value) > 0.1) / 48000
   return (onset - flash) * 1000
+}
+
+/** Print what a worker reports as an error, so a failed run says why. */
+export function reportWorkerErrors() {
+  test.beforeEach(({ page }) => {
+    page.on("worker", (worker) =>
+      worker.on("console", (message) => {
+        if (message.type() === "error")
+          console.log(
+            `[${test.info().project.name}] worker: ${message.text().slice(0, 2000)}`
+          )
+      })
+    )
+  })
 }

@@ -135,6 +135,7 @@ KeepSimp's tools can be used by agents: Claude Code, Codex and other MCP clients
 - **The tools** (`lib/agent/video.ts`): `video_info` (the workspace's facts: kind, codecs, size as shown, turn, frame rate, bitrate, HDR, sound, length, what this browser can play) and `convert_video` (every setting of the video editor: format, codec, quality or a bitrate, size, frame rate, turn, mirror, sound, details).
 - **The same way as the page:** jobs are built by `lib/video/jobs.ts` (`readJob`, `convertJob`) and run on the workspace's own worker (`VideoPool`, the agent's own pool of one, through `PoolJobs`); each file is planned with the workspace's own `planFor` through `browserPlan`, which asks the browser what it can write (`browserAsker`, `lib/video/probe.ts`) as the plan needs, first choice first. A plan the browser cannot write is refused in the page's own words. Results are written to the agent page's own folder on disk, emptied when the page goes.
 - **Handed over only when it holds:** the worker opens every result again (`writtenProblems`); one not as asked is refused with what is wrong.
+- **`compress_video`** (part 2) takes a size in MB or a share of the file, with the converter's other settings, and writes through the same path: the plan's limit, up to three passes, never handed over larger than the limit, and how close it looks (`looksSaid`).
 
 ### Every setting of the image pages (phase 6, part 4)
 
@@ -280,4 +281,4 @@ A package of its own, in TypeScript that Node runs as it is (type stripping), bu
    3. making form fields, and trusted certificates for checking signatures. Built.
    4. every setting of the image and animation pages. Built.
    5. audio's silence trimming, equaliser and split times; colour gradients, brand colours, vision previews and mixing; searching JSON. Built.
-7. **Video:** each phase of the video workspace as it ships. Part 1 (reading and converting) built.
+7. **Video:** each phase of the video workspace as it ships. Part 1 (reading and converting) and part 2 (compressing to a size) built.

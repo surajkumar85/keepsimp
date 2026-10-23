@@ -1,5 +1,6 @@
 import type { Container } from "./formats"
 import type { Plan, VideoFacts } from "./settings"
+import type { Looks } from "./looks"
 
 /** Read a file: its facts and a small picture. */
 export interface ReadJob {
@@ -43,7 +44,14 @@ export type VideoResponse =
       poster: ImageBitmap | null
     }
   | { type: "open-error"; id: string; message: string }
-  | { type: "progress"; id: string; key: string; fraction: number }
+  | {
+      type: "progress"
+      id: string
+      key: string
+      fraction: number
+      /** Which pass, when a size limit may need more than one. */
+      pass?: number
+    }
   | {
       type: "done"
       id: string
@@ -56,6 +64,10 @@ export type VideoResponse =
       problems: string[]
       /** Null for kinds without an index. */
       index: IndexPlace | null
+      /** Passes written to reach a size limit (1 without one). */
+      passes: number
+      /** How close it looks to the original; null when not measured. */
+      looks: Looks | null
     }
   | { type: "error"; id: string; key: string; message: string }
   | { type: "abandoned"; id: string }

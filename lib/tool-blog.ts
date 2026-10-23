@@ -264,6 +264,10 @@ export const overviewPost: BlogPost = {
           href: "/dashboard/video-converter/",
         },
         {
+          label: "Compress a video to a size",
+          href: "/dashboard/video-compressor/",
+        },
+        {
           label: "Guide: convert video without uploading",
           href: "/blog/convert-video-without-uploading/",
         },
