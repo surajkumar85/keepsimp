@@ -4,6 +4,7 @@ import { join } from "node:path"
 import { test, expect, type Page } from "@playwright/test"
 import AxeBuilder from "@axe-core/playwright"
 import { chip, download, EDITOR, folder, LARGE, settled } from "./audio"
+import { openGroups } from "./settings"
 
 const NOISE = "/dashboard/remove-background-noise/"
 const VOICE = "keepsimp-voice.mp3"
@@ -178,6 +179,7 @@ test("draws over clicks and says how many", async ({ page }) => {
     buffer: readFileSync(path),
   })
   await settled(page)
+  await openGroups(page)
   await chip(page, "WAV").click()
   await page.getByRole("switch", { name: "Remove clicks" }).click()
   await settled(page)

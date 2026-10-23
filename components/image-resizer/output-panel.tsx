@@ -1,20 +1,11 @@
 "use client"
 
 import { useId, useState } from "react"
-import {
-  IconCheck,
-  IconChevronDown,
-  IconCopy,
-  IconLock,
-} from "@tabler/icons-react"
+import { IconCheck, IconCopy, IconLock } from "@tabler/icons-react"
 import { Button } from "@/components/ui/button"
 import { ChoiceChips } from "@/components/ui/choice-chips"
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible"
 import { Input } from "@/components/ui/input"
+import { toast } from "@/components/ui/toast"
 import { ToggleChips } from "@/components/ui/toggle-chips"
 import {
   outputFormats,
@@ -33,7 +24,8 @@ import type { Sharpen } from "@/lib/image-resizer/sharpen"
 import { MAX_SET, responsiveWidths } from "@/lib/image-resizer/srcset"
 import { dpiChoices, isPhysical } from "@/lib/image-resizer/units"
 import { Section, ToggleRow } from "@/components/image-batch/controls"
-import type { Update } from "./settings-panel"
+import type { ResizerGroup } from "@/lib/image-resizer/summary"
+import { groupProps, type Update } from "./settings-panel"
 
 const qualityHints: Record<QualityChoice, string> = {
   balanced:
@@ -50,7 +42,12 @@ export function OutputPanel({
   format,
   exampleName,
   snippet,
+  usual,
+  onResetGroup,
 }: {
+  /** The usual settings, which "changed" and "Reset" are measured against. */
+  usual: ResizerSettings
+  onResetGroup: (group: ResizerGroup) => void
   settings: ResizerSettings
   update: Update
   /** Format the selected image will be saved as. */
@@ -75,15 +72,21 @@ export function OutputPanel({
     try {
       await navigator.clipboard.writeText(snippet)
       setCopied(true)
+      toast.success("Copied to the clipboard", {
+        description: "The HTML for the selected image.",
+      })
       setTimeout(() => setCopied(false), 2000)
     } catch {
       setCopied(false)
     }
   }
 
+  const group = (name: ResizerGroup) =>
+    groupProps(name, settings, usual, onResetGroup)
+
   return (
-    <div className="space-y-5 rounded-xl border bg-card p-4 sm:p-5">
-      <Section title="Output">
+    <>
+      <Section title="Output" {...group("output")}>
         <ChoiceChips
           label="Format"
           value={settings.format}
@@ -147,6 +150,9 @@ export function OutputPanel({
             />
           </div>
         )}
+      </Section>
+
+      <Section title="Names and print resolution" {...group("names")}>
         <div className="space-y-2">
           <label
             htmlFor={`${ids}-pattern`}
@@ -225,7 +231,7 @@ export function OutputPanel({
         )}
       </Section>
 
-      <Section title="Several sizes">
+      <Section title="Several sizes" {...group("sizes")}>
         <ToggleRow
           label="Export a responsive set"
           hint="Makes one file per width from every image, ready for srcset."
@@ -304,62 +310,53 @@ export function OutputPanel({
         )}
       </Section>
 
-      <Collapsible className="border-t pt-4">
-        <CollapsibleTrigger className="group flex min-h-11 w-full items-center justify-between rounded-md text-left font-heading text-base font-medium md:min-h-9">
-          Advanced options
-          <IconChevronDown
-            className="size-5 transition-transform duration-200 group-data-[panel-open]:rotate-180 motion-reduce:transition-none"
-            aria-hidden="true"
-          />
-        </CollapsibleTrigger>
-        <CollapsibleContent className="space-y-5 pt-4">
-          <ChoiceChips
-            label="Resampling"
-            value={settings.kernel}
-            onValueChange={(kernel: KernelChoice) => update({ kernel })}
-            options={[
-              { value: "auto", label: "Auto" },
-              { value: "lanczos3", label: "Lanczos" },
-              { value: "magicKernelSharp2021", label: "Magic Kernel Sharp" },
-              { value: "mitchell", label: "Mitchell" },
-              { value: "catrom", label: "Catmull-Rom" },
-              { value: "triangle", label: "Bilinear" },
-              { value: "nearest", label: "Nearest (pixel art)" },
-            ]}
-            hint="Auto uses Lanczos to shrink and Mitchell to enlarge, both in linear light."
-          />
-          <ChoiceChips
-            label="Sharpen after shrinking"
-            value={settings.sharpen}
-            onValueChange={(sharpen: Sharpen) => update({ sharpen })}
-            options={[
-              { value: "off", label: "Off" },
-              { value: "light", label: "Light" },
-              { value: "medium", label: "Medium" },
-              { value: "strong", label: "Strong" },
-            ]}
-            hint="Restores edge contrast that shrinking softens. Not applied when enlarging."
-          />
-          <ChoiceChips
-            label="Round dimensions"
-            value={String(settings.multiple)}
-            onValueChange={(value) =>
-              update({ multiple: Number(value) as 1 | 2 | 8 })
-            }
-            options={[
-              { value: "1", label: "Exact" },
-              { value: "2", label: "Even numbers" },
-              { value: "8", label: "Multiples of 8" },
-            ]}
-            hint="Some video tools and encoders need even or 8-pixel sizes."
-          />
-        </CollapsibleContent>
-      </Collapsible>
+      <Section title="Advanced options" {...group("advanced")}>
+        <ChoiceChips
+          label="Resampling"
+          value={settings.kernel}
+          onValueChange={(kernel: KernelChoice) => update({ kernel })}
+          options={[
+            { value: "auto", label: "Auto" },
+            { value: "lanczos3", label: "Lanczos" },
+            { value: "magicKernelSharp2021", label: "Magic Kernel Sharp" },
+            { value: "mitchell", label: "Mitchell" },
+            { value: "catrom", label: "Catmull-Rom" },
+            { value: "triangle", label: "Bilinear" },
+            { value: "nearest", label: "Nearest (pixel art)" },
+          ]}
+          hint="Auto uses Lanczos to shrink and Mitchell to enlarge, both in linear light."
+        />
+        <ChoiceChips
+          label="Sharpen after shrinking"
+          value={settings.sharpen}
+          onValueChange={(sharpen: Sharpen) => update({ sharpen })}
+          options={[
+            { value: "off", label: "Off" },
+            { value: "light", label: "Light" },
+            { value: "medium", label: "Medium" },
+            { value: "strong", label: "Strong" },
+          ]}
+          hint="Restores edge contrast that shrinking softens. Not applied when enlarging."
+        />
+        <ChoiceChips
+          label="Round dimensions"
+          value={String(settings.multiple)}
+          onValueChange={(value) =>
+            update({ multiple: Number(value) as 1 | 2 | 8 })
+          }
+          options={[
+            { value: "1", label: "Exact" },
+            { value: "2", label: "Even numbers" },
+            { value: "8", label: "Multiples of 8" },
+          ]}
+          hint="Some video tools and encoders need even or 8-pixel sizes."
+        />
+      </Section>
 
-      <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+      <p className="flex items-center gap-1.5 border-t py-4 text-xs text-muted-foreground">
         <IconLock className="size-3.5" aria-hidden="true" />
         Processed on your device. Metadata such as location is removed.
       </p>
-    </div>
+    </>
   )
 }

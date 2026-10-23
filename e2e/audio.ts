@@ -5,6 +5,7 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { expect, type Page } from "@playwright/test"
 import { bytesOf, type Upload } from "./pdf"
+import { openGroups } from "./settings"
 
 export const EDITOR = "/dashboard/audio-editor/"
 export const folder = mkdtempSync(join(tmpdir(), "keepsimp-audio-e2e-"))
@@ -99,6 +100,7 @@ export async function open(page: Page, files: Upload[], route = EDITOR) {
   await page.goto(route)
   await page.locator("#audio-file").setInputFiles(files)
   await settled(page)
+  await openGroups(page)
 }
 
 /** What FFmpeg's ebur128 filter measures of a file: integrated loudness and true peak. */

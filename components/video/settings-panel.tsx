@@ -6,6 +6,12 @@ import { Input } from "@/components/ui/input"
 import { outputInfo, type OutContainer } from "@/lib/video/formats"
 import { useState } from "react"
 import { dbLabel, TARGETS } from "@/lib/audio/level"
+import { differs, resetOf } from "@/lib/settings-groups"
+import {
+  VIDEO_GROUPS,
+  videoSummary,
+  type VideoGroup,
+} from "@/lib/video/summary"
 import {
   FADES,
   FRAME_RATES,
@@ -25,6 +31,7 @@ import {
   type Shape,
   type Turn,
   type VideoSettings,
+  defaultSettings,
 } from "@/lib/video/settings"
 
 export type Update = (change: Partial<VideoSettings>) => void
@@ -143,7 +150,11 @@ export function SettingsPanel({
   limitFirst = false,
   children,
   childrenFirst = false,
+  focus,
+  usual = defaultSettings,
 }: {
+  /** The settings the page started with, which "changed" is measured against. */
+  usual?: VideoSettings
   settings: VideoSettings
   update: Update
   problem: string | null
@@ -153,20 +164,32 @@ export function SettingsPanel({
   children?: React.ReactNode
   /** Those settings at the top, for the page opened to add music. */
   childrenFirst?: boolean
+  /** The group a door is opened for: open from the start, with format and quality. */
+  focus?: VideoGroup
 }) {
+  /** A group's fold: open at first when it is among the first choices or the door's own. */
+  const group = (name: VideoGroup) => ({
+    summary: videoSummary(name, settings),
+    changed: differs(settings, usual, VIDEO_GROUPS[name]),
+    onReset: () => update(resetOf(usual, VIDEO_GROUPS[name])),
+    // A door opens its own group, above the rest, with only the format beside it.
+    defaultOpen:
+      name === focus ||
+      name === "format" ||
+      (name === "quality" && !focus && !childrenFirst),
+  })
   const limitSection = (
-    <Section title="Size limit">
+    <Section key="limit" title="Size limit" {...group("limit")}>
       <LimitChoice settings={settings} update={update} />
     </Section>
   )
   const container: OutContainer | null =
     settings.format === "same" ? null : settings.format
   const codecs = container ? HOLDS[container].video : null
-  return (
-    <div className="space-y-5">
-      {childrenFirst && children}
-      {limitFirst && limitSection}
-      <Section title="Format">
+  const groups: [VideoGroup, React.ReactNode][] = [
+    [
+      "format",
+      <Section key="format" title="Format" {...group("format")}>
         <ChoiceChips
           label="Format"
           hideLabel
@@ -214,9 +237,11 @@ export function SettingsPanel({
               })),
           ]}
         />
-      </Section>
-
-      <Section title="Quality and size">
+      </Section>,
+    ],
+    [
+      "quality",
+      <Section key="quality" title="Quality and size" {...group("quality")}>
         <ChoiceChips
           label="Quality"
           hint={QUALITY_HINTS[settings.quality]}
@@ -280,11 +305,12 @@ export function SettingsPanel({
             })),
           ]}
         />
-      </Section>
-
-      {!limitFirst && limitSection}
-
-      <Section title="Turn and shape">
+      </Section>,
+    ],
+    ["limit", limitSection],
+    [
+      "shape",
+      <Section key="shape" title="Turn and shape" {...group("shape")}>
         <ChoiceChips
           label="Turn"
           hideLabel
@@ -313,9 +339,11 @@ export function SettingsPanel({
             ...SHAPES.map((shape) => ({ value: shape, label: shape })),
           ]}
         />
-      </Section>
-
-      <Section title="Speed and fades">
+      </Section>,
+    ],
+    [
+      "timing",
+      <Section key="timing" title="Speed and fades" {...group("timing")}>
         <ChoiceChips
           label="Speed"
           hint="Faster keeps the frame rate; slower plays every frame for longer. The sound keeps its pitch. The picture and sound are encoded again."
@@ -348,9 +376,11 @@ export function SettingsPanel({
             label: fade === 0 ? "None" : `${fade} s`,
           }))}
         />
-      </Section>
-
-      <Section title="Sound and details">
+      </Section>,
+    ],
+    [
+      "sound",
+      <Section key="sound" title="Sound and details" {...group("sound")}>
         <ChoiceChips
           label="Sound"
           hideLabel
@@ -400,16 +430,27 @@ export function SettingsPanel({
           checked={settings.keepTags}
           onCheckedChange={(keepTags) => update({ keepTags })}
         />
-      </Section>
-
+      </Section>,
+    ],
+  ]
+  // The group a door is opened for comes first (the size limit on the compressor's page).
+  const first = limitFirst ? "limit" : focus
+  const ordered = [
+    ...groups.filter(([name]) => name === first),
+    ...groups.filter(([name]) => name !== first),
+  ]
+  return (
+    <div>
+      {childrenFirst && children}
+      {ordered.map(([, section]) => section)}
       {!childrenFirst && children}
 
       {problem && (
-        <p role="alert" className="text-sm text-destructive">
+        <p role="alert" className="pb-3 text-sm text-destructive">
           {problem}
         </p>
       )}
-      <p className="text-xs text-muted-foreground">
+      <p className="border-t py-4 text-xs text-muted-foreground">
         Bitrates follow YouTube&apos;s recommended upload settings; Balanced and
         Small are KeepSimp&apos;s own shares of them. Writing to{" "}
         {container ? outputInfo[container].label : "each file's own kind"}{" "}

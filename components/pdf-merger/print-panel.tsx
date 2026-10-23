@@ -10,6 +10,7 @@ import type {
   SheetChoice,
 } from "@/lib/pdf-merger/print"
 import type { MergeSettings } from "@/lib/pdf-merger/settings"
+import { mergeGroup } from "./structure-panel"
 
 const sheetHints: Record<SheetChoice, string> = {
   keep: "Every page keeps the size it has.",
@@ -33,11 +34,8 @@ export function PrintPanel({
 }) {
   const ids = useId()
   return (
-    <div
-      className="space-y-5 rounded-xl border bg-card p-4 sm:p-5"
-      data-testid="print-options"
-    >
-      <Section title="Printing">
+    <div className="border-t first:border-t-0" data-testid="print-options">
+      <Section title="Printing" {...mergeGroup("printing", settings, update)}>
         {arranged ? (
           <p className="text-xs text-muted-foreground">
             For double-sided printing of your own page order, add blank pages
@@ -74,7 +72,7 @@ export function PrintPanel({
         )}
       </Section>
 
-      <Section title="Footer">
+      <Section title="Footer" {...mergeGroup("footer", settings, update)}>
         <ToggleRow
           label="File name on every page"
           hint="Printed small at the foot of each page, with the name of the file the page came from."

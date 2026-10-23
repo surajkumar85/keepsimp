@@ -3,12 +3,37 @@
 import { Section, ToggleRow } from "@/components/image-batch/controls"
 import { ChoiceChips } from "@/components/ui/choice-chips"
 import type { BookmarkPolicy } from "@/lib/pdf-merger/outline"
-import type {
-  ContentsChoice,
-  FormsChoice,
-  LabelsChoice,
-  MergeSettings,
+import {
+  defaultSettings,
+  type ContentsChoice,
+  type FormsChoice,
+  type LabelsChoice,
+  type MergeSettings,
 } from "@/lib/pdf-merger/settings"
+import {
+  MERGE_GROUPS,
+  mergeSummary,
+  type MergeGroup,
+} from "@/lib/pdf-merger/summary"
+import { differs, resetOf } from "@/lib/settings-groups"
+
+/**
+ * A group's fold: what it is set to, whether it differs from the usual, and
+ * the change that puts it back. Folded unless `open`.
+ */
+export function mergeGroup(
+  name: MergeGroup,
+  settings: MergeSettings,
+  update: (change: Partial<MergeSettings>) => void,
+  open = false
+) {
+  return {
+    summary: mergeSummary(name, settings),
+    changed: differs(settings, defaultSettings, MERGE_GROUPS[name]),
+    onReset: () => update(resetOf(defaultSettings, MERGE_GROUPS[name])),
+    defaultOpen: open,
+  }
+}
 
 const bookmarkHints: Record<BookmarkPolicy, string> = {
   nested:
@@ -26,7 +51,7 @@ const formHints: Record<FormsChoice, string> = {
   remove: "Fields, and what is filled into them, are taken out.",
 }
 
-/** How the result is organised: bookmarks, a contents page, fields, page numbers and attachments. */
+/** How the result is organised: bookmarks, a contents page, fields, page numbers and attachments. Bookmarks are open; the rest fold. */
 export function StructurePanel({
   settings,
   update,
@@ -40,12 +65,11 @@ export function StructurePanel({
   /** How many files are attached inside the PDFs. */
   attachments: number
 }) {
+  const group = (name: MergeGroup, open = false) =>
+    mergeGroup(name, settings, update, open)
   return (
-    <div
-      className="space-y-5 rounded-xl border bg-card p-4 sm:p-5"
-      data-testid="structure-options"
-    >
-      <Section title="Bookmarks and contents">
+    <div className="border-t first:border-t-0" data-testid="structure-options">
+      <Section title="Bookmarks and contents" {...group("contents", true)}>
         <ChoiceChips
           label="Bookmarks"
           value={settings.bookmarks}
@@ -86,7 +110,7 @@ export function StructurePanel({
       </Section>
 
       {forms && (
-        <Section title="Fillable fields">
+        <Section title="Fillable fields" {...group("fields")}>
           <ChoiceChips
             label="Fields"
             hideLabel
@@ -103,7 +127,7 @@ export function StructurePanel({
         </Section>
       )}
 
-      <Section title="Page numbers">
+      <Section title="Page numbers" {...group("labels")}>
         <ChoiceChips
           label="Page numbers shown by a viewer"
           hideLabel
@@ -122,7 +146,7 @@ export function StructurePanel({
       </Section>
 
       {attachments > 0 && (
-        <Section title="Attachments">
+        <Section title="Attachments" {...group("attachments")}>
           <ToggleRow
             label={`Keep ${attachments === 1 ? "the attached file" : `the ${attachments} attached files`}`}
             hint="Files attached inside the PDFs are carried into the result. A name that is taken gets a number added."

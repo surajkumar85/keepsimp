@@ -10,6 +10,7 @@ import {
   type PlainPage,
 } from "../tests/pdf-fixtures"
 import { readPdf, storedPictures } from "../tests/pdf-reader"
+import { openGroup } from "./settings"
 import {
   bytesOf,
   drawnPage,
@@ -1237,7 +1238,9 @@ test("chooses what parts keep, and locks them with a password", async ({
   ])
   expect(bare.parts.map((part) => part.attachments.length)).toEqual([1, 1])
 
-  // A password is asked for before anything is written.
+  // A password is asked for before anything is written. It folds away at first.
+  await expect(kept.getByText("No password", { exact: true })).toBeVisible()
+  await openGroup(page, "Password")
   await kept
     .getByRole("switch", { name: "Lock every part with a password" })
     .click()

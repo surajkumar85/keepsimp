@@ -4,10 +4,16 @@ import { useState } from "react"
 import { IconCheck, IconCopy, IconScale } from "@tabler/icons-react"
 import { Section, ToggleRow } from "@/components/image-batch/controls"
 import { Button } from "@/components/ui/button"
+import { toast } from "@/components/ui/toast"
 import { ChoiceChips } from "@/components/ui/choice-chips"
 import { ToggleChips } from "@/components/ui/toggle-chips"
 import { sizeLabel } from "@/lib/image-compressor/formats"
 import type { RankedComparison } from "@/lib/image-converter/compare"
+import {
+  converterChanged,
+  converterSummary,
+  type ConverterGroup,
+} from "@/lib/image-converter/summary"
 import { icoSizes } from "@/lib/image-converter/encoders/ico"
 import {
   gifColourChoices,
@@ -32,6 +38,26 @@ export type ComparisonState =
   | { status: "done"; rows: RankedComparison[] }
   | { status: "error"; message: string }
 
+/**
+ * A group's fold: the format and its quality open at first, the rest under
+ * their summaries. A setting that stops the conversion is said even while
+ * the format group is folded.
+ */
+export function groupProps(
+  name: ConverterGroup,
+  settings: ConverterSettings,
+  usual: ConverterSettings,
+  onReset: (group: ConverterGroup) => void,
+  problem: string | null = null
+) {
+  return {
+    summary: problem ?? converterSummary(name, settings),
+    changed: converterChanged(name, settings, usual),
+    onReset: () => onReset(name),
+    defaultOpen: name === "format" || name === "quality",
+  }
+}
+
 const options = targetOrder.map((target) => ({
   value: target,
   label: targets[target].label,
@@ -41,38 +67,28 @@ export function FormatPanel({
   settings,
   update,
   problem,
-  comparison,
-  canCompare,
-  onCompare,
-  onCancelCompare,
-  snippet,
+  usual,
+  onResetGroup,
 }: {
   settings: ConverterSettings
   update: Update
   problem: string | null
-  comparison: ComparisonState
-  /** A readable image is selected. */
-  canCompare: boolean
-  onCompare: () => void
-  onCancelCompare: () => void
-  /** `<picture>` markup for the selected image, when several web formats are ready. */
-  snippet: string | null
+  /** The usual settings, which "changed" and "Reset" are measured against. */
+  usual: ConverterSettings
+  onResetGroup: (group: ConverterGroup) => void
 }) {
-  const [copied, setCopied] = useState(false)
-  async function copy() {
-    if (!snippet) return
-    try {
-      await navigator.clipboard.writeText(snippet)
-      setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
-    } catch {
-      setCopied(false)
-    }
-  }
+  const group = (name: ConverterGroup) =>
+    groupProps(
+      name,
+      settings,
+      usual,
+      onResetGroup,
+      name === "format" ? problem : null
+    )
 
   return (
-    <div className="space-y-5 rounded-xl border bg-card p-4 sm:p-5">
-      <Section title="Convert to">
+    <>
+      <Section title="Convert to" {...group("format")}>
         {settings.multi ? (
           <ToggleChips
             label="Formats"
@@ -105,7 +121,7 @@ export function FormatPanel({
       </Section>
 
       {usesTarget(settings, "ico") && (
-        <Section title="Icon">
+        <Section title="Icon" {...group("ico")}>
           <ToggleChips
             label="Icon sizes (px)"
             value={settings.icoSizes.map(String)}
@@ -122,7 +138,7 @@ export function FormatPanel({
       )}
 
       {usesTarget(settings, "pdf") && (
-        <Section title="PDF">
+        <Section title="PDF" {...group("pdf")}>
           <ChoiceChips
             label="Page size"
             value={settings.pdfPage}
@@ -171,7 +187,7 @@ export function FormatPanel({
       )}
 
       {usesTarget(settings, "gif") && (
-        <Section title="GIF">
+        <Section title="GIF" {...group("gif")}>
           <ChoiceChips
             label="Colours"
             value={String(settings.gifColours)}
@@ -190,8 +206,70 @@ export function FormatPanel({
           />
         </Section>
       )}
+    </>
+  )
+}
 
-      <Section title="Which format is smallest?">
+/** What the comparison has found, in a line, for its group while folded. */
+function comparisonSaid(comparison: ComparisonState) {
+  switch (comparison.status) {
+    case "idle":
+      return "Compare real file sizes for the selected image"
+    case "running":
+      return comparison.label
+    case "error":
+      return comparison.message
+    case "done": {
+      const smallest = comparison.rows[0]
+      return smallest
+        ? `${targets[smallest.target].label} is smallest, ${sizeLabel(smallest.bytes)}`
+        : "Nothing to compare"
+    }
+  }
+}
+
+/** Which format is smallest, and the picture HTML: things to look at rather than settings. */
+export function ComparePanel({
+  settings,
+  update,
+  comparison,
+  canCompare,
+  onCompare,
+  onCancelCompare,
+  snippet,
+}: {
+  settings: ConverterSettings
+  update: Update
+  comparison: ComparisonState
+  /** A readable image is selected. */
+  canCompare: boolean
+  onCompare: () => void
+  onCancelCompare: () => void
+  /** `<picture>` markup for the selected image, when several web formats are ready. */
+  snippet: string | null
+}) {
+  const [copied, setCopied] = useState(false)
+  async function copy() {
+    if (!snippet) return
+    try {
+      await navigator.clipboard.writeText(snippet)
+      setCopied(true)
+      toast.success("Copied to the clipboard", {
+        description: "The picture HTML for the selected image.",
+      })
+      setTimeout(() => setCopied(false), 2000)
+    } catch {
+      setCopied(false)
+    }
+  }
+
+  return (
+    <>
+      <Section
+        title="Which format is smallest?"
+        summary={comparisonSaid(comparison)}
+        defaultOpen={false}
+      >
         <p className="text-sm text-muted-foreground">
           Encode the selected image as JPEG, PNG, WebP, AVIF and JPEG XL with
           your quality setting and compare the real results.
@@ -326,6 +404,6 @@ export function FormatPanel({
           </p>
         </Section>
       )}
-    </div>
+    </>
   )
 }

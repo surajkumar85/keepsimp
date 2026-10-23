@@ -1,8 +1,10 @@
 "use client"
 
+import { useEffect, useRef } from "react"
 import {
   IconDownload,
   IconFileZip,
+  IconLoader2,
   IconPhotoPlus,
   IconTrash,
 } from "@tabler/icons-react"
@@ -11,6 +13,7 @@ import {
   useDropTarget,
 } from "@/components/image-compressor/drop-zone"
 import { Button, buttonVariants } from "@/components/ui/button"
+import { toast } from "@/components/ui/toast"
 import { cn } from "cn"
 import { sizeLabel } from "@/lib/image-compressor/formats"
 import { savingsPercent } from "@/lib/image-compressor/quality"
@@ -40,7 +43,10 @@ export function SummaryBar({
   noun = "image",
   accept,
   addIcon: AddIcon = IconPhotoPlus,
+  applying = false,
 }: {
+  /** A change of settings has been seen and is about to be taken up: what is shown is about to be made again. */
+  applying?: boolean
   totals: BatchTotals
   /** Set when the batch is exactly one file, which downloads directly. */
   single: { url: string; name: string } | null
@@ -63,6 +69,27 @@ export function SummaryBar({
 }) {
   const { over, handlers } = useDropTarget(onFiles)
   const saved = savingsPercent(totals.originalBytes, totals.outputBytes)
+  const working = applying || totals.pending > 0
+  const plural = (count: number) => `${noun}${count === 1 ? "" : "s"}`
+  // Work that ends is said in the corner too, where it is seen wherever the page is scrolled to.
+  const before = useRef(working)
+  useEffect(() => {
+    if (before.current && !working && totals.done > 0)
+      toast.success(
+        totals.done === 1 && totals.images === 1
+          ? `Your ${noun} is ready`
+          : `${totals.done} ${plural(totals.done)} ready`,
+        {
+          description:
+            totals.originalBytes > 0
+              ? `${sizeLabel(totals.originalBytes)} → ${sizeLabel(totals.outputBytes)}`
+              : undefined,
+        }
+      )
+    before.current = working
+    // Said once, as the work ends.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [working])
   return (
     <div
       {...handlers}
@@ -91,14 +118,49 @@ export function SummaryBar({
           </span>
         )}
       </div>
+      {working && (
+        <div className="space-y-1.5" data-testid="batch-progress">
+          <p className="flex items-center gap-2 text-sm text-muted-foreground">
+            <IconLoader2
+              className="size-4 animate-spin text-primary motion-reduce:animate-none"
+              aria-hidden="true"
+            />
+            {applying
+              ? "Applying your changes…"
+              : `${verb} ${totals.pending} ${plural(totals.pending)}…`}
+          </p>
+          <div
+            className="h-1.5 overflow-hidden rounded-full bg-muted"
+            role="progressbar"
+            aria-label={`${noun}s ready`}
+            aria-valuemin={0}
+            aria-valuemax={totals.images}
+            aria-valuenow={applying ? 0 : totals.done}
+          >
+            <div
+              className="h-full rounded-full bg-primary transition-[width] duration-200 motion-reduce:transition-none"
+              style={{
+                width: `${applying || !totals.images ? 4 : Math.max(4, (totals.done / totals.images) * 100)}%`,
+              }}
+            />
+          </div>
+        </div>
+      )}
       <div className="flex flex-wrap gap-2">
         {single ? (
           <a
             href={single.url}
             download={single.name}
+            aria-disabled={applying || undefined}
+            onClick={(event) => {
+              if (applying) event.preventDefault()
+              else
+                toast.success("Download started", { description: single.name })
+            }}
             className={cn(
               buttonVariants({ size: "lg" }),
-              "flex-1 sm:flex-none"
+              "flex-1 sm:flex-none",
+              applying && "pointer-events-none opacity-50"
             )}
           >
             <IconDownload aria-hidden="true" /> {singleLabel}
@@ -107,7 +169,7 @@ export function SummaryBar({
           <Button
             size="lg"
             className="flex-1 sm:flex-none"
-            disabled={!totals.settled || zipping}
+            disabled={!totals.settled || zipping || applying}
             onClick={primary.onClick}
           >
             <IconDownload aria-hidden="true" /> {primary.label}
@@ -116,7 +178,7 @@ export function SummaryBar({
           <Button
             size="lg"
             className="flex-1 sm:flex-none"
-            disabled={!totals.settled || zipping}
+            disabled={!totals.settled || zipping || applying}
             onClick={onZip}
           >
             <IconFileZip aria-hidden="true" />
@@ -147,7 +209,7 @@ export function SummaryBar({
       </div>
       <p className="sr-only" aria-live="polite">
         {totals.pending > 0
-          ? `${verb} ${totals.pending} ${noun}${totals.pending === 1 ? "" : "s"}…`
+          ? `${verb} ${totals.pending} ${plural(totals.pending)}…`
           : totals.done > 0
             ? `All ${noun}s are ready.`
             : ""}

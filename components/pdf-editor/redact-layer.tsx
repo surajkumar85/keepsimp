@@ -13,6 +13,7 @@ import { boxBetween, type Box, type Point } from "@/lib/pdf-editor/geometry"
 import { boxOf, type RedactMark } from "@/lib/pdf-editor/redact"
 import { pagePoint, type Editor } from "./use-editor"
 import type { Redact } from "./use-redact"
+import { useHolding } from "./use-settling"
 
 /** The smallest area that is a mark and not a slip of the hand, in points. */
 const SMALLEST = 3
@@ -80,6 +81,7 @@ export function RedactSpots({
   /** A mark on its way somewhere else with the arrow keys, until it is put into the file. */
   const [moving, setMoving] = useState<{ id: string; box: Box } | null>(null)
   const settle = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const holding = useHolding()
   const { redactMarks, letters } = editor
   const { fresh, setFresh, remark } = redact
   const byWords = redact.how === "words"
@@ -137,6 +139,7 @@ export function RedactSpots({
   const put = (id: string, box: Box) => {
     if (settle.current) clearTimeout(settle.current)
     settle.current = null
+    holding(false)
     void remark(page, id, box)
   }
   const onKey = (event: KeyboardEvent, mark: RedactMark, box: Box) => {
@@ -145,6 +148,7 @@ export function RedactSpots({
       event.stopPropagation()
       if (settle.current) clearTimeout(settle.current)
       settle.current = null
+      holding(false)
       setMoving(null)
       void redact.unmark(page, mark.id)
       return
@@ -164,6 +168,7 @@ export function RedactSpots({
     setMoving({ id: mark.id, box: next })
     if (settle.current) clearTimeout(settle.current)
     settle.current = setTimeout(() => put(mark.id, next), SETTLE)
+    holding(true)
   }
 
   return (

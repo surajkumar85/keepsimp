@@ -5,6 +5,7 @@ import AxeBuilder from "@axe-core/playwright"
 import { unzipSync } from "fflate"
 import { chip, folder, loudnessOf, samples, settled } from "./audio"
 import { bytesOf } from "./pdf"
+import { openGroups } from "./settings"
 
 const SPLITTER = "/dashboard/split-audio/"
 const JOINER = "/dashboard/join-audio/"
@@ -15,6 +16,7 @@ async function withSample(page: Page, route: string, focused: string) {
   await expect(page.getByTestId("audio-focused")).toContainText(focused)
   await page.getByRole("button", { name: "Try a sample" }).first().click()
   await settled(page)
+  await openGroups(page)
 }
 
 /** A download a link or button starts. */

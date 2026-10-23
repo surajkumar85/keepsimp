@@ -4,6 +4,7 @@ import { readFile } from "node:fs/promises"
 import sharp from "sharp"
 import { damage, makePdf, type FixtureOptions } from "../tests/pdf-fixtures"
 import { readPdf } from "../tests/pdf-reader"
+import { openGroups } from "./settings"
 
 const ROUTE = "/dashboard/pdf-merger/"
 
@@ -33,13 +34,14 @@ async function upload(page: Page, ...files: Upload[]) {
   await page.locator("#pdf-file").setInputFiles(files)
 }
 
-/** Wait until every file has been read. */
+/** Wait until every file has been read, then unfold every group of settings. */
 async function ready(page: Page) {
   await expect(page.getByTestId("pdf-merger")).toHaveAttribute(
     "data-ready",
     "true",
     { timeout: 60_000 }
   )
+  await openGroups(page)
 }
 
 /** Merge, download the result and read it back with pdf.js. */

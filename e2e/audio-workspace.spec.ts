@@ -19,6 +19,7 @@ import {
   settled,
 } from "./audio"
 import { bytesOf } from "./pdf"
+import { openGroup } from "./settings"
 
 test("the samples: a tune and a video, written as gapless MP3 with their tags, checked and zipped", async ({
   page,
@@ -61,6 +62,44 @@ test("the samples: a tune and a video, written as gapless MP3 with their tags, c
     "keepsimp-clip.mp3",
     "keepsimp-tune.mp3",
   ])
+})
+
+test("folds the settings under what they hold, says a change at once, and puts them back", async ({
+  page,
+}) => {
+  test.setTimeout(120_000)
+  await page.goto(EDITOR)
+  await page.getByRole("button", { name: "Try a sample" }).click()
+  await settled(page)
+  const sections = page.locator("[data-slot=settings-section]")
+  const loudness = sections.filter({
+    has: page.getByRole("button", { name: "Loudness", exact: true }),
+  })
+  // Format and quality are open; the rest are folded under their summaries.
+  await expect(
+    sections.getByRole("button", { name: "Format", exact: true })
+  ).toHaveAttribute("aria-expanded", "true")
+  await expect(
+    loudness.getByRole("button", { name: "Loudness", exact: true })
+  ).toHaveAttribute("aria-expanded", "false")
+  await expect(loudness.locator("[data-slot=settings-summary]")).toHaveText(
+    "As it is"
+  )
+  await openGroup(page, "Loudness")
+  await chip(page, "Make louder").click()
+  // Said at once, before the files are written again.
+  await expect(page.locator("[data-slot=settings-state]")).toHaveAttribute(
+    "data-state",
+    "pending"
+  )
+  await expect(loudness).toHaveAttribute("data-changed", "true")
+  await settled(page)
+  await expect(page.getByTestId("audio-level")).toContainText(/^Made 6 dB/)
+  await page.getByRole("button", { name: "Reset all" }).click()
+  await expect(chip(page, "As it is")).toBeChecked()
+  await expect(loudness).not.toHaveAttribute("data-changed", "true")
+  await settled(page)
+  await expect(page.getByTestId("audio-level")).toHaveCount(0)
 })
 
 test("writes every format, each read back by FFmpeg as asked", async ({

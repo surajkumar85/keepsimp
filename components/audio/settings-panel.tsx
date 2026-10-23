@@ -31,12 +31,20 @@ import {
 } from "@/lib/audio/level"
 import {
   BITRATES,
+  defaultSettings,
   PRESET_BITRATES,
   RATE_CHOICES,
   type AudioSettings,
-  type Lossy,
   type Preset,
 } from "@/lib/audio/settings"
+import {
+  AUDIO_GROUPS,
+  audioChanged,
+  audioReset,
+  audioSummary,
+  lossyOf,
+  type AudioGroup,
+} from "@/lib/audio/summary"
 import type { SoundSettings } from "@/lib/audio/sound"
 import {
   BASS_HZ,
@@ -71,62 +79,66 @@ const PRESET_LABELS: Record<Preset, string> = {
 const SIZES = [1, 2, 5, 10, 25]
 const MB = 1024 * 1024
 
-/** The output: format, quality, sample rate, channels, depth, tags and a size limit. */
+/** The fold of one group: its line, whether it changed, its reset and whether it starts open. */
+type Fold = {
+  summary: string
+  changed: boolean
+  onReset: () => void
+  defaultOpen: boolean
+}
+
+const sizeText = (bytes: number | null) =>
+  bytes ? String(Math.round((bytes / MB) * 10) / 10) : "3"
+
+/**
+ * The output: format, quality, sample rate, channels, depth, tags and a size
+ * limit, with loudness, speed, repair and tone, each in a group that folds.
+ * Format and quality stay open; a door's own group is open and at the top.
+ */
 export function SettingsPanel({
   settings,
   update,
   problem,
-  repairFirst = false,
+  focus,
+  usual = defaultSettings,
 }: {
   settings: AudioSettings
   update: Update
   problem: string | null
-  /** Repair at the top, for the page opened to take noise away. */
-  repairFirst?: boolean
+  /** The group a door is opened for: open from the start, and first. */
+  focus?: AudioGroup
+  /** The settings the page started with, which "changed" is measured against. */
+  usual?: AudioSettings
 }) {
   const ids = useId()
-  const codec: Lossy | null =
-    settings.format === "mp3"
-      ? "mp3"
-      : settings.format === "m4a" || settings.format === "m4r"
-        ? "aac"
-        : settings.format === "opus"
-          ? "opus"
-          : null
-  const lossless = settings.format === "flac" || settings.format === "wav"
+  const codec = lossyOf(settings.format)
   const sizeChoice =
     settings.targetBytes === null
       ? "none"
       : SIZES.includes(settings.targetBytes / MB)
         ? String(settings.targetBytes / MB)
         : "custom"
-  const [customSize, setCustomSize] = useState(
-    settings.targetBytes
-      ? String(Math.round((settings.targetBytes / MB) * 10) / 10)
-      : "3"
-  )
+  const [customSize, setCustomSize] = useState(sizeText(settings.targetBytes))
+  // A group put back starts again, so figures typed in it are not kept.
+  const [resets, setResets] = useState<Partial<Record<AudioGroup, number>>>({})
+  const group = (name: AudioGroup): Fold => ({
+    summary: audioSummary(name, settings),
+    changed: audioChanged(name, settings, usual),
+    onReset: () => {
+      update(audioReset(name, settings, usual))
+      setResets((had) => ({ ...had, [name]: (had[name] ?? 0) + 1 }))
+      if (name === "limit") setCustomSize(sizeText(usual.targetBytes))
+    },
+    defaultOpen:
+      name === "format" ||
+      name === "quality" ||
+      name === "depth" ||
+      name === focus,
+  })
 
-  const repair = (
-    <RepairSection
-      repair={settings.sound.repair}
-      update={(change) =>
-        update({
-          sound: {
-            ...settings.sound,
-            repair: { ...settings.sound.repair, ...change },
-          },
-        })
-      }
-    />
-  )
-
-  return (
-    <div
-      className="space-y-5 rounded-xl border bg-card p-4 sm:p-5"
-      data-testid="audio-settings"
-    >
-      {repairFirst && repair}
-      <Section title="Format">
+  const sections: Record<AudioGroup, React.ReactNode> = {
+    format: (
+      <Section key="format" title="Format" {...group("format")}>
         <ChoiceChips
           label="Write as"
           hideLabel
@@ -142,98 +154,130 @@ export function SettingsPanel({
           hint={FORMAT_HINTS[settings.format]}
         />
       </Section>
+    ),
 
+    quality: codec && (
+      <Section key="quality" title="Quality" {...group("quality")}>
+        <ChoiceChips
+          label="Quality"
+          hideLabel
+          value={settings.preset}
+          onValueChange={(preset) => update({ preset })}
+          options={(Object.keys(PRESET_LABELS) as Preset[]).map((preset) => ({
+            value: preset,
+            label:
+              preset === "custom"
+                ? PRESET_LABELS[preset]
+                : `${PRESET_LABELS[preset]} · ${PRESET_BITRATES[codec][preset][0]} kbit/s`,
+          }))}
+          hint="Bitrates are for stereo; mono uses less. Higher keeps more detail and makes larger files."
+        />
+        {settings.preset === "custom" && (
+          <div>
+            <label
+              htmlFor={`${ids}-bitrate`}
+              className="mb-2 block text-sm font-medium"
+            >
+              Bitrate
+            </label>
+            <select
+              id={`${ids}-bitrate`}
+              className="form-select"
+              value={settings.bitrate}
+              onChange={(event) =>
+                update({ bitrate: Number(event.target.value) })
+              }
+            >
+              {BITRATES[codec].map((rate) => (
+                <option key={rate} value={rate}>
+                  {rate} kbit/s
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+      </Section>
+    ),
+
+    depth: !codec && (
+      <Section key="depth" title="Bit depth" {...group("depth")}>
+        <ChoiceChips
+          label="Bit depth"
+          hideLabel
+          value={String(settings.depth)}
+          onValueChange={(depth) =>
+            update({
+              depth:
+                depth === "same" ? "same" : (Number(depth) as 16 | 24 | 32),
+            })
+          }
+          options={[
+            { value: "same", label: "Same as the file" },
+            { value: "16", label: "16-bit" },
+            { value: "24", label: "24-bit" },
+            {
+              value: "32",
+              label: "32-bit float",
+              disabled: settings.format === "flac",
+            },
+          ]}
+          hint={
+            settings.format === "flac"
+              ? "For WAV and FLAC. 16-bit is CD quality; 24-bit is for editing. FLAC holds no 32-bit float: choose WAV for it."
+              : "For WAV and FLAC. 16-bit is CD quality; 24-bit and 32-bit float are for editing."
+          }
+        />
+      </Section>
+    ),
+
+    level: (
       <LevelSection
+        key={`level-${resets.level ?? 0}`}
+        fold={group("level")}
         level={settings.level}
         update={(change) => update({ level: { ...settings.level, ...change } })}
       />
+    ),
 
+    changes: (
       <ChangesSection
+        key={`changes-${resets.changes ?? 0}`}
+        fold={group("changes")}
         changes={settings.changes}
         update={(change) =>
           update({ changes: { ...settings.changes, ...change } })
         }
       />
+    ),
 
-      {!repairFirst && repair}
+    repair: (
+      <RepairSection
+        key="repair"
+        fold={group("repair")}
+        repair={settings.sound.repair}
+        update={(change) =>
+          update({
+            sound: {
+              ...settings.sound,
+              repair: { ...settings.sound.repair, ...change },
+            },
+          })
+        }
+      />
+    ),
 
+    tone: (
       <SoundSection
+        key={`tone-${resets.tone ?? 0}`}
+        fold={group("tone")}
         sound={settings.sound}
         leveled={settings.level.mode === "loudness"}
         update={(change) => update({ sound: { ...settings.sound, ...change } })}
       />
+    ),
 
-      {codec && (
-        <Section title="Quality">
-          <ChoiceChips
-            label="Quality"
-            hideLabel
-            value={settings.preset}
-            onValueChange={(preset) => update({ preset })}
-            options={(Object.keys(PRESET_LABELS) as Preset[]).map((preset) => ({
-              value: preset,
-              label:
-                preset === "custom"
-                  ? PRESET_LABELS[preset]
-                  : `${PRESET_LABELS[preset]} · ${PRESET_BITRATES[codec][preset][0]} kbit/s`,
-            }))}
-            hint="Bitrates are for stereo; mono uses less. Higher keeps more detail and makes larger files."
-          />
-          {settings.preset === "custom" && (
-            <div>
-              <label
-                htmlFor={`${ids}-bitrate`}
-                className="mb-2 block text-sm font-medium"
-              >
-                Bitrate
-              </label>
-              <select
-                id={`${ids}-bitrate`}
-                className="form-select"
-                value={settings.bitrate}
-                onChange={(event) =>
-                  update({ bitrate: Number(event.target.value) })
-                }
-              >
-                {BITRATES[codec].map((rate) => (
-                  <option key={rate} value={rate}>
-                    {rate} kbit/s
-                  </option>
-                ))}
-              </select>
-            </div>
-          )}
-        </Section>
-      )}
-
-      {(lossless || settings.format === "same") && (
-        <Section title="Bit depth">
-          <ChoiceChips
-            label="Bit depth"
-            hideLabel
-            value={String(settings.depth)}
-            onValueChange={(depth) =>
-              update({
-                depth:
-                  depth === "same" ? "same" : (Number(depth) as 16 | 24 | 32),
-              })
-            }
-            options={[
-              { value: "same", label: "Same as the file" },
-              { value: "16", label: "16-bit" },
-              { value: "24", label: "24-bit" },
-              {
-                value: "32",
-                label: "32-bit float",
-                disabled: settings.format === "flac",
-              },
-            ]}
-            hint="For WAV and FLAC. 16-bit is CD quality; 24-bit and 32-bit float are for editing."
-          />
-        </Section>
-      )}
-
-      <Section title="Sound">
+    output: (
+      <Section key="output" title="Sound" {...group("output")}>
         <div>
           <label
             htmlFor={`${ids}-rate`}
@@ -284,8 +328,10 @@ export function SettingsPanel({
           onCheckedChange={(keepTags) => update({ keepTags })}
         />
       </Section>
+    ),
 
-      <Section title="File size limit">
+    limit: (
+      <Section key="limit" title="File size limit" {...group("limit")}>
         <ChoiceChips
           label="File size limit"
           hideLabel
@@ -334,9 +380,18 @@ export function SettingsPanel({
           </div>
         )}
       </Section>
+    ),
+  }
 
+  // The door's own group first, then the rest in their order.
+  const order = focus
+    ? [focus, ...AUDIO_GROUPS.filter((name) => name !== focus)]
+    : AUDIO_GROUPS
+  return (
+    <div data-testid="audio-settings">
+      {order.map((name) => sections[name])}
       {problem && (
-        <p role="alert" className="text-sm text-destructive">
+        <p role="alert" className="pb-4 text-sm text-destructive">
           {problem}
         </p>
       )}
@@ -364,9 +419,11 @@ const CEILINGS = [-0.1, -1, -2, -3]
 
 /** How loud each result is to be. */
 function LevelSection({
+  fold,
   level,
   update,
 }: {
+  fold: Fold
   level: Level
   update: (change: Partial<Level>) => void
 }) {
@@ -384,7 +441,7 @@ function LevelSection({
     return text.trim() === "" ? NaN : value
   }
   return (
-    <Section title="Loudness">
+    <Section title="Loudness" {...fold}>
       <ChoiceChips
         label="Loudness"
         hideLabel
@@ -508,10 +565,12 @@ const BANDS: { key: "bass" | "mid" | "treble"; label: string }[] = [
 
 /** The equaliser and the compressor. */
 function SoundSection({
+  fold,
   sound,
   leveled,
   update,
 }: {
+  fold: Fold
   sound: SoundSettings
   leveled: boolean
   update: (change: Partial<SoundSettings>) => void
@@ -524,7 +583,7 @@ function SoundSection({
   const tone = (change: Partial<Tone>) =>
     update({ tone: { ...sound.tone, ...change } })
   return (
-    <Section title="Tone and dynamics">
+    <Section title="Tone and dynamics" {...fold}>
       <ChoiceChips
         label="Equaliser"
         value={preset}
@@ -633,9 +692,11 @@ const times = (tempo: number) =>
 
 /** Speed, pitch, direction and channels. */
 function ChangesSection({
+  fold,
   changes,
   update,
 }: {
+  fold: Fold
   changes: Changes
   update: (change: Partial<Changes>) => void
 }) {
@@ -647,7 +708,7 @@ function ChangesSection({
   const preset = own ? "custom" : String(changes.tempo)
   const balance = Math.round(changes.balance * 100)
   return (
-    <Section title="Speed, pitch and channels">
+    <Section title="Speed, pitch and channels" {...fold}>
       <ChoiceChips
         label="Speed"
         value={preset}
@@ -760,16 +821,18 @@ function ChangesSection({
 
 /** Background noise, hum, clicks and harsh "s" sounds. */
 function RepairSection({
+  fold,
   repair,
   update,
 }: {
+  fold: Fold
   repair: Repair
   update: (change: Partial<Repair>) => void
 }) {
   const ids = useId()
   const strength = Math.round(repair.denoise * 100)
   return (
-    <Section title="Repair">
+    <Section title="Repair" {...fold}>
       <div>
         <div className="mb-1 flex justify-between text-sm">
           <label htmlFor={`${ids}-noise`} className="font-medium">

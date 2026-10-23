@@ -2,7 +2,6 @@
 
 import { useId } from "react"
 import {
-  IconChevronDown,
   IconCrop,
   IconFlipHorizontal,
   IconFlipVertical,
@@ -12,13 +11,9 @@ import {
 } from "@tabler/icons-react"
 import { Button } from "@/components/ui/button"
 import { ChoiceChips } from "@/components/ui/choice-chips"
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible"
 import { Input } from "@/components/ui/input"
-import { Switch } from "@/components/ui/switch"
+import { Section, ToggleRow } from "@/components/image-batch/controls"
+import { resetOf } from "@/lib/settings-groups"
 import {
   inputFormats,
   outputFormats,
@@ -45,62 +40,18 @@ import {
   type FormatChoice,
   type SizeChoice,
 } from "@/lib/image-compressor/settings"
+import {
+  COMPRESSOR_GROUPS,
+  compressorChanged,
+  compressorSummary,
+  type CompressorGroup,
+} from "@/lib/image-compressor/summary"
 
 type Update = (
   change:
     | Partial<CompressorSettings>
     | ((current: CompressorSettings) => CompressorSettings)
 ) => void
-
-function Section({
-  title,
-  children,
-}: {
-  title: string
-  children: React.ReactNode
-}) {
-  return (
-    <section className="space-y-4 border-t pt-5 first:border-t-0 first:pt-0">
-      <h3 className="font-heading text-base font-medium">{title}</h3>
-      {children}
-    </section>
-  )
-}
-
-function ToggleRow({
-  label,
-  hint,
-  checked,
-  onCheckedChange,
-}: {
-  label: string
-  hint?: string
-  checked: boolean
-  onCheckedChange: (value: boolean) => void
-}) {
-  const id = useId()
-  return (
-    <div className="flex items-start justify-between gap-4">
-      <div>
-        <label htmlFor={id} className="text-sm font-medium">
-          {label}
-        </label>
-        {hint && (
-          <p id={`${id}-hint`} className="text-xs text-muted-foreground">
-            {hint}
-          </p>
-        )}
-      </div>
-      <Switch
-        id={id}
-        checked={checked}
-        onCheckedChange={onCheckedChange}
-        aria-describedby={hint ? `${id}-hint` : undefined}
-        className="mt-0.5"
-      />
-    </div>
-  )
-}
 
 function formatHint(
   choice: FormatChoice,
@@ -162,7 +113,10 @@ export function SettingsPanel({
   planError,
   cropping,
   onCrop,
+  usual,
 }: {
+  /** The settings for this image as they start, which "changed" is measured against. */
+  usual: CompressorSettings
   settings: CompressorSettings
   update: Update
   input: InputFormat
@@ -187,9 +141,21 @@ export function SettingsPanel({
       ? { width: source.height, height: source.width }
       : source
 
+  /** A group's fold: format and compression open at first, the rest under their summaries. */
+  const group = (name: CompressorGroup) => ({
+    // A size that cannot be made is said even while its group is folded.
+    summary:
+      name === "size" && planError
+        ? planError
+        : compressorSummary(name, settings),
+    changed: compressorChanged(name, settings, usual),
+    onReset: () => update(resetOf(usual, COMPRESSOR_GROUPS[name])),
+    defaultOpen: name === "format" || name === "compression",
+  })
+
   return (
-    <div className="space-y-5 rounded-xl border bg-card p-4 sm:p-5 lg:sticky lg:top-20">
-      <Section title="Format">
+    <div>
+      <Section title="Format" {...group("format")}>
         <ChoiceChips
           label="Output format"
           hideLabel
@@ -223,7 +189,7 @@ export function SettingsPanel({
         />
       </Section>
 
-      <Section title="Compression">
+      <Section title="Compression" {...group("compression")}>
         <ChoiceChips
           label="Compression level"
           hideLabel
@@ -308,7 +274,7 @@ export function SettingsPanel({
         )}
       </Section>
 
-      <Section title="Size">
+      <Section title="Size" {...group("size")}>
         <ChoiceChips
           label="Output size"
           hideLabel
@@ -460,7 +426,7 @@ export function SettingsPanel({
           )}
       </Section>
 
-      <Section title="Crop and rotate">
+      <Section title="Crop and rotate" {...group("crop")}>
         <ChoiceChips
           label="Crop shape"
           value={settings.aspect}
@@ -541,100 +507,91 @@ export function SettingsPanel({
         </div>
       </Section>
 
-      <Collapsible className="border-t pt-4">
-        <CollapsibleTrigger className="group flex min-h-11 w-full items-center justify-between rounded-md text-left font-heading text-base font-medium md:min-h-9">
-          Advanced options
-          <IconChevronDown
-            className="size-5 transition-transform duration-200 group-data-[panel-open]:rotate-180 motion-reduce:transition-none"
-            aria-hidden="true"
-          />
-        </CollapsibleTrigger>
-        <CollapsibleContent className="space-y-5 pt-4">
-          <ChoiceChips
-            label="Encoder effort"
-            value={settings.effort}
-            onValueChange={(effort) => update({ effort })}
-            options={[
-              { value: "fast", label: "Fast" },
-              { value: "balanced", label: "Balanced" },
-              { value: "max", label: "Maximum" },
-            ]}
-            hint="Maximum squeezes out a few more bytes and takes longer."
-          />
-          <ChoiceChips
-            label="Resampling"
-            value={settings.resample}
-            onValueChange={(resample) => update({ resample })}
-            options={[
-              { value: "lanczos3", label: "Lanczos (sharpest)" },
-              { value: "mitchell", label: "Mitchell (smooth)" },
-              { value: "catrom", label: "Catmull-Rom" },
-            ]}
-            hint="Used whenever the size changes. Resizing happens in linear light."
-          />
-          <ChoiceChips
-            label="Background for transparency"
-            value={settings.background}
-            onValueChange={(background) => update({ background })}
-            options={[
-              { value: "white", label: "White" },
-              { value: "black", label: "Black" },
-              { value: "custom", label: "Custom" },
-            ]}
-            hint="Used only when saving transparent images as JPEG."
-          />
-          {settings.background === "custom" && (
-            <div className="flex items-center gap-3">
-              <label htmlFor={`${ids}-matte`} className="text-sm font-medium">
-                Background colour
-              </label>
-              <input
-                id={`${ids}-matte`}
-                type="color"
-                value={settings.backgroundColor}
-                onChange={(event) =>
-                  update({ backgroundColor: event.target.value })
-                }
-                className="h-11 w-16 cursor-pointer rounded-md border bg-background p-1 md:h-9"
-              />
-            </div>
-          )}
-          <ChoiceChips
-            label="Colour detail (JPEG and AVIF)"
-            value={settings.chroma444 ? "444" : "420"}
-            onValueChange={(value) => update({ chroma444: value === "444" })}
-            options={[
-              { value: "420", label: "Standard 4:2:0" },
-              { value: "444", label: "Full 4:4:4" },
-            ]}
-            hint="Full colour keeps red text and fine colour edges crisp, with larger files."
-          />
-          <ToggleRow
-            label="Progressive JPEG"
-            hint="Loads in passes and is usually a little smaller."
-            checked={settings.progressive}
-            onCheckedChange={(progressive) => update({ progressive })}
-          />
-          <ChoiceChips
-            label="PNG colours"
-            value={String(settings.pngColors)}
-            onValueChange={(value) => update({ pngColors: Number(value) })}
-            options={pngColorChoices.map((value) => ({
-              value: String(value),
-              label: `${value}`,
-            }))}
-            hint="Maximum palette size for compressed PNG. Lossless PNG keeps every colour."
-          />
-          <ToggleRow
-            label="Dithering"
-            hint="Smooths gradients in palette PNG files."
-            checked={settings.dithering}
-            onCheckedChange={(dithering) => update({ dithering })}
-          />
-        </CollapsibleContent>
-      </Collapsible>
+      <Section title="Advanced options" {...group("advanced")}>
+        <ChoiceChips
+          label="Encoder effort"
+          value={settings.effort}
+          onValueChange={(effort) => update({ effort })}
+          options={[
+            { value: "fast", label: "Fast" },
+            { value: "balanced", label: "Balanced" },
+            { value: "max", label: "Maximum" },
+          ]}
+          hint="Maximum squeezes out a few more bytes and takes longer."
+        />
+        <ChoiceChips
+          label="Resampling"
+          value={settings.resample}
+          onValueChange={(resample) => update({ resample })}
+          options={[
+            { value: "lanczos3", label: "Lanczos (sharpest)" },
+            { value: "mitchell", label: "Mitchell (smooth)" },
+            { value: "catrom", label: "Catmull-Rom" },
+          ]}
+          hint="Used whenever the size changes. Resizing happens in linear light."
+        />
+        <ChoiceChips
+          label="Background for transparency"
+          value={settings.background}
+          onValueChange={(background) => update({ background })}
+          options={[
+            { value: "white", label: "White" },
+            { value: "black", label: "Black" },
+            { value: "custom", label: "Custom" },
+          ]}
+          hint="Used only when saving transparent images as JPEG."
+        />
+        {settings.background === "custom" && (
+          <div className="flex items-center gap-3">
+            <label htmlFor={`${ids}-matte`} className="text-sm font-medium">
+              Background colour
+            </label>
+            <input
+              id={`${ids}-matte`}
+              type="color"
+              value={settings.backgroundColor}
+              onChange={(event) =>
+                update({ backgroundColor: event.target.value })
+              }
+              className="h-11 w-16 cursor-pointer rounded-md border bg-background p-1 md:h-9"
+            />
+          </div>
+        )}
+        <ChoiceChips
+          label="Colour detail (JPEG and AVIF)"
+          value={settings.chroma444 ? "444" : "420"}
+          onValueChange={(value) => update({ chroma444: value === "444" })}
+          options={[
+            { value: "420", label: "Standard 4:2:0" },
+            { value: "444", label: "Full 4:4:4" },
+          ]}
+          hint="Full colour keeps red text and fine colour edges crisp, with larger files."
+        />
+        <ToggleRow
+          label="Progressive JPEG"
+          hint="Loads in passes and is usually a little smaller."
+          checked={settings.progressive}
+          onCheckedChange={(progressive) => update({ progressive })}
+        />
+        <ChoiceChips
+          label="PNG colours"
+          value={String(settings.pngColors)}
+          onValueChange={(value) => update({ pngColors: Number(value) })}
+          options={pngColorChoices.map((value) => ({
+            value: String(value),
+            label: `${value}`,
+          }))}
+          hint="Maximum palette size for compressed PNG. Lossless PNG keeps every colour."
+        />
+        <ToggleRow
+          label="Dithering"
+          hint="Smooths gradients in palette PNG files."
+          checked={settings.dithering}
+          onCheckedChange={(dithering) => update({ dithering })}
+        />
+      </Section>
 
-      <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+      <p className="flex items-center gap-1.5 border-t py-4 text-xs text-muted-foreground">
         <IconLock className="size-3.5" aria-hidden="true" />
         Processed on your device. Metadata such as location is removed.
       </p>

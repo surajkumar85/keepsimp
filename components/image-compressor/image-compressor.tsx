@@ -17,6 +17,8 @@ import {
   IconSparkles,
 } from "@tabler/icons-react"
 import { Skeleton } from "@/components/ui/skeleton"
+import { toast } from "@/components/ui/toast"
+import { SettingsCard } from "@/components/image-batch/controls"
 import { CompareSlider } from "./compare-slider"
 import { CropOverlay } from "./crop-overlay"
 import { DropZone, FileBar } from "./drop-zone"
@@ -40,7 +42,10 @@ import type {
   CompressRequest,
   WorkerResponse,
 } from "@/lib/image-compressor/protocol"
-import { originalIsBetter } from "@/lib/image-compressor/quality"
+import {
+  originalIsBetter,
+  savingsPercent,
+} from "@/lib/image-compressor/quality"
 import {
   backgroundRgb,
   buildPlan,
@@ -52,6 +57,11 @@ import {
   targetBytes,
   type CompressorSettings,
 } from "@/lib/image-compressor/settings"
+import {
+  COMPRESSOR_GROUPS,
+  compressorChanges,
+} from "@/lib/image-compressor/summary"
+import { resetAll } from "@/lib/settings-groups"
 
 interface Source {
   width: number
@@ -63,6 +73,8 @@ interface Source {
 type Result = CompressedResult & { reference: ImageBitmap; key: string }
 
 const DEBOUNCE_MS = 350
+/** Work that takes longer than this is said in a toast when it ends, wherever the page is scrolled to. */
+const LONG_MS = 2000
 
 export function ImageCompressor() {
   const [file, setFile] = useState<File | null>(null)
@@ -78,6 +90,8 @@ export function ImageCompressor() {
   const [cropping, setCropping] = useState(false)
   const [paused, setPaused] = useState(false)
   const [originalUrl, setOriginalUrl] = useState("")
+  /** The request the last job was started for (or found already shown). */
+  const [startedKey, setStartedKey] = useState<string | null>(null)
 
   const client = useRef<CompressorClient | null>(null)
   const jobId = useRef(0)
@@ -85,6 +99,8 @@ export function ImageCompressor() {
   const openToken = useRef(0)
   const reopening = useRef(false)
   const fileRef = useRef<File | null>(null)
+  const root = useRef<HTMLDivElement>(null)
+  const jobStarted = useRef(0)
 
   const handleMessage = useEffectEvent((message: WorkerResponse) => {
     if (message.type === "opened") {
@@ -122,6 +138,19 @@ export function ImageCompressor() {
       const blob = new Blob([message.bytes], {
         type: outputFormats[message.format].mime,
       })
+      // Said in the corner when the result may not be in sight: a long job, or the picture scrolled away.
+      const stage = root.current
+        ?.querySelector("[data-testid=compare-stage]")
+        ?.getBoundingClientRect()
+      if (
+        performance.now() - jobStarted.current > LONG_MS ||
+        (stage && (stage.bottom < 0 || stage.top > window.innerHeight))
+      ) {
+        const saved = savingsPercent(fileRef.current.size, blob.size)
+        toast.success("Your image is ready", {
+          description: `${outputFormats[message.format].label} · ${sizeLabel(fileRef.current.size)} → ${sizeLabel(blob.size)}${saved > 0 ? `, ${saved}% smaller` : ""}`,
+        })
+      }
       setResult({
         url: URL.createObjectURL(blob),
         filename: outputFilename(fileRef.current.name, message.format),
@@ -329,6 +358,7 @@ export function ImageCompressor() {
     if (!request || paused) return
     const timer = setTimeout(() => {
       const id = ++jobId.current
+      setStartedKey(request.key)
       if (shownKey.current === request.key) {
         // The visible result already matches (for example after switching back).
         client.current?.supersede(id)
@@ -336,6 +366,7 @@ export function ImageCompressor() {
         return
       }
       jobKeys.current.set(id, request.key)
+      jobStarted.current = performance.now()
       setJobError("")
       setStatus("Starting…")
       client.current?.compress({ ...request.body, id })
@@ -345,10 +376,30 @@ export function ImageCompressor() {
 
   function cancel() {
     jobId.current++
+    setPaused(true)
+    // Only a change waiting to be taken up: there is no job to stop.
+    if (!status) return
     reopening.current = true
     client.current?.cancel()
     setStatus(null)
-    setPaused(true)
+  }
+
+  /** The settings this image starts with: what "changed" and "Reset" are measured against. */
+  const usual = useMemo(
+    () =>
+      sourceSize
+        ? settingsForImage(defaultSettings, sourceSize)
+        : defaultSettings,
+    [sourceSize]
+  )
+  // A change seen but not yet sent to the worker: said at once, so no press seems to do nothing.
+  const waiting = Boolean(request && !paused && request.key !== startedKey)
+  const pending = waiting || Boolean(status)
+  const upToDate = Boolean(result && request && result.key === request.key)
+  function resetSettings() {
+    update(resetAll(usual, COMPRESSOR_GROUPS))
+    setCropping(false)
+    toast.info("Settings put back to the usual")
   }
 
   const bounds = source && sourceSize ? cropBounds(settings, sourceSize) : null
@@ -378,6 +429,7 @@ export function ImageCompressor() {
 
   return (
     <div
+      ref={root}
       className="grid gap-6 lg:grid-cols-5"
       data-testid="image-compressor"
       data-settled={
@@ -460,13 +512,11 @@ export function ImageCompressor() {
                     ? `${outputFormats[result.format].label} · ${sizeLabel(result.bytes)}`
                     : null
                 }
-                status={status}
+                status={status ?? (waiting ? "Applying your changes…" : null)}
+                stale={pending}
                 onCancel={cancel}
               />
             )}
-            <p className="sr-only" aria-live="polite">
-              {status ? "Compressing your image…" : ""}
-            </p>
             {paused && !status && (
               <p className="text-sm text-muted-foreground">
                 Compression cancelled. Change a setting to try again.
@@ -501,7 +551,7 @@ export function ImageCompressor() {
                     ? sizeLabel(target)
                     : null
                 }
-                stale={Boolean(status)}
+                stale={pending}
               />
             )}
           </>
@@ -509,24 +559,37 @@ export function ImageCompressor() {
       </div>
       <div className="lg:col-span-2">
         {source && format && sourceSize ? (
-          <SettingsPanel
-            settings={settings}
-            update={update}
-            input={format}
-            transparent={source.transparent}
-            source={sourceSize}
-            output={plan?.output ?? null}
-            planError={planError}
-            cropping={cropping}
-            onCrop={() => {
-              if (!cropping && !settings.crop)
-                update((current) => ({
-                  ...current,
-                  crop: { x: 0, y: 0, ...cropBounds(current, sourceSize) },
-                }))
-              setCropping((value) => !value)
-            }}
-          />
+          <SettingsCard
+            state={pending ? "pending" : upToDate ? "done" : "idle"}
+            pendingText={
+              waiting ? "Applying your changes…" : "Compressing your image…"
+            }
+            doneText={
+              result ? `Up to date · ${sizeLabel(result.bytes)}` : undefined
+            }
+            changed={compressorChanges(settings, usual)}
+            onResetAll={resetSettings}
+          >
+            <SettingsPanel
+              usual={usual}
+              settings={settings}
+              update={update}
+              input={format}
+              transparent={source.transparent}
+              source={sourceSize}
+              output={plan?.output ?? null}
+              planError={planError}
+              cropping={cropping}
+              onCrop={() => {
+                if (!cropping && !settings.crop)
+                  update((current) => ({
+                    ...current,
+                    crop: { x: 0, y: 0, ...cropBounds(current, sourceSize) },
+                  }))
+                setCropping((value) => !value)
+              }}
+            />
+          </SettingsCard>
         ) : (
           <div className="space-y-4 rounded-xl border bg-card p-4 sm:p-5">
             <h2 className="section-title">What you can do</h2>

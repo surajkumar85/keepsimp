@@ -58,6 +58,14 @@ import { OutputPanel } from "./output-panel"
 import { QueueList, type QueueRow } from "@/components/image-batch/queue-list"
 import { SummaryBar } from "@/components/image-batch/summary-bar"
 import { SettingsPanel } from "./settings-panel"
+import { SettingsCard } from "@/components/image-batch/controls"
+import { toast } from "@/components/ui/toast"
+import { resetAll, resetOf } from "@/lib/settings-groups"
+import {
+  RESIZER_GROUPS,
+  resizerChanges,
+  type ResizerGroup,
+} from "@/lib/image-resizer/summary"
 
 const INPUT_ID = "resizer-file"
 const DEBOUNCE_MS = 350
@@ -129,6 +137,8 @@ export function ImageResizer() {
   const [paused, setPaused] = useState(false)
   const [revision, setRevision] = useState(0)
   const [zipping, setZipping] = useState(false)
+  /** The settings (and focus revision) the workers were last asked to take up. */
+  const [takenUp, setTakenUp] = useState("")
 
   // Workers ask for work between renders, so the queue also lives in refs that
   // are updated the moment something changes.
@@ -294,14 +304,38 @@ export function ImageResizer() {
 
   // Reprocess shortly after settings (or one image's focus) settle.
   const settingsKey = processingKey(settings, null)
+  const changeKey = `${settingsKey}|${revision}`
   useEffect(() => {
     if (paused) return
     const timer = setTimeout(() => {
+      setTakenUp(changeKey)
       pool.current?.supersede()
       pool.current?.kick()
     }, DEBOUNCE_MS)
     return () => clearTimeout(timer)
-  }, [settingsKey, revision, paused])
+  }, [settingsKey, revision, paused, changeKey])
+  // A change seen but not yet taken up: said at once, so no press seems to do nothing.
+  const applying = items.length > 0 && !paused && takenUp !== changeKey
+
+  /** Puts groups back to the usual; a turn or a new frame also drops each image's own position. */
+  function resetGroups(groups: ResizerGroup[]) {
+    update(
+      resetOf(
+        defaultSettings,
+        groups.flatMap((name) => RESIZER_GROUPS[name])
+      )
+    )
+    if (groups.includes("fit") || groups.includes("turn")) {
+      dispatch({ type: "reset-focus" })
+      setRevision((value) => value + 1)
+    }
+  }
+  function resetEverything() {
+    update(resetAll(defaultSettings, RESIZER_GROUPS))
+    dispatch({ type: "reset-focus" })
+    setRevision((value) => value + 1)
+    toast.info("Settings put back to the usual")
+  }
 
   const addFiles = useCallback(
     async (files: File[]) => {
@@ -535,6 +569,9 @@ export function ImageResizer() {
       link.click()
       link.remove()
       setTimeout(() => URL.revokeObjectURL(url), 60_000)
+      toast.success("Download started", {
+        description: "keepsimp-resized.zip",
+      })
     } catch {
       setNotice("The ZIP could not be created. Download the images one by one.")
     } finally {
@@ -682,6 +719,7 @@ export function ImageResizer() {
           onClear={clearAll}
           inputId={INPUT_ID}
           verb="Resizing"
+          applying={applying}
         />
 
         <QueueList
@@ -692,36 +730,58 @@ export function ImageResizer() {
         />
       </div>
 
-      <div className="min-w-0 space-y-4 lg:col-span-2">
-        <SettingsPanel
-          settings={settings}
-          update={update}
-          reference={reference}
-          layout={layout}
-          planError={planned?.error ?? null}
-          focus={focus}
-          hasOverride={Boolean(selected?.focus)}
-          onAnchor={(next) => {
-            dispatch({ type: "reset-focus" })
-            update({ focus: next, focusMode: "manual" })
-          }}
-          onResetFocus={() => {
-            if (!selected) return
-            dispatch({ type: "focus", id: selected.id, focus: undefined })
-            setRevision((value) => value + 1)
-          }}
-          onOrientation={(change) => {
-            dispatch({ type: "reset-focus" })
-            update(change)
-          }}
-        />
-        <OutputPanel
-          settings={settings}
-          update={update}
-          format={selectedFormat}
-          exampleName={exampleName}
-          snippet={snippet}
-        />
+      <div className="min-w-0 lg:col-span-2">
+        <SettingsCard
+          state={
+            !paused && (applying || totals.pending > 0)
+              ? "pending"
+              : totals.done > 0
+                ? "done"
+                : "idle"
+          }
+          pendingText={
+            applying
+              ? "Applying your changes…"
+              : `Resizing ${totals.pending} ${totals.pending === 1 ? "image" : "images"}…`
+          }
+          doneText={`Up to date: ${totals.done} of ${totals.images} ready`}
+          changed={resizerChanges(settings, defaultSettings)}
+          onResetAll={resetEverything}
+        >
+          <SettingsPanel
+            usual={defaultSettings}
+            onResetGroup={(group) => resetGroups([group])}
+            settings={settings}
+            update={update}
+            reference={reference}
+            layout={layout}
+            planError={planned?.error ?? null}
+            focus={focus}
+            hasOverride={Boolean(selected?.focus)}
+            onAnchor={(next) => {
+              dispatch({ type: "reset-focus" })
+              update({ focus: next, focusMode: "manual" })
+            }}
+            onResetFocus={() => {
+              if (!selected) return
+              dispatch({ type: "focus", id: selected.id, focus: undefined })
+              setRevision((value) => value + 1)
+            }}
+            onOrientation={(change) => {
+              dispatch({ type: "reset-focus" })
+              update(change)
+            }}
+          />
+          <OutputPanel
+            settings={settings}
+            update={update}
+            format={selectedFormat}
+            exampleName={exampleName}
+            snippet={snippet}
+            usual={defaultSettings}
+            onResetGroup={(group) => resetGroups([group])}
+          />
+        </SettingsCard>
       </div>
     </div>
   )

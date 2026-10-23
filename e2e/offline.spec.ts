@@ -1,3 +1,4 @@
+import { openGroup } from "./settings"
 import { replaceEditor } from "./editor"
 import { readdir, readFile } from "node:fs/promises"
 import { join, relative, sep } from "node:path"
@@ -211,6 +212,7 @@ test("every tool works offline after one visit", async ({ page }) => {
     await sharp(await bytesOf(await pending), { animated: true }).metadata()
   ).toMatchObject({ format: "gif", width: 192, pages: 20 })
   // Text needs the caption font, which is part of the saved copy too.
+  await openGroup(page, "Text")
   await page.getByLabel("Top text").fill("Offline")
   await expect(page.getByTestId("animation-converter")).not.toHaveAttribute(
     "data-settled",

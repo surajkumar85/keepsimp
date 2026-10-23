@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs"
+import { openGroups } from "./settings"
 import { test, expect } from "@playwright/test"
 import {
   brightness,
@@ -33,6 +34,7 @@ test("crops the sample to 9:16 around its middle, checked", async ({
     "opened for cropping."
   )
   await page.getByRole("button", { name: "Try a sample" }).click()
+  await openGroups(page)
   await settled(page)
   await expect(page.getByTestId("video-plan")).toContainText(
     "because it is cut to 9:16"
@@ -58,6 +60,7 @@ test("plays a clip twice as fast, every other frame, the tone keeping its pitch"
   const tone = clip("tone.mp4", { size: "640x360", seconds: 4 })
   await page.goto(SPEED)
   await page.locator("#video-file").setInputFiles([tone])
+  await openGroups(page)
   await settled(page, 120_000)
   await expect(page.getByTestId("video-plan")).toContainText(
     "It plays twice as fast: 0:04.00 becomes 0:02.00, the sound keeping its pitch."
@@ -82,6 +85,7 @@ test("fades in from black and silence and out to them", async ({ page }) => {
   const tone = clip("fades.mp4", { size: "640x360", seconds: 4 })
   await page.goto(EDITOR)
   await page.locator("#video-file").setInputFiles([tone])
+  await openGroups(page)
   await settled(page)
   await page
     .getByRole("radiogroup", { name: "Fade in" })
@@ -114,6 +118,7 @@ test("mutes the sample: the picture copied packet for packet, no sound", async (
 }) => {
   await page.goto(MUTE)
   await page.locator("#video-file").setInputFiles([sample()])
+  await openGroups(page)
   await settled(page)
   await expect(page.getByTestId("video-plan")).toContainText(
     "The sound is left out."
@@ -152,6 +157,7 @@ test("makes a quiet clip's sound −16 LUFS, as FFmpeg's meter reads it", async 
   expect(ebur128(quiet.buffer, "quiet-in.mp4").integrated).toBeLessThan(-30)
   await page.goto(EDITOR)
   await page.locator("#video-file").setInputFiles([quiet])
+  await openGroups(page)
   await settled(page)
   await page
     .getByRole("radiogroup", { name: "Loudness" })
@@ -179,6 +185,7 @@ test("crops by hand with the keys: the result is the source cropped there", asyn
   const wide = clip("hand-crop.mp4", { size: "640x360", seconds: 2 })
   await page.goto(EDITOR)
   await page.locator("#video-file").setInputFiles([wide])
+  await openGroups(page)
   await settled(page)
   await page.getByRole("button", { name: "Crop by hand" }).click()
   await page

@@ -13,10 +13,12 @@ import {
   IconAlertCircle,
   IconFileTypePdf,
   IconInfoCircle,
+  IconLock,
   IconScale,
   IconStack2,
   IconTransform,
 } from "@tabler/icons-react"
+import { SettingsCard } from "@/components/image-batch/controls"
 import { QueueList, type QueueRow } from "@/components/image-batch/queue-list"
 import { SummaryBar } from "@/components/image-batch/summary-bar"
 import { CompareSlider } from "@/components/image-compressor/compare-slider"
@@ -61,7 +63,14 @@ import {
 import { comparable, targets, type Target } from "@/lib/image-converter/targets"
 import { fileName, uniqueNames } from "@/lib/image-resizer/naming"
 import { createZip } from "@/lib/image-resizer/zip"
-import { FormatPanel, type ComparisonState } from "./format-panel"
+import {
+  CONVERTER_GROUPS,
+  converterChanges,
+  type ConverterGroup,
+} from "@/lib/image-converter/summary"
+import { resetAll, resetOf } from "@/lib/settings-groups"
+import { toast } from "@/components/ui/toast"
+import { ComparePanel, FormatPanel, type ComparisonState } from "./format-panel"
 import { OptionsPanel } from "./options-panel"
 
 type Item = QueueItem<Target>
@@ -113,6 +122,7 @@ function download(bytes: Uint8Array, name: string, type: string) {
   link.click()
   link.remove()
   setTimeout(() => URL.revokeObjectURL(url), 60_000)
+  toast.success("Download started", { description: name })
 }
 
 export function ImageConverter() {
@@ -134,6 +144,8 @@ export function ImageConverter() {
     url: string | null
     target: Target | null
   } | null>(null)
+  /** The settings the workers were last asked to take up. */
+  const [takenUp, setTakenUp] = useState("")
   const [compared, setCompared] = useState<{
     key: string
     state: ComparisonState
@@ -304,11 +316,22 @@ export function ImageConverter() {
   useEffect(() => {
     if (paused) return
     const timer = setTimeout(() => {
+      setTakenUp(key)
       pool.current?.supersede()
       pool.current?.kick()
     }, DEBOUNCE_MS)
     return () => clearTimeout(timer)
   }, [key, paused])
+  // A change seen but not yet taken up: said at once, so no press seems to do nothing.
+  const applying = items.length > 0 && !paused && !problem && takenUp !== key
+
+  function resetGroup(group: ConverterGroup) {
+    update(resetOf(defaultSettings, CONVERTER_GROUPS[group]))
+  }
+  function resetEverything() {
+    update(resetAll(defaultSettings, CONVERTER_GROUPS))
+    toast.info("Settings put back to the usual")
+  }
 
   const addFiles = useCallback(
     async (files: File[]) => {
@@ -607,15 +630,14 @@ export function ImageConverter() {
     )
     comparing.current = stop
     promise
-      .then((results) =>
-        setCompared({
-          key: forKey,
-          state: {
-            status: "done",
-            rows: rankComparisons(results, originalBytes),
-          },
-        })
-      )
+      .then((results) => {
+        const rows = rankComparisons(results, originalBytes)
+        setCompared({ key: forKey, state: { status: "done", rows } })
+        if (rows[0])
+          toast.success("Formats compared", {
+            description: `${targets[rows[0].target].label} is smallest, ${sizeLabel(rows[0].bytes)}`,
+          })
+      })
       .catch((failure: Error) =>
         setCompared((current) =>
           current?.key === forKey
@@ -876,6 +898,7 @@ export function ImageConverter() {
           onClear={clearAll}
           inputId={INPUT_ID}
           verb="Converting"
+          applying={applying}
         />
 
         <QueueList
@@ -886,22 +909,52 @@ export function ImageConverter() {
         />
       </div>
 
-      <div className="min-w-0 space-y-4 lg:col-span-2">
-        <FormatPanel
-          settings={settings}
-          update={update}
-          problem={problem}
-          comparison={comparison}
-          canCompare={selected?.status === "ready" && !problem}
-          onCompare={runComparison}
-          onCancelCompare={cancelComparison}
-          snippet={snippet}
-        />
-        <OptionsPanel
-          settings={settings}
-          update={update}
-          exampleName={exampleName}
-        />
+      <div className="min-w-0 lg:col-span-2">
+        <SettingsCard
+          state={
+            !paused && !problem && (applying || totals.pending > 0)
+              ? "pending"
+              : totals.done > 0 && !problem
+                ? "done"
+                : "idle"
+          }
+          pendingText={
+            applying
+              ? "Applying your changes…"
+              : `Converting ${totals.pending} ${totals.pending === 1 ? "image" : "images"}…`
+          }
+          doneText={`Up to date: ${totals.done} of ${totals.images} ready`}
+          changed={converterChanges(settings, defaultSettings)}
+          onResetAll={resetEverything}
+        >
+          <FormatPanel
+            settings={settings}
+            update={update}
+            problem={problem}
+            usual={defaultSettings}
+            onResetGroup={resetGroup}
+          />
+          <OptionsPanel
+            settings={settings}
+            update={update}
+            exampleName={exampleName}
+            usual={defaultSettings}
+            onResetGroup={resetGroup}
+          />
+          <ComparePanel
+            settings={settings}
+            update={update}
+            comparison={comparison}
+            canCompare={selected?.status === "ready" && !problem}
+            onCompare={runComparison}
+            onCancelCompare={cancelComparison}
+            snippet={snippet}
+          />
+          <p className="flex items-center gap-1.5 border-t py-4 text-xs text-muted-foreground">
+            <IconLock className="size-3.5" aria-hidden="true" />
+            Processed on your device. Metadata such as location is removed.
+          </p>
+        </SettingsCard>
       </div>
     </div>
   )

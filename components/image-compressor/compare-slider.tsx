@@ -25,7 +25,10 @@ export function CompareSlider({
   status,
   onCancel,
   result = null,
+  stale = false,
 }: {
+  /** The result shown was made from settings that have since changed: it is dimmed until the new one comes. */
+  stale?: boolean
   reference: ImageBitmap | null
   resultUrl: string | null
   /** The result as pixels, for tools that have a frame rather than a file to show. */
@@ -128,9 +131,11 @@ export function CompareSlider({
                 src={resultUrl}
                 alt="Compressed result"
                 draggable={false}
+                data-stale={stale || undefined}
                 className={cn(
-                  "pointer-events-none absolute inset-0 size-full",
-                  zoom === "200" && "[image-rendering:pixelated]"
+                  "pointer-events-none absolute inset-0 size-full transition-opacity duration-150 motion-reduce:transition-none",
+                  zoom === "200" && "[image-rendering:pixelated]",
+                  stale && "opacity-60"
                 )}
                 style={{ clipPath: `inset(0 0 0 ${position}%)` }}
               />
@@ -140,9 +145,11 @@ export function CompareSlider({
                 ref={after}
                 role="img"
                 aria-label="Compressed result"
+                data-stale={stale || undefined}
                 className={cn(
-                  "pointer-events-none absolute inset-0 size-full",
-                  zoom === "200" && "[image-rendering:pixelated]"
+                  "pointer-events-none absolute inset-0 size-full transition-opacity duration-150 motion-reduce:transition-none",
+                  zoom === "200" && "[image-rendering:pixelated]",
+                  stale && "opacity-60"
                 )}
                 style={{ clipPath: `inset(0 0 0 ${position}%)` }}
               />

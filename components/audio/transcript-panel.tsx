@@ -11,6 +11,7 @@ import { ToggleRow } from "@/components/image-batch/controls"
 import { Button } from "@/components/ui/button"
 import { ChoiceChips } from "@/components/ui/choice-chips"
 import { Input } from "@/components/ui/input"
+import { toast } from "@/components/ui/toast"
 import type { ReadFacts } from "@/lib/audio/mediabunny-audio"
 import { startTranscription } from "@/lib/audio/transcribe-client"
 import {
@@ -78,6 +79,7 @@ function save(text: string, name: string) {
   link.download = name
   link.click()
   setTimeout(() => URL.revokeObjectURL(url), 10_000)
+  toast.success("Download started", { description: name })
 }
 
 /** Whisper on the device: what a file says, with times, to search, play along and save. */
@@ -139,6 +141,15 @@ export function TranscriptPanel({ source }: { source: TranscriptSource }) {
         else {
           stops.current.get(id)?.()
           stops.current.delete(id)
+          // Said in the corner too: a long transcription ends while the page is elsewhere.
+          if (message.type === "done")
+            toast.success("The transcript is ready", {
+              description: source.name,
+            })
+          else
+            toast.error("The transcription stopped", {
+              description: message.message,
+            })
           update(
             id,
             message.type === "done"
@@ -380,6 +391,7 @@ export function TranscriptPanel({ source }: { source: TranscriptSource }) {
                 void navigator.clipboard
                   .writeText(toText(segments))
                   .then(() => {
+                    toast.success("Text copied")
                     setCopied(true)
                     setTimeout(() => setCopied(false), 2000)
                   })

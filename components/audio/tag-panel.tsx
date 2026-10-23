@@ -1,10 +1,17 @@
 "use client"
 
 import { useEffect, useId, useMemo, useRef, useState } from "react"
-import { IconPhoto, IconRestore, IconTrash } from "@tabler/icons-react"
+import {
+  IconCheck,
+  IconLoader2,
+  IconPhoto,
+  IconRestore,
+  IconTrash,
+} from "@tabler/icons-react"
 import { Button } from "@/components/ui/button"
 import { ChoiceChips } from "@/components/ui/choice-chips"
 import { Input } from "@/components/ui/input"
+import { toast } from "@/components/ui/toast"
 import {
   COVER_TYPES,
   LONG_FIELDS,
@@ -89,6 +96,8 @@ function Fields({
   const [draft, setDraft] = useState<Partial<Record<TagField, string>>>({})
   const pending = useRef<Partial<Record<TagField, string>>>({})
   const timer = useRef<number | undefined>(undefined)
+  /** Typing waits for a pause before it is written; said at once, so no key press seems lost. */
+  const [saving, setSaving] = useState<"typing" | "saved" | null>(null)
   const many = rows.length > 1
   const valid = (fields: Partial<Record<TagField, string>>) =>
     Object.fromEntries(
@@ -99,8 +108,10 @@ function Fields({
   const commit = () => {
     window.clearTimeout(timer.current)
     const fields = valid(pending.current)
+    const typed = Object.keys(pending.current).length > 0
     pending.current = {}
     if (Object.keys(fields).length) onChange(fields)
+    if (typed) setSaving(Object.keys(fields).length ? "saved" : null)
   }
   // What was typed and not yet written is written when the panel goes.
   const latest = useRef(commit)
@@ -112,6 +123,7 @@ function Fields({
   const set = (field: TagField, value: string) => {
     setDraft((had) => ({ ...had, [field]: value }))
     pending.current = { ...pending.current, [field]: value }
+    setSaving("typing")
     window.clearTimeout(timer.current)
     timer.current = window.setTimeout(commit, COMMIT_MS)
   }
@@ -199,6 +211,28 @@ function Fields({
       </div>
       {field("comment", "sm:col-span-2")}
       {field("lyrics", "sm:col-span-2")}
+      <p
+        role="status"
+        className="flex min-h-5 items-center gap-1.5 text-xs text-muted-foreground sm:col-span-2"
+        data-testid="tag-saving"
+        data-state={saving ?? undefined}
+      >
+        {saving === "typing" ? (
+          <>
+            <IconLoader2
+              className="size-3.5 animate-spin text-primary motion-reduce:animate-none"
+              aria-hidden="true"
+            />
+            Saving your tags…
+          </>
+        ) : saving === "saved" ? (
+          <>
+            <IconCheck className="size-3.5 text-primary" aria-hidden="true" />
+            Tags saved: the {many ? "files are" : "file is"} written again with
+            them
+          </>
+        ) : null}
+      </p>
     </div>
   )
 }
@@ -357,6 +391,11 @@ export function TagPanel({
               onClick={() => {
                 onReset(targets)
                 setVersion((had) => had + 1)
+                toast.info(
+                  all
+                    ? "Every file's tags put back"
+                    : "The file's tags put back"
+                )
               }}
             >
               <IconRestore data-icon="inline-start" aria-hidden="true" />

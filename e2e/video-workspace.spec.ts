@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs"
+import { openGroups } from "./settings"
 import { test, expect, type Page } from "@playwright/test"
 import AxeBuilder from "@axe-core/playwright"
 import { unzipSync } from "fflate"
@@ -31,6 +32,7 @@ test("copies the sample into an MP4 as it is, index first, every packet unchange
 }) => {
   await page.goto(CONVERTER)
   await page.getByRole("button", { name: "Try a sample" }).click()
+  await openGroups(page)
   await settled(page)
   await expect(page.getByTestId("video-plan")).toContainText(
     "The picture (H.264) is copied as it is, without encoding it again"
@@ -101,6 +103,7 @@ test("makes a 720p clip 360p at 15 frames a second, small, as H.264", async ({
   await page.goto(EDITOR)
   if (!(await canEncode(page, "avc", 640, 360))) test.skip()
   await page.locator("#video-file").setInputFiles([source])
+  await openGroups(page)
   await settled(page)
   await page
     .getByRole("radiogroup", { name: "Quality" })
@@ -215,6 +218,7 @@ test("compresses the sample to half its size and to a quarter, checked and measu
   const original = readFileSync("public/samples/keepsimp-scene.mp4")
   if (!(await canEncode(page, "avc", 960, 540))) test.skip()
   await page.getByRole("button", { name: "Try a sample" }).click()
+  await openGroups(page)
   await settled(page, 180_000)
   const plan = page.getByTestId("video-plan")
   await expect(plan).toContainText("because it is to fit under")
@@ -265,6 +269,7 @@ test("says why a file cannot be opened, and zips the rest", async ({
     },
     { name: "notes.txt", mimeType: "text/plain", buffer: Buffer.from("hello") },
   ])
+  await openGroups(page)
   await settled(page)
   await expect(item(page, "old.avi")).toContainText(
     "AVI files are not read here."

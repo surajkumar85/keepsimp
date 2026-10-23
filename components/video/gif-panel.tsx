@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react"
 import { IconDownload, IconGif } from "@tabler/icons-react"
 import { Button, buttonVariants } from "@/components/ui/button"
 import { ChoiceChips } from "@/components/ui/choice-chips"
+import { toast } from "@/components/ui/toast"
 import { AnimationPool } from "@/lib/animation/client"
 import type { AnimationResponse } from "@/lib/animation/protocol"
 import {
@@ -85,20 +86,25 @@ export function GifPanel({
             const blob = new Blob([message.output.bytes], {
               type: `image/${message.output.target === "apng" ? "png" : message.output.target}`,
             })
+            const made = gifName(name, choice.target)
             setResult({
               file: asked.current.file,
               choice: asked.current.choice,
               url: URL.createObjectURL(blob),
-              name: gifName(name, choice.target),
+              name: made,
               said: gifSaid(message.output, blob.size),
               note: message.output.note,
             })
+            toast.success("Your animation is ready", { description: made })
             setBusy(null)
             waiting.current = null
           } else if (
             message.type === "error" ||
             message.type === "open-error"
           ) {
+            toast.error("The animation could not be made", {
+              description: "What went wrong is said under the button.",
+            })
             setProblem(message.message)
             setBusy(null)
             waiting.current = null
@@ -182,7 +188,10 @@ export function GifPanel({
           <a
             href={shown.url}
             download={shown.name}
-            className={buttonVariants({ variant: "outline" })}
+            onClick={() =>
+              toast.success("Download started", { description: shown.name })
+            }
+            className={buttonVariants()}
           >
             <IconDownload aria-hidden="true" /> Download {shown.name}
           </a>

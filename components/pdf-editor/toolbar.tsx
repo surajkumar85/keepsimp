@@ -141,6 +141,7 @@ import type { Signatures } from "./use-signatures"
 import type { Repeat } from "./use-repeat"
 import { PARAGRAPH_HINT, RETEXT_HINT, type Retext } from "./use-retext"
 import type { Editor } from "./use-editor"
+import { useHolding } from "./use-settling"
 
 const TOOLS: { tool: Tool; label: string; key: string; icon: ReactNode }[] = [
   {
@@ -288,16 +289,24 @@ function Slide({
   /** Where it has been dragged to; null when it shows the number it stands for. */
   const [draft, setDraft] = useState<number | null>(null)
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const holding = useHolding()
   const wait = () => {
     if (timer.current) clearTimeout(timer.current)
     timer.current = null
+    holding(false)
   }
   const settle = (to: number | null) => {
     wait()
     setDraft(null)
     if (to !== null && to !== value) onSettle(to)
   }
-  useEffect(() => wait, [])
+  // What still waits when it goes away is let go of; its hold goes with it.
+  useEffect(
+    () => () => {
+      if (timer.current) clearTimeout(timer.current)
+    },
+    []
+  )
   const shown = draft ?? value
   return (
     <input
@@ -309,6 +318,8 @@ function Slide({
         setDraft(to)
         wait()
         timer.current = setTimeout(() => settle(to), SETTLE_AFTER)
+        // The status says at once that the number is on its way to the file.
+        holding(true)
       }}
       onPointerUp={() => settle(draft)}
       onBlur={() => settle(draft)}
@@ -352,9 +363,11 @@ function NumberField({
   const [draft, setDraft] = useState<string | null>(null)
   const field = useRef<HTMLInputElement>(null)
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const holding = useHolding()
   const wait = () => {
     if (timer.current) clearTimeout(timer.current)
     timer.current = null
+    holding(false)
   }
   /** Take what is typed. A number beyond the bounds is brought to the nearest that is within them, once typing is over. */
   const settle = (typed: string | null, over: boolean) => {
@@ -383,7 +396,13 @@ function NumberField({
     document.addEventListener("pointerdown", press, true)
     return () => document.removeEventListener("pointerdown", press, true)
   }, [typing])
-  useEffect(() => wait, [])
+  // What still waits when it goes away is let go of; its hold goes with it.
+  useEffect(
+    () => () => {
+      if (timer.current) clearTimeout(timer.current)
+    },
+    []
+  )
   return (
     <input
       {...props}
@@ -397,6 +416,7 @@ function NumberField({
         setDraft(typed)
         wait()
         timer.current = setTimeout(() => settle(typed, false), SETTLE_AFTER)
+        holding(true)
       }}
       onBlur={() => settle(draft, true)}
       onKeyDown={(event) => {

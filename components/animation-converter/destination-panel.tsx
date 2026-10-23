@@ -12,7 +12,8 @@ import {
   matchingDestination,
 } from "@/lib/animation/presets"
 import type { AnimationSettings } from "@/lib/animation/settings"
-import type { Update } from "./format-panel"
+import { destinationSummary } from "@/lib/animation/summary"
+import { fold, FaultNote, type Fault, type Update } from "./format-panel"
 
 const limits = [128_000, 256_000, 512_000, 1_000_000, 5_000_000, 10_000_000]
 const label = (bytes: number) =>
@@ -22,9 +23,11 @@ const label = (bytes: number) =>
 export function DestinationPanel({
   settings,
   update,
+  fault,
 }: {
   settings: AnimationSettings
   update: Update
+  fault: Fault | null
 }) {
   const ids = useId()
   const destination = matchingDestination(settings)
@@ -35,8 +38,12 @@ export function DestinationPanel({
   const inMegabytes = limit !== null && limit >= 1_000_000
 
   return (
-    <div className="space-y-5 rounded-xl border bg-card p-4 sm:p-5">
-      <Section title="Where is it going?">
+    <>
+      {/* Open from the start: a destination sets the format, size and limit in one go. */}
+      <Section
+        title="Where is it going?"
+        summary={destinationSummary(settings)}
+      >
         <ChoiceChips
           label="Destination"
           hideLabel
@@ -95,7 +102,10 @@ export function DestinationPanel({
         )}
       </Section>
 
-      <Section title="File size limit">
+      <Section
+        title="File size limit"
+        {...fold("limit", settings, update, fault)}
+      >
         <ChoiceChips
           label="Largest file"
           hideLabel
@@ -170,7 +180,8 @@ export function DestinationPanel({
             />
           </div>
         )}
+        <FaultNote fault={fault} group="limit" />
       </Section>
-    </div>
+    </>
   )
 }

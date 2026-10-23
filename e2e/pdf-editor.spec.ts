@@ -12,6 +12,7 @@ import {
   texts,
 } from "../tests/pdf-reader"
 import { bytesOf, pdf, reader, readerReady, type Upload } from "./pdf"
+import { openGroup, openGroups } from "./settings"
 
 const ROUTE = "/dashboard/pdf-editor/"
 /** Every page of the files made here, in points. */
@@ -801,6 +802,7 @@ test("opens a locked file with its password, and locks the result with a new one
   await page.getByRole("button", { name: "Close the editor" }).click()
 
   // A lock needs a password before anything is written.
+  await openGroup(page, "Password")
   await page
     .getByRole("switch", { name: "Lock the result with a password" })
     .click()
@@ -1019,6 +1021,7 @@ test("stays accessible, local and responsive", async ({ page }) => {
 
   // Behind the window: the file's card and the download, in both themes.
   await saved(page, page.getByTestId("editor-download"))
+  await openGroups(page)
   await page
     .getByRole("switch", { name: "Lock the result with a password" })
     .click()

@@ -9,6 +9,7 @@ import {
   IconRefresh,
 } from "@tabler/icons-react"
 import { Button } from "@/components/ui/button"
+import { toast } from "@/components/ui/toast"
 import { ColorControl } from "./picker"
 import { ChoiceChips } from "@/components/ui/choice-chips"
 import {
@@ -120,6 +121,7 @@ export function PalettePanel({
     a.click()
     setTimeout(() => URL.revokeObjectURL(url), 1000)
     tell("PNG palette downloaded.")
+    toast.success("Download started", { description: a.download })
   }
   return (
     <div className="space-y-4">

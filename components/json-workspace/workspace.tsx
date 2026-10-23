@@ -23,9 +23,11 @@ import {
   IconFilter,
   IconX,
   IconLock,
+  IconLoader2,
 } from "@tabler/icons-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { toast } from "@/components/ui/toast"
 import {
   WorkspaceTabs,
   WorkspaceTabList,
@@ -81,6 +83,13 @@ export function JsonWorkspace() {
   const [fileName, setFileName] = useState("")
   const [output, setOutput] = useState<Output | null>(null)
   const [inspection, setInspection] = useState<JsonResult | null>(null)
+  /** What the last check answered: anything else on the page is still being checked. */
+  const [answered, setAnswered] = useState<{
+    input: string
+    expanded: string[]
+    search: string
+    offset: number
+  } | null>(null)
   const [problem, setProblem] = useState<{
     text: string
     offset?: number
@@ -142,11 +151,13 @@ export function JsonWorkspace() {
           if (active) {
             setInspection(result)
             setProblem(null)
+            setAnswered({ input, expanded, search, offset })
           }
         })
         .catch((error) => {
           if (error.name === "AbortError") return
           if (active) {
+            setAnswered({ input, expanded, search, offset })
             setInspection(null)
             setProblem({
               text: error.message,
@@ -161,6 +172,17 @@ export function JsonWorkspace() {
       clearTimeout(timer)
     }
   }, [input, importing, expanded, search, offset, run])
+  // Typing settles for a moment before the check runs: the page says at once
+  // that it is coming, rather than show the last answer as if it were current.
+  const checking =
+    !importing &&
+    input.trim() !== "" &&
+    !(
+      answered?.input === input &&
+      answered.expanded === expanded &&
+      answered.search === search &&
+      answered.offset === offset
+    )
   async function execute(
     job: JsonJob,
     label: string,
@@ -241,7 +263,7 @@ export function JsonWorkspace() {
   async function copy(text: string, label = "Result") {
     try {
       await navigator.clipboard.writeText(text)
-      setNotice(`${label} copied.`)
+      toast.success(`${label} copied`)
     } catch {
       setError(
         "Clipboard is unavailable. Select the text to copy it, or download the result."
@@ -266,6 +288,7 @@ export function JsonWorkspace() {
     link.download = `${safeName}.${output.extension}`
     link.click()
     setTimeout(() => URL.revokeObjectURL(url), 1000)
+    toast.success("Download started", { description: link.download })
   }
   const common = { input, busy, execute, invalidate }
   return (
@@ -461,6 +484,7 @@ export function JsonWorkspace() {
                   offset={offset}
                   setOffset={setOffset}
                   copy={copy}
+                  checking={checking}
                 />
                 <QueryPanel {...common} />
                 <ComparePanel {...common} updateSource={updateSource} />
@@ -524,7 +548,13 @@ export function JsonWorkspace() {
             )}
           </div>
           <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
-            <span>
+            <span data-testid="json-check" data-checking={checking}>
+              {checking && (
+                <IconLoader2
+                  className="mr-1 inline size-3.5 animate-spin text-primary motion-reduce:animate-none"
+                  aria-hidden="true"
+                />
+              )}
               {inspection?.stats ? (
                 <>
                   <IconCheck
@@ -534,6 +564,7 @@ export function JsonWorkspace() {
                   Valid JSON · {inspection.stats.bytes.toLocaleString()} bytes ·{" "}
                   {inspection.stats.nodes.toLocaleString()} values · depth{" "}
                   {inspection.stats.depth}
+                  {checking && " · updating…"}
                 </>
               ) : importing ? (
                 "Convert accepts the source format you selected."

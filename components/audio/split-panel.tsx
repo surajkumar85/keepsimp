@@ -9,6 +9,7 @@ import {
   IconScissors,
 } from "@tabler/icons-react"
 import { Button, buttonVariants } from "@/components/ui/button"
+import { toast } from "@/components/ui/toast"
 import { ChoiceChips } from "@/components/ui/choice-chips"
 import type { Edited } from "@/lib/audio/edits"
 import { clockLabel, timeLabel } from "@/lib/audio/labels"
@@ -262,6 +263,11 @@ export function SplitPanel({
                   download={part.name}
                   className={buttonVariants({ variant: "ghost", size: "icon" })}
                   aria-label={`Download ${part.name}`}
+                  onClick={() =>
+                    toast.success("Download started", {
+                      description: part.name,
+                    })
+                  }
                 >
                   <IconDownload aria-hidden="true" />
                 </a>

@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs"
 import { test, expect, type Page } from "@playwright/test"
 import AxeBuilder from "@axe-core/playwright"
 import { chip, download, EDITOR, loudnessOf, samples, settled } from "./audio"
+import { openGroups } from "./settings"
 
 const NORMALIZE = "/dashboard/normalize-audio/"
 const BOOSTER = "/dashboard/volume-booster/"
@@ -14,6 +15,7 @@ async function withSample(page: Page, route: string, focused?: string) {
     await expect(page.getByTestId("audio-focused")).toContainText(focused)
   await page.getByRole("button", { name: "Try a sample" }).first().click()
   await settled(page)
+  await openGroups(page)
 }
 
 test("normalizes every file to −14 LUFS, then to −23, as FFmpeg measures them", async ({

@@ -75,6 +75,7 @@ import {
   type TextOp,
 } from "@/lib/pdf-editor/retext"
 import { laidOut, measureWith } from "@/lib/pdf-editor/laid-out"
+import { useHolding } from "./use-settling"
 import {
   applied,
   defaultStyles,
@@ -201,6 +202,8 @@ export function useEditor(
     change: Change
     timer: ReturnType<typeof setTimeout>
   } | null>(null)
+  /** The editor's status says "Applying…" while moves are gathered. */
+  const holding = useHolding()
   /**
    * Where things stand this very moment. What is drawn lags behind: a
    * pointer can be pressed, moved and let go before the screen has been
@@ -496,6 +499,7 @@ export function useEditor(
     if (waiting) {
       clearTimeout(waiting.timer)
       held.current = null
+      holding(false)
       void send(waiting.change)
     }
     // A finisher sends through this same queue, so it may call flush again.
@@ -506,7 +510,7 @@ export function useEditor(
     } finally {
       finishing.current = false
     }
-  }, [send])
+  }, [send, holding])
 
   useEffect(
     () => () => {
@@ -556,9 +560,10 @@ export function useEditor(
       if (waiting && ids(waiting.change).join() !== ids(change).join()) flush()
       else if (waiting) clearTimeout(waiting.timer)
       held.current = { change, timer: setTimeout(flush, 400) }
+      holding(true)
       show()
     },
-    [sizes, flush, show]
+    [sizes, flush, show, holding]
   )
 
   /**

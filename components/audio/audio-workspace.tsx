@@ -118,6 +118,9 @@ import { savingsPercent } from "@/lib/image-compressor/quality"
 import { uniqueNames } from "@/lib/image-resizer/naming"
 import { createZip } from "@/lib/image-resizer/zip"
 import { SettingsPanel } from "./settings-panel"
+import { SettingsCard } from "@/components/image-batch/controls"
+import { toast } from "@/components/ui/toast"
+import { audioChangedGroups, type AudioGroup } from "@/lib/audio/summary"
 import { SoundEditor, type EditorFocus } from "./sound-editor"
 import { SplitPanel } from "./split-panel"
 import { TagPanel, type TagRow } from "./tag-panel"
@@ -407,6 +410,34 @@ const FIRST_LEVEL: Partial<Record<AudioMode, Partial<Level>>> = {
   booster: { mode: "louder" },
 }
 
+/** The settings each mode starts with: what "changed" and "Reset" are measured against. */
+function firstSettings(mode: AudioMode): AudioSettings {
+  return {
+    ...defaultSettings,
+    format: FIRST_FORMAT[mode],
+    level: { ...defaultSettings.level, ...FIRST_LEVEL[mode] },
+    changes:
+      mode === "speed"
+        ? { ...defaultSettings.changes, tempo: 1.25 }
+        : defaultSettings.changes,
+    sound:
+      mode === "noise"
+        ? {
+            ...defaultSettings.sound,
+            repair: { ...defaultSettings.sound.repair, denoise: 1 },
+          }
+        : defaultSettings.sound,
+  }
+}
+
+/** The group of settings each door opens with, at the top, besides format and quality. */
+const FOCUS: Partial<Record<AudioMode, AudioGroup>> = {
+  normalize: "level",
+  booster: "level",
+  speed: "changes",
+  noise: "repair",
+}
+
 /** A small picture of a file for the list: its cover, or its waveform. */
 async function thumbnailOf(facts: ReadFacts, peaks: Peaks | null) {
   try {
@@ -502,22 +533,10 @@ function resultOf(
 /** The audio workspace: many files read, written by one set of settings, checked and downloaded. */
 export function AudioWorkspace({ mode = "editor" }: { mode?: AudioMode }) {
   const [items, dispatchRaw] = useReducer(audioReducer, [])
-  const [settings, setSettings] = useState<AudioSettings>(() => ({
-    ...defaultSettings,
-    format: FIRST_FORMAT[mode],
-    level: { ...defaultSettings.level, ...FIRST_LEVEL[mode] },
-    changes:
-      mode === "speed"
-        ? { ...defaultSettings.changes, tempo: 1.25 }
-        : defaultSettings.changes,
-    sound:
-      mode === "noise"
-        ? {
-            ...defaultSettings.sound,
-            repair: { ...defaultSettings.sound.repair, denoise: 1 },
-          }
-        : defaultSettings.sound,
-  }))
+  const usual = useMemo(() => firstSettings(mode), [mode])
+  const [settings, setSettings] = useState<AudioSettings>(usual)
+  /** Counts "Reset all", so the settings start again with nothing half typed. */
+  const [resets, setResets] = useState(0)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   /** Which picture of the sound the file shows. */
   const [picture, setPicture] = useState<"waveform" | "spectrogram">("waveform")
@@ -697,6 +716,15 @@ export function AudioWorkspace({ mode = "editor" }: { mode?: AudioMode }) {
             ? { ...had, result, resultKey: message.key, progress: undefined }
             : had
         )
+        // Said in the corner too: the join may have been asked for further up the page.
+        if (result.problems.length)
+          toast.error("The joined file is not quite as asked", {
+            description: "See the check under it.",
+          })
+        else
+          toast.success("The joined file is ready", {
+            description: `${result.name} · ${sizeLabel(result.blob.size)}`,
+          })
       } else if (message.type === "done" && message.job === "split") {
         const id = message.id.slice("split:".length)
         const item = live.current.items.find((one) => one.id === id)
@@ -704,21 +732,28 @@ export function AudioWorkspace({ mode = "editor" }: { mode?: AudioMode }) {
         if (!item?.facts || !asked || item.splitWanted?.key !== message.key)
           return
         const names = partNames(baseName(item.file.name), message.parts.length)
-        dispatch({
-          type: "split-done",
-          id,
-          key: message.key,
-          parts: message.parts.map((written, index) =>
-            resultOf(
-              item,
-              message.plan,
-              written,
-              names[index],
-              asked.parts[index].to - asked.parts[index].from,
-              asked.settings
-            )
-          ),
-        })
+        const parts = message.parts.map((written, index) =>
+          resultOf(
+            item,
+            message.plan,
+            written,
+            names[index],
+            asked.parts[index].to - asked.parts[index].from,
+            asked.settings
+          )
+        )
+        dispatch({ type: "split-done", id, key: message.key, parts })
+        const wrong = parts.filter((part) => part.problems.length).length
+        if (wrong)
+          toast.error(
+            `${wrong} of ${parts.length} parts are not quite as asked`,
+            { description: "See the list of parts." }
+          )
+        else
+          toast.success(
+            `${parts.length} ${parts.length === 1 ? "part" : "parts"} ready`,
+            { description: item.file.name }
+          )
       } else if (message.type === "done") {
         const item = live.current.items.find((one) => one.id === message.id)
         if (!item?.facts || message.key !== keyFor(message.id)) return
@@ -742,7 +777,11 @@ export function AudioWorkspace({ mode = "editor" }: { mode?: AudioMode }) {
       } else if (message.type === "open-error")
         dispatch({ type: "failed", id: message.id, message: message.message })
       else if (message.type === "error") {
-        if (message.id === JOIN_ID)
+        if (message.id === JOIN_ID) {
+          if (joinLive.current.wanted?.key === message.key)
+            toast.error("The files could not be joined", {
+              description: message.message,
+            })
           setJoined((had) =>
             had.wanted?.key === message.key
               ? {
@@ -753,14 +792,22 @@ export function AudioWorkspace({ mode = "editor" }: { mode?: AudioMode }) {
                 }
               : had
           )
-        else if (message.id.startsWith("split:"))
+        } else if (message.id.startsWith("split:")) {
+          const id = message.id.slice("split:".length)
+          if (
+            live.current.items.find((one) => one.id === id)?.splitWanted
+              ?.key === message.key
+          )
+            toast.error("The file could not be split", {
+              description: message.message,
+            })
           dispatch({
             type: "split-failed",
-            id: message.id.slice("split:".length),
+            id,
             key: message.key,
             message: message.message,
           })
-        else
+        } else
           dispatch({
             type: "job-failed",
             id: message.id,
@@ -869,10 +916,12 @@ export function AudioWorkspace({ mode = "editor" }: { mode?: AudioMode }) {
   }, [items])
 
   // A change of settings outdates the files being written; the newest wins after a pause.
+  const [takenKey, setTakenKey] = useState(key)
   useEffect(() => {
     const timer = window.setTimeout(() => {
       pool.current?.supersede()
       pool.current?.kick()
+      setTakenKey(key)
     }, DEBOUNCE_MS)
     return () => window.clearTimeout(timer)
   }, [key])
@@ -966,14 +1015,18 @@ export function AudioWorkspace({ mode = "editor" }: { mode?: AudioMode }) {
 
   // An edit outdates the file being written; the newest edits win after a pause.
   const editTimers = useRef(new Map<string, number>())
+  /** Edits made and not yet taken up, said as "Applying your changes…". */
+  const [editing, setEditing] = useState(false)
   function edit(action: Parameters<typeof audioReducer>[1] & { id: string }) {
     dispatch(action)
+    setEditing(true)
     const timers = editTimers.current
     window.clearTimeout(timers.get(action.id))
     timers.set(
       action.id,
       window.setTimeout(() => {
         timers.delete(action.id)
+        if (!timers.size) setEditing(false)
         if (pool.current?.inFlight().has(action.id))
           pool.current.forget(action.id)
         pool.current?.kick()
@@ -1035,6 +1088,15 @@ export function AudioWorkspace({ mode = "editor" }: { mode?: AudioMode }) {
   const finished = items.filter(
     (item) => audioState(item, itemKey(key, item)) === "done"
   )
+  // A change seen but not yet taken up: said at once, so no press seems to do nothing.
+  const settling =
+    items.length > 0 && ((key !== null && key !== takenKey) || editing)
+  const changedCount = audioChangedGroups(settings, usual).length
+  const resetAllSettings = () => {
+    setSettings(usual)
+    setResets((had) => had + 1)
+    toast.info("Settings put back to the usual")
+  }
   const names = uniqueNames(finished.map((item) => item.result!.name))
 
   async function downloadZip(
@@ -1061,6 +1123,7 @@ export function AudioWorkspace({ mode = "editor" }: { mode?: AudioMode }) {
       link.download = zipName
       link.click()
       window.setTimeout(() => URL.revokeObjectURL(url), 10_000)
+      toast.success("Download started", { description: zipName })
     } catch {
       setNotice("The ZIP could not be made. Download the files one by one.")
     } finally {
@@ -1376,9 +1439,11 @@ export function AudioWorkspace({ mode = "editor" }: { mode?: AudioMode }) {
                         ? (selected.jobError ?? "Not written.")
                         : problem
                           ? "Waiting for settings"
-                          : selected.progress !== undefined
-                            ? `Writing… ${Math.round(selected.progress * 100)}%`
-                            : "Waiting…"}
+                          : settling
+                            ? "Applying your changes…"
+                            : selected.progress !== undefined
+                              ? `Writing… ${Math.round(selected.progress * 100)}%`
+                              : "Waiting…"}
                   </dd>
                   {selected.loudness && (
                     <>
@@ -1780,6 +1845,7 @@ export function AudioWorkspace({ mode = "editor" }: { mode?: AudioMode }) {
           inputId={INPUT_ID}
           verb="Converting"
           noun="file"
+          applying={settling}
           accept={ACCEPT}
           addIcon={IconFilePlus}
         />
@@ -1797,15 +1863,36 @@ export function AudioWorkspace({ mode = "editor" }: { mode?: AudioMode }) {
         />
       </div>
 
-      <div className="min-w-0 space-y-4 lg:col-span-2">
-        <SettingsPanel
-          settings={settings}
-          update={(change) =>
-            setSettings((current) => ({ ...current, ...change }))
+      <div className="min-w-0 lg:col-span-2">
+        <SettingsCard
+          // A setting that cannot be used is said under it; nothing is under way meanwhile.
+          state={
+            problem
+              ? "idle"
+              : settling || totals.pending > 0
+                ? "pending"
+                : "done"
           }
-          problem={problem}
-          repairFirst={mode === "noise"}
-        />
+          pendingText={
+            settling
+              ? "Applying your changes…"
+              : `Converting ${totals.pending} ${totals.pending === 1 ? "file" : "files"}…`
+          }
+          doneText={`Up to date: ${totals.done} of ${totals.images} ready`}
+          changed={changedCount}
+          onResetAll={resetAllSettings}
+        >
+          <SettingsPanel
+            key={resets}
+            settings={settings}
+            update={(change) =>
+              setSettings((current) => ({ ...current, ...change }))
+            }
+            problem={problem}
+            focus={FOCUS[mode]}
+            usual={usual}
+          />
+        </SettingsCard>
       </div>
     </div>
   )

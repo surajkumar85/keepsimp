@@ -20,6 +20,8 @@ The editor is built in ten phases, each shipped before the next begins. **All te
   - **Keep what you added editable.** Off, what was added becomes part of the page. On, it stays as separate things that the editor reads back when the file is opened again; other apps show them as stamps.
   - **Password**, with the shared lock fields (`components/pdf/lock-fields.tsx`). A file that came with a password keeps it unless a new one is set.
   - **The check** (below), the size, "Download again" and "Read the result".
+  - **How the card is laid out:** its choices fold into groups (the signature, what you added, what is left out, a certificate, a password), each saying in a line what it is set to (`lib/pdf-editor/download-summary.ts`). The signature and what you added are open; the redaction door also opens what is left out. The download button, the check and any problem stay at the foot of the card, in view beside the file from 1024 pixels. "Your PDF is ready" is said in the corner once a download is written and checked.
+- **Applying:** a slider, a typed number or a move by the arrow keys waits for a pause before it goes to the file (`use-settling.ts`), and the window's bar says "Applying…" meanwhile, or while the file takes a moment with a change, then "Up to date".
 - **Leaving:** the browser asks before a tab with changes that were not downloaded is closed, and "Close the file" asks in the page. A download makes the file "saved" at that point in its list of changes; a change, an undo or a redo after it makes it unsaved again.
 
 ## Comments (phase 2, first part)

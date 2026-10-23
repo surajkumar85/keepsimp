@@ -33,7 +33,11 @@ import {
   IconTypography,
   IconX,
 } from "@tabler/icons-react"
-import { ToggleRow } from "@/components/image-batch/controls"
+import {
+  Section,
+  SettingsCard,
+  ToggleRow,
+} from "@/components/image-batch/controls"
 import { DropZone } from "@/components/image-compressor/drop-zone"
 import { LockFields } from "@/components/pdf/lock-fields"
 import { PasswordRow } from "@/components/pdf/password-row"
@@ -46,6 +50,7 @@ import {
 } from "@/components/pdf-reader/pdf-reader"
 import { Button, buttonVariants } from "@/components/ui/button"
 import { ChoiceChips } from "@/components/ui/choice-chips"
+import { toast } from "@/components/ui/toast"
 import { sizeLabel } from "@/lib/image-compressor/formats"
 import {
   defaultExtras,
@@ -55,6 +60,13 @@ import {
 } from "@/lib/pdf-compressor/options"
 import { countComments, type CommentTool } from "@/lib/pdf-editor/comments"
 import { draftLine, fontsOf } from "@/lib/pdf-editor/draft"
+import {
+  downloadChanged,
+  downloadGroups,
+  downloadSummary,
+  type DownloadChoices,
+  type DownloadGroup,
+} from "@/lib/pdf-editor/download-summary"
 import {
   clearDraft,
   draftsWanted,
@@ -96,6 +108,7 @@ import { PageLayer } from "./page-layer"
 import { ShortcutsDialog } from "./shortcuts-dialog"
 import { SignatureDialog } from "./signature-dialog"
 import { EditorToolbar } from "./toolbar"
+import { EditorStatus } from "./editor-status"
 import { useComments } from "./use-comments"
 import { useDraft, type DraftStatus } from "./use-draft"
 import { useEditor } from "./use-editor"
@@ -831,6 +844,26 @@ function Workspace({
     window.addEventListener("beforeunload", ask)
     return () => window.removeEventListener("beforeunload", ask)
   }, [atRisk])
+  // A draft that was asked for says once, wherever the person is, that it is
+  // kept or that it could not be; the line on the file's card says so too.
+  const draftTold = useRef<DraftStatus>("none")
+  useEffect(() => {
+    const told = draftTold.current
+    if (draft.status === "none") draftTold.current = "none"
+    if (draft.status === "kept" && told !== "kept") {
+      draftTold.current = "kept"
+      toast.success("Draft kept on this device", {
+        description:
+          "Your changes are kept in this browser until you close the file.",
+      })
+    }
+    if (draft.status === "failed" && told !== "failed") {
+      draftTold.current = "failed"
+      toast.error("The draft could not be kept", {
+        description: DRAFT_SAYS.failed,
+      })
+    }
+  }, [draft.status])
 
   const { onPage: tellEditor, addPicture } = editor
   const onPage = useCallback(
@@ -920,6 +953,44 @@ function Workspace({
       pages,
       after ? Boolean(doc.password) : lockOf(extras, () => "") !== null
     )
+  /** The download's choices in groups, each folded under a line that says what it will do. */
+  const choices: DownloadChoices = {
+    signed,
+    signedHow,
+    keepEditable,
+    comments: commentsHow,
+    commentCount,
+    fields: fieldsHow,
+    fieldCount,
+    clean,
+    protect: extras.protect,
+    certify: certify.on,
+    signer: certify.opened?.signer?.name ?? "",
+  }
+  const shownGroups = downloadGroups(choices)
+  const changedCount = shownGroups.filter((group) =>
+    downloadChanged(group, choices)
+  ).length
+  const resets: Record<DownloadGroup, () => void> = {
+    signature: () => setSignedHow("keep"),
+    added: () => {
+      setKeepEditable(false)
+      setCommentsHow("keep")
+      setFieldsHow("keep")
+    },
+    leave: () => setClean(CLEAN_NOTHING),
+    certificate: () => certify.setOn(false),
+    password: () => setExtras(defaultExtras),
+  }
+  /** What a group of the download card shows of itself. */
+  const group = (name: DownloadGroup, open: boolean) => ({
+    id: `pdf-editor-download-${name}`,
+    summary: downloadSummary(name, choices),
+    changed: downloadChanged(name, choices),
+    onReset: resets[name],
+    defaultOpen: open,
+  })
+
   /** What a result is made from, at a number of changes; anything else makes it out of date. */
   const keyAt = (position: number) =>
     JSON.stringify([
@@ -1001,6 +1072,13 @@ function Workspace({
       link.href = next.url
       link.download = next.name
       link.click()
+      // The card with the check is behind the window that was just closed, or far down a phone's page.
+      const amiss = checkLines(made.report).some((line) => !line.good)
+      toast.success("Your PDF is ready", {
+        description: amiss
+          ? "Download started. The check found something to look at: see the download card."
+          : "Download started. It was written and checked.",
+      })
     } catch (error) {
       setFailure(
         (error as Error).message || "The file could not be written. Try again."
@@ -1260,6 +1338,7 @@ function Workspace({
       ) : undefined,
     actions: (
       <>
+        <EditorStatus busy={editor.busy} />
         <Button
           variant="ghost"
           size="icon"
@@ -1573,216 +1652,250 @@ function Workspace({
         </section>
       </div>
 
-      <div className="min-w-0 space-y-4 lg:col-span-2">
-        <section
-          className="space-y-4 rounded-xl border bg-card p-4 sm:p-5"
-          aria-labelledby={`${ids}-result`}
-          data-testid="result"
+      {/* The column is as tall as the file's card, so the download card stays in view beside it. */}
+      <section
+        className="min-w-0 lg:col-span-2"
+        aria-label="Download"
+        data-testid="result"
+      >
+        <SettingsCard
+          title="Download"
+          state={making ? "pending" : current ? "done" : "idle"}
+          pendingText="Writing and checking the file…"
+          doneText="Downloaded and checked"
+          changed={changedCount}
+          onResetAll={() => {
+            for (const name of shownGroups) resets[name]()
+            toast.info("Download settings put back to the usual")
+          }}
         >
-          <h2
-            id={`${ids}-result`}
-            className="font-heading text-base font-medium"
-          >
-            Download
-          </h2>
           {signed && (
-            <ChoiceChips
-              label="The signature in this file"
-              value={signedHow}
-              onValueChange={setSignedHow}
-              options={SIGNED_CHOICES.map(({ value, label }) => ({
-                value,
-                label,
-              }))}
-              hint={
-                SIGNED_CHOICES.find((choice) => choice.value === signedHow)!
-                  .hint
-              }
-            />
+            <Section title="The signature" {...group("signature", true)}>
+              <ChoiceChips
+                label="The signature in this file"
+                value={signedHow}
+                onValueChange={setSignedHow}
+                options={SIGNED_CHOICES.map(({ value, label }) => ({
+                  value,
+                  label,
+                }))}
+                hint={
+                  SIGNED_CHOICES.find((choice) => choice.value === signedHow)!
+                    .hint
+                }
+              />
+            </Section>
           )}
           {!after && (
-            <ToggleRow
-              label="Keep what you added editable"
-              hint="Off, the things you added become part of the page. On, they stay separate, so this editor can move and change them again later; other apps show them as stamps."
-              checked={keepEditable}
-              onCheckedChange={setKeepEditable}
-            />
-          )}
-          {!after && commentCount > 0 && (
-            <ChoiceChips
-              label="Comments"
-              value={commentsHow}
-              onValueChange={setCommentsHow}
-              options={COMMENT_CHOICES.map(({ value, label }) => ({
-                value,
-                label,
-              }))}
-              hint={
-                COMMENT_CHOICES.find((choice) => choice.value === commentsHow)!
-                  .hint
-              }
-            />
-          )}
-          {!after && fieldCount > 0 && (
-            <ChoiceChips
-              label="Form fields"
-              value={fieldsHow}
-              onValueChange={setFieldsHow}
-              options={FIELD_CHOICES.map(({ value, label }) => ({
-                value,
-                label,
-              }))}
-              hint={
-                FIELD_CHOICES.find((choice) => choice.value === fieldsHow)!.hint
-              }
-            />
-          )}
-          {!after && (
-            <fieldset className="space-y-2">
-              <legend className="text-sm font-medium">
-                Leave out of the result
-              </legend>
-              {CLEAN_CHOICES.map(({ key, label, hint }) => (
-                <ToggleRow
-                  key={key}
-                  label={label}
-                  hint={hint}
-                  checked={clean[key]}
-                  onCheckedChange={(on) =>
-                    setClean((was) => ({ ...was, [key]: on }))
+            <Section title="What you added" {...group("added", true)}>
+              <ToggleRow
+                label="Keep what you added editable"
+                hint="Off, the things you added become part of the page. On, they stay separate, so this editor can move and change them again later; other apps show them as stamps."
+                checked={keepEditable}
+                onCheckedChange={setKeepEditable}
+              />
+              {commentCount > 0 && (
+                <ChoiceChips
+                  label="Comments"
+                  value={commentsHow}
+                  onValueChange={setCommentsHow}
+                  options={COMMENT_CHOICES.map(({ value, label }) => ({
+                    value,
+                    label,
+                  }))}
+                  hint={
+                    COMMENT_CHOICES.find(
+                      (choice) => choice.value === commentsHow
+                    )!.hint
                   }
                 />
-              ))}
-            </fieldset>
-          )}
-          <CertifyFields certify={certify} pages={pages} />
-          {!after && (
-            <LockFields
-              settings={extras}
-              update={(change) =>
-                setExtras((before) => ({ ...before, ...change }))
-              }
-              label="Lock the result with a password"
-            />
-          )}
-          {problem && (
-            <p
-              role="alert"
-              className="flex items-start gap-2 text-sm text-destructive"
-            >
-              <IconAlertCircle
-                className="mt-0.5 size-4 shrink-0"
-                aria-hidden="true"
-              />
-              {problem}
-            </p>
-          )}
-          {making ? (
-            <div
-              className="flex items-center justify-between gap-3"
-              data-testid="editor-making"
-            >
-              <p role="status" className="text-sm text-muted-foreground">
-                Writing and checking the file…
-              </p>
-              <Button variant="outline" onClick={() => cancel.current?.()}>
-                <IconPlayerStop aria-hidden="true" /> Cancel
-              </Button>
-            </div>
-          ) : current ? (
-            <div className="space-y-3">
-              <p className="text-sm" data-testid="result-facts">
-                <span className="font-medium">
-                  {plural(pages, "page")} · {sizeLabel(current.blob.size)}
-                </span>
-                <span className="text-muted-foreground">
-                  {" "}
-                  · the original is {sizeLabel(doc.file.size)}
-                </span>
-              </p>
-              <ul className="space-y-2 text-sm" data-testid="editor-check">
-                {lines.map((line) => (
-                  <li
-                    key={line.text}
-                    data-good={line.good}
-                    className={cn(
-                      "flex items-start gap-2",
-                      !line.good && "text-destructive"
-                    )}
-                  >
-                    {line.good ? (
-                      <IconCircleCheck
-                        className="mt-0.5 size-4 shrink-0 text-primary"
-                        aria-hidden="true"
-                      />
-                    ) : (
-                      <IconAlertCircle
-                        className="mt-0.5 size-4 shrink-0"
-                        aria-hidden="true"
-                      />
-                    )}
-                    {line.text}
-                  </li>
-                ))}
-              </ul>
-              <div className="flex flex-wrap gap-2">
-                <a
-                  href={current.url}
-                  download={current.name}
-                  className={buttonVariants({ size: "lg" })}
-                >
-                  <IconDownload aria-hidden="true" /> Download again
-                </a>
-                <Button
-                  variant="outline"
-                  size="lg"
-                  onClick={(event) =>
-                    void reader.readResult(
-                      current.blob,
-                      {
-                        title: current.name,
-                        subtitle: `${plural(pages, "page")} · ${sizeLabel(current.blob.size)}`,
-                        password: current.password,
-                        label: (page) => `Page ${page} of ${current.name}`,
-                        failure:
-                          "The result could not be shown. You can still download it.",
-                      },
-                      event.currentTarget
-                    )
+              )}
+              {fieldCount > 0 && (
+                <ChoiceChips
+                  label="Form fields"
+                  value={fieldsHow}
+                  onValueChange={setFieldsHow}
+                  options={FIELD_CHOICES.map(({ value, label }) => ({
+                    value,
+                    label,
+                  }))}
+                  hint={
+                    FIELD_CHOICES.find((choice) => choice.value === fieldsHow)!
+                      .hint
                   }
-                >
-                  <IconBook2 aria-hidden="true" /> Read the result
+                />
+              )}
+            </Section>
+          )}
+          {!after && (
+            <Section
+              title="Leave out of the result"
+              // A page opened for taking things out begins with what else can be taken out.
+              {...group("leave", mode === "redact")}
+            >
+              <fieldset className="space-y-2">
+                <legend className="sr-only">Leave out of the result</legend>
+                {CLEAN_CHOICES.map(({ key, label, hint }) => (
+                  <ToggleRow
+                    key={key}
+                    label={label}
+                    hint={hint}
+                    checked={clean[key]}
+                    onCheckedChange={(on) =>
+                      setClean((was) => ({ ...was, [key]: on }))
+                    }
+                  />
+                ))}
+              </fieldset>
+            </Section>
+          )}
+          <Section
+            title="Sign with a certificate"
+            {...group("certificate", false)}
+          >
+            <CertifyFields certify={certify} pages={pages} />
+          </Section>
+          {!after && (
+            <Section title="Password" {...group("password", false)}>
+              <LockFields
+                settings={extras}
+                update={(change) =>
+                  setExtras((before) => ({ ...before, ...change }))
+                }
+                label="Lock the result with a password"
+              />
+            </Section>
+          )}
+          {/* What is done with the choices stays in view below them as the card scrolls. */}
+          <div className="-mx-4 -mb-1 space-y-3 rounded-b-xl border-t bg-card px-4 py-4 lg:sticky lg:bottom-0 lg:z-10">
+            {problem && (
+              <p
+                role="alert"
+                className="flex items-start gap-2 text-sm text-destructive"
+              >
+                <IconAlertCircle
+                  className="mt-0.5 size-4 shrink-0"
+                  aria-hidden="true"
+                />
+                {problem}
+              </p>
+            )}
+            {making ? (
+              <div
+                className="flex items-center justify-between gap-3"
+                data-testid="editor-making"
+              >
+                {/* The card's own status line says it aloud. */}
+                <p className="text-sm text-muted-foreground">
+                  Writing and checking the file…
+                </p>
+                <Button variant="outline" onClick={() => cancel.current?.()}>
+                  <IconPlayerStop aria-hidden="true" /> Cancel
                 </Button>
               </div>
-            </div>
-          ) : (
-            <div className="space-y-2">
-              <Button
-                size="lg"
-                disabled={Boolean(problem)}
-                onClick={() => void download()}
-              >
-                <IconDownload aria-hidden="true" /> Download PDF
-              </Button>
-              {result && (
-                <p className="text-xs text-muted-foreground">
-                  Something changed since the last download. Download again to
-                  include it.
+            ) : current ? (
+              <div className="space-y-3">
+                <p className="text-sm" data-testid="result-facts">
+                  <span className="font-medium">
+                    {plural(pages, "page")} · {sizeLabel(current.blob.size)}
+                  </span>
+                  <span className="text-muted-foreground">
+                    {" "}
+                    · the original is {sizeLabel(doc.file.size)}
+                  </span>
                 </p>
-              )}
-            </div>
-          )}
-          {failure && (
-            <p role="alert" className="text-sm text-destructive">
-              {failure}
+                <ul
+                  className="max-h-48 space-y-2 overflow-y-auto text-sm"
+                  data-testid="editor-check"
+                >
+                  {lines.map((line) => (
+                    <li
+                      key={line.text}
+                      data-good={line.good}
+                      className={cn(
+                        "flex items-start gap-2",
+                        !line.good && "text-destructive"
+                      )}
+                    >
+                      {line.good ? (
+                        <IconCircleCheck
+                          className="mt-0.5 size-4 shrink-0 text-primary"
+                          aria-hidden="true"
+                        />
+                      ) : (
+                        <IconAlertCircle
+                          className="mt-0.5 size-4 shrink-0"
+                          aria-hidden="true"
+                        />
+                      )}
+                      {line.text}
+                    </li>
+                  ))}
+                </ul>
+                <div className="flex flex-wrap gap-2">
+                  <a
+                    href={current.url}
+                    download={current.name}
+                    className={buttonVariants({ size: "lg" })}
+                    onClick={() => toast.info("Download started")}
+                  >
+                    <IconDownload aria-hidden="true" /> Download again
+                  </a>
+                  <Button
+                    variant="outline"
+                    size="lg"
+                    onClick={(event) =>
+                      void reader.readResult(
+                        current.blob,
+                        {
+                          title: current.name,
+                          subtitle: `${plural(pages, "page")} · ${sizeLabel(current.blob.size)}`,
+                          password: current.password,
+                          label: (page) => `Page ${page} of ${current.name}`,
+                          failure:
+                            "The result could not be shown. You can still download it.",
+                        },
+                        event.currentTarget
+                      )
+                    }
+                  >
+                    <IconBook2 aria-hidden="true" /> Read the result
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <Button
+                  size="lg"
+                  className="w-full"
+                  disabled={Boolean(problem)}
+                  onClick={() => void download()}
+                >
+                  <IconDownload aria-hidden="true" /> Download PDF
+                </Button>
+                {result && (
+                  <p className="text-xs text-muted-foreground">
+                    Something changed since the last download. Download again to
+                    include it.
+                  </p>
+                )}
+              </div>
+            )}
+            {failure && (
+              <p role="alert" className="text-sm text-destructive">
+                {failure}
+              </p>
+            )}
+            <p className="flex items-start gap-2 text-xs text-muted-foreground">
+              <IconLock
+                className="mt-0.5 size-3.5 shrink-0"
+                aria-hidden="true"
+              />
+              The file is changed on your device and is not uploaded.
             </p>
-          )}
-          <p className="flex items-start gap-2 text-xs text-muted-foreground">
-            <IconLock className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
-            The file is changed on your device and is not uploaded.
-          </p>
-        </section>
-      </div>
+          </div>
+        </SettingsCard>
+      </section>
 
       <PdfReader
         reading={reading}

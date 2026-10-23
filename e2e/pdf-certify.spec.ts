@@ -10,6 +10,7 @@ import {
 import { danglingRefs, readPdf } from "../tests/pdf-reader"
 import { makeSignedPdf } from "../tests/pdf-signing"
 import { bytesOf, pdf, readerReady, type Upload } from "./pdf"
+import { openGroups } from "./settings"
 
 const card = (page: Page) => page.getByTestId("editor-certify")
 const download = (page: Page) =>
@@ -20,6 +21,8 @@ async function open(page: Page, upload: Upload) {
   await page.locator("#editor-file").setInputFiles(upload)
   await readerReady(page)
   await page.getByRole("button", { name: "Close the editor" }).click()
+  // The download's choices fold away; these tests reach into all of them.
+  await openGroups(page)
 }
 
 const signing = (page: Page) =>

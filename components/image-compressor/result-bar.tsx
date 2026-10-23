@@ -4,8 +4,10 @@ import {
   IconArrowRight,
   IconDownload,
   IconInfoCircle,
+  IconLoader2,
 } from "@tabler/icons-react"
 import { buttonVariants } from "@/components/ui/button"
+import { toast } from "@/components/ui/toast"
 import { cn } from "cn"
 import {
   outputFormats,
@@ -78,6 +80,15 @@ export function ResultBar({
               ? "Same size"
               : `${-saved}% larger`}
         </span>
+        {stale && (
+          <span className="inline-flex items-center gap-1.5 text-sm text-muted-foreground">
+            <IconLoader2
+              className="size-4 animate-spin text-primary motion-reduce:animate-none"
+              aria-hidden="true"
+            />
+            Updating…
+          </span>
+        )}
       </div>
       <dl className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
         <div>
@@ -142,6 +153,14 @@ export function ResultBar({
           href={result.url}
           download={result.filename}
           aria-disabled={stale || undefined}
+          onClick={(event) => {
+            // A result made from settings that have since changed is not handed over.
+            if (stale) event.preventDefault()
+            else
+              toast.success("Download started", {
+                description: result.filename,
+              })
+          }}
           className={cn(
             buttonVariants({ size: "lg" }),
             "flex-1 sm:flex-none",
@@ -156,6 +175,9 @@ export function ResultBar({
           <a
             href={originalUrl}
             download={originalName}
+            onClick={() =>
+              toast.success("Download started", { description: originalName })
+            }
             className={buttonVariants({ variant: "outline", size: "lg" })}
           >
             Download original

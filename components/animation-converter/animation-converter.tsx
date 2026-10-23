@@ -17,8 +17,10 @@ import {
   IconStack2,
   IconTransform,
 } from "@tabler/icons-react"
+import { SettingsCard } from "@/components/image-batch/controls"
 import { QueueList, type QueueRow } from "@/components/image-batch/queue-list"
 import { SummaryBar } from "@/components/image-batch/summary-bar"
+import { toast } from "@/components/ui/toast"
 import {
   DropZone,
   type DropZoneCopy,
@@ -51,7 +53,14 @@ import {
   sourceFormats,
   type SourceFormat,
 } from "@/lib/animation/source"
+import {
+  ANIMATION_GROUPS,
+  changedCount,
+  comparedSoFar,
+  problemGroup,
+} from "@/lib/animation/summary"
 import { describeTiming, planFrames, sum } from "@/lib/animation/timeline"
+import { resetAll } from "@/lib/settings-groups"
 import {
   itemState,
   nextJob,
@@ -917,10 +926,19 @@ export function AnimationConverter() {
     if (!selected || selected.status !== "ready") return
     const forKey = comparisonKey
     const originalBytes = sizeOf(selected)
+    const order = (["gif", "webp", "apng", "mp4", "webm"] as const).filter(
+      (target) =>
+        targets[target].kind !== "video" || video?.[target as "mp4" | "webm"]
+    )
     comparing.current?.()
     setCompared({
       key: forKey,
-      state: { status: "running", label: "Starting…" },
+      state: {
+        status: "running",
+        label: "Starting…",
+        done: 0,
+        total: order.length,
+      },
     })
     const { promise, cancel: stop } = compareFormats(
       {
@@ -928,27 +946,33 @@ export function AnimationConverter() {
         settings,
         trim: selectedTrim,
         overlay: overlay && { file: overlay.file, key: overlay.key },
-        targets: (["gif", "webp", "apng", "mp4", "webm"] as const).filter(
-          (target) =>
-            targets[target].kind !== "video" ||
-            video?.[target as "mp4" | "webm"]
-        ),
+        targets: order,
       },
       (label) =>
         setCompared((current) =>
-          current?.key === forKey
-            ? { key: forKey, state: { status: "running", label } }
+          current?.key === forKey && current.state.status === "running"
+            ? {
+                key: forKey,
+                state: {
+                  ...current.state,
+                  label,
+                  done: comparedSoFar(label, order, current.state.done),
+                },
+              }
             : current
         )
     )
     comparing.current = stop
     promise
-      .then((results) =>
-        setCompared({
-          key: forKey,
-          state: { status: "done", rows: rankSizes(results, originalBytes) },
-        })
-      )
+      .then((results) => {
+        const rows = rankSizes(results, originalBytes)
+        setCompared({ key: forKey, state: { status: "done", rows } })
+        // The table can be out of sight by the time every format is tried.
+        if (rows.length)
+          toast.success("Formats compared", {
+            description: `${targets[rows[0].target].label} is smallest, at ${sizeLabel(rows[0].bytes)}`,
+          })
+      })
       .catch((failure: Error) =>
         setCompared((current) =>
           current?.key === forKey
@@ -1000,6 +1024,14 @@ export function AnimationConverter() {
       ? compared.state
       : { status: "idle" }
 
+  /** Every group back to the usual, the logo taken away; trims and crops stay with their animations. */
+  function resetAllSettings() {
+    update(resetAll(defaultSettings, ANIMATION_GROUPS))
+    void chooseOverlay(null)
+    setTip("")
+    toast.info("Settings put back to the usual")
+  }
+
   async function downloadZip() {
     setZipping(true)
     try {
@@ -1010,6 +1042,9 @@ export function AnimationConverter() {
         }))
       )
       download(createZip(entries), "keepsimp-animations.zip", "application/zip")
+      toast.success("Download started", {
+        description: "keepsimp-animations.zip",
+      })
     } catch {
       setNotice(
         "The ZIP could not be created. Download the animations one by one."
@@ -1091,6 +1126,9 @@ export function AnimationConverter() {
       </div>
     )
 
+  const fault = problem
+    ? { group: problemGroup(settings)!, text: problem }
+    : null
   const extra = (selectedOutput?.extra as Extra | undefined) ?? null
   const single =
     totals.settled && files.length === 1
@@ -1372,7 +1410,8 @@ export function AnimationConverter() {
         )}
 
         <SummaryBar
-          totals={totals}
+          // Nothing is being converted while the settings need a change or after a cancel, so no spinner says so.
+          totals={paused || problem ? { ...totals, pending: 0 } : totals}
           single={single}
           singleLabel={
             files.length === 1 &&
@@ -1402,48 +1441,67 @@ export function AnimationConverter() {
         />
       </div>
 
-      <div className="min-w-0 space-y-4 lg:col-span-2">
-        <DestinationPanel settings={settings} update={update} />
-        <FormatPanel
-          settings={settings}
-          update={update}
-          problem={problem}
-          video={video}
-          comparison={comparison}
-          canCompare={selected?.status === "ready" && !problem}
-          onCompare={runComparison}
-          onCancelCompare={cancelComparison}
-        />
-        <TimingPanel
-          settings={settings}
-          update={update}
-          selected={
-            selected && selectedFacts && selected.status === "ready"
-              ? {
-                  name: selected.file.name,
-                  strip: selectedFacts.strip,
-                  duration: sum(selectedFacts.durations),
-                  trim: selectedTrim,
-                }
-              : null
+      <div className="min-w-0 lg:col-span-2">
+        <SettingsCard
+          state={
+            paused || problem
+              ? "idle"
+              : totals.pending > 0
+                ? "pending"
+                : totals.done > 0
+                  ? "done"
+                  : "idle"
           }
-          onTrim={(trim) => selected && setTrim(selected.id, trim)}
-        />
-        <OptionsPanel
-          settings={settings}
-          update={update}
-          transparent={items.some((item) => item.transparent)}
-          exampleName={
-            files.find((file) => file.id === selected?.id)?.name ?? null
-          }
-        />
-        <EffectsPanel
-          settings={settings}
-          update={update}
-          overlay={overlay && { name: overlay.file.name, url: overlay.url }}
-          overlayProblem={overlayProblem}
-          onOverlay={(file) => void chooseOverlay(file)}
-        />
+          pendingText={`Converting ${totals.pending} ${totals.pending === 1 ? "file" : "files"}…`}
+          doneText={`Up to date: ${totals.done} of ${totals.images} ready`}
+          changed={changedCount(settings, overlay !== null)}
+          onResetAll={resetAllSettings}
+        >
+          <DestinationPanel settings={settings} update={update} fault={fault} />
+          <FormatPanel
+            settings={settings}
+            update={update}
+            fault={fault}
+            video={video}
+            comparison={comparison}
+            canCompare={selected?.status === "ready" && !problem}
+            onCompare={runComparison}
+            onCancelCompare={cancelComparison}
+          />
+          <TimingPanel
+            settings={settings}
+            update={update}
+            fault={fault}
+            selected={
+              selected && selectedFacts && selected.status === "ready"
+                ? {
+                    name: selected.file.name,
+                    strip: selectedFacts.strip,
+                    duration: sum(selectedFacts.durations),
+                    trim: selectedTrim,
+                  }
+                : null
+            }
+            onTrim={(trim) => selected && setTrim(selected.id, trim)}
+          />
+          <OptionsPanel
+            settings={settings}
+            update={update}
+            fault={fault}
+            transparent={items.some((item) => item.transparent)}
+            exampleName={
+              files.find((file) => file.id === selected?.id)?.name ?? null
+            }
+          />
+          <EffectsPanel
+            settings={settings}
+            update={update}
+            fault={fault}
+            overlay={overlay && { name: overlay.file.name, url: overlay.url }}
+            overlayProblem={overlayProblem}
+            onOverlay={(file) => void chooseOverlay(file)}
+          />
+        </SettingsCard>
       </div>
     </div>
   )

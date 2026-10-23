@@ -6,14 +6,15 @@ import { Section, ToggleRow } from "@/components/image-batch/controls"
 import { Button } from "@/components/ui/button"
 import { ChoiceChips } from "@/components/ui/choice-chips"
 import { Input } from "@/components/ui/input"
+import type { CaptionSize, Corner, Filter } from "@/lib/animation/effects"
 import {
-  adjusts,
-  type CaptionSize,
-  type Corner,
-  type Filter,
-} from "@/lib/animation/effects"
-import { hasCaption, type AnimationSettings } from "@/lib/animation/settings"
-import type { Update } from "./format-panel"
+  defaultSettings,
+  hasCaption,
+  type AnimationSettings,
+} from "@/lib/animation/settings"
+import { ANIMATION_GROUPS, animationSummary } from "@/lib/animation/summary"
+import { differs, resetOf } from "@/lib/settings-groups"
+import { fold, FaultNote, type Fault, type Update } from "./format-panel"
 
 const fadeChoices = ["0", "0.5", "1", "2"]
 const fadeOptions = fadeChoices.map((value) => ({
@@ -30,12 +31,14 @@ const sliders = [
 export function EffectsPanel({
   settings,
   update,
+  fault,
   overlay,
   overlayProblem,
   onOverlay,
 }: {
   settings: AnimationSettings
   update: Update
+  fault: Fault | null
   /** The logo or watermark that was added, if any. */
   overlay: { name: string; url: string } | null
   /** Why the last image chosen could not be used; empty when it could. */
@@ -49,8 +52,8 @@ export function EffectsPanel({
     value === null || Number.isNaN(value) ? "" : value
 
   return (
-    <div className="space-y-5 rounded-xl border bg-card p-4 sm:p-5">
-      <Section title="Text">
+    <>
+      <Section title="Text" {...fold("text", settings, update, fault)}>
         {(["captionTop", "captionBottom"] as const).map((field) => (
           <div key={field}>
             <label
@@ -178,9 +181,11 @@ export function EffectsPanel({
             </div>
           </>
         )}
+        <FaultNote fault={fault} group="text" />
       </Section>
 
-      <Section title="Colour">
+      {/* Its reset, "Reset colour", puts the filter and every slider back. */}
+      <Section title="Colour" {...fold("colour", settings, update, fault)}>
         <ChoiceChips
           label="Filter"
           hideLabel
@@ -219,24 +224,10 @@ export function EffectsPanel({
             />
           </div>
         ))}
-        {adjusts(settings) && (
-          <Button
-            variant="outline"
-            onClick={() =>
-              update({
-                filter: "none",
-                brightness: 0,
-                contrast: 0,
-                saturation: 0,
-              })
-            }
-          >
-            Reset colour
-          </Button>
-        )}
+        <FaultNote fault={fault} group="colour" />
       </Section>
 
-      <Section title="Fade">
+      <Section title="Fade" {...fold("fade", settings, update, fault)}>
         {(
           [
             ["fadeIn", "Fade in"],
@@ -255,9 +246,27 @@ export function EffectsPanel({
           The picture fades from and to black, or the background colour when one
           is chosen. A fade adds in-between pictures, so the file gets larger.
         </p>
+        <FaultNote fault={fault} group="fade" />
       </Section>
 
-      <Section title="Logo or watermark">
+      <Section
+        title="Logo or watermark"
+        {...fold("logo", settings, update, fault)}
+        summary={
+          fault?.group === "logo"
+            ? `Needs a change: ${fault.text}`
+            : animationSummary("logo", settings, overlay?.name ?? null)
+        }
+        // A logo added is a change, and putting the group back takes it away.
+        changed={
+          overlay !== null ||
+          differs(settings, defaultSettings, ANIMATION_GROUPS.logo)
+        }
+        onReset={() => {
+          onOverlay(null)
+          update(resetOf(defaultSettings, ANIMATION_GROUPS.logo))
+        }}
+      >
         <input
           ref={picker}
           type="file"
@@ -354,7 +363,8 @@ export function EffectsPanel({
             background. It stays on your device.
           </p>
         )}
+        <FaultNote fault={fault} group="logo" />
       </Section>
-    </div>
+    </>
   )
 }

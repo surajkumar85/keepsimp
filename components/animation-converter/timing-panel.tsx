@@ -6,13 +6,15 @@ import { ChoiceChips } from "@/components/ui/choice-chips"
 import { Input } from "@/components/ui/input"
 import {
   fpsChoices,
+  noTrim,
   speedChoices,
   targets,
   type AnimationSettings,
   type LoopChoice,
   type Trim,
 } from "@/lib/animation/settings"
-import type { Update } from "./format-panel"
+import { trimSummary } from "@/lib/animation/summary"
+import { fold, FaultNote, type Fault, type Update } from "./format-panel"
 import { TrimBar } from "./trim-bar"
 
 const lengthChoices = [3, 6, 10]
@@ -21,11 +23,13 @@ const lengthChoices = [3, 6, 10]
 export function TimingPanel({
   settings,
   update,
+  fault,
   selected,
   onTrim,
 }: {
   settings: AnimationSettings
   update: Update
+  fault: Fault | null
   /** The selected animation, once it has been read. */
   selected: {
     name: string
@@ -52,10 +56,18 @@ export function TimingPanel({
         ? String(settings.fps)
         : "custom"
 
+  const kept = selected ? trimSummary(selected.trim, selected.duration) : ""
+
   return (
-    <div className="space-y-5 rounded-xl border bg-card p-4 sm:p-5">
+    <>
       {selected && selected.duration > 0 && (
-        <Section title="Trim">
+        // "Keep everything" in the bar puts a trim back, so the group needs no reset of its own.
+        <Section
+          title="Trim"
+          summary={kept}
+          changed={kept !== trimSummary(noTrim, selected.duration)}
+          defaultOpen={false}
+        >
           <p className="text-xs text-muted-foreground">
             Applies to{" "}
             <span className="font-medium text-foreground">{selected.name}</span>{" "}
@@ -70,7 +82,10 @@ export function TimingPanel({
         </Section>
       )}
 
-      <Section title="Speed and frames">
+      <Section
+        title="Speed and frames"
+        {...fold("timing", settings, update, fault)}
+      >
         <ChoiceChips
           label="Speed"
           value={speed}
@@ -155,9 +170,13 @@ export function TimingPanel({
             />
           </div>
         )}
+        <FaultNote fault={fault} group="timing" />
       </Section>
 
-      <Section title="Length limit">
+      <Section
+        title="Length limit"
+        {...fold("length", settings, update, fault)}
+      >
         <ChoiceChips
           label="Longest result"
           hideLabel
@@ -214,9 +233,13 @@ export function TimingPanel({
               />
             </div>
           )}
+        <FaultNote fault={fault} group="length" />
       </Section>
 
-      <Section title="Direction and looping">
+      <Section
+        title="Direction and looping"
+        {...fold("direction", settings, update, fault)}
+      >
         <ToggleRow
           label="Reverse"
           hint="Plays from the last frame to the first."
@@ -280,7 +303,8 @@ export function TimingPanel({
               : "A video file has no loop count; the player decides."}
           </p>
         )}
+        <FaultNote fault={fault} group="direction" />
       </Section>
-    </div>
+    </>
   )
 }

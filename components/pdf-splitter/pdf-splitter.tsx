@@ -25,6 +25,7 @@ import {
   IconTrash,
 } from "@tabler/icons-react"
 import { DropZone, FileInput } from "@/components/image-compressor/drop-zone"
+import { SettingsCard } from "@/components/image-batch/controls"
 import { useDeviceLimits } from "@/components/pdf/use-device-limits"
 import { usePagePictures } from "@/components/pdf/use-page-pictures"
 import { usePdfReader } from "@/components/pdf/use-pdf-reader"
@@ -32,6 +33,7 @@ import { PdfReader } from "@/components/pdf-reader/pdf-reader"
 import { Button, buttonVariants } from "@/components/ui/button"
 import { ChoiceChips } from "@/components/ui/choice-chips"
 import { Input } from "@/components/ui/input"
+import { toast } from "@/components/ui/toast"
 import { cn } from "cn"
 import { sizeLabel } from "@/lib/image-compressor/formats"
 import { createZip } from "@/lib/image-resizer/zip"
@@ -93,6 +95,8 @@ import {
   type PlannedPart,
 } from "@/lib/pdf-splitter/settings"
 import { limitBytes, UNIT_BYTES, type SizeUnit } from "@/lib/pdf-splitter/size"
+import { SPLIT_GROUPS } from "@/lib/pdf-splitter/summary"
+import { changedGroups, resetAll } from "@/lib/settings-groups"
 import { FileRows, type FileSummary } from "./file-rows"
 import { OptionsPanel } from "./options-panel"
 import { PageBoard } from "./page-board"
@@ -622,6 +626,17 @@ export function PdfSplitter() {
   const canSplit =
     !splitting && !reading && workable.length > 0 && !wrongPattern
   const one = givesOneFile(mode, blankHow)
+  /**
+   * Words typed but not yet looked for, or looked for and not yet found:
+   * said at once, so the count shown is never the last search's.
+   */
+  const searching =
+    mode === "text" &&
+    textKind === "contains" &&
+    (needleOf(words) !== needle ||
+      (needle !== "" &&
+        shown?.file.status === "ready" &&
+        shown.file.starts?.key !== needle))
 
   /** Every part that is written and up to date, with the name it has now. */
   const finished = useMemo(
@@ -795,6 +810,11 @@ export function PdfSplitter() {
             ? "The new file is ready to download."
             : `Split into ${plural(made, "part")}. They are ready to download.`
     )
+    // Said where it is seen, as the parts may be listed far below the button.
+    if (!stopped && made > 0)
+      toast.success(
+        made === 1 ? "Your PDF is ready" : `Split into ${plural(made, "file")}`
+      )
   }
 
   async function downloadAll() {
@@ -823,6 +843,7 @@ export function PdfSplitter() {
       link.href = url
       link.download = zipName(sources.map((view) => view.file.name))
       link.click()
+      toast.info("Download started", { description: link.download })
       // The browser has taken the file by the time this runs.
       setTimeout(() => URL.revokeObjectURL(url), 60_000)
     } catch {
@@ -1363,15 +1384,24 @@ export function PdfSplitter() {
                       ? shown.file.texts.texts
                       : null
                   }
+                  searching={
+                    searching ||
+                    (textKind === "area" &&
+                      area !== null &&
+                      shown?.file.status === "ready" &&
+                      shown.file.texts?.key !== areaKey)
+                  }
                   status={
                     !shown || shown.file.status !== "ready"
                       ? ""
                       : textKind === "contains"
-                        ? !needle
-                          ? ""
-                          : shown.file.starts?.key === needle
-                            ? `Found on ${plural(shown.file.starts.pages.length, "page")}.`
-                            : "Looking…"
+                        ? searching
+                          ? "Searching…"
+                          : !needle
+                            ? ""
+                            : shown.file.starts?.key === needle
+                              ? `Found on ${plural(shown.file.starts.pages.length, "page")}.`
+                              : "Searching…"
                         : !area
                           ? ""
                           : shown.file.texts?.key === areaKey
@@ -1524,6 +1554,11 @@ export function PdfSplitter() {
                     href={finished[0].url}
                     download={finished[0].name}
                     className={buttonVariants({ size: "lg" })}
+                    onClick={() =>
+                      toast.info("Download started", {
+                        description: finished[0].name,
+                      })
+                    }
                   >
                     <IconDownload aria-hidden="true" /> Download PDF
                   </a>
@@ -1630,7 +1665,25 @@ export function PdfSplitter() {
         </section>
 
         {state.files.some((file) => file.status === "ready") && (
-          <OptionsPanel options={options} update={updateOptions} />
+          <SettingsCard
+            state={splitting ? "pending" : done ? "done" : "idle"}
+            pendingText="Splitting…"
+            doneText="Split with these settings"
+            changed={
+              changedGroups(options, defaultOptions, SPLIT_GROUPS).length
+            }
+            onResetAll={
+              splitting
+                ? undefined
+                : () => {
+                    updateOptions(resetAll(defaultOptions, SPLIT_GROUPS))
+                    toast.info("Settings put back to the usual")
+                  }
+            }
+            sticky={false}
+          >
+            <OptionsPanel options={options} update={updateOptions} />
+          </SettingsCard>
         )}
       </div>
     </div>

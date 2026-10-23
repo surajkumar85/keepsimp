@@ -2,6 +2,7 @@ import { test, expect, type Download, type Page } from "@playwright/test"
 import AxeBuilder from "@axe-core/playwright"
 import { unzipSync } from "fflate"
 import sharp from "sharp"
+import { openGroup, openGroups } from "./settings"
 
 const ROUTE = "/dashboard/image-resizer/"
 
@@ -16,6 +17,11 @@ type Upload = { name: string; mimeType: string; buffer: Buffer }
 
 async function upload(page: Page, ...files: Upload[]) {
   await page.locator("#resizer-file").setInputFiles(files)
+  // Groups past the first choices wait under their summaries until opened.
+  await expect(
+    page.locator("[data-slot=settings-section]").first()
+  ).toBeVisible()
+  await openGroups(page)
 }
 
 /** Wait until every image has a result for the current settings. */
@@ -135,6 +141,8 @@ async function exactBox(page: Page, width: string, height: string) {
   if ((await lock.getAttribute("aria-checked")) === "true") await lock.click()
   await page.getByLabel("Width (px)").fill(width)
   await page.getByLabel("Height (px)").fill(height)
+  // Fit appears once both sides are set.
+  await openGroup(page, "Fit")
 }
 
 test.describe.configure({ timeout: 180_000 })
@@ -149,6 +157,11 @@ test("resizes by every size mode to exact pixels", async ({ page }) => {
   expect((await result(page)).size).toEqual([1200, 900])
 
   await page.getByLabel("Width (px)").fill("200")
+  // The change is answered at once, before the images are made again.
+  await expect(page.locator("[data-slot=settings-state]")).toHaveAttribute(
+    "data-state",
+    "pending"
+  )
   await expect(page.getByLabel("Height (px)")).toHaveValue("150")
   const linked = await result(page)
   expect(linked.size).toEqual([200, 150])

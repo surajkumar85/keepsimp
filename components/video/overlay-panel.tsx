@@ -13,6 +13,9 @@ import {
   type LogoFacts,
   type VideoSettings,
 } from "@/lib/video/settings"
+import { differs, resetOf } from "@/lib/settings-groups"
+import { defaultSettings } from "@/lib/video/settings"
+import { VIDEO_GROUPS, videoSummary } from "@/lib/video/summary"
 import type { Update } from "./settings-panel"
 
 /** The logo chosen on the page: its file and what reading it found. */
@@ -105,7 +108,13 @@ export function OverlayPanel({
   problem,
   onLogo,
   onRemoveLogo,
+  open = false,
+  usual = defaultSettings,
 }: {
+  /** The settings the page started with, which "changed" is measured against. */
+  usual?: VideoSettings
+  /** Open from the start, for the page opened to add text. */
+  open?: boolean
   settings: VideoSettings
   update: Update
   logo: ChosenLogo | null
@@ -119,7 +128,16 @@ export function OverlayPanel({
     settings.captionTop.trim() || settings.captionBottom.trim()
   )
   return (
-    <Section title="Text and logo">
+    <Section
+      title="Text and logo"
+      summary={videoSummary("overlay", settings, logo !== null)}
+      changed={logo !== null || differs(settings, usual, VIDEO_GROUPS.overlay)}
+      onReset={() => {
+        update(resetOf(usual, VIDEO_GROUPS.overlay))
+        onRemoveLogo()
+      }}
+      defaultOpen={open}
+    >
       <TextField
         label="Text at the top"
         value={settings.captionTop}

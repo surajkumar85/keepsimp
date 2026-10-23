@@ -4,6 +4,7 @@ import { join } from "node:path"
 import { test, expect, type Page } from "@playwright/test"
 import AxeBuilder from "@axe-core/playwright"
 import { chip, download, fixture, folder, probe, settled } from "./audio"
+import { openGroups } from "./settings"
 
 const TAGS = "/dashboard/edit-audio-tags/"
 const panel = (page: Page) => page.getByTestId("tag-panel")
@@ -183,10 +184,15 @@ test("writes M4A, Opus and WAV in place, and another format with its sound", asy
       fixture("tone.wav"),
     ])
   await settled(page)
+  await openGroups(page)
   await panel(page).getByRole("radio", { name: "All 3 files" }).click()
   await field(page, "Genre").fill("Jazz")
   await field(page, "Year").fill("2024")
   await field(page, "Year").blur()
+  // What was typed is said to be saved once it is written into the results.
+  await expect(panel(page).getByTestId("tag-saving")).toContainText(
+    "Tags saved"
+  )
   await settled(page)
   for (const name of ["tone.m4a", "tone.opus", "tone.wav"]) {
     const got = await download(page, name)

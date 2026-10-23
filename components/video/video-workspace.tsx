@@ -67,6 +67,10 @@ import { levelSaid } from "@/lib/video/check"
 import { convertJob, readJob } from "@/lib/video/jobs"
 import { browserAsker } from "@/lib/video/probe"
 import { SettingsPanel } from "./settings-panel"
+import { SettingsCard } from "@/components/image-batch/controls"
+import { toast } from "@/components/ui/toast"
+import { changedGroups, resetAll } from "@/lib/settings-groups"
+import { VIDEO_GROUPS, type VideoGroup } from "@/lib/video/summary"
 import { TrimPanel } from "./trim-panel"
 import { GifPanel } from "./gif-panel"
 import { SubtitlesControl } from "./subtitles-control"
@@ -244,6 +248,14 @@ const OPENED_FOR: Record<VideoMode, string> = {
   subtitles: "adding subtitles",
 }
 
+/** The group of settings each door opens with, besides format and quality. */
+const FOCUS: Partial<Record<VideoMode, VideoGroup>> = {
+  compressor: "limit",
+  cropper: "shape",
+  speed: "timing",
+  mute: "sound",
+}
+
 /** The doors that show the trimmer at once; the others have it one press away. */
 const TRIMS: Record<VideoMode, boolean> = {
   editor: true,
@@ -326,6 +338,14 @@ export function VideoWorkspace({ mode }: { mode: VideoMode }) {
         problems: message.problems,
         copied: message.copied,
       })
+      if (message.problems.length)
+        toast.error("The joined video has a problem", {
+          description: "What was found is said under it.",
+        })
+      else
+        toast.success("Your joined video is ready", {
+          description: wanted.name,
+        })
       setJoinProgress(null)
       joinWanted.current = null
     }
@@ -777,6 +797,23 @@ export function VideoWorkspace({ mode }: { mode: VideoMode }) {
   const problem = settingsProblem(settings)
   const update = (change: Partial<VideoSettings>) =>
     setSettings((current) => ({ ...current, ...change }))
+  /** The settings this door starts with: what "changed" and "Reset" are measured against. */
+  const usual = { ...defaultSettings, ...FIRST[mode] }
+  // A change seen but not yet taken up: said at once, so no press seems to do nothing.
+  const settling =
+    items.length > 0 &&
+    ((!problem && JSON.stringify(settings) !== JSON.stringify(applied)) ||
+      unsettled !== "")
+  const changedCount =
+    changedGroups(settings, usual, VIDEO_GROUPS).length +
+    (logo ? 1 : 0) +
+    (soundtrack ? 1 : 0)
+  const resetAllSettings = () => {
+    update(resetAll(usual, VIDEO_GROUPS))
+    setLogo(null)
+    setSoundtrack(null)
+    toast.info("Settings put back to the usual")
+  }
 
   // A soundtrack is read on the page, as it is chosen.
   const tracks = useRef(0)
@@ -828,6 +865,8 @@ export function VideoWorkspace({ mode }: { mode: VideoMode }) {
   }, [])
   const overlayPanel = (
     <OverlayPanel
+      open={mode === "text" || mode === "subtitles"}
+      usual={usual}
       settings={settings}
       update={update}
       logo={logo}
@@ -839,6 +878,7 @@ export function VideoWorkspace({ mode }: { mode: VideoMode }) {
   )
   const soundtrackOnly = (
     <SoundtrackPanel
+      open={mode === "music"}
       track={soundtrack}
       reading={trackReading}
       problem={trackProblem}
@@ -895,17 +935,23 @@ export function VideoWorkspace({ mode }: { mode: VideoMode }) {
           )}
         </div>
         <div className="min-w-0 lg:col-span-2">
-          <div className="rounded-xl border bg-card p-4">
+          <SettingsCard
+            state="idle"
+            changed={changedCount}
+            onResetAll={resetAllSettings}
+          >
             <SettingsPanel
               settings={settings}
               update={update}
               problem={problem}
               limitFirst={mode === "compressor"}
               childrenFirst={mode === "music" || mode === "text"}
+              focus={FOCUS[mode]}
+              usual={usual}
             >
               {soundtrackPanel}
             </SettingsPanel>
-          </div>
+          </SettingsCard>
         </div>
       </div>
     )
@@ -1022,6 +1068,7 @@ export function VideoWorkspace({ mode }: { mode: VideoMode }) {
           inputId={INPUT_ID}
           verb="Converting"
           noun="video"
+          applying={settling}
           accept={ACCEPT}
           addIcon={IconVideoPlus}
         />
@@ -1056,17 +1103,29 @@ export function VideoWorkspace({ mode }: { mode: VideoMode }) {
         )}
       </div>
       <div className="min-w-0 lg:col-span-2">
-        <div className="rounded-xl border bg-card p-4">
+        <SettingsCard
+          state={settling || !totals.settled ? "pending" : "done"}
+          pendingText={
+            settling
+              ? "Applying your changes…"
+              : `Converting ${totals.pending} ${totals.pending === 1 ? "video" : "videos"}…`
+          }
+          doneText={`Up to date: ${totals.done} of ${totals.images} ready`}
+          changed={changedCount}
+          onResetAll={resetAllSettings}
+        >
           <SettingsPanel
             settings={settings}
             update={update}
             problem={problem}
             limitFirst={mode === "compressor"}
             childrenFirst={mode === "music" || mode === "text"}
+            focus={FOCUS[mode]}
+            usual={usual}
           >
             {soundtrackPanel}
           </SettingsPanel>
-        </div>
+        </SettingsCard>
       </div>
     </div>
   )

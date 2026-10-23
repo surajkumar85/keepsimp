@@ -1,5 +1,6 @@
 import { AppShell } from "@/components/app-shell"
 import { OfflineSupport } from "@/components/offline-support"
+import { Toaster } from "@/components/ui/toast"
 
 export default function WorkspaceLayout({
   children,
@@ -10,6 +11,7 @@ export default function WorkspaceLayout({
     <>
       <OfflineSupport />
       <AppShell>{children}</AppShell>
+      <Toaster />
     </>
   )
 }

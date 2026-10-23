@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test"
+import { openGroups } from "./settings"
 import {
   download,
   EDITOR,
@@ -21,6 +22,7 @@ test("draws a logo in its corner on every frame, and text only while it shows", 
   const blue = plainClip("blue.mp4", "blue", 4)
   await page.goto(EDITOR)
   await page.locator("#video-file").setInputFiles([blue])
+  await openGroups(page)
   await settled(page)
   await page.getByLabel("Text at the bottom").fill("KEEPSIMP KEEPSIMP")
   await page.getByLabel("Show from (s)").fill("2")

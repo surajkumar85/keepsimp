@@ -6,6 +6,7 @@ import { LockFields } from "@/components/pdf/lock-fields"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import type { MergeSettings } from "@/lib/pdf-merger/settings"
+import { mergeGroup } from "./structure-panel"
 
 type Details = Pick<MergeSettings, "title" | "author" | "subject" | "keywords">
 
@@ -29,11 +30,8 @@ export function OutputPanel({
 }) {
   const ids = useId()
   return (
-    <div
-      className="space-y-5 rounded-xl border bg-card p-4 sm:p-5"
-      data-testid="output-options"
-    >
-      <Section title="Details">
+    <div className="border-t first:border-t-0" data-testid="output-options">
+      <Section title="Details" {...mergeGroup("details", settings, update)}>
         <p className="text-xs text-muted-foreground">
           Shown by viewers and search tools. Nothing is taken from your files
           unless you put it here.
@@ -71,7 +69,7 @@ export function OutputPanel({
         )}
       </Section>
 
-      <Section title="Password">
+      <Section title="Password" {...mergeGroup("password", settings, update)}>
         <LockFields
           settings={settings}
           update={update}

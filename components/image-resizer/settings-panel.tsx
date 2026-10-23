@@ -39,11 +39,35 @@ import {
 } from "@/lib/image-resizer/units"
 import { AnchorGrid } from "./anchor-grid"
 import { Section, ToggleRow } from "@/components/image-batch/controls"
+import {
+  resizerChanged,
+  resizerSummary,
+  type ResizerGroup,
+} from "@/lib/image-resizer/summary"
 
 export type Update = (
   change:
     Partial<ResizerSettings> | ((current: ResizerSettings) => ResizerSettings)
 ) => void
+
+/**
+ * A group's fold: size and output open at first, the rest under their
+ * summaries. A size that cannot be made is said even while folded.
+ */
+export function groupProps(
+  name: ResizerGroup,
+  settings: ResizerSettings,
+  usual: ResizerSettings,
+  onReset: (group: ResizerGroup) => void,
+  problem: string | null = null
+) {
+  return {
+    summary: problem ?? resizerSummary(name, settings),
+    changed: resizerChanged(name, settings, usual),
+    onReset: () => onReset(name),
+    defaultOpen: name === "size" || name === "output",
+  }
+}
 
 const modeHints: Record<SizeMode, string> = {
   dimensions:
@@ -127,7 +151,12 @@ export function SettingsPanel({
   onAnchor,
   onResetFocus,
   onOrientation,
+  usual,
+  onResetGroup,
 }: {
+  /** The usual settings, which "changed" and "Reset" are measured against. */
+  usual: ResizerSettings
+  onResetGroup: (group: ResizerGroup) => void
   settings: ResizerSettings
   update: Update
   /** The selected image after rotation, used to link width and height. */
@@ -216,9 +245,18 @@ export function SettingsPanel({
     </div>
   )
 
+  const group = (name: ResizerGroup) =>
+    groupProps(
+      name,
+      settings,
+      usual,
+      onResetGroup,
+      name === "size" ? planError : null
+    )
+
   return (
-    <div className="space-y-5 rounded-xl border bg-card p-4 sm:p-5">
-      <Section title="Size">
+    <>
+      <Section title="Size" {...group("size")}>
         <ChoiceChips
           label="Resize by"
           value={settings.mode}
@@ -369,7 +407,7 @@ export function SettingsPanel({
       </Section>
 
       {box && (
-        <Section title="Fit">
+        <Section title="Fit" {...group("fit")}>
           <ChoiceChips
             label="How the image fills the frame"
             hideLabel
@@ -460,7 +498,7 @@ export function SettingsPanel({
         </Section>
       )}
 
-      <Section title="Rotate and flip">
+      <Section title="Rotate and flip" {...group("turn")}>
         <div
           className="flex flex-wrap gap-2"
           role="group"
@@ -506,6 +544,6 @@ export function SettingsPanel({
           </Button>
         </div>
       </Section>
-    </div>
+    </>
   )
 }

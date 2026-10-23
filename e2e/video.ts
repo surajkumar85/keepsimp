@@ -5,6 +5,7 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { expect, test, type Page } from "@playwright/test"
 import { bytesOf, type Upload } from "./pdf"
+import { openGroups } from "./settings"
 
 export const EDITOR = "/dashboard/video-editor/"
 export const CONVERTER = "/dashboard/video-converter/"
@@ -222,6 +223,7 @@ export async function open(page: Page, files: Upload[], route = EDITOR) {
   await page.goto(route)
   await page.locator("#video-file").setInputFiles(files)
   await settled(page)
+  await openGroups(page)
 }
 
 /** Whether this browser can write a codec at a size, as the page asks it. */

@@ -12,6 +12,7 @@ import {
   samples,
   settled,
 } from "./audio"
+import { openGroups } from "./settings"
 
 const SPEED = "/dashboard/change-audio-speed/"
 const RATE = 44100
@@ -46,7 +47,15 @@ test("speeds up, slows down and moves the pitch, each file exactly as long as it
   )
   await page.getByRole("button", { name: "Try a sample" }).click()
   await settled(page)
+  // The door opens its own group, at the top, with the speed it starts at.
+  await expect(
+    page
+      .locator("[data-slot=settings-section]")
+      .first()
+      .getByRole("button", { name: "Speed, pitch and channels", exact: true })
+  ).toHaveAttribute("aria-expanded", "true")
   await expect(chip(page, "1.25×")).toBeChecked()
+  await openGroups(page)
   const quicker = await download(page, "keepsimp-tune.flac")
   expect(samples(quicker.bytes, "quicker.flac")).toBe(
     Math.round((8 * RATE) / 1.25)
@@ -111,6 +120,7 @@ test("plays backwards, sample for sample, and swaps the channels exactly", async
     buffer: Buffer.from(source),
   })
   await settled(page)
+  await openGroups(page)
   await chip(page, "WAV").click()
   await page.getByRole("switch", { name: "Play backwards" }).click()
   await settled(page)

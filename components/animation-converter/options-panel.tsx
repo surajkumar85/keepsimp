@@ -22,7 +22,7 @@ import {
 } from "@/lib/animation/settings"
 import { rotate } from "@/lib/image-compressor/geometry"
 import { unknownTokens } from "@/lib/image-resizer/naming"
-import type { Update } from "./format-panel"
+import { fold, FaultNote, type Fault, type Update } from "./format-panel"
 
 const nameTokens = ["name", "format", "width", "height", "index"]
 const sizeLabels: Record<Exclude<ResizeChoice, "original">, string> = {
@@ -37,11 +37,13 @@ const sizeLabels: Record<Exclude<ResizeChoice, "original">, string> = {
 export function OptionsPanel({
   settings,
   update,
+  fault,
   transparent,
   exampleName,
 }: {
   settings: AnimationSettings
   update: Update
+  fault: Fault | null
   /** Whether any animation in the batch has see-through pixels. */
   transparent: boolean
   exampleName: string | null
@@ -50,8 +52,8 @@ export function OptionsPanel({
   const unknown = unknownTokens(settings.pattern)
 
   return (
-    <div className="space-y-5 rounded-xl border bg-card p-4 sm:p-5">
-      <Section title="Size">
+    <>
+      <Section title="Size" {...fold("size", settings, update, fault)}>
         <ChoiceChips
           label="Resize"
           hideLabel
@@ -146,9 +148,13 @@ export function OptionsPanel({
             onCheckedChange={(enlarge) => update({ enlarge })}
           />
         )}
+        <FaultNote fault={fault} group="size" />
       </Section>
 
-      <Section title="Rotate and flip">
+      <Section
+        title="Rotate and flip"
+        {...fold("turn", settings, update, fault)}
+      >
         <div
           className="flex flex-wrap gap-2"
           role="group"
@@ -205,7 +211,10 @@ export function OptionsPanel({
         </div>
       </Section>
 
-      <Section title="Background">
+      <Section
+        title="Background"
+        {...fold("background", settings, update, fault)}
+      >
         <ChoiceChips
           label="Background"
           hideLabel
@@ -248,9 +257,10 @@ export function OptionsPanel({
             />
           </div>
         )}
+        <FaultNote fault={fault} group="background" />
       </Section>
 
-      <Section title="File names">
+      <Section title="File names" {...fold("names", settings, update, fault)}>
         <div>
           <label
             htmlFor={`${ids}-pattern`}
@@ -304,11 +314,12 @@ export function OptionsPanel({
             )}
           </p>
         </div>
+        <FaultNote fault={fault} group="names" />
         <p className="flex items-start gap-2 text-xs text-muted-foreground">
           <IconLock className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
           Animations are converted on your device and are not uploaded.
         </p>
       </Section>
-    </div>
+    </>
   )
 }

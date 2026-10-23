@@ -3,6 +3,7 @@ import { createContext, useContext, useEffect, useId, useState } from "react"
 import { IconCheck, IconCopy, IconDownload } from "@tabler/icons-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { toast } from "@/components/ui/toast"
 import { hex, parseColor } from "@/lib/color/core"
 
 export const panel = "min-w-0 space-y-4 rounded-xl border bg-card p-4"
@@ -25,6 +26,10 @@ export async function copy(text: string, tell: Tell) {
   try {
     await navigator.clipboard.writeText(text)
     tell("Copied to clipboard.")
+    // Said in the corner too, with what was copied, since the line above may be out of sight.
+    toast.success("Copied", {
+      description: text.length > 80 ? `${text.slice(0, 79)}…` : text,
+    })
     return true
   } catch {
     tell(
@@ -40,6 +45,7 @@ export function download(text: string, mime: string, name: string) {
   a.download = name
   a.click()
   setTimeout(() => URL.revokeObjectURL(url), 1000)
+  toast.success("Download started", { description: name })
 }
 export function Copy({
   value,

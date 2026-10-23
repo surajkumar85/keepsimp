@@ -2,6 +2,8 @@
 
 import { IconArrowDown, IconArrowUp, IconDownload } from "@tabler/icons-react"
 import { Button, buttonVariants } from "@/components/ui/button"
+import { Progress } from "@/components/ui/progress"
+import { toast } from "@/components/ui/toast"
 import { sizeLabel } from "@/lib/image-compressor/formats"
 import type { JoinPlan } from "@/lib/video/join"
 import { factsLine } from "@/lib/video/queue"
@@ -99,6 +101,9 @@ export function JoinPanel({
           ? `Joining… ${Math.round(progress * 100)}%`
           : `Join ${names.length} videos`}
       </Button>
+      {progress !== null && (
+        <Progress value={progress} label="Joining the videos" />
+      )}
       {problem && (
         <p role="alert" className="text-sm text-destructive">
           {problem}
@@ -128,7 +133,10 @@ export function JoinPanel({
           <a
             href={joined.downloadUrl}
             download={joined.name}
-            className={buttonVariants({ variant: "outline" })}
+            onClick={() =>
+              toast.success("Download started", { description: joined.name })
+            }
+            className={buttonVariants()}
           >
             <IconDownload aria-hidden="true" /> Download {joined.name}
           </a>

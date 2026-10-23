@@ -27,7 +27,10 @@ export function SoundtrackPanel({
   onChoose,
   onChange,
   onRemove,
+  open = false,
 }: {
+  /** Open from the start, for the page opened to add music. */
+  open?: boolean
   track: ChosenTrack | null
   reading: boolean
   problem: string | null
@@ -37,7 +40,17 @@ export function SoundtrackPanel({
 }) {
   const id = useId()
   return (
-    <Section title="Soundtrack">
+    <Section
+      title="Soundtrack"
+      summary={
+        track
+          ? `${track.facts.name} · ${track.mode === "replace" ? "in place of the sound" : "under the sound"}`
+          : "None"
+      }
+      changed={track !== null}
+      onReset={onRemove}
+      defaultOpen={open}
+    >
       {track ? (
         <div className="space-y-4" data-testid="soundtrack">
           <div className="flex items-center justify-between gap-2">

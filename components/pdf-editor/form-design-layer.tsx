@@ -19,6 +19,7 @@ import type { Size } from "@/lib/image-compressor/geometry"
 import { cn } from "cn"
 import { pagePoint, type Editor } from "./use-editor"
 import type { MakeForm } from "./use-make-form"
+import { useHolding } from "./use-settling"
 const arrows: Record<string, [number, number]> = {
   ArrowLeft: [-1, 0],
   ArrowRight: [1, 0],
@@ -41,6 +42,7 @@ export function FormDesignSpots({
   const surface = useRef<HTMLDivElement>(null),
     timer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [preview, setPreview] = useState<{ id: string; box: Box } | null>(null)
+  const holding = useHolding()
   const moving = useRef<{ id: string; box: Box } | null>(null),
     drag = useRef<{
       id: string
@@ -71,10 +73,11 @@ export function FormDesignSpots({
   const put = useCallback(() => {
     if (timer.current) clearTimeout(timer.current)
     timer.current = null
+    holding(false)
     const next = moving.current
     moving.current = null
     if (next) void reshape(page, next.id, next.box).then(() => setPreview(null))
-  }, [page, reshape])
+  }, [page, reshape, holding])
   const { onFlush } = editor
   useEffect(() => onFlush(put), [onFlush, put])
   const display = (id: string, box: Box) => {
@@ -107,6 +110,7 @@ export function FormDesignSpots({
     display(id, next)
     if (timer.current) clearTimeout(timer.current)
     timer.current = setTimeout(put, 500)
+    holding(true)
   }
   const down = (event: PointerEvent, id: string, box: Box, handle?: Handle) => {
     if (event.button !== 0) return

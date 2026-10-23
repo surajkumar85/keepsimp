@@ -1,4 +1,5 @@
 import { test, expect, type Page } from "@playwright/test"
+import { openGroups } from "./settings"
 import {
   clip,
   download,
@@ -29,6 +30,7 @@ test("puts a soundtrack in place of a video's sound, played again until it ends"
   const music = toneFile("music.m4a", 880, 1.2)
   await page.goto(EDITOR)
   await page.locator("#video-file").setInputFiles([video])
+  await openGroups(page)
   await settled(page)
   await addSoundtrack(page, music)
   await expect(page.getByTestId("video-plan")).toContainText(
@@ -64,6 +66,7 @@ test("mixes a soundtrack under the video's own sound, quieter", async ({
   const music = toneFile("bed.m4a", 880, 5)
   await page.goto(EDITOR)
   await page.locator("#video-file").setInputFiles([video])
+  await openGroups(page)
   await settled(page)
   await addSoundtrack(page, music)
   await page
@@ -103,6 +106,7 @@ test("gives a silent video a soundtrack, as long as the video", async ({
   const music = toneFile("long.m4a", 660, 6)
   await page.goto(EDITOR)
   await page.locator("#video-file").setInputFiles([video])
+  await openGroups(page)
   await settled(page)
   await addSoundtrack(page, music)
   await expect(page.getByTestId("video-plan")).toContainText(

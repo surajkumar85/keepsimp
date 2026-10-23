@@ -28,11 +28,13 @@ import {
   IconTrash,
 } from "@tabler/icons-react"
 import { DropZone, FileInput } from "@/components/image-compressor/drop-zone"
+import { Section, SettingsCard } from "@/components/image-batch/controls"
 import { useDeviceLimits } from "@/components/pdf/use-device-limits"
 import { usePagePictures } from "@/components/pdf/use-page-pictures"
 import { usePdfReader } from "@/components/pdf/use-pdf-reader"
 import { PdfReader } from "@/components/pdf-reader/pdf-reader"
 import { Button, buttonVariants } from "@/components/ui/button"
+import { toast } from "@/components/ui/toast"
 import { sizeLabel } from "@/lib/image-compressor/formats"
 import { uniqueNames } from "@/lib/image-resizer/naming"
 import { createZip } from "@/lib/image-resizer/zip"
@@ -81,7 +83,13 @@ import {
   type Mode,
   type ScanChoice,
 } from "@/lib/pdf-compressor/settings"
+import {
+  EXTRAS_GROUPS,
+  levelChanged,
+  levelSummary,
+} from "@/lib/pdf-compressor/summary"
 import { mostWrites, stepCount } from "@/lib/pdf-compressor/target"
+import { changedGroups, resetAll } from "@/lib/settings-groups"
 import { limitBytes, type SizeUnit } from "@/lib/pdf-splitter/size"
 import { cn } from "cn"
 import { AuditCard } from "./audit-card"
@@ -95,6 +103,9 @@ const ACCEPT = "application/pdf,.pdf"
 const SAMPLE = "keepsimp-brochure.pdf"
 const SCAN_SAMPLE = "keepsimp-scan.pdf"
 const ZIP_NAME = "compressed-pdfs.zip"
+/** A size of one's own, as the field starts. */
+const SIZE_TEXT = "300"
+const SIZE_UNIT: SizeUnit = "KB"
 /** Results opened in the worker to be compared begin with this. */
 const AFTER_ID = "after-"
 
@@ -124,9 +135,9 @@ export function PdfCompressor() {
   const [state, dispatch] = useReducer(compressReducer, noFiles)
   const [mode, setMode] = useState<Mode>(defaultSettings.mode)
   const [size, setSize] = useState<SizeChoice>(String(defaultSettings.target))
-  const [sizeText, setSizeText] = useState("300")
-  const [sizeUnit, setSizeUnit] = useState<SizeUnit>("KB")
-  const [further, setFurther] = useState(false)
+  const [sizeText, setSizeText] = useState(SIZE_TEXT)
+  const [sizeUnit, setSizeUnit] = useState<SizeUnit>(SIZE_UNIT)
+  const [further, setFurther] = useState(defaultSettings.further)
   const [scans, setScans] = useState<ScanChoice>(defaultSettings.scans)
   const [custom, setCustom] = useState(defaultSettings.custom)
   const [extras, setExtras] = useState<Extras>(defaultExtras)
@@ -390,6 +401,8 @@ export function PdfCompressor() {
     const opens = (file: { password?: string }) =>
       lock ? lock.password : file.password
     let stopped = false
+    /** Files that came back with a result, smaller or not. */
+    let resulted = 0
     setFailure("")
     setAnnouncement(
       todo.length > 1 ? `Compressing ${todo.length} files.` : "Compressing."
@@ -475,6 +488,7 @@ export function PdfCompressor() {
         setResults((before) => ({ ...before, [slot(file.id, made)]: next }))
         if (file.id === live.current.state.active)
           setPage(out.report.check.low[0]?.page ?? 0)
+        resulted++
         if (todo.length === 1) {
           const gain = outcome(out.report.before, out.report.after)
           setAnnouncement(
@@ -482,10 +496,17 @@ export function PdfCompressor() {
               ? `Done. ${gain.percent}% smaller: ${sizeLabel(out.report.after)}.`
               : "Done. The file could not be made smaller."
           )
+          if (out.bytes)
+            toast.success("Your PDF is ready", {
+              description: `${gain.percent}% smaller: ${sizeLabel(out.report.after)}`,
+            })
+          else toast.info("The file could not be made smaller")
         }
       }
-      if (todo.length > 1 && !stopped)
+      if (todo.length > 1 && !stopped) {
         setAnnouncement(`Done. ${todo.length} files compressed.`)
+        if (resulted > 0) toast.success(`${plural(resulted, "PDF")} ready`)
+      }
     } finally {
       cancel.current = null
       setProgress(null)
@@ -518,6 +539,7 @@ export function PdfCompressor() {
       link.href = url
       link.download = ZIP_NAME
       link.click()
+      toast.info("Download started", { description: ZIP_NAME })
       // The browser has taken the file by the time this runs.
       setTimeout(() => URL.revokeObjectURL(url), 60_000)
     } catch {
@@ -691,6 +713,24 @@ export function PdfCompressor() {
           }))
         )
       : null
+  const changedCount =
+    (levelChanged(settings) ? 1 : 0) +
+    changedGroups(extras, defaultExtras, EXTRAS_GROUPS).length
+  /** Puts the level back, with the size and the settings of one's own. */
+  const resetLevel = () => {
+    setMode(defaultSettings.mode)
+    setSize(String(defaultSettings.target))
+    setSizeText(SIZE_TEXT)
+    setSizeUnit(SIZE_UNIT)
+    setFurther(defaultSettings.further)
+    setScans(defaultSettings.scans)
+    setCustom(defaultSettings.custom)
+  }
+  const resetAllSettings = () => {
+    resetLevel()
+    updateExtras(resetAll(defaultExtras, EXTRAS_GROUPS))
+    toast.info("Settings put back to the usual")
+  }
   const others =
     waiting.length > 0 &&
     Object.values(results).some((result) =>
@@ -777,27 +817,6 @@ export function PdfCompressor() {
       </div>
 
       <div className="space-y-4 lg:col-span-2 lg:row-span-2">
-        <LevelPanel
-          mode={mode}
-          onMode={setMode}
-          size={size}
-          onSize={setSize}
-          sizeText={sizeText}
-          onSizeText={setSizeText}
-          sizeUnit={sizeUnit}
-          onSizeUnit={setSizeUnit}
-          sizeWrong={mode === "size" && settings.target === null}
-          further={further}
-          onFurther={setFurther}
-          scans={scans}
-          onScans={setScans}
-          custom={custom}
-          onCustom={(change) =>
-            setCustom((before) => ({ ...before, ...change }))
-          }
-          disabled={compressing}
-        />
-
         <section
           className="space-y-4 rounded-xl border bg-card p-4 sm:p-5"
           aria-labelledby="compress-result"
@@ -1005,6 +1024,11 @@ export function PdfCompressor() {
                       <a
                         href={current.url}
                         download={current.name}
+                        onClick={() =>
+                          toast.info("Download started", {
+                            description: current.name,
+                          })
+                        }
                         // Merged, so the outline's border wins over the base's clear one.
                         className={cn(
                           buttonVariants({
@@ -1084,6 +1108,52 @@ export function PdfCompressor() {
             Files are compressed on your device and are not uploaded.
           </p>
         </section>
+
+        <SettingsCard
+          state={
+            compressing
+              ? "pending"
+              : ready.length > 0 && !waiting.length
+                ? "done"
+                : "idle"
+          }
+          pendingText="Compressing…"
+          doneText="Compressed with these settings"
+          changed={changedCount}
+          onResetAll={compressing ? undefined : resetAllSettings}
+          sticky={false}
+        >
+          <Section
+            title="How much to compress"
+            summary={levelSummary(settings)}
+            changed={levelChanged(settings)}
+            onReset={compressing ? undefined : resetLevel}
+          >
+            <LevelPanel
+              mode={mode}
+              onMode={setMode}
+              size={size}
+              onSize={setSize}
+              sizeText={sizeText}
+              onSizeText={setSizeText}
+              sizeUnit={sizeUnit}
+              onSizeUnit={setSizeUnit}
+              sizeWrong={mode === "size" && settings.target === null}
+              further={further}
+              onFurther={setFurther}
+              scans={scans}
+              onScans={setScans}
+              custom={custom}
+              onCustom={(change) =>
+                setCustom((before) => ({ ...before, ...change }))
+              }
+              disabled={compressing}
+            />
+          </Section>
+          {ready.length > 0 && (
+            <OptionsPanel extras={extras} update={updateExtras} />
+          )}
+        </SettingsCard>
       </div>
 
       <div className="min-w-0 space-y-4 lg:col-span-3">
@@ -1115,9 +1185,6 @@ export function PdfCompressor() {
             audit={current.report.audit}
             testId="audit-after"
           />
-        )}
-        {ready.length > 0 && (
-          <OptionsPanel extras={extras} update={updateExtras} />
         )}
       </div>
 

@@ -15,6 +15,7 @@ import {
   type Drawn,
 } from "../tests/pdf-pictures"
 import { readPdf, texts } from "../tests/pdf-reader"
+import { openGroups } from "./settings"
 import {
   bytesOf,
   drawnPage,
@@ -55,6 +56,8 @@ async function add(page: Page, ...files: Upload[]) {
   await expect(tool(page)).toHaveAttribute("data-ready", "true", {
     timeout: 60_000,
   })
+  // What is taken out and the password fold away at first.
+  await openGroups(page)
 }
 
 async function compress(page: Page) {
@@ -747,6 +750,7 @@ test("stays accessible, local and responsive", async ({ page }) => {
   expect((await scan()).violations).toEqual([])
   // So are settings of one's own, and the password fields.
   await level(page, "Custom").click()
+  await openGroups(page)
   await page
     .getByRole("switch", { name: "Lock the result with a password" })
     .click()

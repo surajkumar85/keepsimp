@@ -3,6 +3,7 @@ import { test, expect, type Download, type Page } from "@playwright/test"
 import AxeBuilder from "@axe-core/playwright"
 import { unzipSync } from "fflate"
 import sharp from "sharp"
+import { openGroup, openGroups } from "./settings"
 
 const ROUTE = "/dashboard/image-converter/"
 
@@ -17,6 +18,11 @@ type Upload = { name: string; mimeType: string; buffer: Buffer }
 
 async function upload(page: Page, ...files: Upload[]) {
   await page.locator("#converter-file").setInputFiles(files)
+  // Groups past the format and quality wait under their summaries until opened.
+  await expect(
+    page.locator("[data-slot=settings-section]").first()
+  ).toBeVisible()
+  await openGroups(page)
 }
 
 /** Wait until every image has a result for the current settings. */
@@ -234,6 +240,7 @@ test("converts one image to every format, keeping or filling transparency", asyn
     expect([decodedJxl.width, decodedJxl.height]).toEqual([64, 48])
 
   await chip(page, "Format", "PDF").click()
+  await openGroup(page, "PDF")
   await chip(page, "Background for transparency", "White").click()
   await chip(page, "Resolution (DPI)", "72").click()
   const pdf = await result(page)
@@ -331,6 +338,7 @@ test("makes favicons and PDF documents", async ({ page }) => {
   await page.goto(ROUTE)
   await upload(page, await photo(), await badge())
   await chip(page, "Format", "ICO").click()
+  await openGroup(page, "Icon")
   await toggle(page, "Icon sizes (px)", "16").click()
   await toggle(page, "Icon sizes (px)", "256").click()
   const icons = await zip(page)
@@ -350,6 +358,7 @@ test("makes favicons and PDF documents", async ({ page }) => {
   )
 
   await chip(page, "Format", "PDF").click()
+  await openGroup(page, "PDF")
   await chip(page, "Resolution (DPI)", "72").click()
   const separate = await zip(page)
   expect(Object.keys(separate)).toEqual(["photo.pdf", "badge.pdf"])
@@ -565,6 +574,7 @@ test("stays accessible, keyboard-friendly, local and responsive", async ({
   await page.getByRole("button", { name: "Try a sample" }).click()
   await expect(page.getByTestId("queue-item")).toHaveCount(2)
   await settled(page)
+  await openGroups(page)
 
   // Format chips are radios: arrow keys move the choice.
   await page

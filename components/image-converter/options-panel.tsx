@@ -1,7 +1,6 @@
 "use client"
 
 import { useId } from "react"
-import { IconLock } from "@tabler/icons-react"
 import { Section, ToggleRow } from "@/components/image-batch/controls"
 import { Button } from "@/components/ui/button"
 import { ChoiceChips } from "@/components/ui/choice-chips"
@@ -17,7 +16,8 @@ import {
 import { targets } from "@/lib/image-converter/targets"
 import { unknownTokens } from "@/lib/image-resizer/naming"
 import { dpiChoices } from "@/lib/image-resizer/units"
-import type { Update } from "./format-panel"
+import type { ConverterGroup } from "@/lib/image-converter/summary"
+import { groupProps, type Update } from "./format-panel"
 
 const qualityHints: Record<QualityChoice, string> = {
   balanced:
@@ -33,7 +33,12 @@ export function OptionsPanel({
   settings,
   update,
   exampleName,
+  usual,
+  onResetGroup,
 }: {
+  /** The usual settings, which "changed" and "Reset" are measured against. */
+  usual: ConverterSettings
+  onResetGroup: (group: ConverterGroup) => void
   settings: ConverterSettings
   update: Update
   exampleName: string | null
@@ -46,10 +51,13 @@ export function OptionsPanel({
   )
   const density = ["jpeg", "png", "bmp", "tiff"] as const
 
+  const group = (name: ConverterGroup) =>
+    groupProps(name, settings, usual, onResetGroup)
+
   return (
-    <div className="space-y-5 rounded-xl border bg-card p-4 sm:p-5">
+    <>
       {qualityApplies(settings) && (
-        <Section title="Quality">
+        <Section title="Quality" {...group("quality")}>
           <ChoiceChips
             label="Quality"
             hideLabel
@@ -93,7 +101,7 @@ export function OptionsPanel({
         </Section>
       )}
 
-      <Section title="Options">
+      <Section title="Options" {...group("options")}>
         {flattened.length > 0 && (
           <>
             <ChoiceChips
@@ -185,6 +193,9 @@ export function OptionsPanel({
             }))}
           />
         )}
+      </Section>
+
+      <Section title="Naming" {...group("names")}>
         <div className="space-y-2">
           <label
             htmlFor={`${ids}-pattern`}
@@ -239,11 +250,6 @@ export function OptionsPanel({
           </p>
         </div>
       </Section>
-
-      <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
-        <IconLock className="size-3.5" aria-hidden="true" />
-        Processed on your device. Metadata such as location is removed.
-      </p>
-    </div>
+    </>
   )
 }

@@ -29,7 +29,12 @@ import {
   IconTrash,
 } from "@tabler/icons-react"
 import { DropZone, FileInput } from "@/components/image-compressor/drop-zone"
-import { Section, ToggleRow } from "@/components/image-batch/controls"
+import {
+  Section,
+  SettingsCard,
+  ToggleRow,
+} from "@/components/image-batch/controls"
+import { toast } from "@/components/ui/toast"
 import { Button, buttonVariants } from "@/components/ui/button"
 import { ChoiceChips } from "@/components/ui/choice-chips"
 import { Input } from "@/components/ui/input"
@@ -79,6 +84,8 @@ import {
   type Limits,
   type MergeSettings,
 } from "@/lib/pdf-merger/settings"
+import { MERGE_GROUPS, pictureSummary } from "@/lib/pdf-merger/summary"
+import { changedGroups, resetAll } from "@/lib/settings-groups"
 import { FileList } from "./file-list"
 import { OutputPanel } from "./output-panel"
 import { PageGrid, type GridFile } from "./page-grid"
@@ -114,6 +121,9 @@ interface Result {
   locked: boolean
 }
 
+/** How pictures become pages, unless chosen otherwise. */
+const PICTURES = { page: "previous", margin: "small" } as const
+
 const plural = (count: number, word: string) =>
   `${count.toLocaleString("en")} ${word}${count === 1 ? "" : "s"}`
 
@@ -131,8 +141,10 @@ export function PdfMerger() {
   /** The pages as arranged by hand; null while they follow the file list. */
   const [arranged, setArranged] = useState<History<PageEntry[]> | null>(null)
   const [selection, setSelection] = useState<ReadonlySet<string>>(new Set())
-  const [picturePage, setPicturePage] = useState<PicturePage>("previous")
-  const [pictureMargin, setPictureMargin] = useState<PictureMargin>("small")
+  const [picturePage, setPicturePage] = useState<PicturePage>(PICTURES.page)
+  const [pictureMargin, setPictureMargin] = useState<PictureMargin>(
+    PICTURES.margin
+  )
   const [alternating, setAlternating] = useState(false)
   const [reverseLast, setReverseLast] = useState(false)
   const [resetting, setResetting] = useState(false)
@@ -522,6 +534,9 @@ export function PdfMerger() {
         setAnnouncement(
           `Merged ${plural(merged.pages, "page")} into one PDF. It is ready to download.`
         )
+        toast.success("Your PDF is ready", {
+          description: `${plural(merged.pages, "page")} · ${sizeLabel(blob.size)}`,
+        })
       })
       .catch((error: Error) => setFailure(error.message))
       .finally(() => {
@@ -759,6 +774,18 @@ export function PdfMerger() {
     )
 
   const used = usedFiles.size
+  const picturesChanged =
+    picturePage !== PICTURES.page || pictureMargin !== PICTURES.margin
+  const changedCount =
+    changedGroups(settings, defaultSettings, MERGE_GROUPS).length +
+    (hasPictures && picturesChanged ? 1 : 0)
+  // The file name is not a setting of the result's content, so it stays as typed.
+  const resetAllSettings = () => {
+    update(resetAll(defaultSettings, MERGE_GROUPS))
+    setPicturePage(PICTURES.page)
+    setPictureMargin(PICTURES.margin)
+    toast.info("Settings put back to the usual")
+  }
   const percent =
     progress && progress.total
       ? Math.round((progress.done / progress.total) * 100)
@@ -1093,6 +1120,11 @@ export function PdfMerger() {
                   href={current.url}
                   download={outputName(settings.name)}
                   className={buttonVariants({ size: "lg" })}
+                  onClick={() =>
+                    toast.info("Download started", {
+                      description: outputName(settings.name),
+                    })
+                  }
                 >
                   <IconDownload aria-hidden="true" /> Download PDF
                 </a>
@@ -1164,80 +1196,106 @@ export function PdfMerger() {
           </p>
         </section>
 
-        <StructurePanel
-          settings={settings}
-          update={update}
-          forms={state.files.some((file) => file.facts?.forms)}
-          attachments={state.files.reduce(
-            (sum, file) => sum + (file.facts?.attachments ?? 0),
-            0
-          )}
-        />
+        <SettingsCard
+          state={merging ? "pending" : current ? "done" : "idle"}
+          pendingText="Merging your PDF…"
+          doneText="Merged with these settings"
+          changed={changedCount}
+          onResetAll={merging ? undefined : resetAllSettings}
+          sticky={false}
+        >
+          <StructurePanel
+            settings={settings}
+            update={update}
+            forms={state.files.some((file) => file.facts?.forms)}
+            attachments={state.files.reduce(
+              (sum, file) => sum + (file.facts?.attachments ?? 0),
+              0
+            )}
+          />
 
-        {hasPictures && (
-          <div
-            className="space-y-5 rounded-xl border bg-card p-4 sm:p-5"
-            data-testid="picture-options"
-          >
-            <Section title="Pictures as pages">
-              <ChoiceChips
-                label="Page size"
-                value={picturePage}
-                onValueChange={setPicturePage}
-                options={[
-                  { value: "previous", label: "Like the page before" },
-                  { value: "fit", label: "Fit the picture" },
-                  { value: "a4", label: "A4" },
-                  { value: "letter", label: "Letter" },
-                ]}
-                hint={
-                  picturePage === "previous"
-                    ? "A picture takes the size of the page before it, or A4 when none comes before. The sheet is turned to suit the picture."
-                    : picturePage === "fit"
-                      ? "The page is exactly as large as the picture, at 150 pixels to the inch."
-                      : "The sheet is turned to suit the picture."
-                }
-              />
-              {picturePage !== "fit" && (
+          {hasPictures && (
+            <div
+              className="border-t first:border-t-0"
+              data-testid="picture-options"
+            >
+              <Section
+                title="Pictures as pages"
+                summary={pictureSummary(picturePage, pictureMargin)}
+                changed={picturesChanged}
+                onReset={() => {
+                  setPicturePage(PICTURES.page)
+                  setPictureMargin(PICTURES.margin)
+                }}
+              >
                 <ChoiceChips
-                  label="Margin"
-                  value={pictureMargin}
-                  onValueChange={setPictureMargin}
+                  label="Page size"
+                  value={picturePage}
+                  onValueChange={setPicturePage}
                   options={[
-                    { value: "none", label: "None" },
-                    { value: "small", label: "Small" },
-                    { value: "normal", label: "Normal" },
+                    { value: "previous", label: "Like the page before" },
+                    { value: "fit", label: "Fit the picture" },
+                    { value: "a4", label: "A4" },
+                    { value: "letter", label: "Letter" },
                   ]}
+                  hint={
+                    picturePage === "previous"
+                      ? "A picture takes the size of the page before it, or A4 when none comes before. The sheet is turned to suit the picture."
+                      : picturePage === "fit"
+                        ? "The page is exactly as large as the picture, at 150 pixels to the inch."
+                        : "The sheet is turned to suit the picture."
+                  }
                 />
-              )}
-              <p className="text-xs text-muted-foreground">
-                JPEG photographs go in as they are, without being compressed
-                again. See-through parts of other pictures become white.
-              </p>
-            </Section>
-          </div>
-        )}
+                {picturePage !== "fit" && (
+                  <ChoiceChips
+                    label="Margin"
+                    value={pictureMargin}
+                    onValueChange={setPictureMargin}
+                    options={[
+                      { value: "none", label: "None" },
+                      { value: "small", label: "Small" },
+                      { value: "normal", label: "Normal" },
+                    ]}
+                  />
+                )}
+                <p className="text-xs text-muted-foreground">
+                  JPEG photographs go in as they are, without being compressed
+                  again. See-through parts of other pictures become white.
+                </p>
+              </Section>
+            </div>
+          )}
 
-        <PrintPanel
-          settings={settings}
-          update={update}
-          arranged={arranged !== null}
-        />
+          <PrintPanel
+            settings={settings}
+            update={update}
+            arranged={arranged !== null}
+          />
 
-        <OutputPanel settings={settings} update={update} first={firstDetails} />
+          <OutputPanel
+            settings={settings}
+            update={update}
+            first={firstDetails}
+          />
 
-        <section className="space-y-2 rounded-xl border bg-card p-4 text-sm sm:p-5">
-          <h2 className="font-heading text-base font-medium">What is kept</h2>
-          <ul className="list-disc space-y-1 pl-5 text-muted-foreground">
-            <li>Every page as it is: text, pictures, fonts and page sizes.</li>
-            <li>Links, notes, fillable fields and layers.</li>
-            <li>Bookmarks, organised the way you choose above.</li>
-            <li>
-              Fonts and pictures that files share are stored once, so the result
-              is often smaller than the files together.
-            </li>
-          </ul>
-        </section>
+          <Section
+            title="What is kept"
+            summary="Pages, links, notes, fields and layers"
+            defaultOpen={false}
+          >
+            <ul className="list-disc space-y-1 pl-5 text-sm text-muted-foreground">
+              <li>
+                Every page as it is: text, pictures, fonts and page sizes.
+              </li>
+              <li>Links, notes, fillable fields and layers.</li>
+              <li>Bookmarks, organised the way you choose above.</li>
+              <li>
+                Fonts and pictures that files share are stored once, so the
+                result is often smaller than the files together.
+              </li>
+            </ul>
+          </Section>
+        </SettingsCard>
       </div>
     </div>
   )

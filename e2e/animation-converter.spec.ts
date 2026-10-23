@@ -3,6 +3,7 @@ import AxeBuilder from "@axe-core/playwright"
 import { unzipSync } from "fflate"
 import sharp from "sharp"
 import UPNG from "upng-js"
+import { openGroups } from "./settings"
 
 const ROUTE = "/dashboard/animation-converter/"
 const WIDTH = 64
@@ -134,6 +135,21 @@ async function read(format: Format, bytes: Buffer) {
 
 async function upload(page: Page, ...files: Upload[]) {
   await page.locator("#animation-file").setInputFiles(files)
+  await unfold(page)
+}
+
+/**
+ * Opens every folded group of settings once the selected animation has
+ * been read, so that its trim is there too. A group stays open for as
+ * long as the page is.
+ */
+async function unfold(page: Page) {
+  await expect(
+    page
+      .locator("[data-slot=settings-section]")
+      .getByRole("button", { name: "Trim", exact: true })
+  ).toBeVisible({ timeout: 60_000 })
+  await openGroups(page)
 }
 
 /** Wait until every animation has a result for the current settings. */
@@ -829,6 +845,7 @@ test("stays accessible, keyboard-friendly, local and responsive", async ({
   await page.goto(ROUTE)
   await page.getByRole("button", { name: "Try a sample" }).click()
   await expect(page.getByTestId("queue-item")).toHaveCount(2)
+  await unfold(page)
   await settled(page)
 
   // With reduced motion the preview starts paused, on a single frame.
@@ -1372,6 +1389,7 @@ test("fits a file under a size limit and says what it changed", async ({
   await page.goto(ROUTE)
   await page.getByRole("button", { name: "Try a sample" }).click()
   await expect(page.getByTestId("queue-item")).toHaveCount(2)
+  await unfold(page)
   await page.getByRole("button", { name: "Remove keepsimp-pulse.webp" }).click()
   await chip(page, "Format", "GIF").click()
   const free = await result(page, "gif")
@@ -1538,7 +1556,7 @@ test("limits length, crops to a shape and compares formats", async ({
 
   // Reset removes the crop.
   await page.getByRole("button", { name: "Change the crop" }).click()
-  await page.getByRole("button", { name: "Reset" }).click()
+  await page.getByRole("button", { name: "Reset crop" }).click()
   await page.getByRole("button", { name: "Done" }).click()
   await expect(page.getByTestId("crop-note")).toHaveCount(0)
   const whole = await result(page, "webp")

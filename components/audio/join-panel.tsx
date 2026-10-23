@@ -9,6 +9,7 @@ import {
 } from "@tabler/icons-react"
 import { ToggleRow } from "@/components/image-batch/controls"
 import { Button, buttonVariants } from "@/components/ui/button"
+import { toast } from "@/components/ui/toast"
 import { ChoiceChips } from "@/components/ui/choice-chips"
 import { clockLabel, timeLabel } from "@/lib/audio/labels"
 import { CROSSFADES, GAPS, type Joining } from "@/lib/audio/join"
@@ -235,6 +236,9 @@ export function JoinPanel({
             download={result.name}
             className={buttonVariants()}
             data-testid="join-download"
+            onClick={() =>
+              toast.success("Download started", { description: result.name })
+            }
           >
             <IconDownload data-icon="inline-start" aria-hidden="true" />
             Download the joined file

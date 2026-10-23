@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises"
 import { test, expect, type Download, type Page } from "@playwright/test"
 import AxeBuilder from "@axe-core/playwright"
 import sharp from "sharp"
+import { openGroups } from "./settings"
 
 const ROUTE = "/dashboard/image-compressor/"
 
@@ -79,6 +80,9 @@ test("compresses a photo with smart defaults and compares before downloading", a
   await expect(page.getByTestId("file-bar")).toContainText("holiday.jpg")
   await expect(page.getByTestId("file-bar")).toContainText("1600 × 1200 px")
   const { buffer, name, meta } = await download(page)
+  await expect(
+    page.getByTestId("toast").filter({ hasText: "Download started" })
+  ).toBeVisible()
   expect(name).toBe("holiday-keepsimp.jpg")
   expect(meta).toMatchObject({ format: "jpeg", width: 1600, height: 1200 })
   expect(buffer.byteLength).toBeLessThan(source.byteLength)
@@ -159,6 +163,9 @@ test("every output format writes real bytes and handles transparency", async ({
 test("resizes, crops and rotates to exact pixel sizes", async ({ page }) => {
   await page.goto(ROUTE)
   await upload(page, "scene.jpg", await photo(800, 600, 90), "image/jpeg")
+  // Size and crop wait under their summaries until opened.
+  await expect(page.getByTestId("file-bar")).toContainText("800 × 600 px")
+  await openGroups(page)
   const sizeOf = async () => {
     const { meta } = await download(page)
     return [meta.width, meta.height]
@@ -210,6 +217,12 @@ test("resizes, crops and rotates to exact pixel sizes", async ({ page }) => {
     page.getByRole("button", { name: "Flip horizontally" })
   ).toHaveAttribute("aria-pressed", "true")
   expect(await sizeOf()).toEqual([600, 800])
+
+  // One press puts every group back to how the image started.
+  await page.getByRole("button", { name: "Reset all" }).click()
+  await expect(chip(page, "Output size", "Original")).toBeChecked()
+  expect(await sizeOf()).toEqual([800, 600])
+  await expect(page.getByRole("button", { name: "Reset all" })).toHaveCount(0)
 })
 
 test("reaches a file-size target", async ({ page }) => {
@@ -294,6 +307,11 @@ test("accepts dropped files, cancels long jobs and resumes", async ({
   await expect(page.getByTestId("file-bar")).toContainText("dropped.jpg")
   await settled(page)
   await chip(page, "Output format", "AVIF").click()
+  // The press is answered at once, before the new file is made.
+  await expect(page.locator("[data-slot=settings-state]")).toHaveAttribute(
+    "data-state",
+    "pending"
+  )
   await page.getByRole("button", { name: "Cancel" }).click()
   await expect(page.getByText("Compression cancelled")).toBeVisible()
   await chip(page, "Output format", "WebP").click()

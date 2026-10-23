@@ -3,6 +3,7 @@ import tokens from "@/design-system/tokens.json"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { ChoiceChipsDemo } from "@/components/choice-chips-demo"
+import { SettingsDemo } from "@/components/settings-demo"
 
 export const metadata: Metadata = {
   title: "Design reference",
@@ -150,6 +151,12 @@ export default function DesignSystem() {
         </div>
         <div className="mt-6 max-w-md" data-testid="choice-chips-example">
           <ChoiceChipsDemo />
+        </div>
+        <div className="mt-6 max-w-md" data-testid="settings-example">
+          <h3 className="mb-3 font-heading text-base font-medium">
+            Settings that fold, and feedback
+          </h3>
+          <SettingsDemo />
         </div>
       </section>
       <div className="rounded-xl border bg-accent p-4">

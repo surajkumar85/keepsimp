@@ -3,6 +3,7 @@ import AxeBuilder from "@axe-core/playwright"
 import { danglingRefs, readPdf } from "../tests/pdf-reader"
 import { makeRedactPdf, PLACES, REDACT, REDACT_PAGE } from "../tests/pdf-redact"
 import { bytesOf, pdf, reader, readerReady, type Upload } from "./pdf"
+import { openGroup } from "./settings"
 
 const ROUTE = "/dashboard/pdf-editor/"
 const TOOL = "Redact: take out for good"
@@ -265,6 +266,8 @@ test("leaves the file's details and attached files out of the download when aske
   )
   await page.getByRole("button", { name: "Close the editor" }).click()
   const card = tool(page)
+  // On the editor's own page, what else is left out is folded.
+  await openGroup(page, "Leave out of the result")
   await card
     .getByRole("switch", { name: "Title, author and other details" })
     .click()

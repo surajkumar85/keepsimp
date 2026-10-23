@@ -3,9 +3,18 @@
 import { Section, ToggleRow } from "@/components/image-batch/controls"
 import { LockFields } from "@/components/pdf/lock-fields"
 import { ChoiceChips } from "@/components/ui/choice-chips"
-import type { SplitOptions } from "@/lib/pdf-splitter/options"
+import { defaultOptions, type SplitOptions } from "@/lib/pdf-splitter/options"
+import {
+  SPLIT_GROUPS,
+  splitSummary,
+  type SplitGroup,
+} from "@/lib/pdf-splitter/summary"
+import { differs, resetOf } from "@/lib/settings-groups"
 
-/** What every part keeps of the file it came from, and, when wanted, a password. */
+/**
+ * What every part keeps of the file it came from, and, when wanted, a
+ * password. What is kept is open; the password folds under its summary.
+ */
 export function OptionsPanel({
   options,
   update,
@@ -13,12 +22,15 @@ export function OptionsPanel({
   options: SplitOptions
   update: (change: Partial<SplitOptions>) => void
 }) {
+  const group = (name: SplitGroup, open: boolean) => ({
+    summary: splitSummary(name, options),
+    changed: differs(options, defaultOptions, SPLIT_GROUPS[name]),
+    onReset: () => update(resetOf(defaultOptions, SPLIT_GROUPS[name])),
+    defaultOpen: open,
+  })
   return (
-    <div
-      className="space-y-5 rounded-xl border bg-card p-4 sm:p-5"
-      data-testid="split-options"
-    >
-      <Section title="What each part keeps">
+    <div data-testid="split-options">
+      <Section title="What each part keeps" {...group("keeps", true)}>
         <ToggleRow
           label="Bookmarks"
           hint="Those that lead to the part's own pages."
@@ -49,7 +61,7 @@ export function OptionsPanel({
           hint="Attached files are stored whole in each part that carries them."
         />
       </Section>
-      <Section title="Password">
+      <Section title="Password" {...group("password", false)}>
         <LockFields
           settings={options}
           update={update}

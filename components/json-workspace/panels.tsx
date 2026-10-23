@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { ChoiceChips } from "@/components/ui/choice-chips"
 import { WorkspaceTabPanel } from "@/components/ui/workspace-tabs"
+import { cn } from "cn"
 import { CodeEditor } from "./code-editor"
 import type { JsonJob, JsonResult } from "@/lib/json-workspace/protocol"
 import type { Transform } from "@/lib/json-workspace/transforms"
@@ -208,6 +209,7 @@ export function ExplorePanel({
   offset,
   setOffset,
   copy,
+  checking = false,
 }: Props & {
   inspection: JsonResult | null
   expanded: string[]
@@ -217,6 +219,8 @@ export function ExplorePanel({
   offset: number
   setOffset: (value: number) => void
   copy: (text: string, label?: string) => Promise<void>
+  /** A change waits to be checked: the tree shown is the last one, dimmed until the new one comes. */
+  checking?: boolean
 }) {
   const [view, setView] = useState("tree")
   const [table, setTable] = useScopedResult<JsonResult["table"]>(input)
@@ -267,8 +271,12 @@ export function ExplorePanel({
             />
           </div>
           <div
-            className="max-h-96 overflow-auto rounded-lg border"
+            className={cn(
+              "max-h-96 overflow-auto rounded-lg border transition-opacity motion-reduce:transition-none",
+              checking && "opacity-60"
+            )}
             aria-label="JSON tree"
+            aria-busy={checking || undefined}
           >
             {inspection?.rows?.map((row, index) => (
               <div

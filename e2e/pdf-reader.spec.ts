@@ -1,3 +1,4 @@
+import { openGroup } from "./settings"
 import { test, expect, type Page } from "@playwright/test"
 import AxeBuilder from "@axe-core/playwright"
 import { readFile } from "node:fs/promises"
@@ -457,6 +458,7 @@ test("reads a merged file that is locked with a password, and a file once it is 
   await expect(drawnPage(page, 1)).toBeVisible({ timeout: 30_000 })
   await page.keyboard.press("Escape")
 
+  await openGroup(page, "Password")
   await page
     .getByRole("switch", { name: "Lock the merged PDF with a password" })
     .click()

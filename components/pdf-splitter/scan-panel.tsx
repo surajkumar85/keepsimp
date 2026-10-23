@@ -1,7 +1,11 @@
 "use client"
 
 import { useEffect, useId, useRef, useState, type PointerEvent } from "react"
-import { IconChevronLeft, IconChevronRight } from "@tabler/icons-react"
+import {
+  IconChevronLeft,
+  IconChevronRight,
+  IconLoader2,
+} from "@tabler/icons-react"
 import { ToggleRow } from "@/components/image-batch/controls"
 import type { ReaderSource } from "@/components/pdf-reader/types"
 import { Button } from "@/components/ui/button"
@@ -340,6 +344,7 @@ export function TextRules({
   onFront,
   hasFront,
   status,
+  searching = false,
   file,
   pages,
   source,
@@ -357,6 +362,8 @@ export function TextRules({
   /** There are pages before the first page that holds the words. */
   hasFront: boolean
   status: string
+  /** Words are typed but not yet looked for, or are being looked for. */
+  searching?: boolean
   /** The file shown, and how many pages it has. */
   file: string | null
   pages: number
@@ -428,7 +435,18 @@ export function TextRules({
           reads={reads}
         />
       ) : null}
-      <p role="status" className="text-sm" data-testid="text-status">
+      <p
+        role="status"
+        className="flex items-center gap-1.5 text-sm"
+        data-testid="text-status"
+        data-searching={searching || undefined}
+      >
+        {searching && (
+          <IconLoader2
+            className="size-4 shrink-0 animate-spin text-primary motion-reduce:animate-none"
+            aria-hidden="true"
+          />
+        )}
         {status}
       </p>
       <p className="text-xs text-muted-foreground">

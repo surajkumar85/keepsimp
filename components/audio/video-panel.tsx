@@ -9,6 +9,7 @@ import {
 } from "@tabler/icons-react"
 import { ToggleRow } from "@/components/image-batch/controls"
 import { Button, buttonVariants } from "@/components/ui/button"
+import { toast } from "@/components/ui/toast"
 import { ChoiceChips } from "@/components/ui/choice-chips"
 import type { Cover } from "@/lib/audio/tags"
 import { clock } from "@/lib/audio/transcript"
@@ -136,8 +137,12 @@ export function VideoPanel({ source }: { source: VideoSource }) {
           stop.current?.()
           stop.current = null
           setProgress(null)
-          if (message.type === "error") setProblem(message.message)
-          else if (!message.check.video || !message.check.audio)
+          if (message.type === "error") {
+            setProblem(message.message)
+            toast.error("The video could not be made", {
+              description: message.message,
+            })
+          } else if (!message.check.video || !message.check.audio)
             setProblem(
               "The video was written without its picture or its sound, so it is not offered."
             )
@@ -151,6 +156,9 @@ export function VideoPanel({ source }: { source: VideoSource }) {
             const { video } = message
             const type = video.container === "mp4" ? "video/mp4" : "video/webm"
             const blob = new Blob([video.bytes as BlobPart], { type })
+            toast.success("Your video is ready", {
+              description: `${clock(message.check.seconds)} · ${sizeLabel(blob.size)}`,
+            })
             setMade({
               url: URL.createObjectURL(blob),
               downloadUrl: URL.createObjectURL(
@@ -339,6 +347,9 @@ export function VideoPanel({ source }: { source: VideoSource }) {
             download={made.name}
             className={buttonVariants()}
             data-testid="video-download"
+            onClick={() =>
+              toast.success("Download started", { description: made.name })
+            }
           >
             <IconDownload data-icon="inline-start" aria-hidden="true" />
             Download {made.name}
