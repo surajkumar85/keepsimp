@@ -14,6 +14,7 @@ describe("doors", () => {
     expect(doors.map((tool) => tool.id)).toEqual([
       "video-converter",
       "video-compressor",
+      "video-trimmer",
       "audio-converter",
       "audio-extractor",
       "audio-trimmer",

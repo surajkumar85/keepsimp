@@ -93,10 +93,22 @@ export const tools: readonly Tool[] = [
   {
     id: "video-trimmer",
     name: "Video trimmer",
-    description: "Keep the moments that matter.",
+    description:
+      "Cut a video to the moments you want, to the frame or without encoding, and save any frame as a picture, on your device.",
+    partOf: "video-editor",
     category: "video",
-    keywords: ["cut", "clip", "trim"],
-    status: "planned",
+    keywords: [
+      "cut",
+      "clip",
+      "trim",
+      "trim video",
+      "cut video",
+      "cut mp4",
+      "lossless cut",
+      "video frame to image",
+      "screenshot from video",
+    ],
+    status: "available",
   },
   {
     id: "audio-editor",

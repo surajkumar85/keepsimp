@@ -667,3 +667,206 @@ describe("a size limit", () => {
       )
   })
 })
+
+describe("cutting", () => {
+  const keyed = withVideo({ keyframes: [0, 2, 4, 6, 8] })
+  const exact = (parts: { start: number; end: number }[]) => ({
+    parts,
+    exact: true,
+  })
+  const lossless = (parts: { start: number; end: number }[]) => ({
+    parts,
+    exact: false,
+  })
+
+  it("keeps the whole file when nothing is cut, and refuses cutting everything", () => {
+    const plan = planFor(
+      keyed,
+      defaultSettings,
+      all,
+      undefined,
+      lossless([{ start: 0, end: 10 }])
+    )
+    expect(plan.cut).toBeNull()
+    expect(plan.length).toBe(10)
+    expect(
+      planFor(keyed, defaultSettings, all, undefined, lossless([])).problem
+    ).toBe("Everything is cut out. Keep at least a part.")
+  })
+
+  it("copies one part into an MP4, the edit list starting it where asked, ending on a keyframe", () => {
+    const plan = planFor(
+      keyed,
+      defaultSettings,
+      all,
+      undefined,
+      lossless([{ start: 2.5, end: 7.25 }])
+    )
+    expect(plan.cut).toEqual({
+      mode: "copy",
+      parts: [{ start: 2.5, end: 8 }],
+    })
+    expect(plan.video).toEqual({ action: "copy" })
+    expect(plan.audio).toEqual({ action: "copy" })
+    // It starts where asked and ends on the next keyframe.
+    expect(plan.length).toBe(5.5)
+    expect(plan.estimate).toBe(Math.round(10_000_000 * 0.55))
+    expect(plan.notes).toContain(
+      "It is cut without encoding: the file says where to start playing, and a copy ends where the video holds a whole picture (a keyframe), so 0.8 s more is kept at the end. Choose Exact to cut to the frame."
+    )
+  })
+
+  it("says nothing is lost when the end is on a keyframe already", () => {
+    const plan = planFor(
+      keyed,
+      defaultSettings,
+      all,
+      undefined,
+      lossless([{ start: 2.5, end: 8 }])
+    )
+    expect(plan.cut).toEqual({ mode: "copy", parts: [{ start: 2.5, end: 8 }] })
+    expect(plan.notes).toContain(
+      "It is cut without encoding: the file says where to start playing, so nothing is lost."
+    )
+  })
+
+  it("snaps one part to keyframes in MKV, and says how much more it keeps", () => {
+    const plan = planFor(
+      keyed,
+      set({ format: "mkv" }),
+      all,
+      undefined,
+      lossless([{ start: 2.5, end: 7.25 }])
+    )
+    expect(plan.cut).toEqual({ mode: "copy", parts: [{ start: 2, end: 8 }] })
+    expect(plan.length).toBe(6)
+    expect(plan.notes).toContain(
+      "Copied without encoding, a part can only begin and end where the video holds a whole picture (a keyframe), so 1.3 s more is kept around the cuts. Choose Exact to cut to the frame."
+    )
+  })
+
+  it("joins several parts by copying, each from a keyframe", () => {
+    const plan = planFor(
+      keyed,
+      defaultSettings,
+      all,
+      undefined,
+      lossless([
+        { start: 0, end: 2 },
+        { start: 6, end: 8 },
+      ])
+    )
+    expect(plan.cut).toEqual({
+      mode: "join",
+      parts: [
+        { start: 0, end: 2 },
+        { start: 6, end: 8 },
+      ],
+    })
+    expect(plan.notes).toContain(
+      "Its parts are joined without encoding, so nothing is lost."
+    )
+  })
+
+  it("cuts to the frame where copying cannot", () => {
+    const parts = [
+      { start: 1, end: 3 },
+      { start: 5, end: 7 },
+    ]
+    // No keyframes known.
+    const unknown = planFor(
+      clip,
+      defaultSettings,
+      all,
+      undefined,
+      lossless(parts)
+    )
+    expect(unknown.cut?.mode).toBe("exact")
+    expect(unknown.notes[0]).toMatch(
+      /because it can be cut only by encoding here\.$/
+    )
+    // Sound an MP4 does not copy cannot be joined by copying.
+    const opus = planFor(
+      { ...keyed, audio: { ...keyed.audio!, codec: "opus" } },
+      defaultSettings,
+      all,
+      undefined,
+      lossless(parts)
+    )
+    expect(opus.cut?.mode).toBe("exact")
+    // One part in MKV with no keyframes known.
+    expect(
+      planFor(
+        clip,
+        set({ format: "mkv" }),
+        all,
+        undefined,
+        lossless([{ start: 1, end: 3 }])
+      ).cut?.mode
+    ).toBe("exact")
+  })
+
+  it("cuts to the frame when asked, the sound with it", () => {
+    const plan = planFor(
+      keyed,
+      defaultSettings,
+      all,
+      undefined,
+      exact([{ start: 2.5, end: 7.25 }])
+    )
+    expect(plan.cut).toEqual({
+      mode: "exact",
+      parts: [{ start: 2.5, end: 7.25 }],
+    })
+    expect(plan.video).toMatchObject({ action: "encode", codec: "avc" })
+    expect(plan.audio).toMatchObject({ action: "encode", codec: "aac" })
+    expect(plan.notes[0]).toMatch(/because it is cut exactly where asked\.$/)
+    // Another reason to encode needs no reason of its own for the cut.
+    const smaller = planFor(
+      keyed,
+      set({ quality: "small" }),
+      all,
+      undefined,
+      lossless([{ start: 1, end: 9 }])
+    )
+    expect(smaller.cut?.mode).toBe("exact")
+    expect(smaller.notes[0]).toMatch(/because the quality was chosen\.$/)
+    // A picture alone joins by copying, whatever the sound would need.
+    expect(
+      planFor(
+        { ...keyed, audio: null },
+        defaultSettings,
+        all,
+        undefined,
+        lossless([
+          { start: 0.5, end: 1.5 },
+          { start: 6.5, end: 7 },
+        ])
+      ).cut?.mode
+    ).toBe("join")
+  })
+
+  it("fits what is kept under a limit", () => {
+    const MB = 1024 * 1024
+    const long = { ...keyed, duration: 120, size: 200 * MB }
+    const half = planFor(
+      long,
+      set({ limit: { bytes: 25 * MB } }),
+      all,
+      undefined,
+      exact([{ start: 0, end: 60 }])
+    )
+    // A minute in 25 MB keeps 1080p.
+    expect(half.video).toMatchObject({ width: 1920, target: 25 * MB })
+    expect(half.length).toBe(60)
+    // A part already under the limit is copied.
+    const small = planFor(
+      long,
+      set({ limit: { bytes: 25 * MB } }),
+      all,
+      undefined,
+      lossless([{ start: 0, end: 4 }])
+    )
+    expect(small.video).toEqual({ action: "copy" })
+  })
+})

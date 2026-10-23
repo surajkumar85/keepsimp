@@ -6,17 +6,17 @@ test("tools are grouped, coloured by kind, and follow validated category URLs", 
   page,
 }) => {
   await page.goto("/dashboard/")
-  await expect(page.getByTestId("tool-card")).toHaveCount(13)
-  // What works comes first; what is still to come is kept apart and quiet.
+  await expect(page.getByTestId("tool-card")).toHaveCount(12)
+  // What works comes first; what is still to come is kept apart and quiet
+  // (nothing is, now that every tool is built).
   const ready = page.getByTestId("tools-ready")
   const planned = page.getByTestId("tools-planned")
   await expect(ready.getByRole("heading", { level: 3 }).first()).toContainText(
     "Ready to use"
   )
   await expect(ready.getByTestId("tool-card")).toHaveCount(12)
-  await expect(planned.getByTestId("tool-card")).toHaveCount(1)
+  await expect(planned).toHaveCount(0)
   await expect(ready.getByRole("link")).toHaveCount(12)
-  await expect(planned.getByRole("link")).toHaveCount(0)
   // Each kind of tool has its own colour, taken from the tokens.
   const colourOf = (name: string) =>
     ready
@@ -41,13 +41,13 @@ test("tools are grouped, coloured by kind, and follow validated category URLs", 
   await expect(card).not.toHaveCSS("box-shadow", "none")
 
   await page.goto("/dashboard/?category=video")
-  await expect(page.getByTestId("tool-card")).toHaveCount(2)
-  // The Video editor is ready (its doors are not cards); the trimmer is still to come.
+  await expect(page.getByTestId("tool-card")).toHaveCount(1)
+  // The Video editor is ready; its doors are not cards.
   await expect(
     page.getByTestId("tools-ready").getByTestId("tool-card")
   ).toHaveText([/Video editor/])
   await page.goto("/dashboard/?category=invalid")
-  await expect(page.getByTestId("tool-card")).toHaveCount(13)
+  await expect(page.getByTestId("tool-card")).toHaveCount(12)
 })
 
 test("the search in the top bar finds tools and opens them", async ({
@@ -73,13 +73,10 @@ test("the search in the top bar finds tools and opens them", async ({
   await box.fill("nonexistent")
   await expect(dialog).toContainText("No tools found")
   await expect(options).toHaveCount(0)
-  // A tool that is not built yet is listed, but cannot be chosen.
+  // A page that opens a tool for one job is found by its own name.
   await box.fill("video trimmer")
   await expect(options).toHaveCount(1)
-  await expect(options).toHaveAttribute("aria-disabled", "true")
-  await expect(options).toContainText("Coming soon")
-  await box.press("Enter")
-  await expect(dialog).toBeVisible()
+  await expect(options).not.toHaveAttribute("aria-disabled", "true")
 
   // Arrow keys move between tools that can be opened, going round at the ends.
   await box.fill("pdf")

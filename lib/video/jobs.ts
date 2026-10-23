@@ -7,6 +7,7 @@ import type { ConvertJob, ReadJob } from "./protocol"
 import { planKey } from "./queue"
 import {
   planFor,
+  type Cut,
   type Plan,
   type SoundCodec,
   type VideoCodec,
@@ -31,14 +32,16 @@ export async function browserPlan(
   facts: VideoFacts,
   settings: VideoSettings,
   ask: Asker,
-  known = new Map<string, boolean>()
+  known = new Map<string, boolean>(),
+  cut: Cut | null = null
 ): Promise<Plan> {
   const sounds = new Map<SoundCodec, boolean>([["aac", true]])
   let plan = planFor(
     facts,
     settings,
     (codec, width, height) => known.get(`${codec}@${width}x${height}`) ?? null,
-    (codec) => sounds.get(codec) ?? null
+    (codec) => sounds.get(codec) ?? null,
+    cut
   )
   for (let round = 0; round < MOST_ROUNDS; round++) {
     const waiting = plan.pending[0]
@@ -58,7 +61,8 @@ export async function browserPlan(
       settings,
       (codec, width, height) =>
         known.get(`${codec}@${width}x${height}`) ?? null,
-      (codec) => sounds.get(codec) ?? null
+      (codec) => sounds.get(codec) ?? null,
+      cut
     )
   }
   return plan

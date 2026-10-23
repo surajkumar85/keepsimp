@@ -9,6 +9,7 @@ import { bytesOf, type Upload } from "./pdf"
 export const EDITOR = "/dashboard/video-editor/"
 export const CONVERTER = "/dashboard/video-converter/"
 export const COMPRESSOR = "/dashboard/video-compressor/"
+export const TRIMMER = "/dashboard/video-trimmer/"
 export const folder = mkdtempSync(join(tmpdir(), "keepsimp-video-e2e-"))
 
 export const workspace = (page: Page) => page.getByTestId("video-workspace")
@@ -121,6 +122,54 @@ export function packets(bytes: Uint8Array, name: string, stream: "v" | "a") {
     .split("\n")
     .filter((line) => line && !line.startsWith("#"))
     .map((line) => line.split(",")[5].trim())
+}
+
+/** Hashes of every frame FFmpeg decodes, as it is shown (edit lists followed). */
+export function frameHashes(bytes: Uint8Array, name: string) {
+  const path = join(folder, name)
+  writeFileSync(path, bytes)
+  return execFileSync("ffmpeg", [
+    "-v",
+    "error",
+    "-i",
+    path,
+    "-map",
+    "0:v:0",
+    "-fps_mode",
+    "passthrough",
+    "-f",
+    "framemd5",
+    "-",
+  ])
+    .toString()
+    .split("\n")
+    .filter((line) => line && !line.startsWith("#"))
+    .map((line) => line.split(",")[5].trim())
+}
+
+/** One stream's length in seconds, as FFprobe reads it. */
+export function streamSeconds(
+  bytes: Uint8Array,
+  name: string,
+  stream: "v" | "a"
+) {
+  const path = join(folder, name)
+  writeFileSync(path, bytes)
+  return Number(
+    execFileSync("ffprobe", [
+      "-v",
+      "error",
+      "-select_streams",
+      `${stream}:0`,
+      "-show_entries",
+      "stream=duration",
+      "-of",
+      "csv=p=0",
+      path,
+    ])
+      .toString()
+      .trim()
+  )
 }
 
 /** The order of an MP4's top boxes: the index first means fast start. */

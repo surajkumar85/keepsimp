@@ -8,7 +8,52 @@ import { containerLabels, outputInfo, type Container } from "./formats"
 import type { IndexPlace } from "./protocol"
 import { videoCodecLabels, type Plan, type VideoFacts } from "./settings"
 import { MOST_PASSES } from "./target"
+import type { Part } from "./trim"
 import type { Looks } from "./looks"
+
+/** What the trimmer keeps, with the edits that can be undone and done again. */
+export interface Trim {
+  parts: Part[]
+  /** Cut to the frame by encoding, rather than copied from keyframes. */
+  exact: boolean
+  undo: Part[][]
+  redo: Part[][]
+}
+
+/** The trim as the plan takes it. */
+export const cutOf = (trim: Trim | null) =>
+  trim ? { parts: trim.parts, exact: trim.exact } : null
+
+/** A trim with one more change, which can be undone. */
+export function trimmed(trim: Trim | null, parts: Part[], whole: Part[]): Trim {
+  const before = trim?.parts ?? whole
+  return {
+    parts,
+    exact: trim?.exact ?? false,
+    undo: [...(trim?.undo ?? []), before],
+    redo: [],
+  }
+}
+
+/** The trim as it was before its last change, or after the change undone. */
+export function undone(trim: Trim, back: boolean): Trim {
+  const from = back ? trim.undo : trim.redo
+  if (!from.length) return trim
+  const parts = from.at(-1)!
+  return back
+    ? {
+        ...trim,
+        parts,
+        undo: trim.undo.slice(0, -1),
+        redo: [...trim.redo, trim.parts],
+      }
+    : {
+        ...trim,
+        parts,
+        redo: trim.redo.slice(0, -1),
+        undo: [...trim.undo, trim.parts],
+      }
+}
 
 /** Videos open at once. Shared by the page and its help, which is drawn on the server. */
 export const MAX_FILES = 20
@@ -42,6 +87,10 @@ export interface VideoItem {
   facts: VideoFacts | null
   poster: ImageBitmap | null
   message: string | null
+  /** What the trimmer keeps, as edited; null keeps the whole file. */
+  trim: Trim | null
+  /** The trim the plan follows: the edits, once they have settled. */
+  trimApplied: Trim | null
   /** How far the job writing it is, for the plan named. */
   progress: { key: string; fraction: number; pass?: number } | null
   result: VideoResult | null
@@ -126,7 +175,8 @@ export function outputName(name: string, plan: Plan) {
   const base = dot > 0 ? name.slice(0, dot) : name
   const extension = outputInfo[plan.container].extension
   const same = dot > 0 && name.slice(dot + 1).toLowerCase() === extension
-  return `${base}${same ? "-converted" : ""}.${extension}`
+  const said = plan.cut ? "-trimmed" : "-converted"
+  return `${base}${same ? said : ""}.${extension}`
 }
 
 /** The next job for an idle worker: files to read first, then the selected file, then the rest in order. */

@@ -200,7 +200,18 @@ export function startAgent(): Started {
       images,
       animation,
       audio,
-      video: { pool: videoPool, ask: browserAsker, folder: videoFolder },
+      video: {
+        pool: videoPool,
+        ask: browserAsker,
+        folder: videoFolder,
+        frame: async (file, seconds) => {
+          const [engine, { frameAt }] = await Promise.all([
+            import("mediabunny"),
+            import("@/lib/video/mediabunny-video"),
+          ])
+          return frameAt(engine, file, seconds)
+        },
+      },
     })
   )
   window.keepsimp = bridgeApi(agent, {

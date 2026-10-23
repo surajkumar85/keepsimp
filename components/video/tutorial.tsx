@@ -12,6 +12,8 @@ import {
   PRESET_SHARE,
 } from "@/lib/video/settings"
 import { MAX_FILES } from "@/lib/video/queue"
+import { shortcutGroups } from "@/lib/video/shortcuts"
+import { JOIN_FADE } from "@/lib/audio/edits"
 
 const mbit = (kbit: number) =>
   `${(kbit / 1000).toLocaleString("en", { maximumFractionDigits: 1 })}`
@@ -75,6 +77,40 @@ const options: TutorialContent["options"] = [
   },
 ]
 
+/** The keys, as the help says them: made from the list the trimmer answers to. */
+const keys = shortcutGroups().map((group) => ({
+  term: `Keys: ${group.title.toLowerCase()}`,
+  detail: `${group.shortcuts
+    .map(
+      (shortcut) =>
+        `${shortcut.ways.map((way) => way.join(" + ")).join(" or ")}: ${shortcut.does}.`
+    )
+    .join(" ")} The keys work while the trim panel has the focus.`,
+}))
+
+const trimming: TutorialContent["options"] = [
+  {
+    term: "Keep and cut",
+    detail:
+      "Choose a stretch with Start and End (type a time such as 1:07.25, drag, or press I and O at the playhead). Keep the selection keeps only that stretch of what is kept now; Cut it out takes it away. Do either as often as you like: the parts kept are shown on the timeline and listed under it, and Undo and Redo go back and forth. Play what is kept plays the parts one after another, stepping over what is cut.",
+  },
+  {
+    term: "Lossless",
+    detail:
+      "The picture is copied as it is, so nothing is lost and an hour of video is cut in seconds. A video holds a whole picture only now and then (a keyframe, marked under the timeline); the frames between are written as changes from it, so a copy can begin and end only at a keyframe. An MP4 or MOV with one part kept still starts exactly where you asked: the file says where to start playing, and its earlier frames are kept only to be decoded. Otherwise each part is moved out to the keyframes around it, and the page says how much more is kept. Several parts are joined one after another into one file.",
+  },
+  {
+    term: "Exact",
+    detail: `Cuts to the frame, and the sound to the sample, by encoding the picture again (with the quality chosen in the settings; Original keeps its bitrate). Where parts are joined, the sound fades over ${JOIN_FADE * 1000} ms on each side, so a cut does not click. Lossless becomes exact by itself when something else means the picture is encoded anyway, such as a new size or format.`,
+  },
+  {
+    term: "Save a frame",
+    detail:
+      "Saves the frame at the playhead as a PNG, read from the file itself at the video's full size, not from the player.",
+  },
+  ...keys,
+]
+
 const editor: TutorialContent = {
   name: "How to convert video with KeepSimp's video editor",
   description:
@@ -91,14 +127,14 @@ const editor: TutorialContent = {
     },
     {
       title: "Change what you need",
-      text: "Quality, size, frame rate, a turn, or the sound. The sentence under the player says what will be done and why.",
+      text: "Trim it, or change its quality, size, frame rate, turn or sound. The sentence under the player says what will be done and why.",
     },
     {
       title: "Download",
       text: "Each video is checked before it is offered. Download one, or all of them as a ZIP.",
     },
   ],
-  options,
+  options: [...options, ...trimming],
   guideHref: "/blog/convert-video-without-uploading/",
 }
 
@@ -134,6 +170,37 @@ const compressing: TutorialContent = {
     },
   ],
   guideHref: "/blog/compress-video-to-a-size/",
+}
+
+const cutting: TutorialContent = {
+  ...editor,
+  name: "How to trim a video with KeepSimp",
+  description:
+    "Cut a video to the parts you want in your browser, without encoding or to the frame, and save any frame as a picture. Nothing is uploaded.",
+  steps: [
+    {
+      title: "Add your video",
+      text: `Drop it or choose it: MP4, MOV, WebM, MKV or MPEG-TS, of any length. Up to ${MAX_FILES} at once, each trimmed on its own.`,
+    },
+    {
+      title: "Choose what to keep",
+      text: "Set a start and an end, then keep that part or cut it out. Do it again for more cuts.",
+    },
+    {
+      title: "Lossless or exact",
+      text: "Lossless copies the picture and cuts at keyframes; Exact cuts to the frame and encodes it again.",
+    },
+    {
+      title: "Download",
+      text: "The trimmed video is opened again and checked before it is offered, its length too.",
+    },
+  ],
+  options: [...trimming, ...options],
+  guideHref: "/blog/trim-video-without-losing-quality/",
+}
+
+export function VideoTrimmerTutorial() {
+  return <ToolTutorial content={cutting} />
 }
 
 export function VideoCompressorTutorial() {

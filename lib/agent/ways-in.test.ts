@@ -70,6 +70,7 @@ const engines = {
     ) as never,
     ask: { video: async () => true, sound: async () => true },
     folder: "test",
+    frame: async () => new Blob(),
   },
 }
 

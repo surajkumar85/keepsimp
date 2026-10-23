@@ -11,6 +11,7 @@ import {
   VideoCompressorTutorial,
   VideoConverterTutorial,
   VideoEditorTutorial,
+  VideoTrimmerTutorial,
 } from "@/components/video/tutorial"
 import {
   AudioConverterTutorial,
@@ -108,6 +109,12 @@ export async function generateMetadata({
     return pageMetadata(
       "Compress video online for free: under 8, 10 or 25 MB",
       "Make a video smaller in your browser, to fit under 8, 10 or 25 MB, half its size or a size of your own, with the bitrate, frame rate and size chosen for it and the quality measured. Any length, no account, no uploads.",
+      `/dashboard/${id}/`
+    )
+  if (id === "video-trimmer")
+    return pageMetadata(
+      "Trim video online for free, without losing quality",
+      "Cut an MP4, MOV, WebM or MKV to the part you want in your browser: copied without encoding, so nothing is lost, or cut exactly to the frame. Cut several parts out at once and save any frame as a PNG. Any length, no account, no uploads.",
       `/dashboard/${id}/`
     )
   if (id === "video-converter")
@@ -356,6 +363,8 @@ export default async function ToolPage({
         <VideoWorkspace mode="converter" />
       ) : id === "video-compressor" ? (
         <VideoWorkspace mode="compressor" />
+      ) : id === "video-trimmer" ? (
+        <VideoWorkspace mode="trimmer" />
       ) : id === "audio-editor" ? (
         <AudioWorkspace mode="editor" />
       ) : id === "audio-converter" ? (
@@ -433,6 +442,8 @@ export default async function ToolPage({
         <VideoConverterTutorial />
       ) : id === "video-compressor" ? (
         <VideoCompressorTutorial />
+      ) : id === "video-trimmer" ? (
+        <VideoTrimmerTutorial />
       ) : id === "audio-editor" ? (
         <AudioEditorTutorial />
       ) : id === "audio-converter" ? (

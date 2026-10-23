@@ -13,6 +13,14 @@ import {
 import { browserPlan, convertJob, readJob, type Asker } from "@/lib/video/jobs"
 import type { VideoJob, VideoResponse } from "@/lib/video/protocol"
 import { factsLine, outputName } from "@/lib/video/queue"
+import {
+  clock,
+  cutOut,
+  keepOnly,
+  tidy,
+  whole,
+  type Part,
+} from "@/lib/video/trim"
 import { looksSaid } from "@/lib/video/looks"
 import {
   defaultSettings,
@@ -23,6 +31,8 @@ import {
   MOST_BITRATE,
   MOST_LIMIT,
   SHORT_SIDES,
+  type Cut,
+  type VideoFacts,
   type VideoSettings,
 } from "@/lib/video/settings"
 import type { PoolJobs } from "./pool-jobs"
@@ -34,6 +44,8 @@ export interface VideoEngines {
   ask: Asker
   /** The agent page's folder for results being written. */
   folder: string
+  /** A frame of a file as a PNG, read as the workspace reads it (`frameAt`). */
+  frame: (file: Blob, seconds: number) => Promise<Blob>
 }
 
 type Settings = Partial<
@@ -105,6 +117,51 @@ const settingsSchema = {
   },
 } as const
 
+const partsSchema = (description: string) =>
+  ({
+    type: "array",
+    minItems: 1,
+    items: {
+      type: "object",
+      properties: {
+        start: { type: "number", minimum: 0, description: "Seconds." },
+        end: { type: "number", minimum: 0, description: "Seconds." },
+      },
+      required: ["start", "end"],
+      additionalProperties: false,
+    },
+    description,
+  }) as const
+
+/** What is kept: the parts asked for (or the whole), less the parts cut. */
+export function kept(duration: number, keep?: Part[], cut?: Part[]) {
+  let parts = whole(duration)
+  for (const part of keep ?? [])
+    if (part.start >= duration)
+      throw new ToolError(
+        `The video is ${clock(duration)} long, so a part cannot start at ${clock(part.start)}.`
+      )
+  if (keep?.length)
+    parts = tidy(
+      keep.flatMap((part) =>
+        keepOnly(whole(duration), part.start, part.end, duration)
+      ),
+      duration
+    )
+  for (const part of cut ?? [])
+    parts = cutOut(parts, part.start, part.end, duration)
+  return parts
+}
+
+/** A PNG's size, from its header; null when it is not a PNG. */
+export function pngSize(head: Uint8Array) {
+  const signature = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]
+  if (head.length < 24 || signature.some((byte, at) => head[at] !== byte))
+    return null
+  const view = new DataView(head.buffer, head.byteOffset, head.byteLength)
+  return { width: view.getUint32(16), height: view.getUint32(20) }
+}
+
 const bytes = (value: number) =>
   value >= 1024 * 1024
     ? `${(value / 1024 / 1024).toFixed(1)} MB`
@@ -150,10 +207,17 @@ export function videoTools(engines: VideoEngines): AgentTool[] {
   async function write(
     file: string,
     settings: VideoSettings,
-    context: Parameters<AgentTool["run"]>[1]
+    context: Parameters<AgentTool["run"]>[1],
+    cutFor: (facts: VideoFacts) => Cut | null = () => null
   ) {
     const opened = await open(context.files, file, context.signal)
-    const plan = await browserPlan(opened.facts, settings, engines.ask)
+    const plan = await browserPlan(
+      opened.facts,
+      settings,
+      engines.ask,
+      undefined,
+      cutFor(opened.facts)
+    )
     if (plan.problem) throw new ToolError(plan.problem)
     const done = (await engines.pool.run(
       convertJob(
@@ -199,6 +263,7 @@ export function videoTools(engines: VideoEngines): AgentTool[] {
           audio: plan.audio,
           width: plan.width,
           height: plan.height,
+          cut: plan.cut,
         },
         written: done.written,
         passes: done.passes,
@@ -280,7 +345,96 @@ export function videoTools(engines: VideoEngines): AgentTool[] {
     },
   }
 
-  return [info, convert, compress].map((tool) =>
+  const trim: AgentTool<
+    Settings & { file: string; keep?: Part[]; cut?: Part[]; exact?: boolean }
+  > = {
+    name: "trim_video",
+    title: "Trim a video",
+    description:
+      "Keeps parts of a video and cuts the rest, as the video trimmer does, in seconds of the original: keep lists the parts to keep (the whole video when left out), cut the parts to take away from them. Without exact, the picture is copied as it is, so nothing is lost: a part begins and ends at the keyframes around it (a single part of an MP4 or MOV still starts exactly, by the file's edit list), and the summary says how much more that keeps. With exact, it is cut to the frame and the sound to the sample by encoding the picture again. Several parts are joined into one file. The result is opened again and its length held to the parts kept. The format stays the file's own unless one is given.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        file: fileProperty("The video file."),
+        keep: partsSchema(
+          "Parts to keep, in seconds of the original; the whole video when left out."
+        ),
+        cut: partsSchema("Parts to cut out, in seconds of the original."),
+        exact: {
+          type: "boolean",
+          description:
+            "Cut to the frame by encoding the picture again (no by default: copied, cut at keyframes).",
+        },
+        ...settingsSchema,
+      },
+      required: ["file"],
+      additionalProperties: false,
+    },
+    annotations: { readOnlyHint: true },
+    async run({ file, keep, cut, exact = false, ...asked }, context) {
+      if (!keep?.length && !cut?.length)
+        throw new ToolError('Give the parts to "keep" or to "cut", or both.')
+      return write(
+        file,
+        settingsOf({ format: "same", ...asked }),
+        context,
+        (facts) => ({ parts: kept(facts.duration, keep, cut), exact })
+      )
+    },
+  }
+
+  const frame: AgentTool<{ file: string; seconds: number }> = {
+    name: "video_frame",
+    title: "Save a frame of a video",
+    description:
+      "Saves the frame shown at a moment of a video as a PNG, read from the file at the video's full size and turned as it is shown, as the video trimmer's Save this frame does.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        file: fileProperty("The video file."),
+        seconds: {
+          type: "number",
+          minimum: 0,
+          description: "The moment, in seconds from the start.",
+        },
+      },
+      required: ["file", "seconds"],
+      additionalProperties: false,
+    },
+    annotations: { readOnlyHint: true },
+    async run({ file, seconds }, { files, signal }) {
+      const { blob, ref, facts } = await open(files, file, signal)
+      if (!facts.video) throw new ToolError(`${ref.name} has no picture.`)
+      if (seconds > facts.duration)
+        throw new ToolError(
+          `${ref.name} is ${clock(facts.duration)} long, so there is no frame at ${clock(seconds)}.`
+        )
+      const picture = await engines.frame(blob, seconds)
+      const size = pngSize(
+        new Uint8Array(await picture.slice(0, 24).arrayBuffer())
+      )
+      if (
+        !size ||
+        size.width !== facts.video.width ||
+        size.height !== facts.video.height
+      )
+        throw new ToolError(
+          "The frame was read but is not the video's picture, so it is not handed over."
+        )
+      const made = files.add(
+        picture,
+        `${ref.name.replace(/\.[^.]+$/, "")} ${clock(seconds).replaceAll(":", "-")}.png`,
+        "made"
+      )
+      return {
+        summary: `The frame at ${clock(seconds)}: ${size.width} × ${size.height} PNG, ${bytes(picture.size)}.`,
+        files: [made],
+        data: size,
+      }
+    },
+  }
+
+  return [info, convert, compress, trim, frame].map((tool) =>
     asTool(tool as AgentTool<never>)
   )
 }

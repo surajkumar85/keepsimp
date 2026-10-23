@@ -13,6 +13,10 @@ const sources = {
     title: "Mediabunny: converting media files",
     url: "https://mediabunny.dev/guide/converting-media-files",
   },
+  editList: {
+    title: "Apple: QuickTime file format, edit list atoms",
+    url: "https://developer.apple.com/documentation/quicktime-file-format/edit_list_atom",
+  },
   apple: {
     title: "Apple: HLS authoring specification for Apple devices",
     url: "https://developer.apple.com/documentation/http-live-streaming/hls-authoring-specification-for-apple-devices",
@@ -258,5 +262,77 @@ export const videoPosts: readonly BlogPost[] = [
       },
     ],
     sources: [sources.youtube, sources.mediabunny, sources.webcodecs],
+  },
+  {
+    published: "2026-10-23",
+    slug: "trim-video-without-losing-quality",
+    title: "Keep the part that matters. Lose nothing else.",
+    searchTitle: "How to trim a video without losing quality, for free",
+    description:
+      "Cut an MP4, MOV, WebM or MKV to the part you want in your browser: copied without encoding, or exact to the frame. Cut out several parts and save frames. No uploads.",
+    keywords: [
+      "trim video",
+      "cut video",
+      "trim video without losing quality",
+      "lossless video cutter",
+      "cut mp4 online",
+      "remove part of a video",
+      "save frame from video",
+    ],
+    category: "A little know-how",
+    readingTime: "4 min read",
+    image: "/images/video-trim-guide.svg",
+    imageAlt:
+      "A video's timeline with two parts kept and the middle cut out, joined into one shorter MP4, copied without encoding",
+    tool: "video-trimmer",
+    intro:
+      "A recording runs on before the part you want, or has a stretch in the middle nobody needs. Most video tools re-encode the whole file to cut it, which takes time and costs quality. KeepSimp's video trimmer copies what you keep as it is when it can, cuts exactly to the frame when you ask, and does it all on your device.",
+    sections: [
+      {
+        id: "keyframes",
+        title: "Why a lossless cut lands on a keyframe.",
+        paragraphs: [
+          "A video does not store every frame whole. Now and then it holds a whole picture, a keyframe, and the frames between are written as changes from the ones around them. That is how a video stays small, and it is why a copy can only begin where a whole picture is: a frame written as a change means nothing without the frames it changes.",
+          "So a lossless cut is moved out to the keyframes around it, and the trimmer says how much more that keeps; the keyframes are marked under its timeline. There is one exception: an MP4 or MOV with one part kept starts exactly where you asked, because the file can say where to start playing (an edit list) while it keeps the earlier frames only to be decoded.",
+        ],
+        links: [
+          {
+            label: "Open the video trimmer",
+            href: "/dashboard/video-trimmer/",
+          },
+        ],
+      },
+      {
+        id: "exact",
+        title: "When you need the exact frame.",
+        paragraphs: [
+          "Choose Exact and the trimmer cuts to the frame and the sound to the sample. The picture is then encoded again, with the quality chosen in the settings (Original keeps close to its bitrate), so it takes longer and is no longer bit for bit the source. Where parts are joined, the sound fades over 4 ms on each side so a cut does not click.",
+          "If you change anything else about the picture, a size, a frame rate or a format that cannot hold it, the picture is encoded anyway, so the cut is made exact at no extra cost. The sentence under the player says which.",
+        ],
+      },
+      {
+        id: "how",
+        title: "How to trim.",
+        paragraphs: [
+          "Open the video trimmer and drop your video. Set a start and an end, by typing a time such as 1:07.25, dragging, or pressing I and O at the playhead, then Keep the selection or Cut it out. Do it again to cut out more; Undo and Redo go back and forth, and Play what is kept plays the parts one after another.",
+          "The file is written as soon as the edits settle, opened again and checked, its length held to the parts kept, before you can download it. Save this frame (Shift + S) saves the frame at the playhead as a PNG, read from the file at its full size.",
+        ],
+        links: [
+          {
+            label: "Guide: converting video, in full",
+            href: "/blog/convert-video-without-uploading/",
+          },
+        ],
+      },
+      {
+        id: "limits",
+        title: "What it keeps, and what it does not.",
+        paragraphs: [
+          "The picture and the sound are kept, and copied wherever they can be; the file's subtitles and chapters are not. Lossless cuts of WebM and MKV are made at keyframes at both ends, and a cut always ends at a keyframe or the end of the file, so a copy may run a little past the end you set. Choose Exact when that matters.",
+          "Nothing is uploaded. The video is read a piece at a time and written to your browser's private storage on this device, so a long recording is trimmed without filling the memory.",
+        ],
+      },
+    ],
+    sources: [sources.editList, sources.mediabunny, sources.webcodecs],
   },
 ]

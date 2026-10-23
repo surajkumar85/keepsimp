@@ -6,6 +6,7 @@ import {
   IconAlertCircle,
   IconInfoCircle,
   IconMovie,
+  IconScissors,
   IconVideoPlus,
 } from "@tabler/icons-react"
 import { QueueList, type QueueRow } from "@/components/image-batch/queue-list"
@@ -14,6 +15,7 @@ import {
   DropZone,
   type DropZoneCopy,
 } from "@/components/image-compressor/drop-zone"
+import { Button } from "@/components/ui/button"
 import { ChoiceChips } from "@/components/ui/choice-chips"
 import { sizeLabel } from "@/lib/image-compressor/formats"
 import { uniqueNames } from "@/lib/image-resizer/naming"
@@ -27,6 +29,7 @@ import {
 import type { VideoJob, VideoResponse } from "@/lib/video/protocol"
 import {
   factsLine,
+  cutOf,
   itemMessage,
   MAX_FILES,
   itemState,
@@ -36,8 +39,12 @@ import {
   videoTotals,
   writable,
   dropped,
+  trimmed,
+  undone,
+  type Trim,
   type VideoItem,
 } from "@/lib/video/queue"
+import { clock, whole, type Part } from "@/lib/video/trim"
 import { clearScratch, removeScratch } from "@/lib/video/scratch"
 import {
   defaultSettings,
@@ -53,9 +60,10 @@ import { looksSaid } from "@/lib/video/looks"
 import { convertJob, readJob } from "@/lib/video/jobs"
 import { browserAsker } from "@/lib/video/probe"
 import { SettingsPanel } from "./settings-panel"
+import { TrimPanel } from "./trim-panel"
 
 /** What the workspace is opened for: everything, or one job through a door. */
-export type VideoMode = "editor" | "converter" | "compressor"
+export type VideoMode = "editor" | "converter" | "compressor" | "trimmer"
 
 const INPUT_ID = "video-file"
 /** Settings are taken up this long after the last change, so a run of choices starts one job. */
@@ -65,7 +73,7 @@ const COPY: Record<VideoMode, DropZoneCopy> = {
   editor: {
     heading: "Drop video files",
     dropping: "Drop to add these videos",
-    body: "Convert them to MP4, WebM, MOV or MKV, make them smaller, turn them or take the sound out. Many at once, on your device.",
+    body: "Convert them to MP4, WebM, MOV or MKV, trim them, make them smaller, turn them or take the sound out. Many at once, on your device.",
     inputLabel: "Choose video files",
     action: "Choose videos",
     limits: `Stays on your device · up to ${MAX_FILES} videos at once · any length`,
@@ -86,12 +94,21 @@ const COPY: Record<VideoMode, DropZoneCopy> = {
     action: "Choose videos",
     limits: `Stays on your device · up to ${MAX_FILES} videos at once · any length`,
   },
+  trimmer: {
+    heading: "Drop videos to trim",
+    dropping: "Drop to trim these videos",
+    body: "Keep a part or cut parts out, to the frame or without encoding at all, and save any frame as a picture.",
+    inputLabel: "Choose video files to trim",
+    action: "Choose videos",
+    limits: `Stays on your device · up to ${MAX_FILES} videos at once · any length`,
+  },
 }
 
 const SAMPLES: Record<VideoMode, string> = {
   editor: "keepsimp-clip.mp4",
   converter: "keepsimp-clip.mp4",
   compressor: "keepsimp-scene.mp4",
+  trimmer: "keepsimp-scene.mp4",
 }
 
 /** What each door starts with. */
@@ -99,12 +116,22 @@ const FIRST: Record<VideoMode, Partial<VideoSettings>> = {
   editor: {},
   converter: {},
   compressor: { limit: { share: 0.5 } },
+  trimmer: { format: "same" },
 }
 
 const OPENED_FOR: Record<VideoMode, string> = {
   editor: "",
   converter: "converting",
   compressor: "making videos smaller",
+  trimmer: "trimming",
+}
+
+/** The doors that show the trimmer at once; the others have it one press away. */
+const TRIMS: Record<VideoMode, boolean> = {
+  editor: true,
+  converter: false,
+  compressor: false,
+  trimmer: true,
 }
 
 let counter = 0
@@ -158,7 +185,13 @@ export function VideoWorkspace({ mode }: { mode: VideoMode }) {
         items.map((item) => [
           item.id,
           item.facts
-            ? planFor(item.facts, applied, canEncode, canEncodeSound)
+            ? planFor(
+                item.facts,
+                applied,
+                canEncode,
+                canEncodeSound,
+                cutOf(item.trimApplied)
+              )
             : null,
         ])
       ),
@@ -337,6 +370,40 @@ export function VideoWorkspace({ mode }: { mode: VideoMode }) {
     pool.current?.kick()
   }, [items, plans, selectedId])
 
+  // A trim is taken up once its edits settle, like the settings; the file
+  // being written for the trim before it stops.
+  const unsettled = items
+    .filter((item) => item.trim !== item.trimApplied)
+    .map((item) => `${item.id}:${JSON.stringify(item.trim)}`)
+    .join()
+  useEffect(() => {
+    if (!unsettled) return
+    const timer = setTimeout(() => {
+      for (const item of live.current.items)
+        if (item.trim !== item.trimApplied) pool.current?.forget(item.id)
+      change((current) =>
+        current.map((item) =>
+          item.trim === item.trimApplied
+            ? item
+            : { ...item, trimApplied: item.trim }
+        )
+      )
+    }, SETTLE_MS)
+    return () => clearTimeout(timer)
+  }, [unsettled, change])
+
+  const trimWith = useCallback(
+    (id: string, make: (trim: Trim | null, duration: number) => Trim | null) =>
+      change((current) =>
+        current.map((item) =>
+          item.id === id && item.facts
+            ? { ...item, trim: make(item.trim, item.facts.duration) }
+            : item
+        )
+      ),
+    [change]
+  )
+
   const addFiles = useCallback(
     async (added: File[]) => {
       const room = MAX_FILES - live.current.items.length
@@ -362,6 +429,8 @@ export function VideoWorkspace({ mode }: { mode: VideoMode }) {
           facts: null,
           poster: null,
           message: problem,
+          trim: null,
+          trimApplied: null,
           progress: null,
           result: null,
         })
@@ -531,6 +600,21 @@ export function VideoWorkspace({ mode }: { mode: VideoMode }) {
             result={current(selected, planOf(selected))}
             showing={showing}
             onShow={setShowing}
+            trimOpen={TRIMS[mode]}
+            onTrim={(parts) =>
+              trimWith(selected.id, (trim, duration) =>
+                trimmed(trim, parts, whole(duration))
+              )
+            }
+            onExact={(exact) =>
+              trimWith(selected.id, (trim, duration) => ({
+                ...(trim ?? { parts: whole(duration), undo: [], redo: [] }),
+                exact,
+              }))
+            }
+            onUndo={(back) =>
+              trimWith(selected.id, (trim) => trim && undone(trim, back))
+            }
           />
         )}
         {notice && (
@@ -599,17 +683,56 @@ function Selected({
   result,
   showing,
   onShow,
+  trimOpen,
+  onTrim,
+  onExact,
+  onUndo,
 }: {
   item: VideoItem
   plan: Plan | null
   result: VideoItem["result"]
   showing: "original" | "result"
   onShow: (showing: "original" | "result") => void
+  trimOpen: boolean
+  onTrim: (parts: Part[]) => void
+  onExact: (exact: boolean) => void
+  onUndo: (back: boolean) => void
 }) {
   const original = useMemo(() => URL.createObjectURL(item.file), [item.file])
   useEffect(() => () => URL.revokeObjectURL(original), [original])
   const show = result?.url ? showing : "original"
   const source = show === "result" ? result!.url! : original
+  const player = useRef<HTMLVideoElement>(null)
+  const [trimming, setTrimming] = useState(trimOpen)
+  const [saving, setSaving] = useState(false)
+  const [frameProblem, setFrameProblem] = useState<string | null>(null)
+
+  // A frame is read from the file itself, at its own size, not from the player.
+  async function saveFrame(time: number) {
+    setSaving(true)
+    setFrameProblem(null)
+    try {
+      const [engine, { frameAt }] = await Promise.all([
+        import("mediabunny"),
+        import("@/lib/video/mediabunny-video"),
+      ])
+      const picture = await frameAt(engine, item.file, time)
+      const url = URL.createObjectURL(picture)
+      const link = document.createElement("a")
+      link.href = url
+      link.download = `${item.name.replace(/\.[^.]+$/, "")} ${clock(time).replaceAll(":", "-")}.png`
+      link.click()
+      setTimeout(() => URL.revokeObjectURL(url), 60_000)
+    } catch (error) {
+      setFrameProblem(
+        error instanceof Error && error.name === "VideoProblem"
+          ? error.message
+          : "The frame could not be read from this file."
+      )
+    } finally {
+      setSaving(false)
+    }
+  }
   return (
     <section
       aria-label={item.name}
@@ -637,6 +760,7 @@ function Selected({
       ) : (
         <>
           <video
+            ref={player}
             key={source}
             src={source}
             controls
@@ -657,6 +781,31 @@ function Selected({
                 { value: "result", label: "Result" },
               ]}
             />
+          )}
+          {show === "original" &&
+            (trimming ? (
+              <TrimPanel
+                key={item.id}
+                duration={item.facts.duration}
+                frameRate={item.facts.video?.frameRate ?? null}
+                keyframes={item.facts.video?.keyframes ?? null}
+                trim={item.trim}
+                onTrim={onTrim}
+                onExact={onExact}
+                onUndo={onUndo}
+                player={player}
+                onFrame={(time) => void saveFrame(time)}
+                saving={saving}
+              />
+            ) : (
+              <Button variant="outline" onClick={() => setTrimming(true)}>
+                <IconScissors aria-hidden="true" /> Trim
+              </Button>
+            ))}
+          {frameProblem && (
+            <p role="alert" className="text-sm text-destructive">
+              {frameProblem}
+            </p>
           )}
           <dl
             className="grid gap-x-4 gap-y-1 text-sm sm:grid-cols-[auto_1fr]"

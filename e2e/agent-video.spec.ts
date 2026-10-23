@@ -101,3 +101,25 @@ test("compresses a video under a size for an agent", async ({ page }) => {
   expect(out.bytes.length).toBeLessThanOrEqual(512 * 1024)
   expect(decodesCleanly(out.bytes, "agent-small.mp4")).toBe(true)
 })
+
+test("trims a video and saves a frame, for an agent", async ({ page }) => {
+  await ready(page)
+  const file = await hand(page, "clip.mp4", clip, "video/mp4")
+  const trimmed = await ran(page, "trim_video", {
+    file,
+    keep: [{ start: 1.5, end: 4 }],
+  })
+  expect(trimmed.summary).toContain("the file says where to start playing")
+  const out = await saved(page, trimmed.files![0].id)
+  expect(out.name).toBe("clip-trimmed.mp4")
+  // One keyframe at the start, so the copy runs on to the end: 4.5 s shown.
+  expect(
+    Number(probe(out.bytes, "agent-trimmed.mp4").format.duration)
+  ).toBeCloseTo(4.5, 1)
+  expect(decodesCleanly(out.bytes, "agent-trimmed.mp4")).toBe(true)
+  const frame = await ran(page, "video_frame", { file, seconds: 2 })
+  expect(frame.summary).toMatch(/^The frame at 0:02\.00: 320 × 180 PNG, /)
+  const png = await saved(page, frame.files![0].id)
+  expect(png.name).toBe("clip 0-02.00.png")
+  expect([...png.bytes.subarray(1, 4)]).toEqual([0x50, 0x4e, 0x47])
+})

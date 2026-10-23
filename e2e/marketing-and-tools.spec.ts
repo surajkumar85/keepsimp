@@ -22,13 +22,11 @@ test("landing CTA opens the working dashboard", async ({ page }) => {
     .first()
     .click()
   await expect(page).toHaveURL(/\/dashboard\/$/)
-  await expect(page.getByTestId("tool-card")).toHaveCount(13)
+  await expect(page.getByTestId("tool-card")).toHaveCount(12)
   await expect(
     page.getByTestId("tools-ready").getByTestId("tool-card")
   ).toHaveCount(12)
-  await expect(
-    page.getByTestId("tools-planned").getByTestId("tool-card")
-  ).toHaveCount(1)
+  await expect(page.getByTestId("tools-planned")).toHaveCount(0)
   await page.getByRole("link", { name: "JSON formatter", exact: true }).click()
   await expect(page.getByLabel("Your JSON", { exact: true })).toBeVisible()
 })
@@ -183,7 +181,7 @@ test("sitemap, robots and social graphics are production ready", async ({
     "https://keepsimp.vercel.app/dashboard/image-compressor/"
   )
   expect(sitemap).not.toContain("design-system")
-  // Ready tools and their doors are listed; tools still coming are not.
+  // Ready tools and their doors are listed.
   expect(sitemap).toContain(
     "https://keepsimp.vercel.app/dashboard/video-editor/"
   )
@@ -193,7 +191,9 @@ test("sitemap, robots and social graphics are production ready", async ({
   expect(sitemap).toContain(
     "https://keepsimp.vercel.app/dashboard/video-compressor/"
   )
-  expect(sitemap).not.toContain("video-trimmer")
+  expect(sitemap).toContain(
+    "https://keepsimp.vercel.app/dashboard/video-trimmer/"
+  )
   const robots = await (await request.get("/robots.txt")).text()
   expect(robots).toContain("Allow: /")
   expect(robots).toContain("Sitemap: https://keepsimp.vercel.app/sitemap.xml")

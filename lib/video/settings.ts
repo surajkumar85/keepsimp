@@ -4,6 +4,7 @@
  * the check holds the result to it.
  */
 import { fitToSize, MOST_PASSES } from "./target"
+import { isWhole, keptLength, snapOut, snapSaid, tidy, type Part } from "./trim"
 import {
   containerLabels,
   outputInfo,
@@ -178,6 +179,8 @@ export interface VideoFacts {
     bitrate: number | null
     hdr: boolean
     decodable: boolean
+    /** Keyframe times, for cutting without encoding; null or left out when not known. */
+    keyframes?: number[] | null
   } | null
   audio: {
     codec: string | null
@@ -186,6 +189,12 @@ export interface VideoFacts {
     bitrate: number | null
     decodable: boolean
   } | null
+}
+
+/** What a trim keeps, and whether it is to be cut to the frame. */
+export interface Cut {
+  parts: Part[]
+  exact: boolean
 }
 
 /** Whether this browser can write a codec at a size: null while it is being asked. */
@@ -230,6 +239,15 @@ export interface Plan {
   notes: string[]
   /** Why it cannot be written as asked; null when it can. */
   problem: string | null
+  /**
+   * The parts written, in the file's seconds: one copied with a trim (an
+   * MP4's edit list hides the lead-in to its keyframe), several joined by
+   * copying their packets (each from a keyframe), or cut to the frame while
+   * encoding. null keeps the whole file.
+   */
+  cut: null | { mode: "copy" | "join" | "exact"; parts: Part[] }
+  /** Seconds the result lasts. */
+  length: number
   /** Codecs and sizes still being asked of the browser. */
   pending: { codec: VideoCodec; width: number; height: number }[]
   /** Bytes, roughly. */
@@ -353,7 +371,9 @@ export function planFor(
   facts: VideoFacts,
   settings: VideoSettings,
   canEncode: CanEncode,
-  canEncodeSound: (codec: SoundCodec) => boolean | null = () => true
+  canEncodeSound: (codec: SoundCodec) => boolean | null = () => true,
+  /** The parts kept, and whether they are to be cut to the frame. */
+  cut: Cut | null = null
 ): Plan {
   const container =
     settings.format === "same"
@@ -366,12 +386,112 @@ export function planFor(
   let problem: string | null = null
   const fail = (reason: string) => (problem ??= reason)
   const target = targetOf(settings.limit, facts.size)
-  const totalBits = target ? (target * 8) / Math.max(facts.duration, 0.001) : 0
+
+  // What is kept: the whole file, or parts of it.
+  const kept = cut ? tidy(cut.parts, facts.duration) : null
+  if (kept && !kept.length) fail("Everything is cut out. Keep at least a part.")
+  const cutting = kept?.length && !isWhole(kept, facts.duration) ? kept : null
+  let length = cutting ? keptLength(cutting) : facts.duration
+  const share = length / Math.max(facts.duration, 0.001)
+  const totalBits = target ? (target * 8) / Math.max(length, 0.001) : 0
 
   if (settings.format === "same" && container !== facts.container)
     notes.push(
       `${containerLabels[facts.container]} is read here but not written, so it becomes an MP4.`
     )
+
+  // The picture's reasons to be encoded again, before the sound: they decide how it is cut.
+  const source = facts.video
+  const why = source
+    ? (() => {
+        const shown = shownSize(source, settings)
+        const sourceRate = source.frameRate ?? 30
+        const slower =
+          settings.frameRate !== "same" && settings.frameRate < sourceRate - 0.5
+        const asked =
+          settings.codec !== "auto" && settings.codec !== source.codec
+            ? settings.codec
+            : null
+        const turns = settings.rotate !== 0 || settings.flip
+        const ownTurn = source.rotation !== 0 || source.flip
+        const turnsByRedrawing =
+          (turns || ownTurn) && !TURNS_AS_SETTING.includes(container)
+        const held =
+          source.codec !== null && HOLDS[container].video.includes(source.codec)
+        // A codec chosen on purpose is copied wherever the kind holds it.
+        const plays =
+          source.codec !== null &&
+          (settings.codec === source.codec ||
+            PICTURE_PLAYS_EVERYWHERE[container].includes(source.codec))
+        // A file already under its limit needs nothing for it.
+        const over = target !== null && facts.size * share > target
+        const reasons = [
+          settings.quality !== "original" && "the quality was chosen",
+          over && `it is to fit under ${sizeSaid(target!)}`,
+          shown.scaled && `it is made ${shown.width} × ${shown.height}`,
+          slower && `it is made ${settings.frameRate} frames a second`,
+          asked && `${videoCodecLabels[asked]} was chosen`,
+          !held &&
+            `${label} does not hold ${source.codec ? videoCodecLabels[source.codec] : "this picture's codec"}`,
+          held &&
+            !plays &&
+            `${videoCodecLabels[source.codec!]} in ${label} does not play everywhere`,
+          turnsByRedrawing &&
+            `${label} cannot carry a turn as a setting, so the picture is turned as it is drawn`,
+        ].filter((reason): reason is string => Boolean(reason))
+        return {
+          shown,
+          sourceRate,
+          slower,
+          asked,
+          turns,
+          ownTurn,
+          over,
+          reasons,
+        }
+      })()
+    : null
+
+  // How it is cut: copied where it can be (a part starts on a keyframe,
+  // or an MP4's edit list hides the lead-in), to the frame otherwise.
+  const keyframes = source?.keyframes ?? null
+  const soundCopies = (sound: NonNullable<VideoFacts["audio"]>) =>
+    settings.sound === "keep" &&
+    sound.codec !== null &&
+    PLAYS_EVERYWHERE[container].includes(sound.codec) &&
+    // Under a limit, sound that would take a fifth of it is converted smaller.
+    (!target || (sound.bitrate ?? 128_000) <= totalBits * 0.2)
+  let exactCut = Boolean(
+    cutting && (cut!.exact || (why !== null && why.reasons.length > 0))
+  )
+  const lossless = TURNS_AS_SETTING.includes(container)
+  if (cutting && !exactCut) {
+    const soundJoins =
+      !facts.audio || settings.sound === "none" || soundCopies(facts.audio)
+    if (!keyframes || !keyframes.length) exactCut = true
+    if (cutting.length > 1 && !soundJoins) exactCut = true
+  }
+  if (exactCut && why && !why.reasons.length)
+    why.reasons.push(
+      cut!.exact
+        ? "it is cut exactly where asked"
+        : "it can be cut only by encoding here"
+    )
+  // A copy ends on a keyframe, so no frame it needs is left behind; an
+  // MP4 or MOV starts where asked, its edit list hiding the lead-in.
+  const parts: Part[] | null = !cutting
+    ? null
+    : exactCut
+      ? cutting
+      : cutting.length === 1 && lossless
+        ? [
+            {
+              start: cutting[0].start,
+              end: snapOut(cutting, keyframes!, facts.duration)[0].end,
+            },
+          ]
+        : snapOut(cutting, keyframes!, facts.duration)
+  if (parts) length = keptLength(parts)
 
   // The sound first: a size limit shares its bits between the two.
   let audio: Plan["audio"] = { action: "none" }
@@ -382,12 +502,8 @@ export function planFor(
       audio = { action: "drop" }
       soundNotes.push("The sound is left out.")
     } else {
-      const copies =
-        settings.sound === "keep" &&
-        sound.codec !== null &&
-        PLAYS_EVERYWHERE[container].includes(sound.codec) &&
-        // Under a limit, sound that would take a fifth of it is converted smaller.
-        (!target || (sound.bitrate ?? 128_000) <= totalBits * 0.2)
+      // Sound cut to the frame is cut to the sample, which needs encoding.
+      const copies = soundCopies(sound) && !exactCut
       if (copies) {
         audio = { action: "copy" }
         soundBits = sound.bitrate ?? 128_000
@@ -450,46 +566,11 @@ export function planFor(
   let width = 0
   let height = 0
   let videoBits = 0
-  const source = facts.video
-  if (source) {
-    const shown = shownSize(source, settings)
+  if (source && why) {
+    const { shown, sourceRate, slower, asked, turns, ownTurn, over, reasons } =
+      why
     width = shown.width
     height = shown.height
-    const sourceRate = source.frameRate ?? 30
-    const slower =
-      settings.frameRate !== "same" && settings.frameRate < sourceRate - 0.5
-    const asked =
-      settings.codec !== "auto" && settings.codec !== source.codec
-        ? settings.codec
-        : null
-    const turns = settings.rotate !== 0 || settings.flip
-    const ownTurn = source.rotation !== 0 || source.flip
-    const turnsByRedrawing =
-      (turns || ownTurn) && !TURNS_AS_SETTING.includes(container)
-    const held =
-      source.codec !== null && HOLDS[container].video.includes(source.codec)
-    // A codec chosen on purpose is copied wherever the kind holds it.
-    const plays =
-      source.codec !== null &&
-      (settings.codec === source.codec ||
-        PICTURE_PLAYS_EVERYWHERE[container].includes(source.codec))
-    // A file already under its limit needs nothing for it.
-    const over = target !== null && facts.size > target
-    const reasons = [
-      settings.quality !== "original" && "the quality was chosen",
-      over && `it is to fit under ${sizeSaid(target!)}`,
-      shown.scaled && `it is made ${width} × ${height}`,
-      slower && `it is made ${settings.frameRate} frames a second`,
-      asked && `${videoCodecLabels[asked]} was chosen`,
-      !held &&
-        `${label} does not hold ${source.codec ? videoCodecLabels[source.codec] : "this picture's codec"}`,
-      held &&
-        !plays &&
-        `${videoCodecLabels[source.codec!]} in ${label} does not play everywhere`,
-      turnsByRedrawing &&
-        `${label} cannot carry a turn as a setting, so the picture is turned as it is drawn`,
-    ].filter((reason): reason is string => Boolean(reason))
-
     if (!reasons.length) {
       video = { action: "copy" }
       notes.push(
@@ -499,6 +580,17 @@ export function planFor(
         notes.push(
           `It is already under ${sizeSaid(target)}, so nothing is taken from it.`
         )
+      if (parts && cutting) {
+        const more = (parts[0].end - cutting[0].end).toFixed(1)
+        notes.push(
+          parts.length === 1 && parts[0].start === cutting[0].start
+            ? Number(more) > 0
+              ? `It is cut without encoding: the file says where to start playing, and a copy ends where the video holds a whole picture (a keyframe), so ${more} s more is kept at the end. Choose Exact to cut to the frame.`
+              : "It is cut without encoding: the file says where to start playing, so nothing is lost."
+            : (snapSaid(cutting, parts) ??
+                "Its parts are joined without encoding, so nothing is lost.")
+        )
+      }
       if (turns)
         notes.push(
           `The turn is written as a setting that players follow; the picture itself is not redrawn.`
@@ -520,7 +612,7 @@ export function planFor(
         over
           ? fitToSize({
               target: target!,
-              duration: facts.duration,
+              duration: length,
               soundBits,
               width: shown.width,
               height: shown.height,
@@ -633,10 +725,10 @@ export function planFor(
 
   const copying = video.action === "copy" && audio.action !== "encode"
   const estimate = copying
-    ? facts.size
+    ? Math.round(facts.size * (length / Math.max(facts.duration, 0.001)))
     : video.action === "encode" && video.target
       ? video.target
-      : Math.round((((videoBits + soundBits) * facts.duration) / 8) * 1.01)
+      : Math.round((((videoBits + soundBits) * length) / 8) * 1.01)
 
   return {
     container,
@@ -651,6 +743,13 @@ export function planFor(
     problem,
     pending,
     estimate,
+    cut: parts
+      ? {
+          mode: exactCut ? "exact" : parts.length === 1 ? "copy" : "join",
+          parts,
+        }
+      : null,
+    length,
   }
 }
 

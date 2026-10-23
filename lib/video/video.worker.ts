@@ -20,6 +20,7 @@ import type { Plan } from "./settings"
 import type { Looks } from "./looks"
 import { correctedBitrate, MOST_PASSES, passStands, willMiss } from "./target"
 import { soundStart } from "./sound-start"
+import { sourceTime } from "./trim"
 
 declare const self: DedicatedWorkerGlobalScope
 
@@ -79,7 +80,7 @@ async function writePass(
   software: boolean
 ): Promise<{ missed: number } | { file: Blob; scratch: string | null }> {
   const mediabunny = await engine()
-  const { convertVideo } = await engineFiles()
+  const { convertVideo, joinParts } = await engineFiles()
   const name = `${job.id}-${++written}.${outputInfo[plan.container].extension}`
   const scratch = await scratchFile(job.folder, name)
   const memory = scratch ? null : new mediabunny.BufferTarget()
@@ -96,7 +97,8 @@ async function writePass(
   const watch: { miss: number | null } = { miss: null }
   let last = 0
   try {
-    await convertVideo(mediabunny, job.file, plan, target, {
+    const write = plan.cut?.mode === "join" ? joinParts : convertVideo
+    await write(mediabunny, job.file, plan, target, {
       signal: own.signal,
       software,
       onProgress: (fraction) => {
@@ -266,7 +268,7 @@ async function writeJob(
       plan,
       back.facts,
       {
-        duration: job.facts.duration,
+        duration: plan.length,
         frameRate: job.facts.video?.frameRate ?? null,
       },
       back.decoded
@@ -275,12 +277,14 @@ async function writeJob(
     let looks: Looks | null = null
     if (plan.video.action === "encode" && !plan.rotate && !plan.flip)
       try {
-        looks = await looksAlike(mediabunny, job.file, chosen.file, {
-          width: plan.width,
-          height: plan.height,
-          duration: job.facts.duration,
-          start: 0,
-        })
+        const parts = plan.cut?.parts
+        looks = await looksAlike(
+          mediabunny,
+          job.file,
+          chosen.file,
+          { width: plan.width, height: plan.height, duration: plan.length },
+          parts ? (time) => sourceTime(time, parts) : undefined
+        )
       } catch {
         looks = null
       }

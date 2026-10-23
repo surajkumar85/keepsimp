@@ -4,7 +4,7 @@ import type { VideoJob, VideoResponse } from "@/lib/video/protocol"
 import type { VideoFacts } from "@/lib/video/settings"
 import { Agent } from "./agent"
 import { PoolJobs } from "./pool-jobs"
-import { videoTools } from "./video"
+import { kept, pngSize, videoTools } from "./video"
 
 const MP4 = Uint8Array.of(
   0,
@@ -51,12 +51,22 @@ const facts: VideoFacts = {
   },
 }
 
+/** The start of a PNG of a size: its signature and header. */
+function png(width: number, height: number) {
+  const head = new Uint8Array(24)
+  head.set([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
+  new DataView(head.buffer).setUint32(16, width)
+  new DataView(head.buffer).setUint32(20, height)
+  return new Blob([head], { type: "image/png" })
+}
+
 function setup({
   problems = [] as string[],
   canWrite = true,
   readFacts = facts,
   size = 1000,
   passes = 1,
+  frame = png(320, 180),
 } = {}) {
   let pool!: FakePool<VideoJob, VideoResponse>
   const videoPool = new PoolJobs<VideoJob, VideoResponse>(
@@ -122,6 +132,7 @@ function setup({
       pool: videoPool,
       ask: { video: async () => canWrite, sound: async () => true },
       folder: "agent-test",
+      frame: async () => frame,
     })
   )
   const progress: number[] = []
@@ -282,5 +293,118 @@ describe("compressing a video for an agent", () => {
       target: 1024 * 1024,
     })
     expect(result.summary).toMatch(/, in 2 passes\. Looks very close/)
+  })
+})
+
+describe("trimming a video for an agent", () => {
+  it("works out what is kept from parts to keep and to cut", () => {
+    expect(kept(10, undefined, [{ start: 2, end: 4 }])).toEqual([
+      { start: 0, end: 2 },
+      { start: 4, end: 10 },
+    ])
+    expect(
+      kept(
+        10,
+        [
+          { start: 6, end: 9 },
+          { start: 1, end: 3 },
+          { start: 2, end: 4 },
+        ],
+        [{ start: 7, end: 8 }]
+      )
+    ).toEqual([
+      { start: 1, end: 4 },
+      { start: 6, end: 7 },
+      { start: 8, end: 9 },
+    ])
+    expect(() => kept(10, [{ start: 12, end: 14 }])).toThrow(
+      "The video is 0:10.00 long, so a part cannot start at 0:12.00."
+    )
+  })
+
+  it("copies the parts kept, in the file's own format, and says the cut", async () => {
+    const { call, add, jobs } = setup({
+      readFacts: { ...facts, video: { ...facts.video!, keyframes: [0, 2, 4] } },
+    })
+    const result = await call("trim_video", {
+      file: add(MP4, "clip.mp4").id,
+      keep: [{ start: 1, end: 3 }],
+    })
+    const job = jobs().find((one) => one.job === "convert")!
+    expect(job.job === "convert" && job.plan.cut).toEqual({
+      mode: "copy",
+      parts: [{ start: 1, end: 4 }],
+    })
+    expect(job.job === "convert" && job.plan.container).toBe("mp4")
+    expect(result.summary).toContain("Written and checked")
+    expect((result.data as { plan: { cut: unknown } }).plan.cut).toMatchObject({
+      mode: "copy",
+    })
+  })
+
+  it("cuts to the frame when asked, and asks for parts", async () => {
+    const { call, add, jobs } = setup()
+    await call("trim_video", {
+      file: add(MP4, "clip.mp4").id,
+      cut: [{ start: 1, end: 2 }],
+      exact: true,
+    })
+    const job = jobs().find((one) => one.job === "convert")!
+    expect(job.job === "convert" && job.plan.cut).toEqual({
+      mode: "exact",
+      parts: [
+        { start: 0, end: 1 },
+        { start: 2, end: 6 },
+      ],
+    })
+    await expect(
+      call("trim_video", { file: add(MP4, "clip.mp4").id })
+    ).rejects.toThrow('Give the parts to "keep" or to "cut", or both.')
+    await expect(
+      call("trim_video", {
+        file: add(MP4, "clip.mp4").id,
+        cut: [{ start: 0, end: 6 }],
+      })
+    ).rejects.toThrow("Everything is cut out.")
+  })
+})
+
+describe("saving a frame for an agent", () => {
+  it("hands over the frame as a PNG of the picture's size", async () => {
+    const { call, add, agent } = setup()
+    const result = await call("video_frame", {
+      file: add(MP4, "clip.mp4").id,
+      seconds: 1.5,
+    })
+    expect(result.summary).toBe("The frame at 0:01.50: 320 × 180 PNG, 1 KB.")
+    expect(agent.files.get(result.files![0].id).ref.name).toBe(
+      "clip 0-01.50.png"
+    )
+  })
+
+  it("refuses a moment past the end, a file with no picture, and a picture not as read", async () => {
+    const { call, add } = setup()
+    await expect(
+      call("video_frame", { file: add(MP4, "clip.mp4").id, seconds: 7 })
+    ).rejects.toThrow(
+      "clip.mp4 is 0:06.00 long, so there is no frame at 0:07.00."
+    )
+    const silent = setup({ readFacts: { ...facts, video: null } })
+    await expect(
+      silent.call("video_frame", {
+        file: silent.add(MP4, "song.mp4").id,
+        seconds: 1,
+      })
+    ).rejects.toThrow("song.mp4 has no picture.")
+    for (const frame of [png(2, 2), new Blob(["not a picture"])]) {
+      const wrong = setup({ frame })
+      await expect(
+        wrong.call("video_frame", {
+          file: wrong.add(MP4, "clip.mp4").id,
+          seconds: 1,
+        })
+      ).rejects.toThrow("is not the video's picture")
+    }
+    expect(pngSize(new Uint8Array(4))).toBeNull()
   })
 })

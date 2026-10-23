@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest"
 import {
+  cutOf,
+  trimmed,
+  undone,
   factsLine,
   itemMessage,
   itemState,
@@ -53,6 +56,8 @@ const item = (change: Partial<VideoItem> = {}): VideoItem => ({
   facts,
   poster: null,
   message: null,
+  trim: null,
+  trimApplied: null,
   progress: null,
   result: null,
   ...change,
@@ -215,6 +220,9 @@ describe("words and names", () => {
     expect(outputName("holiday.MP4", plan)).toBe("holiday-converted.mp4")
     expect(outputName("holiday.mp4", webm)).toBe("holiday.webm")
     expect(outputName("clip", plan)).toBe("clip.mp4")
+    expect(
+      outputName("holiday.mp4", { ...plan, cut: { mode: "copy", parts: [] } })
+    ).toBe("holiday-trimmed.mp4")
     expect(outputName(".hidden", plan)).toBe(".hidden.mp4")
   })
 
@@ -272,5 +280,36 @@ describe("letting go", () => {
       scratch: ["a-2.mp4"],
     })
     expect(dropped([item()], [item()])).toEqual({ urls: [], scratch: [] })
+  })
+})
+
+describe("the trim's edits", () => {
+  const all = [{ start: 0, end: 10 }]
+  it("are kept with what came before, to undo and do again", () => {
+    expect(cutOf(null)).toBeNull()
+    const first = trimmed(null, [{ start: 2, end: 8 }], all)
+    expect(first).toEqual({
+      parts: [{ start: 2, end: 8 }],
+      exact: false,
+      undo: [all],
+      redo: [],
+    })
+    const second = trimmed(
+      { ...first, exact: true },
+      [{ start: 3, end: 8 }],
+      all
+    )
+    expect(cutOf(second)).toEqual({
+      parts: [{ start: 3, end: 8 }],
+      exact: true,
+    })
+    const back = undone(second, true)
+    expect(back.parts).toEqual([{ start: 2, end: 8 }])
+    expect(back.redo).toEqual([[{ start: 3, end: 8 }]])
+    const again = undone(back, false)
+    expect(again).toEqual({ ...second, redo: [] })
+    expect(undone(again, false)).toBe(again)
+    // A new edit after an undo drops what could be done again.
+    expect(trimmed(back, [{ start: 4, end: 5 }], all).redo).toEqual([])
   })
 })

@@ -277,6 +277,12 @@ const cards = [
     "/images/video-mp4-guide.svg",
   ],
   [
+    "trim-video-without-losing-quality",
+    "Keep the part that matters.",
+    "Trim video without encoding, or to the frame.",
+    "/images/video-trim-guide.svg",
+  ],
+  [
     "keepsimp-tools-for-ai-agents",
     "Ask your agent. The work stays here.",
     "KeepSimp's tools in Claude Code, Codex and WebMCP.",
