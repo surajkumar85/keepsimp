@@ -66,6 +66,7 @@ function setup({
   readFacts = facts,
   size = 1000,
   passes = 1,
+  resized = null as { width: number; height: number } | null,
   frame = png(320, 180),
 } = {}) {
   let pool!: FakePool<VideoJob, VideoResponse>
@@ -117,6 +118,7 @@ function setup({
             problems,
             index: "front",
             passes,
+            resized,
             // Measured only for a picture encoded again, as the worker does.
             looks:
               plan.video.action === "encode"
@@ -293,6 +295,19 @@ describe("compressing a video for an agent", () => {
       target: 1024 * 1024,
     })
     expect(result.summary).toMatch(/, in 2 passes\. Looks very close/)
+    const floored = setup({
+      readFacts: big,
+      passes: 3,
+      resized: { width: 160, height: 90 },
+    })
+    const smaller = await floored.call("compress_video", {
+      file: floored.add(MP4, "clip.mp4").id,
+      megabytes: 1,
+    })
+    expect(smaller.summary).toContain(
+      "would not come down to the bitrate asked, so the picture was made smaller, 160 × 90, to fit."
+    )
+    expect(smaller.data).toMatchObject({ resized: { width: 160, height: 90 } })
   })
 })
 

@@ -569,7 +569,7 @@ describe("a size limit", () => {
     })
     expect(plan.notes[0]).toMatch(/because it is to fit under 25 MB\.$/)
     expect(plan.notes[1]).toBe(
-      "If the browser's encoder overshoots, the file is written again with less (3 times at most), and it is never handed over larger than 25 MB."
+      "If the browser's encoder overshoots, the file is written again with less, or smaller if it will not come down (3 times at most), and it is never handed over larger than 25 MB."
     )
     expect(plan.estimate).toBe(25 * MB)
     expect(plan.audio).toEqual({ action: "copy" })

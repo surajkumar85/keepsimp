@@ -72,6 +72,7 @@ const result = (change: Partial<NonNullable<VideoItem["result"]>> = {}) => ({
   problems: [],
   index: "front" as const,
   passes: 1,
+  resized: null,
   looks: null,
   error: null,
   ...change,

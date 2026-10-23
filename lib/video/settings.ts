@@ -702,7 +702,7 @@ export function planFor(
       )
       if (over)
         notes.push(
-          `If the browser's encoder overshoots, the file is written again with less (${MOST_PASSES} times at most), and it is never handed over larger than ${sizeSaid(target!)}.`
+          `If the browser's encoder overshoots, the file is written again with less, or smaller if it will not come down (${MOST_PASSES} times at most), and it is never handed over larger than ${sizeSaid(target!)}.`
         )
       if (turns || ownTurn)
         notes.push(

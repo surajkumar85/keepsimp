@@ -22,6 +22,7 @@ import {
   type Part,
 } from "@/lib/video/trim"
 import { looksSaid } from "@/lib/video/looks"
+import { floorSaid } from "@/lib/video/target"
 import {
   defaultSettings,
   FRAME_RATES,
@@ -252,6 +253,7 @@ export function videoTools(engines: VideoEngines): AgentTool[] {
     return {
       summary: [
         ...plan.notes,
+        ...(done.resized ? [floorSaid(done.resized)] : []),
         `Written and checked: ${factsLine(done.written)}, ${bytes(done.file.size)}${done.passes > 1 ? `, in ${done.passes} passes` : ""}.`,
         ...(done.looks ? [looksSaid(done.looks)] : []),
       ].join(" "),
@@ -267,6 +269,7 @@ export function videoTools(engines: VideoEngines): AgentTool[] {
         },
         written: done.written,
         passes: done.passes,
+        resized: done.resized,
         looks: done.looks,
       },
     }
@@ -305,7 +308,7 @@ export function videoTools(engines: VideoEngines): AgentTool[] {
     name: "compress_video",
     title: "Make a video smaller, to a size",
     description:
-      "Writes a video to fit under a size (megabytes) or a share of its own size, as the video compressor does: the sound gets its share, the picture the rest as its bitrate, and more than 30 frames a second become 30, then the size steps down, when that leaves too few bits for the picture. The file is written again with a corrected bitrate when the browser's encoder misses (three passes at most), and is never handed over larger than the limit. A file already under it is copied. Says how close the result looks (SSIM on frames through the clip).",
+      "Writes a video to fit under a size (megabytes) or a share of its own size, as the video compressor does: the sound gets its share, the picture the rest as its bitrate, and more than 30 frames a second become 30, then the size steps down, when that leaves too few bits for the picture. The file is written again with a corrected bitrate when the browser's encoder misses (three passes at most), at a smaller size when the encoder will not come down to its bitrate,, and is never handed over larger than the limit. A file already under it is copied. Says how close the result looks (SSIM on frames through the clip).",
     inputSchema: {
       type: "object",
       properties: {

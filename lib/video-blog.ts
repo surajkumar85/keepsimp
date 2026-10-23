@@ -67,7 +67,7 @@ export const videoPosts: readonly BlogPost[] = [
         id: "passes",
         title: "Written, checked, and written again if it misses.",
         paragraphs: [
-          "Browser encoders do not always keep to the bitrate they are given. So each file is watched as it is written: if the bytes so far say it will end up too large, writing stops and starts again with a corrected bitrate; a pass that ends too large is written again too, three passes at most. A result is never offered as fitting when it does not.",
+          "Browser encoders do not always keep to the bitrate they are given. So each file is watched as it is written: if the bytes so far say it will end up too large, writing stops and starts again with a corrected bitrate; a pass that ends too large is written again too, three passes at most. Some encoders will not go below a certain bitrate whatever they are asked; when a pass comes out far over what it asked, the next one is written smaller instead, and the page says so. A result is never offered as fitting when it does not.",
           "Each file is then opened again: its size held to the limit, its length to the original's, its first and last frames decoded. A file already under its limit is copied as it is, with nothing taken from it.",
         ],
       },

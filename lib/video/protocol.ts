@@ -66,6 +66,8 @@ export type VideoResponse =
       index: IndexPlace | null
       /** Passes written to reach a size limit (1 without one). */
       passes: number
+      /** The size the picture was made, when the encoder's floor made it smaller than planned. */
+      resized: { width: number; height: number } | null
       /** How close it looks to the original; null when not measured. */
       looks: Looks | null
     }

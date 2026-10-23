@@ -2,6 +2,9 @@ import { describe, expect, it } from "vitest"
 import {
   correctedBitrate,
   fitToSize,
+  floorSaid,
+  nextPass,
+  stepDown,
   LEAST_BITS_PER_PIXEL,
   OVERHEAD_BYTES,
   OVERHEAD_SHARE,
@@ -127,5 +130,63 @@ describe("passes", () => {
     expect(willMiss(100, 40, 0.2)).toBe(false)
     expect(willMiss(100, 30, 0.25)).toBe(true)
     expect(willMiss(100, 27, 0.25)).toBe(false)
+  })
+})
+
+describe("an encoder at its floor", () => {
+  it("steps the picture down to a size with fewer pixels, in its shape", () => {
+    expect(stepDown(960, 540)).toEqual({ width: 854, height: 480 })
+    expect(stepDown(540, 960)).toEqual({ width: 480, height: 854 })
+    expect(stepDown(1920, 1080, 0.5)).toEqual({ width: 1280, height: 720 })
+    expect(stepDown(960, 540, 0.55)).toEqual({ width: 640, height: 360 })
+    // Nothing has so few pixels: the smallest step.
+    expect(stepDown(960, 540, 0.01)).toEqual({ width: 426, height: 240 })
+    expect(stepDown(426, 240)).toBeNull()
+  })
+
+  it("lowers the bitrate when the encoder follows it, and the size when it does not", () => {
+    const pass = { bitrate: 878_000, width: 960, height: 540 }
+    // Over by a little: the encoder follows its bitrate, so ask less.
+    expect(nextPass(pass, 783_000, 860_000, 783_000)).toEqual({
+      ...pass,
+      bitrate: correctedBitrate(878_000, 783_000, 860_000),
+      smaller: false,
+    })
+    // Firefox on Linux in CI: 1.35 MB for 765 KB asked; the same bitrate, smaller.
+    expect(nextPass(pass, 783_000, 1_415_619, 783_000)).toEqual({
+      bitrate: 878_000,
+      width: 640,
+      height: 360,
+      smaller: true,
+    })
+    // At the smallest size there is nothing to step down to.
+    expect(
+      nextPass({ bitrate: 100_000, width: 426, height: 240 }, 1000, 5000, 1000)
+    ).toMatchObject({ width: 426, smaller: false })
+    // A lower bitrate that wrote about as much: the floor, seen over two passes.
+    const lower = { ...pass, bitrate: 680_000 }
+    expect(
+      nextPass(lower, 783_000, 930_000, 700_000, {
+        bitrate: 878_000,
+        written: 950_000,
+      })
+    ).toMatchObject({
+      width: 640,
+      height: 360,
+      bitrate: 680_000,
+      smaller: true,
+    })
+    // One that came down with it is followed.
+    expect(
+      nextPass(lower, 783_000, 800_000, 700_000, {
+        bitrate: 878_000,
+        written: 950_000,
+      }).smaller
+    ).toBe(false)
+    // Under the target is never a floor.
+    expect(nextPass(pass, 1_000_000, 700_000, 400_000).smaller).toBe(false)
+    expect(floorSaid({ width: 854, height: 480 })).toBe(
+      "This browser's encoder would not come down to the bitrate asked, so the picture was made smaller, 854 × 480, to fit."
+    )
   })
 })

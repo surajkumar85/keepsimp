@@ -57,6 +57,7 @@ import {
 } from "@/lib/video/settings"
 import { zipBlobs } from "@/lib/video/zip-blobs"
 import { looksSaid } from "@/lib/video/looks"
+import { floorSaid } from "@/lib/video/target"
 import { convertJob, readJob } from "@/lib/video/jobs"
 import { browserAsker } from "@/lib/video/probe"
 import { SettingsPanel } from "./settings-panel"
@@ -280,6 +281,7 @@ export function VideoWorkspace({ mode }: { mode: VideoMode }) {
                 problems: [],
                 index: null,
                 passes: 0,
+                resized: null,
                 looks: null,
                 error: message.message,
               },
@@ -307,6 +309,7 @@ export function VideoWorkspace({ mode }: { mode: VideoMode }) {
               problems: message.problems,
               index: message.index,
               passes: message.passes,
+              resized: message.resized,
               looks: message.looks,
               error: null,
             },
@@ -842,6 +845,7 @@ function Selected({
                     : `About ${sizeLabel(plan.estimate)}.`}
                 </p>
               )}
+              {result?.resized && <p>{floorSaid(result.resized)}</p>}
               {result?.looks && (
                 <p data-testid="video-looks">{looksSaid(result.looks)}</p>
               )}

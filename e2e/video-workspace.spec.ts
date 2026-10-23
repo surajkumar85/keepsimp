@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs"
-import { test, expect } from "@playwright/test"
+import { test, expect, type Page } from "@playwright/test"
 import AxeBuilder from "@axe-core/playwright"
 import { unzipSync } from "fflate"
 import { bytesOf } from "./pdf"
@@ -187,6 +187,23 @@ test("keeps the sound in step with the picture when it is encoded again", async 
   }
 })
 
+/**
+ * The size the picture was written at: the plan's, or a smaller one the
+ * page names when the browser's encoder would not come down to its bitrate
+ * (Firefox's H.264 on Linux).
+ */
+async function writtenSize(page: Page, planned: [number, number]) {
+  const floor = await page
+    .getByTestId("video-plan")
+    .getByText("would not come down")
+    .textContent({ timeout: 1000 })
+    .catch(() => null)
+  const size = floor?.match(/(\d+) × (\d+), to fit/)
+  return size
+    ? { width: Number(size[1]), height: Number(size[2]) }
+    : { width: planned[0], height: planned[1] }
+}
+
 test("compresses the sample to half its size and to a quarter, checked and measured", async ({
   page,
 }) => {
@@ -203,8 +220,7 @@ test("compresses the sample to half its size and to a quarter, checked and measu
   const said = probe(half.bytes, "half.mp4")
   expect(said.streams.find((one) => one.codec_type === "video")).toMatchObject({
     codec_name: "h264",
-    width: 960,
-    height: 540,
+    ...(await writtenSize(page, [960, 540])),
   })
   expect(decodesCleanly(half.bytes, "half.mp4")).toBe(true)
   await expect(page.getByTestId("video-looks")).toContainText(
@@ -221,7 +237,7 @@ test("compresses the sample to half its size and to a quarter, checked and measu
   )
   const small = probe(quarter.bytes, "quarter.mp4")
   expect(small.streams.find((one) => one.codec_type === "video")).toMatchObject(
-    { width: 640, height: 360 }
+    await writtenSize(page, [640, 360])
   )
   expect(small.streams.find((one) => one.codec_type === "audio")).toMatchObject(
     { codec_name: "aac" }

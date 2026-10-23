@@ -18,7 +18,7 @@ import type {
 import { removeScratch, scratchFile } from "./scratch"
 import type { Plan } from "./settings"
 import type { Looks } from "./looks"
-import { correctedBitrate, MOST_PASSES, passStands, willMiss } from "./target"
+import { MOST_PASSES, nextPass, passStands, willMiss } from "./target"
 import { soundStart } from "./sound-start"
 import { sourceTime } from "./trim"
 
@@ -202,6 +202,7 @@ async function writeJob(
     file: Blob
     scratch: string | null
     index: IndexPlace | null
+    plan: Plan
   }[] = []
   try {
     const mediabunny = await engine()
@@ -222,13 +223,38 @@ async function writeJob(
     }
     const limit = plan.video.action === "encode" ? plan.video.target : null
     const passes = limit === null ? 1 : MOST_PASSES
-    let bitrate = plan.video.action === "encode" ? plan.video.bitrate : 0
+    let next =
+      plan.video.action === "encode"
+        ? {
+            bitrate: plan.video.bitrate,
+            width: plan.video.width,
+            height: plan.video.height,
+          }
+        : null
     let chosen: (typeof made)[number] | null = null
+    // The pass before at the same size, to tell an encoder that will not come down.
+    let before: { bitrate: number; written: number } | undefined
+    const advance = (written: number, expected: number) => {
+      const was = next!
+      const step = nextPass(was, limit!, written, expected, before)
+      next = { bitrate: step.bitrate, width: step.width, height: step.height }
+      before = step.smaller ? undefined : { bitrate: was.bitrate, written }
+    }
     for (let number = 1; number <= passes && !chosen; number++) {
       const passPlan: Plan =
-        plan.video.action === "encode"
-          ? { ...plan, video: { ...plan.video, bitrate } }
+        plan.video.action === "encode" && next
+          ? {
+              ...plan,
+              width: next.width,
+              height: next.height,
+              video: { ...plan.video, ...next },
+            }
           : plan
+      // What the pass comes to if the encoder keeps to its bitrate.
+      const expected =
+        plan.video.action === "encode" && next && limit !== null
+          ? limit + ((next.bitrate - plan.video.bitrate) * plan.length) / 8
+          : 0
       const pass = await writePass(
         job,
         passPlan,
@@ -239,7 +265,7 @@ async function writeJob(
       )
       if (stop.signal.aborted) return
       if ("missed" in pass) {
-        bitrate = correctedBitrate(bitrate, limit!, pass.missed)
+        advance(pass.missed, expected)
         continue
       }
       let file = pass.file
@@ -251,11 +277,11 @@ async function writeJob(
         file = moved.file
         index = moved.moved ? "front" : moved.reason
       }
-      const result = { file, scratch: pass.scratch, index }
+      const result = { file, scratch: pass.scratch, index, plan: passPlan }
       made.push(result)
       if (limit === null || passStands(limit, file.size, number === passes))
         chosen = result
-      else bitrate = correctedBitrate(bitrate, limit, file.size)
+      else advance(file.size, expected)
     }
     // The last pass, unless an earlier one kept under the limit and it did not.
     const under = made.filter((one) => limit === null || one.file.size <= limit)
@@ -265,7 +291,7 @@ async function writeJob(
         await removeScratch(job.folder, other.scratch)
     const back = await readBack(mediabunny, chosen.file, plan.container)
     const problems = writtenProblems(
-      plan,
+      chosen.plan,
       back.facts,
       {
         duration: plan.length,
@@ -282,7 +308,11 @@ async function writeJob(
           mediabunny,
           job.file,
           chosen.file,
-          { width: plan.width, height: plan.height, duration: plan.length },
+          {
+            width: chosen.plan.width,
+            height: chosen.plan.height,
+            duration: plan.length,
+          },
           parts ? (time) => sourceTime(time, parts) : undefined
         )
       } catch {
@@ -301,6 +331,10 @@ async function writeJob(
       problems,
       index: chosen.index,
       passes: made.length,
+      resized:
+        chosen.plan.width !== plan.width
+          ? { width: chosen.plan.width, height: chosen.plan.height }
+          : null,
     })
   } catch (error) {
     for (const one of made)

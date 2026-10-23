@@ -122,6 +122,67 @@ export function correctedBitrate(
   return Math.floor(bitrate * (target / written) * 0.97)
 }
 
+/**
+ * An encoder that writes this much more than its bitrate asks is at its
+ * floor: asked for less, it writes the same. Measured: Firefox's H.264 on
+ * Linux writes about 1.8 Mbit/s for a 960 × 540 clip whatever it is asked
+ * below that; browsers keeping to a bitrate land within a tenth of it.
+ */
+export const FLOOR_OVERSHOOT = 1.5
+
+/**
+ * The largest size step with at most a share of the picture's pixels, in
+ * its shape; the smallest step when none has so few; null when the picture
+ * is already that small.
+ */
+export function stepDown(width: number, height: number, share = 1) {
+  const short = Math.min(width, height)
+  const steps = SIZE_STEPS.filter((step) => step < short).map((side) => ({
+    width: even((width * side) / short),
+    height: even((height * side) / short),
+  }))
+  return (
+    steps.find((step) => step.width * step.height <= width * height * share) ??
+    steps.at(-1) ??
+    null
+  )
+}
+
+/**
+ * The next pass, from what the last one wrote against what it was asked
+ * for: a corrected bitrate, or, where the encoder did not come down to its
+ * bitrate, the same bitrate at a size with fewer pixels by as much as it
+ * wrote over, as fewer pixels need fewer bits whatever the encoder does.
+ */
+export function nextPass(
+  pass: { bitrate: number; width: number; height: number },
+  target: number,
+  written: number,
+  expected: number,
+  /** The pass before, at the same size: a floor shows as a lower bitrate that wrote about as much. */
+  before?: { bitrate: number; written: number }
+) {
+  const cut = before ? 1 - pass.bitrate / before.bitrate : 0
+  const fell = before ? 1 - written / before.written : 0
+  const floor =
+    written > expected * FLOOR_OVERSHOOT || (cut > 0.1 && fell < cut / 3)
+  if (written > target && floor) {
+    // Fewer pixels by what it wrote over, the bits for each pixel kept,
+    // with some room, as a forecast made early in a pass comes in low.
+    const smaller = stepDown(pass.width, pass.height, (target / written) * 0.85)
+    if (smaller) return { ...pass, ...smaller, smaller: true }
+  }
+  return {
+    ...pass,
+    bitrate: correctedBitrate(pass.bitrate, target, written),
+    smaller: false,
+  }
+}
+
+/** What the page says when the encoder's floor made the picture smaller. */
+export const floorSaid = (size: { width: number; height: number }) =>
+  `This browser's encoder would not come down to the bitrate asked, so the picture was made smaller, ${size.width} × ${size.height}, to fit.`
+
 /** Whether a pass is done: under the target, and not wastefully far under it. */
 export function passStands(target: number, written: number, last: boolean) {
   return written <= target && (last || written >= target * UNDER_ENOUGH)
