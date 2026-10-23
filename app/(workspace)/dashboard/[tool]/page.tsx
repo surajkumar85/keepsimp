@@ -114,7 +114,7 @@ export async function generateMetadata({
   if (id === "video-trimmer")
     return pageMetadata(
       "Trim video online for free, without losing quality",
-      "Cut an MP4, MOV, WebM or MKV to the part you want in your browser: copied without encoding, so nothing is lost, or cut exactly to the frame. Cut several parts out at once and save any frame as a PNG. Any length, no account, no uploads.",
+      "Cut an MP4, MOV, WebM or MKV to the part you want in your browser: copied without encoding, so nothing is lost, or cut exactly to the frame. Cut several parts out at once, split it into files and save any frame as a PNG. Any length, no account, no uploads.",
       `/dashboard/${id}/`
     )
   if (id === "video-converter")

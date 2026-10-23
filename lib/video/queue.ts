@@ -8,7 +8,7 @@ import { containerLabels, outputInfo, type Container } from "./formats"
 import type { IndexPlace } from "./protocol"
 import { videoCodecLabels, type Plan, type VideoFacts } from "./settings"
 import { MOST_PASSES } from "./target"
-import type { Part } from "./trim"
+import { keepOnly, splitAt, whole, type Part } from "./trim"
 import type { Looks } from "./looks"
 
 /** What the trimmer keeps, with the edits that can be undone and done again. */
@@ -93,6 +93,8 @@ export interface VideoItem {
   trim: Trim | null
   /** The trim the plan follows: the edits, once they have settled. */
   trimApplied: Trim | null
+  /** Which part of a split file this is (its name says so); null for a whole file. */
+  part: number | null
   /** How far the job writing it is, for the plan named. */
   progress: { key: string; fraction: number; pass?: number } | null
   result: VideoResult | null
@@ -171,14 +173,73 @@ export function factsLine(facts: VideoFacts) {
   return parts.join(" · ")
 }
 
-/** The name a result is saved under. */
-export function outputName(name: string, plan: Plan) {
+/** The name a result is saved under; a part's name already says what it is. */
+export function outputName(name: string, plan: Plan, part = false) {
   const dot = name.lastIndexOf(".")
   const base = dot > 0 ? name.slice(0, dot) : name
   const extension = outputInfo[plan.container].extension
-  const same = dot > 0 && name.slice(dot + 1).toLowerCase() === extension
+  const same =
+    !part && dot > 0 && name.slice(dot + 1).toLowerCase() === extension
   const said = plan.cut ? "-trimmed" : "-converted"
   return `${base}${same ? said : ""}.${extension}`
+}
+
+/** A name for one part of a file: `holiday-part-2.mp4`. */
+export function partName(name: string, part: number) {
+  const dot = name.lastIndexOf(".")
+  return dot > 0
+    ? `${name.slice(0, dot)}-part-${part}${name.slice(dot)}`
+    : `${name}-part-${part}`
+}
+
+/**
+ * What is kept of a file, split at points: one list of parts for each
+ * piece that keeps something. A split part is the file with one more keep
+ * step, so it is written, cut and checked like any trim.
+ */
+export function splitParts(
+  kept: Part[] | null,
+  points: number[],
+  duration: number
+) {
+  return splitAt(points, duration)
+    .map((piece) =>
+      keepOnly(kept ?? whole(duration), piece.start, piece.end, duration)
+    )
+    .filter((parts) => parts.length > 0)
+}
+
+/** A file split into files of its own, each keeping its piece; null when there is one piece. */
+export function splitItem(
+  item: VideoItem,
+  points: number[],
+  makeId: () => string
+): VideoItem[] | null {
+  if (!item.facts) return null
+  const pieces = splitParts(
+    item.trim?.parts ?? null,
+    points,
+    item.facts.duration
+  )
+  if (pieces.length < 2) return null
+  return pieces.map((parts, index) => {
+    const trim: Trim = {
+      parts,
+      exact: item.trim?.exact ?? false,
+      undo: [],
+      redo: [],
+    }
+    return {
+      ...item,
+      id: makeId(),
+      name: partName(item.name, index + 1),
+      trim,
+      trimApplied: trim,
+      part: index + 1,
+      progress: null,
+      result: null,
+    }
+  })
 }
 
 /** The next job for an idle worker: files to read first, then the selected file, then the rest in order. */

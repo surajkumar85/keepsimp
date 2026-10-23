@@ -19,7 +19,7 @@ describe("the trimmer's keys", () => {
     expect(press("ArrowLeft")).toBe("back")
     expect(press("ArrowLeft", { shiftKey: true })).toBe("back-more")
     expect(press("S", { shiftKey: true })).toBe("frame")
-    expect(press("s")).toBeNull()
+    expect(press("s")).toBe("split")
     expect(press("Delete")).toBe("cut")
     expect(press("Backspace")).toBe("cut")
   })

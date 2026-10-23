@@ -94,7 +94,7 @@ export const tools: readonly Tool[] = [
     id: "video-trimmer",
     name: "Video trimmer",
     description:
-      "Cut a video to the moments you want, to the frame or without encoding, and save any frame as a picture, on your device.",
+      "Cut a video to the moments you want, to the frame or without encoding, split it into files, and save any frame as a picture, on your device.",
     partOf: "video-editor",
     category: "video",
     keywords: [
@@ -105,6 +105,7 @@ export const tools: readonly Tool[] = [
       "cut video",
       "cut mp4",
       "lossless cut",
+      "split video",
       "video frame to image",
       "screenshot from video",
     ],

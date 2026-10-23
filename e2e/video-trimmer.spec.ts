@@ -153,3 +153,59 @@ test("has the trimmer one press away in the converter", async ({ page }) => {
     "The whole video: 0:06.00."
   )
 })
+
+test("splits a video into files at marks, each the source's own frames, with pictures along the timeline", async ({
+  page,
+}) => {
+  test.setTimeout(180_000)
+  const original = source()
+  await page.goto(TRIMMER)
+  await page.locator("#video-file").setInputFiles([original])
+  await settled(page)
+  // Pictures of frames along the timeline, read from the file.
+  await expect(page.getByTestId("trim-timeline").locator("img")).toHaveCount(10)
+  await panel(page).getByRole("button", { name: "Start here (I)" }).focus()
+  const keys = page.keyboard
+  await keys.press("Shift+ArrowRight")
+  await keys.press("Shift+ArrowRight")
+  await keys.press("s")
+  await keys.press("Shift+ArrowRight")
+  await keys.press("Shift+ArrowRight")
+  await keys.press("s")
+  await expect(page.getByTestId("split-said")).toHaveText(
+    "2 splits: 3 files, each written and checked on its own, with what is kept here."
+  )
+  await panel(page).getByRole("button", { name: "Make 3 files" }).click()
+  await expect(page.getByTestId("queue-item")).toHaveCount(3)
+  await settled(page)
+  const all = frameHashes(original.buffer, "split-source.mp4")
+  for (const [index, [start, end]] of [
+    [0, 2],
+    [2, 4],
+    [4, 6],
+  ].entries()) {
+    const part = await download(page, `keyed-part-${index + 1}.mp4`)
+    expect(part.name).toBe(`keyed-part-${index + 1}.mp4`)
+    // Split at keyframes: exactly the source's frames between the marks.
+    expect(frameHashes(part.bytes, `split-${index}.mp4`)).toEqual(
+      all.slice(start * 30, end * 30)
+    )
+  }
+  // The splitting is said in the list too: a ZIP of the three.
+  await expect(page.getByRole("button", { name: /ZIP/ })).toBeVisible()
+})
+
+test("splits every so many seconds", async ({ page }) => {
+  await page.goto(TRIMMER)
+  await page.locator("#video-file").setInputFiles([source()])
+  await settled(page)
+  await panel(page).getByLabel("Every (seconds or m:ss)").fill("2.5")
+  await panel(page).getByRole("button", { name: "Split every" }).click()
+  await expect(page.getByTestId("split-said")).toHaveText(
+    "2 splits: 3 files, each written and checked on its own, with what is kept here."
+  )
+  await panel(page).getByRole("button", { name: "Clear the splits" }).click()
+  await expect(
+    panel(page).getByRole("button", { name: "Make files" })
+  ).toBeDisabled()
+})

@@ -269,10 +269,11 @@ export const videoPosts: readonly BlogPost[] = [
     title: "Keep the part that matters. Lose nothing else.",
     searchTitle: "How to trim a video without losing quality, for free",
     description:
-      "Cut an MP4, MOV, WebM or MKV to the part you want in your browser: copied without encoding, or exact to the frame. Cut out several parts and save frames. No uploads.",
+      "Cut an MP4, MOV, WebM or MKV to the part you want in your browser: copied without encoding, or exact to the frame. Cut out parts, split into files and save frames. No uploads.",
     keywords: [
       "trim video",
       "cut video",
+      "split video",
       "trim video without losing quality",
       "lossless video cutter",
       "cut mp4 online",
@@ -316,6 +317,7 @@ export const videoPosts: readonly BlogPost[] = [
         paragraphs: [
           "Open the video trimmer and drop your video. Set a start and an end, by typing a time such as 1:07.25, dragging, or pressing I and O at the playhead, then Keep the selection or Cut it out. Do it again to cut out more; Undo and Redo go back and forth, and Play what is kept plays the parts one after another.",
           "The file is written as soon as the edits settle, opened again and checked, its length held to the parts kept, before you can download it. Save this frame (Shift + S) saves the frame at the playhead as a PNG, read from the file at its full size.",
+          "To split a video into several files, mark the places with Split here (S) or split every so many seconds, then Make files. Each piece becomes a file of its own, named -part-1, -part-2 and so on, written and checked like any trim; split where the keyframes are (marked under the timeline) and each piece is copied exactly, with nothing lost.",
         ],
         links: [
           {

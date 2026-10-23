@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest"
 import {
   cutOf,
+  partName,
+  splitItem,
+  splitParts,
   trimmed,
   undone,
   factsLine,
@@ -58,6 +61,7 @@ const item = (change: Partial<VideoItem> = {}): VideoItem => ({
   message: null,
   trim: null,
   trimApplied: null,
+  part: null,
   progress: null,
   result: null,
   ...change,
@@ -312,5 +316,69 @@ describe("the trim's edits", () => {
     expect(undone(again, false)).toBe(again)
     // A new edit after an undo drops what could be done again.
     expect(trimmed(back, [{ start: 4, end: 5 }], all).redo).toEqual([])
+  })
+})
+
+describe("splitting into files", () => {
+  it("names each part, and does not call a part converted", () => {
+    expect(partName("holiday.mp4", 2)).toBe("holiday-part-2.mp4")
+    expect(partName("clip", 1)).toBe("clip-part-1")
+    expect(outputName("holiday-part-2.mp4", plan, true)).toBe(
+      "holiday-part-2.mp4"
+    )
+  })
+
+  it("keeps what each piece holds of what is kept, and drops empty pieces", () => {
+    expect(splitParts(null, [4, 8], 12)).toEqual([
+      [{ start: 0, end: 4 }],
+      [{ start: 4, end: 8 }],
+      [{ start: 8, end: 12 }],
+    ])
+    expect(
+      splitParts(
+        [
+          { start: 1, end: 3 },
+          { start: 9, end: 11 },
+        ],
+        [4, 8],
+        12
+      )
+    ).toEqual([[{ start: 1, end: 3 }], [{ start: 9, end: 11 }]])
+  })
+
+  it("turns a file into files of its own, each with its piece, ready to write", () => {
+    let next = 0
+    const made = splitItem(
+      item({
+        trim: {
+          parts: [{ start: 0, end: 6 }],
+          exact: true,
+          undo: [[]],
+          redo: [],
+        },
+      }),
+      [2],
+      () => `p${++next}`
+    )!
+    expect(made.map((one) => [one.id, one.name, one.part])).toEqual([
+      ["p1", "holiday-part-1.mp4", 1],
+      ["p2", "holiday-part-2.mp4", 2],
+    ])
+    expect(made[1].trim).toEqual({
+      parts: [{ start: 2, end: 6 }],
+      exact: true,
+      undo: [],
+      redo: [],
+    })
+    expect(made[1].trimApplied).toBe(made[1].trim)
+    expect(made[0].result).toBeNull()
+    // A whole file splits into pieces copied at keyframes.
+    expect(splitItem(item(), [40], () => "w")!.map((one) => one.trim)).toEqual([
+      { parts: [{ start: 0, end: 40 }], exact: false, undo: [], redo: [] },
+      { parts: [{ start: 40, end: 83.4 }], exact: false, undo: [], redo: [] },
+    ])
+    // Nothing to split: one piece, or a file not yet read.
+    expect(splitItem(item(), [], () => "x")).toBeNull()
+    expect(splitItem(item({ facts: null }), [2], () => "x")).toBeNull()
   })
 })

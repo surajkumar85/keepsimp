@@ -22,6 +22,7 @@ export type KeyAction =
   | "undo"
   | "redo"
   | "frame"
+  | "split"
 
 interface Binding {
   /** `KeyboardEvent.key`, lower case for letters. */
@@ -52,6 +53,7 @@ const BINDINGS: Binding[] = [
   { key: "z", command: true, shift: true, action: "redo" },
   { key: "y", command: true, action: "redo" },
   { key: "s", shift: true, action: "frame" },
+  { key: "s", action: "split" },
 ]
 
 /** How far the keys move the playhead: a frame, a second, five seconds. */
@@ -96,6 +98,7 @@ const SAID: Record<KeyAction, string> = {
   undo: "Undo",
   redo: "Redo",
   frame: "Save the frame at the playhead as a picture",
+  split: "Mark a split at the playhead",
 }
 
 const NAMES: Record<string, string> = {
@@ -132,7 +135,10 @@ const GROUPS: { title: string; actions: KeyAction[] }[] = [
     ],
   },
   { title: "Choosing a part", actions: ["mark-in", "mark-out", "clear"] },
-  { title: "Editing", actions: ["keep", "cut", "undo", "redo", "frame"] },
+  {
+    title: "Editing",
+    actions: ["keep", "cut", "undo", "redo", "split", "frame"],
+  },
 ]
 
 /** The keys in groups, for the help: every way of pressing each action. */

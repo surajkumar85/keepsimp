@@ -6,6 +6,7 @@ import {
   IconArrowForwardUp,
   IconCamera,
   IconCut,
+  IconLayoutColumns,
   IconScissors,
   IconPlayerPlay,
 } from "@tabler/icons-react"
@@ -25,7 +26,8 @@ import {
   whole,
   type Part,
 } from "@/lib/video/trim"
-import type { Trim } from "@/lib/video/queue"
+import { splitParts, type Trim } from "@/lib/video/queue"
+import { everyPoints } from "@/lib/video/trim"
 
 /** Moves a player: the player is the workspace's, handed down by a ref. */
 function moveTo(video: HTMLVideoElement, time: number) {
@@ -101,6 +103,47 @@ function TimeField({
   )
 }
 
+/** Seconds between splits, typed. */
+function SecondsField({
+  value,
+  onChange,
+  onDone,
+}: {
+  value: string
+  onChange: (value: string) => void
+  onDone: (seconds: number) => void
+}) {
+  const id = useId()
+  const seconds = parseClock(value)
+  const usable = seconds !== null && seconds >= 1
+  return (
+    <div className="flex items-end gap-2">
+      <div className="space-y-1">
+        <label htmlFor={id} className="block text-xs font-medium">
+          Every (seconds or m:ss)
+        </label>
+        <Input
+          id={id}
+          value={value}
+          inputMode="decimal"
+          className="w-28 font-mono"
+          onChange={(event) => onChange(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" && usable) onDone(seconds)
+          }}
+        />
+      </div>
+      <Button
+        variant="outline"
+        disabled={!usable}
+        onClick={() => usable && onDone(seconds)}
+      >
+        Split every
+      </Button>
+    </div>
+  )
+}
+
 /** Keep or cut parts of the selected video, on a timeline over the player. */
 export function TrimPanel({
   duration,
@@ -113,6 +156,8 @@ export function TrimPanel({
   player,
   onFrame,
   saving,
+  onSplit,
+  strip = null,
 }: {
   duration: number
   frameRate: number | null
@@ -124,12 +169,25 @@ export function TrimPanel({
   player: RefObject<HTMLVideoElement | null>
   onFrame: (time: number) => void
   saving: boolean
+  /** Makes a file of each piece between the points; absent where the file cannot be split here. */
+  onSplit?: (points: number[]) => void
+  /** Pictures of frames spread along the file, for the timeline; null while they are made. */
+  strip?: string[] | null
 }) {
   const ids = useId()
   const parts = trim?.parts ?? whole(duration)
   const time = usePlayhead(player)
   const [selection, setSelection] = useState<Part>({ start: 0, end: duration })
   const [previewing, setPreviewing] = useState(false)
+  const [points, setPoints] = useState<number[]>([])
+  const [every, setEvery] = useState("")
+  const pieces = splitParts(parts, points, duration).length
+  const mark = (at: number) =>
+    setPoints((current) =>
+      current.some((point) => Math.abs(point - at) < frame)
+        ? current
+        : [...current, at].sort((a, b) => a - b)
+    )
   const frame = 1 / (frameRate ?? 30)
 
   // Playing what is kept: the cut parts are stepped over, on a timer.
@@ -187,7 +245,9 @@ export function TrimPanel({
     else if (action === "cut") cut()
     else if (action === "undo") onUndo(true)
     else if (action === "redo") onUndo(false)
-    else onFrame(at)
+    else if (action === "split") {
+      if (onSplit) mark(at)
+    } else onFrame(at)
   }
 
   const percent = (value: number) => `${(value / duration) * 100}%`
@@ -227,6 +287,19 @@ export function TrimPanel({
           seek(((event.clientX - box.left) / box.width) * duration)
         }}
       >
+        {strip && (
+          <div className="absolute inset-0 flex opacity-60">
+            {strip.map((picture, index) => (
+              // eslint-disable-next-line @next/next/no-img-element -- a picture made on the page from the file
+              <img
+                key={index}
+                src={picture}
+                alt=""
+                className="h-full min-w-0 flex-1 object-cover"
+              />
+            ))}
+          </div>
+        )}
         {parts.map((part) => (
           <div
             key={`${part.start}-${part.end}`}
@@ -246,6 +319,13 @@ export function TrimPanel({
             key={key}
             className="absolute bottom-0 h-2 w-px bg-foreground/40"
             style={{ left: percent(key) }}
+          />
+        ))}
+        {points.map((point) => (
+          <div
+            key={point}
+            className="absolute inset-y-0 border-l-2 border-dashed border-foreground"
+            style={{ left: percent(point) }}
           />
         ))}
         <div
@@ -376,6 +456,44 @@ export function TrimPanel({
           { value: "exact", label: "Exact" },
         ]}
       />
+
+      {onSplit && (
+        <div className="space-y-2" data-testid="split">
+          <h4 className="text-xs font-medium">Split into files</h4>
+          <div className="flex flex-wrap items-end gap-2">
+            <Button variant="outline" onClick={() => mark(time)}>
+              Split here (S)
+            </Button>
+            <SecondsField
+              value={every}
+              onChange={setEvery}
+              onDone={(seconds) => setPoints(everyPoints(seconds, duration))}
+            />
+            <Button
+              variant="ghost"
+              onClick={() => setPoints([])}
+              disabled={!points.length}
+            >
+              Clear the splits
+            </Button>
+          </div>
+          <p className="text-xs text-muted-foreground" data-testid="split-said">
+            {pieces > 1
+              ? `${points.length} ${points.length === 1 ? "split" : "splits"}: ${pieces} files, each written and checked on its own, with what is kept here.`
+              : "Mark where to split at the playhead, or split every so many seconds."}
+          </p>
+          <Button
+            onClick={() => {
+              onSplit(points)
+              setPoints([])
+            }}
+            disabled={pieces < 2}
+          >
+            <IconLayoutColumns aria-hidden="true" />
+            {pieces > 1 ? `Make ${pieces} files` : "Make files"}
+          </Button>
+        </div>
+      )}
 
       {!isWhole(parts, duration) && (
         <ul className="text-xs text-muted-foreground" aria-label="Parts kept">

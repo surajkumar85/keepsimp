@@ -104,6 +104,11 @@ const trimming: TutorialContent["options"] = [
     detail: `Cuts to the frame, and the sound to the sample, by encoding the picture again (with the quality chosen in the settings; Original keeps its bitrate). Where parts are joined, the sound fades over ${JOIN_FADE * 1000} ms on each side, so a cut does not click. Lossless becomes exact by itself when something else means the picture is encoded anyway, such as a new size or format.`,
   },
   {
+    term: "Split into files",
+    detail:
+      "Mark where to split with Split here (or S at the playhead), or split every so many seconds, then Make files: each piece becomes a file of its own in the list, named -part-1, -part-2 and so on, holding what is kept in it, and is written and checked like any trimmed video, lossless or exact as chosen. Download them one by one or as a ZIP.",
+  },
+  {
     term: "Save a frame",
     detail:
       "Saves the frame at the playhead as a PNG, read from the file itself at the video's full size, not from the player.",

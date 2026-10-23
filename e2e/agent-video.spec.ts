@@ -4,6 +4,7 @@ import { hand, ran, ready, run, saved } from "./agent"
 import {
   canEncode,
   decodesCleanly,
+  frameHashes,
   packets,
   probe,
   reportWorkerErrors,
@@ -122,4 +123,24 @@ test("trims a video and saves a frame, for an agent", async ({ page }) => {
   const png = await saved(page, frame.files![0].id)
   expect(png.name).toBe("clip 0-02.00.png")
   expect([...png.bytes.subarray(1, 4)]).toEqual([0x50, 0x4e, 0x47])
+})
+
+test("splits a video into files at its keyframes, for an agent", async ({
+  page,
+}) => {
+  test.setTimeout(120_000)
+  await ready(page)
+  const scene = readFileSync("public/samples/keepsimp-scene.mp4")
+  const file = await hand(page, "scene.mp4", scene, "video/mp4")
+  const split = await ran(page, "split_video", { file, at: [2, 4] })
+  expect(split.summary).toMatch(/^Split into 3 files\./)
+  expect(split.files).toHaveLength(3)
+  const all = frameHashes(scene, "agent-scene.mp4")
+  for (const [index, ref] of split.files!.entries()) {
+    const out = await saved(page, ref.id)
+    expect(out.name).toBe(`scene-part-${index + 1}.mp4`)
+    expect(frameHashes(out.bytes, `agent-part-${index}.mp4`)).toEqual(
+      all.slice(index * 60, (index + 1) * 60)
+    )
+  }
 })

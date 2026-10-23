@@ -418,6 +418,47 @@ export async function frameAt(engine: Engine, file: Blob, time: number) {
   }
 }
 
+/** Small pictures of frames spread along a file, for a timeline; none when its picture cannot be read. */
+export async function stripOf(
+  engine: Engine,
+  file: Blob,
+  count: number,
+  height = 48
+) {
+  const input = opened(engine, file)
+  try {
+    const track = await input.getPrimaryVideoTrack()
+    if (!track || !(await track.canDecode())) return []
+    const start = await track.getFirstTimestamp()
+    const length = (await track.computeDuration()) - start
+    const sink = new engine.CanvasSink(track, { height, poolSize: 1 })
+    const pictures: Blob[] = []
+    const times = Array.from(
+      { length: count },
+      (_, index) => start + ((index + 0.5) * length) / count
+    )
+    for await (const frame of sink.canvasesAtTimestamps(times)) {
+      if (!frame) continue
+      const canvas = frame.canvas
+      pictures.push(
+        "convertToBlob" in canvas
+          ? await canvas.convertToBlob({ type: "image/jpeg", quality: 0.7 })
+          : await new Promise<Blob>((resolve, reject) =>
+              canvas.toBlob(
+                (blob) =>
+                  blob ? resolve(blob) : reject(new Error("No picture.")),
+                "image/jpeg",
+                0.7
+              )
+            )
+      )
+    }
+    return pictures
+  } finally {
+    input.dispose()
+  }
+}
+
 /** A turn and mirror on top of another: a turn after a mirror runs the other way. */
 export function composeTurn(
   first: { rotation: number; flip: boolean },

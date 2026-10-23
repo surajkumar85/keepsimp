@@ -423,3 +423,59 @@ describe("saving a frame for an agent", () => {
     expect(pngSize(new Uint8Array(4))).toBeNull()
   })
 })
+
+describe("splitting a video for an agent", () => {
+  it("writes each piece as a file of its own, with its part's name", async () => {
+    const { call, add, jobs, agent, progress } = setup({
+      readFacts: { ...facts, video: { ...facts.video!, keyframes: [0, 2, 4] } },
+    })
+    const result = await call("split_video", {
+      file: add(MP4, "clip.mp4").id,
+      at: [2, 4],
+    })
+    expect(
+      result.files!.map((one) => agent.files.get(one.id).ref.name)
+    ).toEqual(["clip-part-1.mp4", "clip-part-2.mp4", "clip-part-3.mp4"])
+    const cuts = jobs()
+      .filter((one) => one.job === "convert")
+      .map((one) => one.job === "convert" && one.plan.cut)
+    expect(cuts).toEqual([
+      { mode: "copy", parts: [{ start: 0, end: 2 }] },
+      { mode: "copy", parts: [{ start: 2, end: 4 }] },
+      { mode: "copy", parts: [{ start: 4, end: 6 }] },
+    ])
+    expect(result.summary).toMatch(
+      /^Split into 3 files\.\nPart 1 \(0:00\.00 to 0:02\.00\): /
+    )
+    expect(Math.max(...progress)).toBeLessThanOrEqual(1)
+  })
+
+  it("splits every so many seconds what is kept, leaving out empty pieces", async () => {
+    const { call, add, jobs } = setup()
+    const result = await call("split_video", {
+      file: add(MP4, "clip.mp4").id,
+      every: 2,
+      cut: [{ start: 2, end: 4 }],
+      exact: true,
+    })
+    expect(result.files).toHaveLength(2)
+    expect(
+      jobs()
+        .filter((one) => one.job === "convert")
+        .map((one) => one.job === "convert" && one.plan.cut?.parts)
+    ).toEqual([[{ start: 0, end: 2 }], [{ start: 4, end: 6 }]])
+  })
+
+  it("asks for one way of splitting, and refuses one piece", async () => {
+    const { call, add } = setup()
+    for (const input of [{}, { at: [2], every: 2 }])
+      await expect(
+        call("split_video", { file: add(MP4, "clip.mp4").id, ...input })
+      ).rejects.toThrow('Give either "at" or "every".')
+    await expect(
+      call("split_video", { file: add(MP4, "clip.mp4").id, at: [5.95] })
+    ).rejects.toThrow(
+      "Splitting clip.mp4 (0:06.00) there leaves one piece with something kept, so there is nothing to split."
+    )
+  })
+})

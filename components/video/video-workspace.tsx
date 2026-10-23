@@ -39,6 +39,7 @@ import {
   videoTotals,
   writable,
   dropped,
+  splitItem,
   trimmed,
   undone,
   type Trim,
@@ -395,6 +396,28 @@ export function VideoWorkspace({ mode }: { mode: VideoMode }) {
     return () => clearTimeout(timer)
   }, [unsettled, change])
 
+  // A file split into files of its own, in its place in the list.
+  const split = useCallback(
+    (id: string, points: number[]) => {
+      const item = live.current.items.find((one) => one.id === id)
+      const parts = item && splitItem(item, points, nextId)
+      if (!parts) return
+      if (live.current.items.length - 1 + parts.length > MAX_FILES) {
+        setNotice(
+          `Up to ${MAX_FILES} videos at once: split into fewer files, or remove some first.`
+        )
+        return
+      }
+      pool.current?.forget(id)
+      change((current) =>
+        current.flatMap((one) => (one.id === id ? parts : [one]))
+      )
+      setSelectedId(parts[0].id)
+      setNotice(null)
+    },
+    [change]
+  )
+
   const trimWith = useCallback(
     (id: string, make: (trim: Trim | null, duration: number) => Trim | null) =>
       change((current) =>
@@ -434,6 +457,7 @@ export function VideoWorkspace({ mode }: { mode: VideoMode }) {
           message: problem,
           trim: null,
           trimApplied: null,
+          part: null,
           progress: null,
           result: null,
         })
@@ -476,7 +500,9 @@ export function VideoWorkspace({ mode }: { mode: VideoMode }) {
     (item) => itemState(item, planOf(item)) === "done"
   )
   const names = uniqueNames(
-    finished.map((item) => outputName(item.name, planOf(item)!))
+    finished.map((item) =>
+      outputName(item.name, planOf(item)!, item.part !== null)
+    )
   )
 
   const downloadZip = useCallback(async () => {
@@ -572,7 +598,7 @@ export function VideoWorkspace({ mode }: { mode: VideoMode }) {
         result?.downloadUrl && plan
           ? [
               {
-                name: outputName(item.name, plan),
+                name: outputName(item.name, plan, item.part !== null),
                 url: result.downloadUrl,
                 width: plan.width,
                 height: plan.height,
@@ -618,6 +644,7 @@ export function VideoWorkspace({ mode }: { mode: VideoMode }) {
             onUndo={(back) =>
               trimWith(selected.id, (trim) => trim && undone(trim, back))
             }
+            onSplit={(points) => split(selected.id, points)}
           />
         )}
         {notice && (
@@ -671,6 +698,9 @@ export function VideoWorkspace({ mode }: { mode: VideoMode }) {
   )
 }
 
+/** Pictures of frames along the trimmer's timeline. */
+const STRIP_FRAMES = 10
+
 const INDEX_NOTES: Record<string, string> = {
   large:
     "Its index is very large, so it stays at the end of the file: players read it fine, and some sites prefer it at the start.",
@@ -690,6 +720,7 @@ function Selected({
   onTrim,
   onExact,
   onUndo,
+  onSplit,
 }: {
   item: VideoItem
   plan: Plan | null
@@ -700,6 +731,7 @@ function Selected({
   onTrim: (parts: Part[]) => void
   onExact: (exact: boolean) => void
   onUndo: (back: boolean) => void
+  onSplit: (points: number[]) => void
 }) {
   const original = useMemo(() => URL.createObjectURL(item.file), [item.file])
   useEffect(() => () => URL.revokeObjectURL(original), [original])
@@ -709,6 +741,33 @@ function Selected({
   const [trimming, setTrimming] = useState(trimOpen)
   const [saving, setSaving] = useState(false)
   const [frameProblem, setFrameProblem] = useState<string | null>(null)
+  const [strip, setStrip] = useState<{
+    file: File
+    pictures: string[]
+  } | null>(null)
+  const readable = item.facts?.video?.decodable ?? false
+
+  // Pictures along the timeline, once the trimmer is open: read from the file on the page.
+  useEffect(() => {
+    if (!trimming || !readable) return
+    let gone = false
+    let made: string[] = []
+    void Promise.all([
+      import("mediabunny"),
+      import("@/lib/video/mediabunny-video"),
+    ])
+      .then(([engine, { stripOf }]) => stripOf(engine, item.file, STRIP_FRAMES))
+      .then((pictures) => {
+        made = pictures.map((picture) => URL.createObjectURL(picture))
+        if (gone) for (const url of made) URL.revokeObjectURL(url)
+        else setStrip({ file: item.file, pictures: made })
+      })
+      .catch(() => undefined)
+    return () => {
+      gone = true
+      for (const url of made) URL.revokeObjectURL(url)
+    }
+  }, [trimming, readable, item.file])
 
   // A frame is read from the file itself, at its own size, not from the player.
   async function saveFrame(time: number) {
@@ -799,6 +858,8 @@ function Selected({
                 player={player}
                 onFrame={(time) => void saveFrame(time)}
                 saving={saving}
+                onSplit={onSplit}
+                strip={strip?.file === item.file ? strip.pictures : null}
               />
             ) : (
               <Button variant="outline" onClick={() => setTrimming(true)}>

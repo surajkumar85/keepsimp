@@ -12,10 +12,11 @@ import {
 } from "@/lib/video/formats"
 import { browserPlan, convertJob, readJob, type Asker } from "@/lib/video/jobs"
 import type { VideoJob, VideoResponse } from "@/lib/video/protocol"
-import { factsLine, outputName } from "@/lib/video/queue"
+import { factsLine, outputName, partName, splitParts } from "@/lib/video/queue"
 import {
   clock,
   cutOut,
+  everyPoints,
   keepOnly,
   tidy,
   whole,
@@ -209,7 +210,9 @@ export function videoTools(engines: VideoEngines): AgentTool[] {
     file: string,
     settings: VideoSettings,
     context: Parameters<AgentTool["run"]>[1],
-    cutFor: (facts: VideoFacts) => Cut | null = () => null
+    cutFor: (facts: VideoFacts) => Cut | null = () => null,
+    /** A part's own name, which says what it is. */
+    name?: string
   ) {
     const opened = await open(context.files, file, context.signal)
     const plan = await browserPlan(
@@ -247,7 +250,7 @@ export function videoTools(engines: VideoEngines): AgentTool[] {
       )
     const ref = context.files.add(
       done.file,
-      outputName(opened.ref.name, plan),
+      outputName(name ?? opened.ref.name, plan, name !== undefined),
       "made"
     )
     return {
@@ -386,6 +389,103 @@ export function videoTools(engines: VideoEngines): AgentTool[] {
     },
   }
 
+  const split: AgentTool<
+    Settings & {
+      file: string
+      at?: number[]
+      every?: number
+      keep?: Part[]
+      cut?: Part[]
+      exact?: boolean
+    }
+  > = {
+    name: "split_video",
+    title: "Split a video into files",
+    description:
+      "Splits a video into files of its own at points (at, in seconds of the original) or every so many seconds (every), as the video trimmer's Split into files does: each file is the video with one more part kept, written, cut and checked as trim_video does it, copied at keyframes unless exact. keep and cut, as in trim_video, choose what is kept before it is split; a piece with nothing kept is left out. The format stays the file's own unless one is given. Files are named name-part-1, name-part-2 and so on.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        file: fileProperty("The video file."),
+        at: {
+          type: "array",
+          minItems: 1,
+          items: { type: "number", exclusiveMinimum: 0 },
+          description: "Where to split, in seconds of the original.",
+        },
+        every: {
+          type: "number",
+          minimum: 1,
+          description: "Or split every so many seconds.",
+        },
+        keep: partsSchema(
+          "Parts to keep before splitting, in seconds of the original."
+        ),
+        cut: partsSchema("Parts to cut out before splitting."),
+        exact: {
+          type: "boolean",
+          description:
+            "Cut to the frame by encoding the picture again (no by default: copied, cut at keyframes).",
+        },
+        ...settingsSchema,
+      },
+      required: ["file"],
+      additionalProperties: false,
+    },
+    annotations: { readOnlyHint: true },
+    async run(
+      { file, at, every, keep, cut, exact = false, ...asked },
+      context
+    ) {
+      if ((at === undefined) === (every === undefined))
+        throw new ToolError('Give either "at" or "every".')
+      const { ref, facts } = await open(context.files, file, context.signal)
+      const duration = facts.duration
+      const points = at ?? everyPoints(every!, duration)
+      const pieces = splitParts(
+        keep?.length || cut?.length ? kept(duration, keep, cut) : null,
+        points,
+        duration
+      )
+      if (pieces.length < 2)
+        throw new ToolError(
+          `Splitting ${ref.name} (${clock(duration)}) there leaves one piece with something kept, so there is nothing to split.`
+        )
+      const settings = settingsOf({ format: "same", ...asked })
+      const made = []
+      for (const [index, parts] of pieces.entries())
+        made.push(
+          await write(
+            file,
+            settings,
+            {
+              ...context,
+              progress: (fraction, note) =>
+                context.progress(
+                  (index + fraction) / pieces.length,
+                  `Part ${index + 1} of ${pieces.length}: ${note}`
+                ),
+            },
+            () => ({ parts, exact }),
+            partName(ref.name, index + 1)
+          )
+        )
+      return {
+        summary: [
+          `Split into ${pieces.length} files.`,
+          ...made.map(
+            (one, index) =>
+              `Part ${index + 1} (${pieces[index]
+                .map((part) => `${clock(part.start)} to ${clock(part.end)}`)
+                .join(", ")}): ${one.summary}`
+          ),
+        ].join("\n"),
+        files: made.flatMap((one) => one.files),
+        data: { parts: pieces, files: made.map((one) => one.data) },
+      }
+    },
+  }
+
   const frame: AgentTool<{ file: string; seconds: number }> = {
     name: "video_frame",
     title: "Save a frame of a video",
@@ -437,7 +537,7 @@ export function videoTools(engines: VideoEngines): AgentTool[] {
     },
   }
 
-  return [info, convert, compress, trim, frame].map((tool) =>
+  return [info, convert, compress, trim, split, frame].map((tool) =>
     asTool(tool as AgentTool<never>)
   )
 }
