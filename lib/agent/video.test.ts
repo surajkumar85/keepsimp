@@ -137,6 +137,18 @@ function setup({
       ask: { video: async () => canWrite, sound: async () => true },
       folder: "agent-test",
       frame: async () => frame,
+      track: async (_file: Blob, name: string) => {
+        if (name.endsWith(".txt")) throw new Error(`${name} has no sound.`)
+        if (name.endsWith(".bin")) throw "not an error"
+        return {
+          name,
+          duration: 2,
+          sampleRate: 44100,
+          channels: 2,
+          codec: "aac",
+          decodable: true,
+        }
+      },
     })
   )
   const progress: number[] = []
@@ -571,5 +583,60 @@ describe("a crop of one's own for an agent", () => {
         crop: { left: 0, top: 0, width: 2, height: 2 },
       })
     ).rejects.toThrow("song.mp4 has no picture to crop.")
+  })
+})
+
+describe("a soundtrack for an agent", () => {
+  it("is read, planned and handed to the worker with its file", async () => {
+    const { call, add, jobs, agent } = setup()
+    const music = agent.files.add(new Blob([new Uint8Array(8)]), "song.m4a")
+    const result = await call("convert_video", {
+      file: add(MP4, "clip.mp4").id,
+      soundtrack: music.id,
+      soundtrackMode: "mix",
+      soundtrackVolume: -6,
+      soundtrackLoop: false,
+    })
+    const job = jobs().find((one) => one.job === "convert")!
+    expect(job.job === "convert" && job.plan.track).toMatchObject({
+      id: music.id,
+      name: "song.m4a",
+      mode: "mix",
+      volume: -6,
+      loop: false,
+      mixing: true,
+    })
+    expect(job.job === "convert" && job.track).toBeInstanceOf(Blob)
+    expect(result.summary).toContain(
+      "The sound of song.m4a is mixed under the video's own, 6 dB quieter. It is 2.0 s long, so the rest is silent."
+    )
+    // As the page does: in place of the sound, looping, by default.
+    await call("convert_video", {
+      file: add(MP4, "clip.mp4").id,
+      soundtrack: music.id,
+    })
+    expect(
+      jobs()
+        .filter((one) => one.job === "convert")
+        .map((one) => one.job === "convert" && one.plan.track?.mode)
+    ).toEqual(["mix", "replace"])
+  })
+
+  it("says why a soundtrack cannot be read", async () => {
+    const { call, add, agent } = setup()
+    const text = agent.files.add(new Blob(["words"]), "notes.txt")
+    await expect(
+      call("convert_video", {
+        file: add(MP4, "clip.mp4").id,
+        soundtrack: text.id,
+      })
+    ).rejects.toThrow("notes.txt has no sound.")
+    const odd = agent.files.add(new Blob(["?"]), "odd.bin")
+    await expect(
+      call("convert_video", {
+        file: add(MP4, "clip.mp4").id,
+        soundtrack: odd.id,
+      })
+    ).rejects.toThrow("odd.bin could not be read.")
   })
 })

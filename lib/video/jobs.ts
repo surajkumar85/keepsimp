@@ -4,6 +4,7 @@
  */
 import type { Container } from "./formats"
 import type { Box } from "./frame"
+import type { Soundtrack, TrackFacts } from "./soundtrack"
 import type { ConvertJob, ReadJob } from "./protocol"
 import { planKey } from "./queue"
 import {
@@ -35,7 +36,8 @@ export async function browserPlan(
   ask: Asker,
   known = new Map<string, boolean>(),
   cut: Cut | null = null,
-  box: Box | null = null
+  box: Box | null = null,
+  track: (TrackFacts & Soundtrack) | null = null
 ): Promise<Plan> {
   const sounds = new Map<SoundCodec, boolean>([["aac", true]])
   let plan = planFor(
@@ -44,7 +46,8 @@ export async function browserPlan(
     (codec, width, height) => known.get(`${codec}@${width}x${height}`) ?? null,
     (codec) => sounds.get(codec) ?? null,
     cut,
-    box
+    box,
+    track
   )
   for (let round = 0; round < MOST_ROUNDS; round++) {
     const waiting = plan.pending[0]
@@ -66,7 +69,8 @@ export async function browserPlan(
         known.get(`${codec}@${width}x${height}`) ?? null,
       (codec) => sounds.get(codec) ?? null,
       cut,
-      box
+      box,
+      track
     )
   }
   return plan
@@ -82,7 +86,8 @@ export const convertJob = (
   container: Container,
   facts: VideoFacts,
   plan: Plan,
-  folder: string
+  folder: string,
+  track: Blob | null = null
 ): Omit<ConvertJob, "id"> => ({
   job: "convert",
   file,
@@ -91,4 +96,5 @@ export const convertJob = (
   plan,
   key: planKey(plan),
   folder,
+  track,
 })

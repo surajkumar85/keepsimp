@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 600" role="img" aria-labelledby="title desc">
+  <title id="title">Adding music to a video</title><desc id="desc">A video's picture track copied as it is, its own sound and a music file mixed into one new sound track under it.</desc>
+  <rect width="900" height="600" rx="24" fill="#f5f5f0"/>
+  <g font-family="sans-serif">
+    <rect x="70" y="90" width="760" height="110" rx="16" fill="#00786f"/>
+    <text x="100" y="155" font-size="22" font-weight="600" fill="#ffffff">Picture, copied as it is</text>
+    <rect x="70" y="240" width="360" height="100" rx="16" fill="#ffffff" stroke="#d4d4d4" stroke-width="2"/>
+    <path d="M95 290 q12 -22 24 0 t24 0 t24 0 t24 0 t24 0 t24 0 t24 0 t24 0 t24 0 t24 0 t24 0 t24 0 t24 0" fill="none" stroke="#a3a3a3" stroke-width="3"/>
+    <text x="95" y="330" font-size="16" fill="#525252">its own sound</text>
+    <rect x="470" y="240" width="360" height="100" rx="16" fill="#ffffff" stroke="#d4d4d4" stroke-width="2"/>
+    <path d="M495 290 q10 -30 20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0" fill="none" stroke="#00786f" stroke-width="3"/>
+    <text x="495" y="330" font-size="16" fill="#525252">music.mp3</text>
+    <path d="M250 350 L450 410 L650 350" fill="none" stroke="#00786f" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+    <rect x="70" y="420" width="760" height="100" rx="16" fill="#e6f2f1"/>
+    <path d="M100 470 q10 -26 20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0" fill="none" stroke="#00564f" stroke-width="4"/>
+    <text x="760" y="505" text-anchor="end" font-size="16" fill="#00564f">mixed, faded at the end</text>
+  </g>
+</svg>

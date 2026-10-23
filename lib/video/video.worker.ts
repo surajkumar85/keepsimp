@@ -105,33 +105,65 @@ async function writePass(
   let limited = 0
   try {
     const write = plan.cut?.mode === "join" ? joinParts : convertVideo
-    const made = await write(mediabunny, job.file, plan, target, {
-      signal: own.signal,
-      software,
-      gain,
-      onProgress: (fraction) => {
-        if (
-          pass.limit !== null &&
-          pass.number < pass.of &&
-          watch.miss === null &&
-          willMiss(pass.limit, bytes, fraction)
-        ) {
-          watch.miss = bytes / fraction
-          own.abort()
-          return
-        }
-        const now = Date.now()
-        if (now - last < 250) return
-        last = now
-        send({
-          type: "progress",
-          id: job.id,
-          key: job.key,
-          fraction,
-          pass: pass.number,
-        })
-      },
-    })
+    // With a soundtrack, the picture is written first, alone, then put
+    // together with the sound made for it; the picture's pass is most of
+    // the work.
+    const music = plan.track && job.track ? job.track : null
+    const picture = music
+      ? await pictureFirst(job, plan, own.signal, software, (fraction) =>
+          send({
+            type: "progress",
+            id: job.id,
+            key: job.key,
+            fraction: fraction * 0.8,
+            pass: pass.number,
+          })
+        )
+      : null
+    const made = await (picture
+      ? (async () => {
+          try {
+            const { withSoundtrack } = await engineFiles()
+            return await withSoundtrack(
+              mediabunny,
+              picture.file,
+              job.file,
+              music!,
+              plan,
+              target,
+              { signal: own.signal, gain }
+            )
+          } finally {
+            await picture.remove()
+          }
+        })()
+      : write(mediabunny, job.file, plan, target, {
+          signal: own.signal,
+          software,
+          gain,
+          onProgress: (fraction) => {
+            if (
+              pass.limit !== null &&
+              pass.number < pass.of &&
+              watch.miss === null &&
+              willMiss(pass.limit, bytes, fraction)
+            ) {
+              watch.miss = bytes / fraction
+              own.abort()
+              return
+            }
+            const now = Date.now()
+            if (now - last < 250) return
+            last = now
+            send({
+              type: "progress",
+              id: job.id,
+              key: job.key,
+              fraction,
+              pass: pass.number,
+            })
+          },
+        }))
     limited = (made as { limited?: number } | undefined)?.limited ?? 0
   } catch (error) {
     scratch?.close()
@@ -150,6 +182,43 @@ async function writePass(
     scratch: scratch ? name : null,
     limited,
   }
+}
+
+/** The picture alone, written by the plan with no sound, into a file of its own to put together with a soundtrack. */
+async function pictureFirst(
+  job: ConvertJob,
+  plan: Plan,
+  signal: AbortSignal,
+  software: boolean,
+  onProgress: (fraction: number) => void
+) {
+  const mediabunny = await engine()
+  const { convertVideo } = await engineFiles()
+  const name = `${job.id}-${++written}-picture.${outputInfo[plan.container].extension}`
+  const scratch = await scratchFile(job.folder, name)
+  const memory = scratch ? null : new mediabunny.BufferTarget()
+  const target =
+    memory ?? new mediabunny.StreamTarget(scratch!.writable, { chunked: true })
+  const remove = async () => {
+    scratch?.close()
+    if (scratch) await removeScratch(job.folder, name)
+  }
+  try {
+    await convertVideo(
+      mediabunny,
+      job.file,
+      { ...plan, audio: { action: "drop" }, track: null },
+      target,
+      { signal, software, onProgress }
+    )
+  } catch (error) {
+    await remove()
+    throw error
+  }
+  const file = scratch
+    ? await scratch.file()
+    : new Blob([memory!.buffer!], { type: outputInfo[plan.container].mime })
+  return { file, remove }
 }
 
 /** Encoders that failed in this worker are not asked again. */
@@ -221,23 +290,34 @@ async function writeJob(
     // Seconds the sound encoder puts before the sound, skipped by an edit list.
     let priming = 0
     if (plan.audio.action === "encode" && plan.audio.codec === "aac") {
+      // The sound as written: the soundtrack's, or the video's own.
+      const written = plan.track ?? job.facts.audio!
       const { aacEncoding, readyEncoder } = await soundFiles()
       if (safe.sound) await readyEncoder(mediabunny, "aac")
       // An encoder that keeps all of the sound (the browser's, or ours), and its priming.
       const samples = await aacEncoding(
         mediabunny,
-        job.facts.audio!.sampleRate,
-        job.facts.audio!.channels,
+        written.sampleRate,
+        written.channels,
         plan.audio.bitrate
       )
-      priming = samples / job.facts.audio!.sampleRate
+      priming = samples / written.sampleRate
     }
     // The sound measured as it will be written, for the gain that reaches its loudness.
     let gain: SoundGain | null = null
     let level: Omit<VideoLevel, "after" | "limited"> | null = null
     if (plan.audio.action === "encode" && plan.audio.loudness !== null) {
-      const { measureSound } = await engineFiles()
-      const before = await measureSound(mediabunny, job.file, plan, stop.signal)
+      const { measureSound, measureSoundtrack } = await engineFiles()
+      const before =
+        plan.track && job.track
+          ? await measureSoundtrack(
+              mediabunny,
+              job.file,
+              job.track,
+              plan,
+              stop.signal
+            )
+          : await measureSound(mediabunny, job.file, plan, stop.signal)
       if (stop.signal.aborted) return
       const chosen = gainFor(
         {

@@ -429,6 +429,50 @@ export function croppedLike(
   return Number(/average:([\d.]+|inf)/.exec(said)![1].replace("inf", "99"))
 }
 
+/** How strong one tone is in a stretch of sound (Goertzel), as an amplitude. */
+export function toneLevel(
+  sound: Float32Array,
+  frequency: number,
+  from: number,
+  to: number
+) {
+  const part = sound.subarray(Math.round(from * 48000), Math.round(to * 48000))
+  const k = (2 * Math.PI * frequency) / 48000
+  const coefficient = 2 * Math.cos(k)
+  let previous = 0
+  let before = 0
+  for (const value of part) {
+    const next = value + coefficient * previous - before
+    before = previous
+    previous = next
+  }
+  const power =
+    previous * previous + before * before - coefficient * previous * before
+  return (2 * Math.sqrt(Math.max(0, power))) / part.length
+}
+
+/** A tone FFmpeg writes as a sound file of its own. */
+export function toneFile(
+  name: string,
+  frequency: number,
+  seconds: number,
+  codec = ["-c:a", "aac"]
+) {
+  const path = join(folder, name)
+  execFileSync("ffmpeg", [
+    "-v",
+    "error",
+    "-y",
+    "-f",
+    "lavfi",
+    "-i",
+    `sine=frequency=${frequency}:sample_rate=44100:duration=${seconds}`,
+    ...codec,
+    path,
+  ])
+  return { name, mimeType: "audio/mp4", buffer: readFileSync(path) }
+}
+
 /** Print what a worker reports as an error, so a failed run says why. */
 export function reportWorkerErrors() {
   test.beforeEach(({ page }) => {

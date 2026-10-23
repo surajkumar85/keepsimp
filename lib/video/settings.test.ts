@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest"
+import type { TrackMode } from "./soundtrack"
 import {
   MkvOutputFormat,
   MovOutputFormat,
@@ -1043,5 +1044,96 @@ describe("a crop box of one's own", () => {
         height: 1,
       }).video
     ).toEqual({ action: "copy" })
+  })
+})
+
+describe("a soundtrack", () => {
+  const track = {
+    id: "track-1",
+    name: "song.mp3",
+    duration: 4,
+    sampleRate: 44100,
+    channels: 1,
+    codec: "mp3",
+    decodable: true,
+    mode: "replace" as TrackMode,
+    volume: -12,
+    loop: true,
+  }
+  const withTrack = (
+    change: Partial<typeof track> = {},
+    settings = {},
+    facts = clip
+  ) =>
+    planFor(facts, set(settings), all, undefined, null, null, {
+      ...track,
+      ...change,
+    })
+
+  it("is written as the sound, the picture copied, with its own rate and channels", () => {
+    const plan = withTrack()
+    expect(plan.video).toEqual({ action: "copy" })
+    expect(plan.audio).toMatchObject({
+      action: "encode",
+      codec: "aac",
+      bitrate: 96_000,
+    })
+    expect(plan.track).toEqual({
+      id: "track-1",
+      name: "song.mp3",
+      mode: "replace",
+      volume: -12,
+      loop: true,
+      mixing: false,
+      duration: 4,
+      sampleRate: 44100,
+      channels: 1,
+    })
+    expect(plan.notes).toContain(
+      "The sound is song.mp3, in place of the video's own. It is 4.0 s long, so it plays again from its start until the video ends, fading out over 1 s."
+    )
+  })
+
+  it("is mixed under the video's own at its rate and channels", () => {
+    const plan = withTrack({ mode: "mix" })
+    expect(plan.track).toMatchObject({
+      mixing: true,
+      sampleRate: 48000,
+      channels: 2,
+    })
+    // Leaving the video's own sound out leaves the soundtrack alone.
+    expect(withTrack({ mode: "mix" }, { sound: "none" }).track).toMatchObject({
+      mixing: false,
+    })
+    // Several parts are cut to the frame, as the sound is written anew.
+    expect(
+      planFor(
+        clip,
+        set({}),
+        all,
+        undefined,
+        {
+          parts: [
+            { start: 0, end: 2 },
+            { start: 4, end: 6 },
+          ],
+          exact: false,
+        },
+        null,
+        track
+      ).cut
+    ).toMatchObject({ mode: "exact" })
+  })
+
+  it("says what cannot be done", () => {
+    expect(withTrack({ decodable: false }).problem).toBe(
+      "This browser cannot play the sound of song.mp3. Choose another soundtrack."
+    )
+    expect(withTrack({}, {}, { ...clip, video: null }).problem).toBe(
+      "This file has no picture to put a soundtrack under."
+    )
+    expect(withTrack({}, {}, { ...clip, audio: null }).track).toMatchObject({
+      mixing: false,
+    })
   })
 })

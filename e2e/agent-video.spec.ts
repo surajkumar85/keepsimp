@@ -8,6 +8,9 @@ import {
   packets,
   probe,
   reportWorkerErrors,
+  soundOf,
+  toneFile,
+  toneLevel,
   topOrder,
 } from "./video"
 
@@ -164,4 +167,22 @@ test("crops to a square and speeds up, for an agent", async ({ page }) => {
   })
   expect(Number(said.format.duration)).toBeCloseTo(3, 0)
   expect(decodesCleanly(out.bytes, "agent-square.mp4")).toBe(true)
+})
+
+test("puts a soundtrack under a video, for an agent", async ({ page }) => {
+  test.setTimeout(120_000)
+  await ready(page)
+  const file = await hand(page, "clip.mp4", clip, "video/mp4")
+  const tone = toneFile("agent-tone.m4a", 880, 2)
+  const music = await hand(page, tone.name, tone.buffer, "audio/mp4")
+  const done = await ran(page, "convert_video", { file, soundtrack: music })
+  expect(done.summary).toContain(
+    "The sound is agent-tone.m4a, in place of the video's own."
+  )
+  const out = await saved(page, done.files![0].id)
+  const sound = soundOf(out.bytes, "agent-soundtrack.mp4")
+  expect(toneLevel(sound, 880, 0.5, 1.5)).toBeGreaterThan(0.05)
+  expect(packets(out.bytes, "agent-soundtrack.mp4", "v")).toEqual(
+    packets(clip, "agent-soundtrack-in.mp4", "v")
+  )
 })

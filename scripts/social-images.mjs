@@ -307,6 +307,12 @@ const cards = [
     "/images/video-loudness-guide.svg",
   ],
   [
+    "add-music-to-a-video",
+    "The right sound under every picture.",
+    "Add music to a video, on your device.",
+    "/images/video-music-guide.svg",
+  ],
+  [
     "keepsimp-tools-for-ai-agents",
     "Ask your agent. The work stays here.",
     "KeepSimp's tools in Claude Code, Codex and WebMCP.",

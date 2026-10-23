@@ -141,12 +141,18 @@ export function SettingsPanel({
   update,
   problem,
   limitFirst = false,
+  children,
+  childrenFirst = false,
 }: {
   settings: VideoSettings
   update: Update
   problem: string | null
   /** The size limit at the top, for the page opened to compress. */
   limitFirst?: boolean
+  /** More settings at the end (the soundtrack). */
+  children?: React.ReactNode
+  /** Those settings at the top, for the page opened to add music. */
+  childrenFirst?: boolean
 }) {
   const limitSection = (
     <Section title="Size limit">
@@ -158,6 +164,7 @@ export function SettingsPanel({
   const codecs = container ? HOLDS[container].video : null
   return (
     <div className="space-y-5">
+      {childrenFirst && children}
       {limitFirst && limitSection}
       <Section title="Format">
         <ChoiceChips
@@ -394,6 +401,8 @@ export function SettingsPanel({
           onCheckedChange={(keepTags) => update({ keepTags })}
         />
       </Section>
+
+      {!childrenFirst && children}
 
       {problem && (
         <p role="alert" className="text-sm text-destructive">

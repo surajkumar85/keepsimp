@@ -18,6 +18,7 @@ describe("doors", () => {
       "crop-video",
       "change-video-speed",
       "mute-video",
+      "add-music-to-video",
       "audio-converter",
       "audio-extractor",
       "audio-trimmer",

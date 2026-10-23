@@ -45,6 +45,12 @@ import {
 } from "@/lib/video/settings"
 import type { PoolJobs } from "./pool-jobs"
 import type { Box } from "@/lib/video/frame"
+import {
+  defaultSoundtrack,
+  QUIETEST_TRACK,
+  type TrackFacts,
+  type TrackMode,
+} from "@/lib/video/soundtrack"
 import { asTool, fileProperty, ToolError, type AgentTool } from "./registry"
 import type { FileStore } from "./files"
 
@@ -55,6 +61,8 @@ export interface VideoEngines {
   folder: string
   /** A frame of a file as a PNG, read as the workspace reads it (`frameAt`). */
   frame: (file: Blob, seconds: number) => Promise<Blob>
+  /** What a soundtrack's file holds, read as the workspace reads it (`readTrack`). */
+  track: (file: Blob, name: string) => Promise<Omit<TrackFacts, "id">>
 }
 
 /** A crop box in pixels of the picture as shown, before any turn. */
@@ -65,26 +73,35 @@ interface Crop {
   height: number
 }
 
-type Settings = { crop?: Crop } & Partial<
-  Pick<
-    VideoSettings,
-    | "format"
-    | "codec"
-    | "quality"
-    | "bitrate"
-    | "size"
-    | "frameRate"
-    | "rotate"
-    | "flip"
-    | "sound"
-    | "keepTags"
-    | "shape"
-    | "speed"
-    | "fadeIn"
-    | "fadeOut"
-    | "loudness"
+interface SoundtrackAsked {
+  /** The file whose sound goes under the video. */
+  soundtrack?: string
+  soundtrackMode?: TrackMode
+  soundtrackVolume?: number
+  soundtrackLoop?: boolean
+}
+
+type Settings = { crop?: Crop } & SoundtrackAsked &
+  Partial<
+    Pick<
+      VideoSettings,
+      | "format"
+      | "codec"
+      | "quality"
+      | "bitrate"
+      | "size"
+      | "frameRate"
+      | "rotate"
+      | "flip"
+      | "sound"
+      | "keepTags"
+      | "shape"
+      | "speed"
+      | "fadeIn"
+      | "fadeOut"
+      | "loudness"
+    >
   >
->
 
 const settingsSchema = {
   format: {
@@ -168,6 +185,27 @@ const settingsSchema = {
     additionalProperties: false,
     description:
       "A crop of one's own, in pixels of the picture as shown (as video_info gives its size), before any turn; it takes the place of shape. The picture is encoded again.",
+  },
+  soundtrack: fileProperty(
+    "A sound file (or a video) whose sound goes under the video: in place of its own sound, or mixed under it (soundtrackMode)."
+  ),
+  soundtrackMode: {
+    type: "string",
+    enum: ["replace", "mix"],
+    description:
+      "replace (the default) puts the soundtrack in place of the video's own sound; mix puts it under it, at soundtrackVolume.",
+  },
+  soundtrackVolume: {
+    type: "number",
+    minimum: QUIETEST_TRACK,
+    maximum: 0,
+    description:
+      "dB for the soundtrack under the video's own sound when mixed (-12 by default).",
+  },
+  soundtrackLoop: {
+    type: "boolean",
+    description:
+      "Play the soundtrack again until the video ends (yes by default); otherwise a shorter one leaves the rest silent.",
   },
   loudness: {
     type: "number",
@@ -298,16 +336,21 @@ export function videoTools(engines: VideoEngines): AgentTool[] {
     /** A part's own name, which says what it is. */
     name?: string,
     /** A crop box of one's own, in pixels of the picture as shown. */
-    crop?: Crop
+    crop?: Crop,
+    music: SoundtrackAsked = {}
   ) {
     const opened = await open(context.files, file, context.signal)
+    const track = music.soundtrack
+      ? await soundtrackOf(context.files, music)
+      : null
     const plan = await browserPlan(
       opened.facts,
       settings,
       engines.ask,
       undefined,
       cutFor(opened.facts),
-      crop ? boxOf(crop, opened.facts, opened.ref.name) : null
+      crop ? boxOf(crop, opened.facts, opened.ref.name) : null,
+      track && track.facts
     )
     if (plan.problem) throw new ToolError(plan.problem)
     const done = (await engines.pool.run(
@@ -316,7 +359,8 @@ export function videoTools(engines: VideoEngines): AgentTool[] {
         opened.container,
         opened.facts,
         plan,
-        engines.folder
+        engines.folder,
+        track?.blob ?? null
       ),
       {
         signal: context.signal,
@@ -367,11 +411,45 @@ export function videoTools(engines: VideoEngines): AgentTool[] {
     }
   }
 
+  /** A soundtrack asked for: its file read as the workspace reads one, with how it is used. */
+  async function soundtrackOf(files: FileStore, asked: SoundtrackAsked) {
+    const { blob, ref } = files.get(asked.soundtrack!)
+    let read: Omit<TrackFacts, "id">
+    try {
+      read = await engines.track(blob, ref.name)
+    } catch (error) {
+      throw new ToolError(
+        error instanceof Error
+          ? error.message
+          : `${ref.name} could not be read.`
+      )
+    }
+    return {
+      blob,
+      facts: {
+        ...read,
+        id: ref.id,
+        mode: asked.soundtrackMode ?? defaultSoundtrack.mode,
+        volume: asked.soundtrackVolume ?? defaultSoundtrack.volume,
+        loop: asked.soundtrackLoop ?? defaultSoundtrack.loop,
+      },
+    }
+  }
+
   /** The settings asked for, laid over the workspace's. */
   function settingsOf(asked: Settings): VideoSettings {
     if (asked.quality === "custom" && asked.bitrate === undefined)
       throw new ToolError(`Give the picture's "bitrate" with quality custom.`)
-    return { ...defaultSettings, ...asked }
+    const {
+      crop: _crop,
+      soundtrack: _soundtrack,
+      soundtrackMode: _mode,
+      soundtrackVolume: _volume,
+      soundtrackLoop: _loop,
+      ...settings
+    } = asked
+    void [_crop, _soundtrack, _mode, _volume, _loop]
+    return { ...defaultSettings, ...settings }
   }
 
   const convert: AgentTool<Settings & { file: string }> = {
@@ -390,7 +468,15 @@ export function videoTools(engines: VideoEngines): AgentTool[] {
     },
     annotations: { readOnlyHint: true },
     async run({ file, crop, ...asked }, context) {
-      return write(file, settingsOf(asked), context, undefined, undefined, crop)
+      return write(
+        file,
+        settingsOf(asked),
+        context,
+        undefined,
+        undefined,
+        crop,
+        asked
+      )
     },
   }
 
@@ -438,7 +524,8 @@ export function videoTools(engines: VideoEngines): AgentTool[] {
         context,
         undefined,
         undefined,
-        crop
+        crop,
+        asked
       )
     },
   }
@@ -478,7 +565,8 @@ export function videoTools(engines: VideoEngines): AgentTool[] {
         context,
         (facts) => ({ parts: kept(facts.duration, keep, cut), exact }),
         undefined,
-        crop
+        crop,
+        asked
       )
     },
   }
@@ -562,7 +650,8 @@ export function videoTools(engines: VideoEngines): AgentTool[] {
             },
             () => ({ parts, exact }),
             partName(ref.name, index + 1),
-            crop
+            crop,
+            asked
           )
         )
       return {

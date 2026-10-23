@@ -163,6 +163,23 @@ export const tools: readonly Tool[] = [
     status: "available",
   },
   {
+    id: "add-music-to-video",
+    name: "Add music to video",
+    description:
+      "Put music or a voice-over under a video, in place of its sound or mixed under it, looped to fit, on your device.",
+    partOf: "video-editor",
+    category: "video",
+    keywords: [
+      "add music to video",
+      "add audio to video",
+      "replace audio in video",
+      "background music",
+      "soundtrack",
+      "voice over",
+    ],
+    status: "available",
+  },
+  {
     id: "audio-editor",
     name: "Audio editor",
     description:

@@ -15,6 +15,7 @@ import {
   CropVideoTutorial,
   VideoSpeedTutorial,
   MuteVideoTutorial,
+  MusicTutorial,
 } from "@/components/video/tutorial"
 import {
   AudioConverterTutorial,
@@ -124,6 +125,12 @@ export async function generateMetadata({
     return pageMetadata(
       "Change video speed online: speed up or slow down, free",
       "Speed a video up to twice as fast or slow it to half speed in your browser, the sound keeping its pitch, with fades if you like. Every result is checked. No account, no uploads.",
+      `/dashboard/${id}/`
+    )
+  if (id === "add-music-to-video")
+    return pageMetadata(
+      "Add music to a video online, free and without uploading",
+      "Put music or a voice-over under your videos in your browser: in place of their sound or mixed under it, looped to fit and faded at the end, set to a loudness if you like. No account, no uploads.",
       `/dashboard/${id}/`
     )
   if (id === "mute-video")
@@ -392,6 +399,8 @@ export default async function ToolPage({
         <VideoWorkspace mode="speed" />
       ) : id === "mute-video" ? (
         <VideoWorkspace mode="mute" />
+      ) : id === "add-music-to-video" ? (
+        <VideoWorkspace mode="music" />
       ) : id === "audio-editor" ? (
         <AudioWorkspace mode="editor" />
       ) : id === "audio-converter" ? (
@@ -477,6 +486,8 @@ export default async function ToolPage({
         <VideoSpeedTutorial />
       ) : id === "mute-video" ? (
         <MuteVideoTutorial />
+      ) : id === "add-music-to-video" ? (
+        <MusicTutorial />
       ) : id === "audio-editor" ? (
         <AudioEditorTutorial />
       ) : id === "audio-converter" ? (

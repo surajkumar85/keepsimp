@@ -10,6 +10,7 @@ import {
   SAFE_CEILING,
 } from "@/lib/audio/level"
 import { fitToSize, MOST_PASSES } from "./target"
+import { trackSaid, type Soundtrack, type TrackFacts } from "./soundtrack"
 import { boxCrop, isWholeBox, type Box } from "./frame"
 import {
   clock,
@@ -295,6 +296,19 @@ export interface Plan {
   speed: number
   /** Seconds it fades in and out, picture and sound. */
   fade: Fade
+  /** Another file's sound under the video, and how; null for none. */
+  track:
+    | (Soundtrack & {
+        id: string
+        name: string
+        /** Whether the video's own sound is mixed under it. */
+        mixing: boolean
+        /** The sound written: the video's own rate and channels when mixed, the soundtrack's otherwise. */
+        sampleRate: number
+        channels: number
+        duration: number
+      })
+    | null
   /** As shown, after every turn; 0 with no picture. */
   width: number
   height: number
@@ -492,7 +506,9 @@ export function planFor(
   /** The parts kept, and whether they are to be cut to the frame. */
   cut: Cut | null = null,
   /** A crop box of one's own for this file. */
-  box: Box | null = null
+  box: Box | null = null,
+  /** Another file's sound to put under the video, and how. */
+  track: (TrackFacts & Soundtrack) | null = null
 ): Plan {
   const container =
     settings.format === "same"
@@ -602,7 +618,7 @@ export function planFor(
     const soundJoins =
       !facts.audio ||
       settings.sound === "none" ||
-      (soundCopies(facts.audio) && settings.loudness === null)
+      (soundCopies(facts.audio) && settings.loudness === null && !track)
     if (!keyframes || !keyframes.length) exactCut = true
     if (cutting.length > 1 && !soundJoins) exactCut = true
   }
@@ -631,9 +647,37 @@ export function planFor(
   // The sound first: a size limit shares its bits between the two.
   let audio: Plan["audio"] = { action: "none" }
   let soundBits = 0
-  const sound = facts.audio
+  // With a soundtrack, the sound written is the soundtrack, or the mix of
+  // it and the video's own; "Leave out" leaves out the video's own.
+  const mixing =
+    track?.mode === "mix" && facts.audio !== null && settings.sound !== "none"
+  const sound: VideoFacts["audio"] = track
+    ? {
+        codec: track.codec,
+        sampleRate: mixing ? facts.audio!.sampleRate : track.sampleRate,
+        channels: mixing ? facts.audio!.channels : track.channels,
+        bitrate: null,
+        decodable: track.decodable && (!mixing || facts.audio!.decodable),
+      }
+    : facts.audio
+  if (track) {
+    if (!facts.video)
+      fail("This file has no picture to put a soundtrack under.")
+    if (!track.decodable)
+      fail(
+        `This browser cannot play the sound of ${track.name}. Choose another soundtrack.`
+      )
+    soundNotes.push(
+      trackSaid(
+        track,
+        track,
+        length,
+        facts.audio !== null && settings.sound !== "none"
+      )
+    )
+  }
   if (sound) {
-    if (settings.sound === "none") {
+    if (settings.sound === "none" && !track) {
       audio = { action: "drop" }
       soundNotes.push("The sound is left out.")
     } else {
@@ -643,7 +687,8 @@ export function planFor(
         !exactCut &&
         !changesTime &&
         !fades &&
-        settings.loudness === null
+        settings.loudness === null &&
+        !track
       if (copies) {
         audio = { action: "copy" }
         soundBits = sound.bitrate ?? 128_000
@@ -903,6 +948,19 @@ export function planFor(
     crop: why?.shown.crop ?? null,
     speed: settings.speed,
     fade: { in: settings.fadeIn, out: settings.fadeOut },
+    track: track
+      ? {
+          id: track.id,
+          name: track.name,
+          mode: track.mode,
+          volume: track.volume,
+          loop: track.loop,
+          mixing,
+          duration: track.duration,
+          sampleRate: sound!.sampleRate,
+          channels: sound!.channels,
+        }
+      : null,
     width,
     height,
     audio,

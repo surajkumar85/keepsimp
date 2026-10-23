@@ -71,6 +71,9 @@ const engines = {
     ask: { video: async () => true, sound: async () => true },
     folder: "test",
     frame: async () => new Blob(),
+    track: async () => {
+      throw new Error("No soundtrack here.")
+    },
   },
 }
 

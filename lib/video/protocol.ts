@@ -38,6 +38,8 @@ export interface ConvertJob {
   key: string
   /** The page's own folder for results being written (scratch.ts). */
   folder: string
+  /** The soundtrack's file, when the plan has one. */
+  track?: Blob | null
 }
 
 export type VideoJob = ReadJob | ConvertJob

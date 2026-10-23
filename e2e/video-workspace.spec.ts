@@ -269,9 +269,9 @@ test("says why a file cannot be opened, and zips the rest", async ({
   await expect(item(page, "notes.txt")).toContainText(
     "This is not a video file read here."
   )
+  // The list's own "Add videos" input (the soundtrack has one of its own).
   await page
-    .locator("#video-file-more, input[type=file]")
-    .last()
+    .locator("#video-file")
     .setInputFiles([{ ...sample(), name: "second.mp4" }])
   await settled(page)
   const pending = page.waitForEvent("download")

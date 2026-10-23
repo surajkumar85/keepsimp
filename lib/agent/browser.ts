@@ -211,6 +211,13 @@ export function startAgent(): Started {
           ])
           return frameAt(engine, file, seconds)
         },
+        track: async (file, name) => {
+          const [engine, { readTrack }] = await Promise.all([
+            import("mediabunny"),
+            import("@/lib/video/mediabunny-video"),
+          ])
+          return readTrack(engine, file, name)
+        },
       },
     })
   )

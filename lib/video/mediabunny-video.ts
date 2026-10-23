@@ -11,11 +11,20 @@ import { lookSize, moments, type Looks } from "./looks"
 import { cutPicture, cutSound } from "./cut"
 import {
   cropPicture,
+  fadeGain,
   shapePicture,
   shapeSound,
   type SoundGain,
 } from "./effects"
-import { LoudnessMeter, loudnessOf, type Loudness } from "@/lib/audio/loudness"
+import {
+  decibels,
+  LoudnessMeter,
+  loudnessOf,
+  type Loudness,
+} from "@/lib/audio/loudness"
+import { Limiter } from "@/lib/audio/limiter"
+import { Resampler } from "@/lib/audio/resample"
+import { FrameQueue, matchChannels, mixed, type TrackFacts } from "./soundtrack"
 import { similarity } from "@/lib/image-compressor/ssim"
 
 type Engine = typeof Mediabunny
@@ -376,6 +385,72 @@ export async function convertVideo(
   }
 }
 
+/** A sample's channels, as floats. */
+function planesOfSample(sample: Mediabunny.AudioSample) {
+  return Array.from({ length: sample.numberOfChannels }, (_, plane) => {
+    const values = new Float32Array(sample.numberOfFrames)
+    sample.copyTo(values, { planeIndex: plane, format: "f32-planar" })
+    return values
+  })
+}
+
+/**
+ * A file's sound on the result's clock: with a plan, the parts kept through
+ * the same hooks as it is written (cuts, speed, fades), before any gain;
+ * without, as it is. Nothing when it has no sound this browser plays.
+ */
+async function* keptSound(
+  engine: Engine,
+  input: Mediabunny.Input,
+  plan: Plan | null,
+  signal?: AbortSignal
+): AsyncGenerator<Mediabunny.AudioSample> {
+  const track = await input.getPrimaryAudioTrack()
+  if (!track || !(await track.canDecode())) return
+  const parts = plan?.cut?.parts ?? null
+  const start = parts?.[0].start ?? 0
+  const end = parts?.at(-1)!.end ?? Infinity
+  const hooks = plan ? soundHooks(engine, plan, null) : null
+  const sink = new engine.AudioSampleSink(track)
+  for await (const sample of sink.samples(start, end)) {
+    if (signal?.aborted) {
+      sample.close()
+      return
+    }
+    // Only the frames inside what is kept, on its clock, as a trim gives them.
+    const rate = sample.sampleRate
+    const first = Math.max(0, Math.round((start - sample.timestamp) * rate))
+    const last = Math.min(
+      sample.numberOfFrames,
+      Math.round((end - sample.timestamp) * rate)
+    )
+    if (last <= first) {
+      sample.close()
+      continue
+    }
+    const inside =
+      first > 0 || last < sample.numberOfFrames
+        ? sample.trim(first, last)
+        : sample
+    if (inside !== sample) sample.close()
+    inside.setTimestamp(inside.timestamp - start)
+    if (hooks) yield* hooks.process(inside)
+    else yield inside
+  }
+}
+
+/** How loud the samples are, as the audio workspace's meter reads them. */
+async function measured(samples: AsyncIterable<Mediabunny.AudioSample>) {
+  let meter: LoudnessMeter | null = null
+  for await (const sample of samples) {
+    meter ??= new LoudnessMeter(sample.sampleRate, sample.numberOfChannels)
+    meter.push(planesOfSample(sample))
+    sample.close()
+  }
+  const map = (meter as LoudnessMeter | null)?.result()
+  return map ? loudnessOf(map) : null
+}
+
 /**
  * How loud a file's sound is. With a plan, measured as it will be written:
  * the parts kept, through the same hooks (speed, fades), before any gain;
@@ -389,54 +464,285 @@ export async function measureSound(
 ): Promise<Loudness | null> {
   const input = opened(engine, file)
   try {
-    const track = await input.getPrimaryAudioTrack()
-    if (!track || !(await track.canDecode())) return null
-    const parts = plan?.cut?.parts ?? null
-    const start = parts?.[0].start ?? 0
-    const end = parts?.at(-1)!.end ?? Infinity
-    const hooks = plan ? soundHooks(engine, plan, null) : null
-    let meter: LoudnessMeter | null = null
-    const measure = (sample: Mediabunny.AudioSample) => {
-      meter ??= new LoudnessMeter(sample.sampleRate, sample.numberOfChannels)
-      meter.push(
-        Array.from({ length: sample.numberOfChannels }, (_, plane) => {
-          const values = new Float32Array(sample.numberOfFrames)
-          sample.copyTo(values, { planeIndex: plane, format: "f32-planar" })
-          return values
-        })
-      )
-      sample.close()
-    }
-    const sink = new engine.AudioSampleSink(track)
-    for await (const sample of sink.samples(start, end)) {
-      if (signal?.aborted) {
-        sample.close()
-        break
-      }
-      // Only the frames inside what is kept, on its clock, as a trim gives them.
-      const rate = sample.sampleRate
-      const first = Math.max(0, Math.round((start - sample.timestamp) * rate))
-      const last = Math.min(
-        sample.numberOfFrames,
-        Math.round((end - sample.timestamp) * rate)
-      )
-      if (last <= first) {
-        sample.close()
-        continue
-      }
-      const inside =
-        first > 0 || last < sample.numberOfFrames
-          ? sample.trim(first, last)
-          : sample
-      if (inside !== sample) sample.close()
-      inside.setTimestamp(inside.timestamp - start)
-      if (hooks) for (const out of hooks.process(inside)) measure(out)
-      else measure(inside)
-    }
-    const map = (meter as LoudnessMeter | null)?.result()
-    return map ? loudnessOf(map) : null
+    return await measured(keptSound(engine, input, plan, signal))
   } finally {
     input.dispose()
+  }
+}
+
+/** What a soundtrack's file holds: its sound's length, rate, channels and codec, and whether this browser plays it. */
+export async function readTrack(
+  engine: Engine,
+  file: Blob,
+  name: string
+): Promise<Omit<TrackFacts, "id">> {
+  const input = opened(engine, file)
+  try {
+    const track = await input.getPrimaryAudioTrack().catch(() => null)
+    if (!track)
+      throw new VideoProblem(`${name} has no sound to use as a soundtrack.`)
+    return {
+      name,
+      duration: await track.computeDuration(),
+      sampleRate: track.sampleRate,
+      channels: track.numberOfChannels,
+      codec: track.codec,
+      decodable: await track.canDecode(),
+    }
+  } catch (error) {
+    if (error instanceof VideoProblem) throw error
+    throw new VideoProblem(`${name} could not be read as sound.`)
+  } finally {
+    input.dispose()
+  }
+}
+
+/** How many frames are made at a time for a soundtrack. */
+const RUN = 4096
+
+/**
+ * The sound written under a video with a soundtrack: the soundtrack (its
+ * channels matched, resampled to the result's rate, played again while
+ * the video lasts when it loops, faded out where the video ends it), at
+ * its volume under the video's own sound when they are mixed, faded as the
+ * plan fades, and, with a gain, made louder or quieter and held under its
+ * ceiling by the limiter. Exactly the result's length, on its clock.
+ */
+async function* soundtrackRuns(
+  engine: Engine,
+  source: Mediabunny.Input,
+  music: Mediabunny.Input,
+  plan: Plan,
+  gain: SoundGain | null,
+  report: { limited: number },
+  signal?: AbortSignal
+): AsyncGenerator<Mediabunny.AudioSample> {
+  const track = plan.track!
+  const musicTrack = (await music.getPrimaryAudioTrack())!
+  const own = track.mixing ? await source.getPrimaryAudioTrack() : null
+  const rate = own ? own.sampleRate : musicTrack.sampleRate
+  const channels = own ? own.numberOfChannels : musicTrack.numberOfChannels
+  const total = Math.round(plan.length * rate)
+  const ownRuns = own ? keptSound(engine, source, plan, signal) : null
+  const ownQueue = new FrameQueue(channels)
+  const musicQueue = new FrameQueue(channels)
+  const resampler =
+    musicTrack.sampleRate === rate
+      ? null
+      : new Resampler(channels, musicTrack.sampleRate / rate)
+  let musicRuns = new engine.AudioSampleSink(musicTrack).samples()
+  let musicEnded = false
+  /** Fill the music queue to `frames`, playing it again while it loops. */
+  async function fillMusic(frames: number) {
+    while (musicQueue.size < frames && !musicEnded) {
+      const next = await musicRuns.next()
+      if (next.done) {
+        if (track.loop) {
+          musicRuns = new engine.AudioSampleSink(musicTrack).samples()
+          continue
+        }
+        if (resampler) musicQueue.push(resampler.flush())
+        musicEnded = true
+        return
+      }
+      const planes = matchChannels(planesOfSample(next.value), channels)
+      next.value.close()
+      musicQueue.push(resampler ? resampler.process(planes) : planes)
+    }
+  }
+  async function fillOwn(frames: number) {
+    while (ownRuns && ownQueue.size < frames) {
+      const next = await ownRuns.next()
+      if (next.done) return
+      ownQueue.push(matchChannels(planesOfSample(next.value), channels))
+      next.value.close()
+    }
+  }
+  const cutAtEnd = track.loop || track.duration > plan.length + 0.05
+  const limiter = gain?.ceiling
+    ? new Limiter(rate, channels, gain.ceiling)
+    : null
+  const level = gain ? 10 ** (gain.db / 20) : 1
+  let given = 0
+  try {
+    for (let start = 0; start < total; start += RUN) {
+      signal?.throwIfAborted()
+      const frames = Math.min(RUN, total - start)
+      await fillMusic(frames)
+      await fillOwn(frames)
+      const music = musicQueue.take(frames)
+      // The plan's fades on the soundtrack too (the video's own is faded by its hooks).
+      if (plan.fade.in > 0 || plan.fade.out > 0)
+        for (let index = 0; index < frames; index++) {
+          const value = fadeGain((start + index) / rate, plan.length, plan.fade)
+          if (value < 1) for (const plane of music) plane[index] *= value
+        }
+      let planes: Float32Array[] = mixed(
+        music,
+        own ? ownQueue.take(frames) : null,
+        {
+          volume: own ? track.volume : 0,
+          start,
+          total,
+          rate,
+          cutAtEnd,
+        }
+      )
+      if (level !== 1)
+        planes = planes.map((plane) => plane.map((value) => value * level))
+      if (limiter) {
+        planes = limiter.process(planes)
+        if (start + frames >= total) {
+          const tail = limiter.flush()
+          planes = planes.map((plane, channel) => {
+            const out = new Float32Array(plane.length + tail[channel].length)
+            out.set(plane)
+            out.set(tail[channel], plane.length)
+            return out
+          })
+        }
+      }
+      const count = planes[0].length
+      if (!count) continue
+      const data = new Float32Array(count * channels)
+      planes.forEach((plane, channel) => data.set(plane, channel * count))
+      yield new engine.AudioSample({
+        data,
+        format: "f32-planar",
+        numberOfChannels: channels,
+        sampleRate: rate,
+        timestamp: given / rate,
+      })
+      given += count
+    }
+  } finally {
+    // The readers may hold decoded sound the video's end left unused.
+    await musicRuns.return(undefined)
+    await ownRuns?.return(undefined)
+  }
+  report.limited = limiter ? -decibels(limiter.lowest) : 0
+}
+
+/** How loud a video's sound with its soundtrack will be, before any gain. */
+export async function measureSoundtrack(
+  engine: Engine,
+  file: Blob,
+  music: Blob,
+  plan: Plan,
+  signal?: AbortSignal
+) {
+  const source = opened(engine, file)
+  const musicInput = opened(engine, music)
+  try {
+    return await measured(
+      soundtrackRuns(
+        engine,
+        source,
+        musicInput,
+        plan,
+        null,
+        { limited: 0 },
+        signal
+      )
+    )
+  } finally {
+    source.dispose()
+    musicInput.dispose()
+  }
+}
+
+/**
+ * A written picture put together with a soundtrack: the picture's packets
+ * copied as they are, its turn kept, and the sound (`soundtrackRuns`)
+ * encoded beside it, the two given to the file in order of time.
+ */
+export async function withSoundtrack(
+  engine: Engine,
+  picture: Blob,
+  file: Blob,
+  music: Blob,
+  plan: Plan,
+  target: Mediabunny.Target,
+  {
+    signal,
+    onProgress,
+    gain = null,
+  }: {
+    signal?: AbortSignal
+    onProgress?: (fraction: number) => void
+    gain?: SoundGain | null
+  } = {}
+): Promise<{ limited: number }> {
+  const written = opened(engine, picture)
+  const source = opened(engine, file)
+  const musicInput = opened(engine, music)
+  try {
+    const audio = plan.audio
+    if (audio.action !== "encode")
+      throw new VideoProblem("A soundtrack needs its sound encoded.")
+    const pictureTrack = (await written.getPrimaryVideoTrack())!
+    const output = new engine.Output({
+      format: formatFor(engine, plan.container),
+      target,
+    })
+    const pictureSource = new engine.EncodedVideoPacketSource(
+      (await pictureTrack.getCodec())!
+    )
+    output.addVideoTrack(pictureSource, {
+      rotation: (await pictureTrack.getRotation()) as Turn,
+      flip: await pictureTrack.getFlip(),
+    })
+    const soundSource = new engine.AudioSampleSource({
+      codec: audio.codec,
+      quality: new engine.Quality({ bitrate: audio.bitrate }),
+      ...(audio.codec === "opus" ? { transform: { sampleRate: 48000 } } : {}),
+    })
+    output.addAudioTrack(soundSource)
+    if (plan.keepTags) output.setMetadataTags(await source.getMetadataTags())
+    await output.start()
+    const report = { limited: 0 }
+    const sound = soundtrackRuns(
+      engine,
+      source,
+      musicInput,
+      plan,
+      gain,
+      report,
+      signal
+    )
+    const packets = new engine.EncodedPacketSink(pictureTrack).packets()
+    let config = await pictureTrack.getDecoderConfig()
+    let nextPacket = await packets.next()
+    let nextSound = await sound.next()
+    // In order of time, so the file is written as it goes.
+    while (!nextPacket.done || !nextSound.done) {
+      signal?.throwIfAborted()
+      const soundFirst =
+        nextPacket.done ||
+        (!nextSound.done &&
+          nextSound.value.timestamp < nextPacket.value.timestamp)
+      if (soundFirst && !nextSound.done) {
+        await soundSource.add(nextSound.value)
+        nextSound.value.close()
+        nextSound = await sound.next()
+      } else if (!nextPacket.done) {
+        await pictureSource.add(
+          nextPacket.value,
+          config ? { decoderConfig: config } : undefined
+        )
+        config = null
+        onProgress?.(Math.min(1, nextPacket.value.timestamp / plan.length))
+        nextPacket = await packets.next()
+      }
+    }
+    pictureSource.close()
+    soundSource.close()
+    await output.finalize()
+    return report
+  } finally {
+    written.dispose()
+    source.dispose()
+    musicInput.dispose()
   }
 }
 

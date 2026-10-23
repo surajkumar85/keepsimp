@@ -16,6 +16,7 @@ import {
 } from "@/lib/video/settings"
 import { MAX_FILES } from "@/lib/video/queue"
 import { TARGETS } from "@/lib/audio/level"
+import { TRACK_TAIL, TRACK_VOLUMES } from "@/lib/video/soundtrack"
 import { shortcutGroups } from "@/lib/video/shortcuts"
 import { JOIN_FADE } from "@/lib/audio/edits"
 
@@ -77,6 +78,10 @@ const options: TutorialContent["options"] = [
   {
     term: "Loudness",
     detail: `Makes the sound ${TARGETS.map((target) => `${target.label} (${target.for})`).join(", ")} as BS.1770 measures it, with the audio editor's own meter. Each sound is measured as it will be written (after trims, speed and fades), made louder or quieter, and its true peaks held under −1 dBTP by the audio editor's limiter; the result is measured again and held to the target within 1 LU, unless the limiter had to keep it quieter, which the page says. The picture is not touched by it.`,
+  },
+  {
+    term: "Soundtrack",
+    detail: `Add a soundtrack puts the sound of another file (music, a voice-over, or a video's sound) under every video: in place of its own sound, or mixed under it at a volume (${TRACK_VOLUMES.filter(Boolean).join(", ")} dB, or as it is). A shorter soundtrack plays again from its start until the video ends, unless that is turned off, and one still playing at the end fades out over ${TRACK_TAIL} s. It starts with the video, after any trim, and takes the fades and loudness chosen. The picture is copied as it is when nothing else changes it; only the sound is encoded.`,
   },
   {
     term: "Fades",
@@ -302,6 +307,36 @@ export function CropVideoTutorial() {
 
 export function VideoSpeedTutorial() {
   return <ToolTutorial content={speeding} />
+}
+
+const scoring: TutorialContent = {
+  ...editor,
+  name: "How to add music to a video",
+  description:
+    "Put music or a voice-over under your videos in your browser, in place of their sound or mixed under it. Nothing is uploaded.",
+  steps: [
+    {
+      title: "Add your videos",
+      text: `Drop them or choose them: MP4, MOV, WebM, MKV or MPEG-TS, of any length. Up to ${MAX_FILES} at once.`,
+    },
+    {
+      title: "Add a soundtrack",
+      text: "MP3, M4A, WAV, FLAC, Ogg or the sound of another video. It goes under every video.",
+    },
+    {
+      title: "In place of the sound, or under it",
+      text: "Choose how loud it is under the video's own sound, and whether it plays again to fill the video.",
+    },
+    {
+      title: "Download",
+      text: "Each video is written with its new sound, checked and offered.",
+    },
+  ],
+  guideHref: "/blog/add-music-to-a-video/",
+}
+
+export function MusicTutorial() {
+  return <ToolTutorial content={scoring} />
 }
 
 export function MuteVideoTutorial() {
