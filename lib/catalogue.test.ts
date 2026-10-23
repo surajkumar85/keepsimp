@@ -20,6 +20,7 @@ describe("doors", () => {
       "mute-video",
       "add-music-to-video",
       "add-text-to-video",
+      "video-to-gif",
       "audio-converter",
       "audio-extractor",
       "audio-trimmer",

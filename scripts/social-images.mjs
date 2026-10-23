@@ -319,6 +319,12 @@ const cards = [
     "/images/video-text-guide.svg",
   ],
   [
+    "make-a-gif-from-a-video",
+    "The moment, on a loop.",
+    "Make a GIF from a video, on your device.",
+    "/images/video-gif-guide.svg",
+  ],
+  [
     "keepsimp-tools-for-ai-agents",
     "Ask your agent. The work stays here.",
     "KeepSimp's tools in Claude Code, Codex and WebMCP.",

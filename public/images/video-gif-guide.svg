@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 600" role="img" aria-labelledby="title desc">
+  <title id="title">Making a GIF from a video</title><desc id="desc">A strip of video frames with a few seconds marked, becoming a small looping GIF.</desc>
+  <rect width="900" height="600" rx="24" fill="#f5f5f0"/>
+  <g font-family="sans-serif">
+    <g fill="#00786f">
+      <rect x="60" y="110" width="90" height="60" rx="6" opacity="0.35"/><rect x="160" y="110" width="90" height="60" rx="6" opacity="0.35"/><rect x="260" y="110" width="90" height="60" rx="6"/><rect x="360" y="110" width="90" height="60" rx="6"/><rect x="460" y="110" width="90" height="60" rx="6"/><rect x="560" y="110" width="90" height="60" rx="6" opacity="0.35"/><rect x="660" y="110" width="90" height="60" rx="6" opacity="0.35"/><rect x="760" y="110" width="80" height="60" rx="6" opacity="0.35"/>
+    </g>
+    <rect x="252" y="100" width="306" height="80" rx="10" fill="none" stroke="#00564f" stroke-width="4"/>
+    <text x="405" y="215" text-anchor="middle" font-size="18" fill="#00564f">the moment</text>
+    <path d="M405 240 V300" stroke="#00786f" stroke-width="6" stroke-linecap="round"/>
+    <path d="M387 284 L405 304 L423 284" fill="none" stroke="#00786f" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+    <rect x="300" y="320" width="210" height="140" rx="16" fill="#ffffff" stroke="#d4d4d4" stroke-width="2"/>
+    <rect x="318" y="338" width="174" height="98" rx="8" fill="#00786f"/>
+    <path d="M450 370 a28 28 0 1 1 -10 -22" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="round"/>
+    <path d="M432 336 L444 350 L428 356" fill="none" stroke="#ffffff" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+    <text x="560" y="380" font-size="26" font-weight="700" fill="#171717">GIF</text>
+    <text x="560" y="412" font-size="17" fill="#525252">or WebP, APNG</text>
+    <rect x="60" y="500" width="780" height="56" rx="14" fill="#e6f2f1"/>
+    <text x="450" y="534" text-anchor="middle" font-size="18" fill="#00564f">Trimmed, cropped, captioned · the Animation converter's engine</text>
+  </g>
+</svg>

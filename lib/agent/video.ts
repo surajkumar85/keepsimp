@@ -567,7 +567,7 @@ export function videoTools(engines: VideoEngines): AgentTool[] {
     name: "compress_video",
     title: "Make a video smaller, to a size",
     description:
-      "Writes a video to fit under a size (megabytes) or a share of its own size, as the video compressor does: the sound gets its share, the picture the rest as its bitrate, and more than 30 frames a second become 30, then the size steps down, when that leaves too few bits for the picture. The file is written again with a corrected bitrate when the browser's encoder misses (three passes at most), at a smaller size when the encoder will not come down to its bitrate,, and is never handed over larger than the limit. A file already under it is copied. Says how close the result looks (SSIM on frames through the clip).",
+      "Writes a video to fit under a size (megabytes) or a share of its own size, as the video compressor does: the sound gets its share, the picture the rest as its bitrate, and more than 30 frames a second become 30, then the size steps down, when that leaves too few bits for the picture. The file is written again with a corrected bitrate when the browser's encoder misses (three passes at most), at a smaller size when the encoder will not come down to its bitrate,, and is never handed over larger than the limit. A file already under it is copied. To make a GIF of a video, give the result to convert_animation. Says how close the result looks (SSIM on frames through the clip).",
     inputSchema: {
       type: "object",
       properties: {

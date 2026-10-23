@@ -18,6 +18,7 @@ import {
 import { MAX_FILES } from "@/lib/video/queue"
 import { TARGETS } from "@/lib/audio/level"
 import { TRACK_TAIL, TRACK_VOLUMES } from "@/lib/video/soundtrack"
+import { GIF_RATES, GIF_SIDES } from "@/lib/video/gif"
 import { shortcutGroups } from "@/lib/video/shortcuts"
 import { JOIN_FADE } from "@/lib/audio/edits"
 
@@ -83,6 +84,10 @@ const options: TutorialContent["options"] = [
   {
     term: "Text and logo",
     detail: `Text along the top and the bottom of the picture is written with the animation converter's own captions: the site's Outfit, wrapped to fit, small, medium or large, white or black with an outline of the other colour, for the whole video or between two times of the result. A logo (PNG, JPEG, WebP, GIF or AVIF) sits in a corner or the middle, ${LOGO_SIZES.join(", ")}% of the picture's width in its own shape, solid or see-through. Both are drawn on every frame, so the picture is encoded again. A logo marks a video; it does not stop it being copied.`,
+  },
+  {
+    term: "Make a GIF",
+    detail: `Make a GIF of the result hands the video, as written with every edit, to the animation converter's own engine: a GIF (plays everywhere), an animated WebP (far smaller, plays in every browser) or an APNG (full colour), ${GIF_SIDES.join(", ")} pixels on its longest side or as the video, at ${GIF_RATES.join(", ")} frames a second, played for ever. An animation holds every frame as a picture, so keep it short: trim to the moment first. The sound is left out.`,
   },
   {
     term: "Soundtrack",
@@ -364,6 +369,36 @@ const titling: TutorialContent = {
     },
   ],
   guideHref: "/blog/add-text-or-a-logo-to-a-video/",
+}
+
+const gifing: TutorialContent = {
+  ...editor,
+  name: "How to make a GIF from a video",
+  description:
+    "Turn a moment of a video into a GIF, animated WebP or APNG in your browser. Nothing is uploaded.",
+  steps: [
+    {
+      title: "Add your video",
+      text: "Drop it or choose it: MP4, MOV, WebM, MKV or MPEG-TS.",
+    },
+    {
+      title: "Trim to the moment",
+      text: "Keep the few seconds you want; crop it or add text in the settings if you like.",
+    },
+    {
+      title: "Make the GIF",
+      text: "Choose GIF, WebP or APNG, the size and the frame rate, then Make a GIF.",
+    },
+    {
+      title: "Download",
+      text: "See it play on the page and save it.",
+    },
+  ],
+  guideHref: "/blog/make-a-gif-from-a-video/",
+}
+
+export function GifTutorial() {
+  return <ToolTutorial content={gifing} />
 }
 
 export function TextTutorial() {

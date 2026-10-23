@@ -214,3 +214,30 @@ test("writes text and draws a logo on a video, for an agent", async ({
   expect(r).toBeGreaterThan(180)
   expect(g + b).toBeLessThan(140)
 })
+
+test("trims a video and makes a GIF of it with convert_animation, for an agent", async ({
+  page,
+}) => {
+  test.setTimeout(150_000)
+  await ready(page)
+  const scene = readFileSync("public/samples/keepsimp-scene.mp4")
+  const file = await hand(page, "scene.mp4", scene, "video/mp4")
+  const trimmed = await ran(page, "trim_video", {
+    file,
+    keep: [{ start: 2, end: 4 }],
+  })
+  const gif = await ran(page, "convert_animation", {
+    files: [trimmed.files![0].id],
+    to: "gif",
+    longEdge: 320,
+  })
+  const out = await saved(page, gif.files![0].id)
+  expect(out.name).toMatch(/\.gif$/)
+  const said = probe(out.bytes, "agent-scene.gif")
+  expect(said.streams[0]).toMatchObject({
+    codec_name: "gif",
+    width: 320,
+    height: 180,
+  })
+  expect(Number(said.format.duration)).toBeCloseTo(2, 0)
+})

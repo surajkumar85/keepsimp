@@ -741,4 +741,73 @@ export const videoPosts: readonly BlogPost[] = [
       sources.webcodecs,
     ],
   },
+  {
+    published: "2026-10-23",
+    slug: "make-a-gif-from-a-video",
+    title: "The moment, on a loop.",
+    searchTitle: "How to make a GIF from a video, free and without uploading",
+    description:
+      "Turn a moment of an MP4, MOV or WebM into a GIF, animated WebP or APNG in your browser: trim it, crop it, caption it, choose the size. Nothing is uploaded.",
+    keywords: [
+      "video to gif",
+      "mp4 to gif",
+      "make a gif from a video",
+      "gif maker",
+      "video to animated webp",
+    ],
+    category: "A little know-how",
+    readingTime: "3 min read",
+    image: "/images/video-gif-guide.svg",
+    imageAlt:
+      "A strip of video frames, a few seconds of it marked, becoming a small looping GIF",
+    tool: "video-to-gif",
+    intro:
+      "A reaction, a how-to step, a moment worth replaying: a GIF plays by itself, on a loop, in chats, documents and pages that will not play a video. KeepSimp makes one from a moment of your video, on your device.",
+    sections: [
+      {
+        id: "moment",
+        title: "Keep it to the moment.",
+        paragraphs: [
+          "A GIF holds every frame as a picture of up to 256 colours, so a long one is heavy: a few seconds is the right length. Open Video to GIF, drop your video and trim it to the moment; crop it to a square or 9:16, write text on it or slow it down in the settings if you like.",
+        ],
+        links: [
+          { label: "Open Video to GIF", href: "/dashboard/video-to-gif/" },
+        ],
+      },
+      {
+        id: "kind",
+        title: "GIF, WebP or APNG.",
+        paragraphs: [
+          "A GIF plays everywhere. An animated WebP looks better and is often a fraction of the size, and plays in every current browser and in most chats. An APNG keeps full colour, for pictures with smooth shading. Choose the longest side (320, 480 or 640 pixels, or the video's own) and 10 to 25 frames a second; 15 is smooth enough for most moments.",
+          "The animation is made by the Animation converter's own engine, with its palettes and dithering, from the video as written with every edit in it. It plays for ever; the sound is left out.",
+        ],
+        links: [
+          {
+            label: "Guide: GIF, WebP, APNG or video?",
+            href: "/blog/gif-webp-apng-or-video/",
+          },
+        ],
+      },
+      {
+        id: "more",
+        title: "When you need more control.",
+        paragraphs: [
+          "For colours, dithering, a size limit, playing back and forth or the frames as pictures, open the GIF itself, or the video, in the Animation converter: it takes short videos too.",
+        ],
+        links: [
+          {
+            label: "Open the Animation converter",
+            href: "/dashboard/animation-converter/",
+          },
+        ],
+      },
+    ],
+    sources: [
+      {
+        title: "MDN: image file type and format guide (GIF, APNG, WebP)",
+        url: "https://developer.mozilla.org/en-US/docs/Web/Media/Guides/Formats/Image_types",
+      },
+      sources.mediabunny,
+    ],
+  },
 ]

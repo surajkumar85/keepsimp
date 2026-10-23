@@ -5,6 +5,7 @@ import Link from "next/link"
 import {
   IconAlertCircle,
   IconCrop,
+  IconGif,
   IconInfoCircle,
   IconMovie,
   IconScissors,
@@ -67,6 +68,7 @@ import { convertJob, readJob } from "@/lib/video/jobs"
 import { browserAsker } from "@/lib/video/probe"
 import { SettingsPanel } from "./settings-panel"
 import { TrimPanel } from "./trim-panel"
+import { GifPanel } from "./gif-panel"
 import { SoundtrackPanel, type ChosenTrack } from "./soundtrack-panel"
 import { OverlayPanel, type ChosenLogo } from "./overlay-panel"
 import { defaultSoundtrack } from "@/lib/video/soundtrack"
@@ -75,6 +77,7 @@ import { isWholeBox, WHOLE, type Box } from "@/lib/video/frame"
 
 /** What the workspace is opened for: everything, or one job through a door. */
 export type VideoMode =
+  | "gif"
   | "editor"
   | "converter"
   | "compressor"
@@ -130,6 +133,14 @@ const COPY: Record<VideoMode, DropZoneCopy> = {
     action: "Choose videos",
     limits: `Stays on your device · up to ${MAX_FILES} videos at once · any length`,
   },
+  gif: {
+    heading: "Drop a video to make a GIF",
+    dropping: "Drop to make GIFs of these videos",
+    body: "Trim it to the moment you want, then make a GIF, an animated WebP or an APNG at the size and frame rate you choose.",
+    inputLabel: "Choose video files to make GIFs of",
+    action: "Choose videos",
+    limits: `Stays on your device · up to ${MAX_FILES} videos at once`,
+  },
   text: {
     heading: "Drop videos to add text to",
     dropping: "Drop to add text to these videos",
@@ -174,6 +185,7 @@ const SAMPLES: Record<VideoMode, string> = {
   mute: "keepsimp-clip.mp4",
   music: "keepsimp-scene.mp4",
   text: "keepsimp-scene.mp4",
+  gif: "keepsimp-scene.mp4",
 }
 
 /** What each door starts with. */
@@ -187,6 +199,7 @@ const FIRST: Record<VideoMode, Partial<VideoSettings>> = {
   mute: { format: "same", sound: "none" },
   music: { format: "same" },
   text: { format: "same" },
+  gif: { format: "same" },
 }
 
 const OPENED_FOR: Record<VideoMode, string> = {
@@ -199,6 +212,7 @@ const OPENED_FOR: Record<VideoMode, string> = {
   mute: "muting",
   music: "adding music",
   text: "adding text",
+  gif: "making GIFs",
 }
 
 /** The doors that show the trimmer at once; the others have it one press away. */
@@ -212,6 +226,7 @@ const TRIMS: Record<VideoMode, boolean> = {
   mute: false,
   music: false,
   text: false,
+  gif: true,
 }
 
 let counter = 0
@@ -830,6 +845,7 @@ export function VideoWorkspace({ mode }: { mode: VideoMode }) {
             showing={showing}
             onShow={setShowing}
             trimOpen={TRIMS[mode]}
+            gifOpen={mode === "gif"}
             onTrim={(parts) =>
               trimWith(selected.id, (trim, duration) =>
                 trimmed(trim, parts, whole(duration))
@@ -928,6 +944,7 @@ function Selected({
   showing,
   onShow,
   trimOpen,
+  gifOpen,
   onTrim,
   onExact,
   onUndo,
@@ -940,6 +957,7 @@ function Selected({
   showing: "original" | "result"
   onShow: (showing: "original" | "result") => void
   trimOpen: boolean
+  gifOpen: boolean
   onTrim: (parts: Part[]) => void
   onExact: (exact: boolean) => void
   onUndo: (back: boolean) => void
@@ -958,6 +976,7 @@ function Selected({
     ? item.facts.video.width / item.facts.video.height
     : 16 / 9
   const [trimming, setTrimming] = useState(trimOpen)
+  const [gifing, setGifing] = useState(gifOpen)
   const [saving, setSaving] = useState(false)
   const [frameProblem, setFrameProblem] = useState<string | null>(null)
   const [strip, setStrip] = useState<{
@@ -1201,6 +1220,21 @@ function Selected({
               ))}
             </div>
           )}
+          {result?.file &&
+            !result.problems.length &&
+            plan &&
+            plan.video.action !== "none" &&
+            (gifing ? (
+              <GifPanel
+                file={result.file}
+                name={item.name}
+                seconds={plan.length}
+              />
+            ) : (
+              <Button variant="outline" onClick={() => setGifing(true)}>
+                <IconGif aria-hidden="true" /> Make a GIF
+              </Button>
+            ))}
         </>
       )}
     </section>

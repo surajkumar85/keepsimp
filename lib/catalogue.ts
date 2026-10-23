@@ -196,6 +196,16 @@ export const tools: readonly Tool[] = [
     status: "available",
   },
   {
+    id: "video-to-gif",
+    name: "Video to GIF",
+    description:
+      "Make a GIF of a moment of a video, trimmed, cropped and captioned, on your device.",
+    partOf: "video-editor",
+    category: "video",
+    keywords: ["video to gif", "mp4 to gif", "make a gif", "gif maker"],
+    status: "available",
+  },
+  {
     id: "audio-editor",
     name: "Audio editor",
     description:

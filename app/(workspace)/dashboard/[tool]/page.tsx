@@ -17,6 +17,7 @@ import {
   MuteVideoTutorial,
   MusicTutorial,
   TextTutorial,
+  GifTutorial,
 } from "@/components/video/tutorial"
 import {
   AudioConverterTutorial,
@@ -126,6 +127,12 @@ export async function generateMetadata({
     return pageMetadata(
       "Change video speed online: speed up or slow down, free",
       "Speed a video up to twice as fast or slow it to half speed in your browser, the sound keeping its pitch, with fades if you like. Every result is checked. No account, no uploads.",
+      `/dashboard/${id}/`
+    )
+  if (id === "video-to-gif")
+    return pageMetadata(
+      "Video to GIF converter, free and without uploading",
+      "Make a GIF, animated WebP or APNG from an MP4, MOV, WebM or MKV in your browser: trim it to the moment, crop it, caption it, choose the size and frame rate. No account, no uploads.",
       `/dashboard/${id}/`
     )
   if (id === "add-text-to-video")
@@ -410,6 +417,8 @@ export default async function ToolPage({
         <VideoWorkspace mode="music" />
       ) : id === "add-text-to-video" ? (
         <VideoWorkspace mode="text" />
+      ) : id === "video-to-gif" ? (
+        <VideoWorkspace mode="gif" />
       ) : id === "audio-editor" ? (
         <AudioWorkspace mode="editor" />
       ) : id === "audio-converter" ? (
@@ -499,6 +508,8 @@ export default async function ToolPage({
         <MusicTutorial />
       ) : id === "add-text-to-video" ? (
         <TextTutorial />
+      ) : id === "video-to-gif" ? (
+        <GifTutorial />
       ) : id === "audio-editor" ? (
         <AudioEditorTutorial />
       ) : id === "audio-converter" ? (
