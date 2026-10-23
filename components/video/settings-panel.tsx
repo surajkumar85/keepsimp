@@ -5,6 +5,7 @@ import { ChoiceChips } from "@/components/ui/choice-chips"
 import { Input } from "@/components/ui/input"
 import { outputInfo, type OutContainer } from "@/lib/video/formats"
 import { useState } from "react"
+import { dbLabel, TARGETS } from "@/lib/audio/level"
 import {
   FADES,
   FRAME_RATES,
@@ -365,6 +366,27 @@ export function SettingsPanel({
             { value: "none", label: "Leave out" },
           ]}
         />
+        {settings.sound !== "none" && (
+          <ChoiceChips
+            label="Loudness"
+            hint={
+              settings.loudness === null
+                ? "Leaves the sound's level as it is."
+                : `Measures the sound as it will be written and makes it ${dbLabel(settings.loudness)} LUFS, as asked for ${TARGETS.find((target) => target.lufs === settings.loudness)?.for ?? "this target"} (BS.1770), a true-peak limiter holding peaks under −1 dBTP. The sound is encoded again.`
+            }
+            value={String(settings.loudness)}
+            onValueChange={(value) =>
+              update({ loudness: value === "null" ? null : Number(value) })
+            }
+            options={[
+              { value: "null", label: "Same" },
+              ...TARGETS.map((target) => ({
+                value: String(target.lufs),
+                label: target.label,
+              })),
+            ]}
+          />
+        )}
         <ToggleRow
           label="Keep the title and details"
           hint="Title, artist, date and comments, where the format holds them."

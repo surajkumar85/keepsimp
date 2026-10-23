@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import Link from "next/link"
 import {
   IconAlertCircle,
+  IconCrop,
   IconInfoCircle,
   IconMovie,
   IconScissors,
@@ -51,7 +52,9 @@ import {
   defaultSettings,
   planFor,
   settingsProblem,
+  shapeRatio,
   type CanEncode,
+  type Shape,
   type Plan,
   type SoundCodec,
   type VideoSettings,
@@ -59,10 +62,13 @@ import {
 import { zipBlobs } from "@/lib/video/zip-blobs"
 import { looksSaid } from "@/lib/video/looks"
 import { floorSaid } from "@/lib/video/target"
+import { levelSaid } from "@/lib/video/check"
 import { convertJob, readJob } from "@/lib/video/jobs"
 import { browserAsker } from "@/lib/video/probe"
 import { SettingsPanel } from "./settings-panel"
 import { TrimPanel } from "./trim-panel"
+import { CropControls, CropOverlay, startingBox } from "./crop-box"
+import { isWholeBox, WHOLE, type Box } from "@/lib/video/frame"
 
 /** What the workspace is opened for: everything, or one job through a door. */
 export type VideoMode =
@@ -235,7 +241,8 @@ export function VideoWorkspace({ mode }: { mode: VideoMode }) {
                 applied,
                 canEncode,
                 canEncodeSound,
-                cutOf(item.trimApplied)
+                cutOf(item.trimApplied),
+                item.box
               )
             : null,
         ])
@@ -326,6 +333,7 @@ export function VideoWorkspace({ mode }: { mode: VideoMode }) {
                 index: null,
                 passes: 0,
                 resized: null,
+                level: null,
                 looks: null,
                 error: message.message,
               },
@@ -354,6 +362,7 @@ export function VideoWorkspace({ mode }: { mode: VideoMode }) {
               index: message.index,
               passes: message.passes,
               resized: message.resized,
+              level: message.level,
               looks: message.looks,
               error: null,
             },
@@ -501,6 +510,7 @@ export function VideoWorkspace({ mode }: { mode: VideoMode }) {
           trim: null,
           trimApplied: null,
           part: null,
+          box: null,
           progress: null,
           result: null,
         })
@@ -667,6 +677,7 @@ export function VideoWorkspace({ mode }: { mode: VideoMode }) {
       <div className="min-w-0 space-y-4 lg:col-span-3">
         {selected && (
           <Selected
+            key={selected.id}
             item={selected}
             plan={planOf(selected)}
             result={current(selected, planOf(selected))}
@@ -688,6 +699,14 @@ export function VideoWorkspace({ mode }: { mode: VideoMode }) {
               trimWith(selected.id, (trim) => trim && undone(trim, back))
             }
             onSplit={(points) => split(selected.id, points)}
+            onBox={(box) => {
+              pool.current?.forget(selected.id)
+              change((current) =>
+                current.map((one) =>
+                  one.id === selected.id ? { ...one, box } : one
+                )
+              )
+            }}
           />
         )}
         {notice && (
@@ -764,6 +783,7 @@ function Selected({
   onExact,
   onUndo,
   onSplit,
+  onBox,
 }: {
   item: VideoItem
   plan: Plan | null
@@ -775,12 +795,19 @@ function Selected({
   onExact: (exact: boolean) => void
   onUndo: (back: boolean) => void
   onSplit: (points: number[]) => void
+  onBox: (box: Box | null) => void
 }) {
   const original = useMemo(() => URL.createObjectURL(item.file), [item.file])
   useEffect(() => () => URL.revokeObjectURL(original), [original])
   const show = result?.url ? showing : "original"
   const source = show === "result" ? result!.url! : original
   const player = useRef<HTMLVideoElement>(null)
+  const [cropping, setCropping] = useState<{ shape: Shape; box: Box } | null>(
+    null
+  )
+  const aspect = item.facts?.video
+    ? item.facts.video.width / item.facts.video.height
+    : 16 / 9
   const [trimming, setTrimming] = useState(trimOpen)
   const [saving, setSaving] = useState(false)
   const [frameProblem, setFrameProblem] = useState<string | null>(null)
@@ -864,17 +891,76 @@ function Selected({
         </p>
       ) : (
         <>
-          <video
-            ref={player}
-            key={source}
-            src={source}
-            controls
-            playsInline
-            preload="metadata"
-            className="aspect-video w-full rounded-lg bg-black"
-            aria-label={show === "result" ? "The result" : "The original"}
-            data-testid="video-player"
-          />
+          <div className="relative">
+            <video
+              ref={player}
+              key={source}
+              src={source}
+              controls={!cropping}
+              playsInline
+              preload="metadata"
+              className="aspect-video w-full rounded-lg bg-black"
+              aria-label={show === "result" ? "The result" : "The original"}
+              data-testid="video-player"
+            />
+            {cropping && item.facts.video && (
+              <CropOverlay
+                box={cropping.box}
+                onChange={(box) => setCropping({ ...cropping, box })}
+                aspect={aspect}
+                ratio={
+                  cropping.shape === "same" ? null : shapeRatio(cropping.shape)
+                }
+              />
+            )}
+          </div>
+          {cropping && item.facts.video && (
+            <CropControls
+              shape={cropping.shape}
+              onShape={(shape, box) => setCropping({ shape, box })}
+              box={cropping.box}
+              aspect={aspect}
+              size={item.facts.video}
+              onUse={() => {
+                onBox(isWholeBox(cropping.box) ? null : cropping.box)
+                setCropping(null)
+                onShow("original")
+              }}
+              onReset={() => setCropping({ shape: "same", box: WHOLE })}
+              onCancel={() => setCropping(null)}
+            />
+          )}
+          {!cropping && show === "original" && item.facts.video && (
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                variant="outline"
+                onClick={() =>
+                  setCropping({
+                    shape: "same",
+                    box: item.box ?? startingBox("same", aspect),
+                  })
+                }
+              >
+                <IconCrop aria-hidden="true" />
+                {item.box ? "Change the crop" : "Crop by hand"}
+              </Button>
+              {item.box && (
+                <>
+                  <span
+                    className="text-sm text-muted-foreground"
+                    data-testid="crop-said"
+                  >
+                    Cropped by hand to{" "}
+                    {Math.round(item.box.width * item.facts.video.width)} ×{" "}
+                    {Math.round(item.box.height * item.facts.video.height)}.
+                  </span>
+                  <Button variant="ghost" onClick={() => onBox(null)}>
+                    Remove the crop
+                  </Button>
+                </>
+              )}
+            </div>
+          )}
           {result?.url && (
             <ChoiceChips
               label="Play"
@@ -950,6 +1036,9 @@ function Selected({
                 </p>
               )}
               {result?.resized && <p>{floorSaid(result.resized)}</p>}
+              {result?.level && (
+                <p data-testid="video-level">{levelSaid(result.level)}</p>
+              )}
               {result?.looks && (
                 <p data-testid="video-looks">{looksSaid(result.looks)}</p>
               )}

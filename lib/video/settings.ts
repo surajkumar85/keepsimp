@@ -3,7 +3,14 @@
  * said in words. The page shows the sentence; the worker follows the plan;
  * the check holds the result to it.
  */
+import {
+  dbLabel,
+  LOUDEST_TARGET,
+  QUIETEST_TARGET,
+  SAFE_CEILING,
+} from "@/lib/audio/level"
 import { fitToSize, MOST_PASSES } from "./target"
+import { boxCrop, isWholeBox, type Box } from "./frame"
 import {
   clock,
   isWhole,
@@ -176,6 +183,8 @@ export interface VideoSettings {
   /** Seconds it fades in from black and silence, and out to them. */
   fadeIn: number
   fadeOut: number
+  /** The loudness the sound is made, in LUFS (its peaks held under −1 dBTP); null leaves its level. */
+  loudness: number | null
 }
 
 export type Limit = null | { bytes: number } | { share: number }
@@ -205,6 +214,7 @@ export const defaultSettings: VideoSettings = {
   speed: 1,
   fadeIn: 0,
   fadeOut: 0,
+  loudness: null,
 }
 
 export const LEAST_BITRATE = 100
@@ -292,7 +302,13 @@ export interface Plan {
     | { action: "none" }
     | { action: "drop" }
     | { action: "copy" }
-    | { action: "encode"; codec: SoundCodec; bitrate: number }
+    | {
+        action: "encode"
+        codec: SoundCodec
+        bitrate: number
+        /** LUFS to reach, measured first; null leaves the level. */
+        loudness: number | null
+      }
   keepTags: boolean
   /** What was chosen and why, in order. */
   notes: string[]
@@ -389,7 +405,9 @@ export const shapeRatio = (shape: Exclude<Shape, "same">) => {
 export function shownSize(
   video: NonNullable<VideoFacts["video"]>,
   settings: Pick<VideoSettings, "rotate" | "size"> &
-    Partial<Pick<VideoSettings, "shape">>
+    Partial<Pick<VideoSettings, "shape" | "flip">>,
+  /** A crop box of one's own, which takes the place of the shape. */
+  box: Box | null = null
 ) {
   let [width, height] =
     settings.rotate % 180 === 0
@@ -397,7 +415,17 @@ export function shownSize(
       : [video.height, video.width]
   let crop: Plan["crop"] = null
   const shape = settings.shape ?? "same"
-  if (shape !== "same") {
+  if (box && !isWholeBox(box)) {
+    crop = boxCrop(
+      box,
+      video.width,
+      video.height,
+      settings.rotate,
+      settings.flip ?? false
+    )
+    width = crop.width
+    height = crop.height
+  } else if (shape !== "same") {
     const ratio = shapeRatio(shape)
     // Within a hundredth of the shape already: left as it is.
     if (Math.abs(width / height / ratio - 1) > 0.01) {
@@ -462,7 +490,9 @@ export function planFor(
   canEncode: CanEncode,
   canEncodeSound: (codec: SoundCodec) => boolean | null = () => true,
   /** The parts kept, and whether they are to be cut to the frame. */
-  cut: Cut | null = null
+  cut: Cut | null = null,
+  /** A crop box of one's own for this file. */
+  box: Box | null = null
 ): Plan {
   const container =
     settings.format === "same"
@@ -501,7 +531,7 @@ export function planFor(
   const source = facts.video
   const why = source
     ? (() => {
-        const shown = shownSize(source, settings)
+        const shown = shownSize(source, settings, box)
         const sourceRate = source.frameRate ?? 30
         const slower =
           settings.frameRate !== "same" && settings.frameRate < sourceRate - 0.5
@@ -525,7 +555,10 @@ export function planFor(
         const reasons = [
           settings.quality !== "original" && "the quality was chosen",
           over && `it is to fit under ${sizeSaid(target!)}`,
-          shown.crop && `it is cut to ${settings.shape}`,
+          shown.crop &&
+            (box && !isWholeBox(box)
+              ? `it is cropped to ${shown.crop.width} × ${shown.crop.height}`
+              : `it is cut to ${settings.shape}`),
           shown.scaled && `it is made ${shown.width} × ${shown.height}`,
           changesTime && `it plays ${speedSaid(settings.speed)}`,
           fades && "it fades",
@@ -567,7 +600,9 @@ export function planFor(
   const lossless = TURNS_AS_SETTING.includes(container)
   if (cutting && !exactCut) {
     const soundJoins =
-      !facts.audio || settings.sound === "none" || soundCopies(facts.audio)
+      !facts.audio ||
+      settings.sound === "none" ||
+      (soundCopies(facts.audio) && settings.loudness === null)
     if (!keyframes || !keyframes.length) exactCut = true
     if (cutting.length > 1 && !soundJoins) exactCut = true
   }
@@ -603,7 +638,12 @@ export function planFor(
       soundNotes.push("The sound is left out.")
     } else {
       // Sound cut to the frame is cut to the sample, which needs encoding.
-      const copies = soundCopies(sound) && !exactCut && !changesTime && !fades
+      const copies =
+        soundCopies(sound) &&
+        !exactCut &&
+        !changesTime &&
+        !fades &&
+        settings.loudness === null
       if (copies) {
         audio = { action: "copy" }
         soundBits = sound.bitrate ?? 128_000
@@ -648,11 +688,15 @@ export function planFor(
         const squeezed =
           target !== null && chosen.bitrate > Math.max(least, roomy)
         if (squeezed) chosen = { ...chosen, bitrate: Math.max(least, roomy) }
-        audio = { action: "encode", ...chosen }
+        audio = { action: "encode", ...chosen, loudness: settings.loudness }
         soundBits = chosen.bitrate
         soundNotes.push(
           `The sound is converted to ${soundLabel(chosen.codec)} at ${Math.round(chosen.bitrate / 1000)} kbit/s${squeezed ? ", to leave room for the picture" : soundCapped ? ", no more than the file holds" : ""}${settings.sound === "keep" && sound.codec && !PLAYS_EVERYWHERE[container].includes(sound.codec) ? `, as ${label} would not play ${soundLabel(sound.codec)} everywhere` : ""}.`
         )
+        if (settings.loudness !== null)
+          soundNotes.push(
+            `It is measured as it will be written and made louder or quieter to ${dbLabel(settings.loudness)} LUFS (BS.1770), its peaks held under ${dbLabel(SAFE_CEILING)} dBTP by a limiter.`
+          )
         if (late)
           soundNotes.push(
             "This browser cannot write Opus, so the sound is AAC, which in MKV starts a few hundredths of a second late. Choose MP4 to keep it in step."
@@ -900,6 +944,14 @@ export function settingsProblem(settings: VideoSettings): string | null {
     return `Give a size from ${LEAST_LIMIT} to ${MOST_LIMIT.toLocaleString("en")} MB.`
   if (!(settings.speed >= SLOWEST_SPEED && settings.speed <= FASTEST_SPEED))
     return `Choose a speed from ${SLOWEST_SPEED} to ${FASTEST_SPEED} times.`
+  if (
+    settings.loudness !== null &&
+    !(
+      settings.loudness >= QUIETEST_TARGET &&
+      settings.loudness <= LOUDEST_TARGET
+    )
+  )
+    return `Choose a loudness from ${dbLabel(QUIETEST_TARGET)} to ${dbLabel(LOUDEST_TARGET)} LUFS.`
   for (const fade of [settings.fadeIn, settings.fadeOut])
     if (!(fade >= 0 && fade <= LONGEST_FADE))
       return `Choose a fade of at most ${LONGEST_FADE} s.`

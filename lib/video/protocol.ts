@@ -1,6 +1,22 @@
 import type { Container } from "./formats"
 import type { Plan, VideoFacts } from "./settings"
 import type { Looks } from "./looks"
+import type { Loudness } from "@/lib/audio/loudness"
+
+/** What was done to the sound's level: measured before, the gain, measured after. */
+export interface VideoLevel {
+  /** LUFS asked for. */
+  target: number
+  /** Measured as it would be written, before the gain; null when it could not be. */
+  before: Loudness | null
+  db: number
+  /** Measured as written; null when it could not be. */
+  after: Loudness | null
+  /** The most the limiter took off, in dB. */
+  limited: number
+  /** Why the target was not reached, when it was not. */
+  notes: string[]
+}
 
 /** Read a file: its facts and a small picture. */
 export interface ReadJob {
@@ -70,6 +86,8 @@ export type VideoResponse =
       resized: { width: number; height: number } | null
       /** How close it looks to the original; null when not measured. */
       looks: Looks | null
+      /** The sound's level, when it was set to a loudness. */
+      level: VideoLevel | null
     }
   | { type: "error"; id: string; key: string; message: string }
   | { type: "abandoned"; id: string }

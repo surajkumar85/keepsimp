@@ -301,6 +301,12 @@ const cards = [
     "/images/video-mute-guide.svg",
   ],
   [
+    "make-a-video-louder-or-even-out-its-sound",
+    "Every video, as loud as the next.",
+    "Set a video's loudness in LUFS, on your device.",
+    "/images/video-loudness-guide.svg",
+  ],
+  [
     "keepsimp-tools-for-ai-agents",
     "Ask your agent. The work stays here.",
     "KeepSimp's tools in Claude Code, Codex and WebMCP.",

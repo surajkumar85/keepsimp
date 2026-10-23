@@ -5,10 +5,11 @@
  */
 import type { ItemState } from "@/lib/image-batch/queue"
 import { containerLabels, outputInfo, type Container } from "./formats"
-import type { IndexPlace } from "./protocol"
+import type { IndexPlace, VideoLevel } from "./protocol"
 import { videoCodecLabels, type Plan, type VideoFacts } from "./settings"
 import { MOST_PASSES } from "./target"
 import { keepOnly, splitAt, whole, type Part } from "./trim"
+import type { Box } from "./frame"
 import type { Looks } from "./looks"
 
 /** What the trimmer keeps, with the edits that can be undone and done again. */
@@ -77,6 +78,8 @@ export interface VideoResult {
   resized: { width: number; height: number } | null
   /** How close it looks to the original; null when not measured. */
   looks: Looks | null
+  /** The sound's level, when it was set to a loudness. */
+  level: VideoLevel | null
   error: string | null
 }
 
@@ -95,6 +98,8 @@ export interface VideoItem {
   trimApplied: Trim | null
   /** Which part of a split file this is (its name says so); null for a whole file. */
   part: number | null
+  /** A crop box of one's own, over the picture as shown; null for none. */
+  box: Box | null
   /** How far the job writing it is, for the plan named. */
   progress: { key: string; fraction: number; pass?: number } | null
   result: VideoResult | null

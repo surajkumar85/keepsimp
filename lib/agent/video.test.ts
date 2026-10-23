@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 import { FakePool } from "@/tests/agent-image-fake"
-import type { VideoJob, VideoResponse } from "@/lib/video/protocol"
+import type { VideoJob, VideoLevel, VideoResponse } from "@/lib/video/protocol"
 import type { VideoFacts } from "@/lib/video/settings"
 import { Agent } from "./agent"
 import { PoolJobs } from "./pool-jobs"
@@ -67,6 +67,7 @@ function setup({
   size = 1000,
   passes = 1,
   resized = null as { width: number; height: number } | null,
+  level = null as VideoLevel | null,
   frame = png(320, 180),
 } = {}) {
   let pool!: FakePool<VideoJob, VideoResponse>
@@ -119,6 +120,7 @@ function setup({
             index: "front",
             passes,
             resized,
+            level,
             // Measured only for a picture encoded again, as the worker does.
             looks:
               plan.video.action === "encode"
@@ -503,5 +505,71 @@ describe("shape, speed and fades for an agent", () => {
     await expect(
       call("convert_video", { file: add(MP4, "clip.mp4").id, speed: 4 })
     ).rejects.toThrow()
+  })
+})
+
+describe("loudness for an agent", () => {
+  it("sets the sound to a loudness and says what was done", async () => {
+    const loud = (integrated: number) => ({
+      integrated,
+      range: 3,
+      truePeak: -1.1,
+      peak: -1.4,
+    })
+    const { call, add, jobs } = setup({
+      level: {
+        target: -14,
+        before: loud(-20),
+        db: 6,
+        after: loud(-14.2),
+        limited: 0,
+        notes: [],
+      },
+    })
+    const result = await call("convert_video", {
+      file: add(MP4, "clip.mp4").id,
+      loudness: -14,
+    })
+    const job = jobs().find((one) => one.job === "convert")!
+    expect(job.job === "convert" && job.plan.audio).toMatchObject({
+      action: "encode",
+      loudness: -14,
+    })
+    expect(result.summary).toContain("Made 6 dB louder to −14.2 LUFS.")
+    await expect(
+      call("convert_video", { file: add(MP4, "clip.mp4").id, loudness: -60 })
+    ).rejects.toThrow()
+  })
+})
+
+describe("a crop of one's own for an agent", () => {
+  it("crops to pixels of the picture as shown, and refuses one past it", async () => {
+    const { call, add, jobs } = setup()
+    await call("convert_video", {
+      file: add(MP4, "clip.mp4").id,
+      crop: { left: 160, top: 0, width: 160, height: 90 },
+    })
+    const job = jobs().find((one) => one.job === "convert")!
+    expect(job.job === "convert" && job.plan.crop).toEqual({
+      left: 160,
+      top: 0,
+      width: 160,
+      height: 90,
+    })
+    await expect(
+      call("convert_video", {
+        file: add(MP4, "clip.mp4").id,
+        crop: { left: 200, top: 0, width: 160, height: 90 },
+      })
+    ).rejects.toThrow(
+      "The crop goes past the picture, which is 320 × 180 as shown."
+    )
+    const silent = setup({ readFacts: { ...facts, video: null } })
+    await expect(
+      silent.call("convert_video", {
+        file: silent.add(MP4, "song.mp4").id,
+        crop: { left: 0, top: 0, width: 2, height: 2 },
+      })
+    ).rejects.toThrow("song.mp4 has no picture to crop.")
   })
 })

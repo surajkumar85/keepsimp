@@ -3,6 +3,7 @@
  * given to agents, so both write a file the same way.
  */
 import type { Container } from "./formats"
+import type { Box } from "./frame"
 import type { ConvertJob, ReadJob } from "./protocol"
 import { planKey } from "./queue"
 import {
@@ -33,7 +34,8 @@ export async function browserPlan(
   settings: VideoSettings,
   ask: Asker,
   known = new Map<string, boolean>(),
-  cut: Cut | null = null
+  cut: Cut | null = null,
+  box: Box | null = null
 ): Promise<Plan> {
   const sounds = new Map<SoundCodec, boolean>([["aac", true]])
   let plan = planFor(
@@ -41,7 +43,8 @@ export async function browserPlan(
     settings,
     (codec, width, height) => known.get(`${codec}@${width}x${height}`) ?? null,
     (codec) => sounds.get(codec) ?? null,
-    cut
+    cut,
+    box
   )
   for (let round = 0; round < MOST_ROUNDS; round++) {
     const waiting = plan.pending[0]
@@ -62,7 +65,8 @@ export async function browserPlan(
       (codec, width, height) =>
         known.get(`${codec}@${width}x${height}`) ?? null,
       (codec) => sounds.get(codec) ?? null,
-      cut
+      cut,
+      box
     )
   }
   return plan

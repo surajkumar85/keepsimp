@@ -9,7 +9,13 @@ import type { Decoded } from "./check"
 import type { Plan, Turn, VideoCodec, VideoFacts } from "./settings"
 import { lookSize, moments, type Looks } from "./looks"
 import { cutPicture, cutSound } from "./cut"
-import { shapePicture, shapeSound } from "./effects"
+import {
+  cropPicture,
+  shapePicture,
+  shapeSound,
+  type SoundGain,
+} from "./effects"
+import { LoudnessMeter, loudnessOf, type Loudness } from "@/lib/audio/loudness"
 import { similarity } from "@/lib/image-compressor/ssim"
 
 type Engine = typeof Mediabunny
@@ -179,17 +185,20 @@ const DISCARDED: Record<string, string> = {
 const timed = (plan: Plan) =>
   plan.speed !== 1 || plan.fade.in > 0 || plan.fade.out > 0
 
-/** Hooks one after the other: what the first drops, the second never sees. */
+/** Hooks one after the other: what one drops, the next never sees; the last may give a canvas. */
 function chained<T>(
-  first: ((sample: T) => T | null) | null,
-  then: ((sample: T) => unknown) | null
+  steps: ((sample: T) => T | null)[],
+  last: ((sample: T) => unknown) | null
 ) {
-  if (!first && !then) return {}
+  if (!steps.length && !last) return {}
   return {
     process: (sample: T) => {
-      const kept = first ? first(sample) : sample
-      if (kept === null) return null
-      return then ? then(kept) : kept
+      let kept: T | null = sample
+      for (const step of steps) {
+        kept = step(kept)
+        if (kept === null) return null
+      }
+      return last ? last(kept) : kept
     },
   }
 }
@@ -209,23 +218,34 @@ function videoOptions(
   if (video.action === "none") return undefined
   if (video.action === "copy") return { rotate: plan.rotate, flip: plan.flip }
   const parts = hooked(plan)
+  const canvasOf = (width: number, height: number) =>
+    new OffscreenCanvas(width, height)
+  // A crop is drawn by our own hook (see `cropPicture`), at the result's size.
+  const steps = [
+    ...(plan.crop
+      ? [
+          cropPicture(
+            engine.VideoSample,
+            plan.crop,
+            video.width,
+            video.height,
+            canvasOf
+          ),
+        ]
+      : []),
+    ...(parts ? [cutPicture(parts)] : []),
+  ]
   return {
     ...(chained(
-      parts ? cutPicture(parts) : null,
+      steps,
       timed(plan)
-        ? shapePicture(
-            plan.speed,
-            plan.fade,
-            plan.length,
-            (width, height) => new OffscreenCanvas(width, height)
-          )
+        ? shapePicture(plan.speed, plan.fade, plan.length, canvasOf)
         : null
     ) as Pick<Mediabunny.ConversionVideoOptions, "process">),
-    ...(plan.crop ? { crop: plan.crop } : {}),
+    ...(plan.crop
+      ? { processedWidth: video.width, processedHeight: video.height }
+      : { width: video.width, height: video.height, fit: "fill" as const }),
     codec: video.codec,
-    width: video.width,
-    height: video.height,
-    fit: "fill",
     // In the file's own time: the hook then moves frames to the result's.
     frameRate: video.frameRate ? video.frameRate / plan.speed : undefined,
     quality: new engine.Quality({ bitrate: video.bitrate }),
@@ -240,32 +260,43 @@ function videoOptions(
   }
 }
 
+/**
+ * The sound's hooks for a plan: the parts cut to the frame, then speed,
+ * fades, gain and limiter. Null when the sound passes as it is. The same
+ * hooks measure a sound before its gain is chosen, so it is measured as it
+ * will be written.
+ */
+function soundHooks(engine: Engine, plan: Plan, gain: SoundGain | null) {
+  const parts = hooked(plan)
+  const cut = parts ? cutSound(engine.AudioSample, parts) : null
+  const shape =
+    timed(plan) || gain
+      ? shapeSound(
+          engine.AudioSample,
+          plan.speed,
+          plan.fade,
+          plan.length * plan.speed,
+          gain
+        )
+      : null
+  if (!cut && !shape) return null
+  return {
+    process: (sample: Mediabunny.AudioSample) =>
+      shape ? (cut ? cut(sample) : [sample]).flatMap(shape) : cut!(sample),
+    limited: () => shape?.limited() ?? 0,
+  }
+}
+
 function audioOptions(
   engine: Engine,
-  plan: Plan
+  plan: Plan,
+  hooks: ReturnType<typeof soundHooks>
 ): Mediabunny.ConversionAudioOptions | undefined {
   const audio = plan.audio
   if (audio.action === "drop") return { discard: true }
   if (audio.action !== "encode") return undefined
-  const parts = hooked(plan)
-  const cut = parts ? cutSound(engine.AudioSample, parts) : null
-  const shape = timed(plan)
-    ? shapeSound(
-        engine.AudioSample,
-        plan.speed,
-        plan.fade,
-        plan.length * plan.speed
-      )
-    : null
   return {
-    ...(cut || shape
-      ? {
-          process: (sample: Mediabunny.AudioSample) =>
-            shape
-              ? (cut ? cut(sample) : [sample]).flatMap(shape)
-              : cut!(sample),
-        }
-      : {}),
+    ...(hooks ? { process: hooks.process } : {}),
     codec: audio.codec,
     quality: new engine.Quality({ bitrate: audio.bitrate }),
     sampleRate: audio.codec === "opus" ? 48000 : undefined,
@@ -283,14 +314,19 @@ export async function convertVideo(
     signal,
     onProgress,
     software = false,
+    gain = null,
   }: {
     signal?: AbortSignal
     onProgress?: (fraction: number) => void
     /** Encode the picture in software, after the hardware failed. */
     software?: boolean
+    /** The sound's gain and ceiling, worked out from measuring it. */
+    gain?: SoundGain | null
   } = {}
-) {
+): Promise<{ limited: number }> {
   const input = opened(engine, file)
+  const hooks =
+    plan.audio.action === "encode" ? soundHooks(engine, plan, gain) : null
   try {
     const output = new engine.Output({
       format: formatFor(engine, plan.container),
@@ -313,7 +349,7 @@ export async function convertVideo(
             },
           }
         : {}),
-      audio: audioOptions(engine, plan),
+      audio: audioOptions(engine, plan, hooks),
       tags: plan.keepTags ? undefined : {},
       showWarnings: false,
     })
@@ -334,6 +370,71 @@ export async function convertVideo(
     } finally {
       signal?.removeEventListener("abort", stop)
     }
+    return { limited: hooks?.limited() ?? 0 }
+  } finally {
+    input.dispose()
+  }
+}
+
+/**
+ * How loud a file's sound is. With a plan, measured as it will be written:
+ * the parts kept, through the same hooks (speed, fades), before any gain;
+ * without, the file's sound as it is (a result). Null with no sound to read.
+ */
+export async function measureSound(
+  engine: Engine,
+  file: Blob,
+  plan: Plan | null,
+  signal?: AbortSignal
+): Promise<Loudness | null> {
+  const input = opened(engine, file)
+  try {
+    const track = await input.getPrimaryAudioTrack()
+    if (!track || !(await track.canDecode())) return null
+    const parts = plan?.cut?.parts ?? null
+    const start = parts?.[0].start ?? 0
+    const end = parts?.at(-1)!.end ?? Infinity
+    const hooks = plan ? soundHooks(engine, plan, null) : null
+    let meter: LoudnessMeter | null = null
+    const measure = (sample: Mediabunny.AudioSample) => {
+      meter ??= new LoudnessMeter(sample.sampleRate, sample.numberOfChannels)
+      meter.push(
+        Array.from({ length: sample.numberOfChannels }, (_, plane) => {
+          const values = new Float32Array(sample.numberOfFrames)
+          sample.copyTo(values, { planeIndex: plane, format: "f32-planar" })
+          return values
+        })
+      )
+      sample.close()
+    }
+    const sink = new engine.AudioSampleSink(track)
+    for await (const sample of sink.samples(start, end)) {
+      if (signal?.aborted) {
+        sample.close()
+        break
+      }
+      // Only the frames inside what is kept, on its clock, as a trim gives them.
+      const rate = sample.sampleRate
+      const first = Math.max(0, Math.round((start - sample.timestamp) * rate))
+      const last = Math.min(
+        sample.numberOfFrames,
+        Math.round((end - sample.timestamp) * rate)
+      )
+      if (last <= first) {
+        sample.close()
+        continue
+      }
+      const inside =
+        first > 0 || last < sample.numberOfFrames
+          ? sample.trim(first, last)
+          : sample
+      if (inside !== sample) sample.close()
+      inside.setTimestamp(inside.timestamp - start)
+      if (hooks) for (const out of hooks.process(inside)) measure(out)
+      else measure(inside)
+    }
+    const map = (meter as LoudnessMeter | null)?.result()
+    return map ? loudnessOf(map) : null
   } finally {
     input.dispose()
   }

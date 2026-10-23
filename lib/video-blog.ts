@@ -380,9 +380,9 @@ export const videoPosts: readonly BlogPost[] = [
       },
       {
         id: "limits",
-        title: "What it does not do.",
+        title: "When the middle is not the place.",
         paragraphs: [
-          "The crop is always around the middle. If what matters is to one side, a centred crop may cut into it: check the result in the player before you share it. Nothing is uploaded: the videos never leave your device.",
+          "A shape is cut around the middle. If what matters is to one side, use Crop by hand: drag the box over the picture, or move it with the arrow keys, locked to a shape or free, and that video keeps its own crop. Nothing is uploaded: the videos never leave your device.",
         ],
         links: [
           {
@@ -528,5 +528,83 @@ export const videoPosts: readonly BlogPost[] = [
       },
     ],
     sources: [sources.mediabunny],
+  },
+  {
+    published: "2026-10-23",
+    slug: "make-a-video-louder-or-even-out-its-sound",
+    title: "Every video, as loud as the next.",
+    searchTitle:
+      "How to make a video louder or normalise its sound, without uploading",
+    description:
+      "Set a video's sound to −14, −16 or −23 LUFS in your browser, measured by BS.1770 as streaming services and broadcasters measure it, its peaks held under −1 dBTP. The picture is not touched.",
+    keywords: [
+      "make video louder",
+      "normalize video audio",
+      "video loudness",
+      "LUFS video",
+      "increase video volume",
+    ],
+    category: "A little know-how",
+    readingTime: "3 min read",
+    image: "/images/video-loudness-guide.svg",
+    imageAlt:
+      "Three videos with quiet, loud and uneven sound coming out at the same loudness, a meter reading −14 LUFS",
+    tool: "video-editor",
+    intro:
+      "A phone recording is too quiet next to a screen capture; one clip in a course is louder than the rest. Turning the volume up by ear is guesswork, and too far makes the sound crackle. KeepSimp measures each video's sound as streaming services and broadcasters do, and sets it to a loudness, on your device.",
+    sections: [
+      {
+        id: "lufs",
+        title: "Loudness, not volume.",
+        paragraphs: [
+          "Loudness is measured in LUFS, by the method of ITU-R BS.1770: it weighs the sound as the ear hears it and leaves out the silences, so a quiet talk and a loud song can be set to sound alike. Spotify plays music at −14 LUFS, Apple Podcasts asks for −16, and Europe's broadcasters for −23 (EBU R 128).",
+          "Making a sound louder can push its loudest moments past what a file can hold. A true-peak limiter turns just those moments down, smoothly, so the peaks stay under −1 dBTP and nothing crackles.",
+        ],
+        links: [
+          { label: "Open the video editor", href: "/dashboard/video-editor/" },
+        ],
+      },
+      {
+        id: "how",
+        title: "How to do it.",
+        paragraphs: [
+          "Open the video editor, drop your videos and choose a loudness under Sound and details. Each sound is measured as it will be written, after any trim, speed change or fade, then made louder or quieter, and the result is measured again. The page says how much it was changed, how loud it came out and whether the limiter had to work.",
+          "Only the sound is encoded again; the picture is copied as it is when nothing else changes it.",
+        ],
+      },
+      {
+        id: "limits",
+        title: "What it cannot do.",
+        paragraphs: [
+          "A sound more than 30 dB too quiet is raised 30 dB, the most done here, and stays under the target; the page says so. Setting loudness evens out videos against each other, not loud and quiet moments within one: speech recorded far from the microphone stays far away.",
+        ],
+        links: [
+          {
+            label: "Guide: loudness for podcasts and music",
+            href: "/blog/normalize-audio-loudness/",
+          },
+        ],
+      },
+    ],
+    sources: [
+      {
+        title:
+          "ITU-R BS.1770: algorithms to measure audio programme loudness and true-peak audio level",
+        url: "https://www.itu.int/rec/R-REC-BS.1770",
+      },
+      {
+        title: "Spotify for Artists: loudness normalization",
+        url: "https://support.spotify.com/us/artists/article/loudness-normalization/",
+      },
+      {
+        title: "Apple Podcasts: audio requirements",
+        url: "https://podcasters.apple.com/support/893-audio-requirements",
+      },
+      {
+        title:
+          "EBU R 128: loudness normalisation and permitted maximum level of audio signals",
+        url: "https://tech.ebu.ch/publications/r128",
+      },
+    ],
   },
 ]

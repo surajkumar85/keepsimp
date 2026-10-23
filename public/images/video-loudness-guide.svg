@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 600" role="img" aria-labelledby="title desc">
+  <title id="title">Setting videos to one loudness</title><desc id="desc">Three videos with a quiet, a loud and an uneven sound wave come out with sound waves of the same loudness, beside a meter reading −14 LUFS.</desc>
+  <rect width="900" height="600" rx="24" fill="#f5f5f0"/>
+  <g font-family="sans-serif">
+    <g>
+      <rect x="70" y="90" width="300" height="100" rx="14" fill="#ffffff" stroke="#d4d4d4" stroke-width="2"/>
+      <path d="M90 140 q10 -6 20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0" fill="none" stroke="#a3a3a3" stroke-width="3"/>
+      <rect x="70" y="220" width="300" height="100" rx="14" fill="#ffffff" stroke="#d4d4d4" stroke-width="2"/>
+      <path d="M90 270 q10 -40 20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0" fill="none" stroke="#a3a3a3" stroke-width="3"/>
+      <rect x="70" y="350" width="300" height="100" rx="14" fill="#ffffff" stroke="#d4d4d4" stroke-width="2"/>
+      <path d="M90 400 q10 -8 20 0 t20 0 t20 0 q10 -38 20 0 t20 0 t20 0 q10 -6 20 0 t20 0 t20 0 q10 -30 20 0 t20 0 t20 0" fill="none" stroke="#a3a3a3" stroke-width="3"/>
+    </g>
+    <path d="M400 270 H470" stroke="#00786f" stroke-width="6" stroke-linecap="round"/>
+    <path d="M454 252 L474 270 L454 288" fill="none" stroke="#00786f" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+    <g>
+      <rect x="500" y="90" width="230" height="100" rx="14" fill="#ffffff" stroke="#d4d4d4" stroke-width="2"/>
+      <path d="M515 140 q10 -22 20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0" fill="none" stroke="#00786f" stroke-width="4"/>
+      <rect x="500" y="220" width="230" height="100" rx="14" fill="#ffffff" stroke="#d4d4d4" stroke-width="2"/>
+      <path d="M515 270 q10 -22 20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0" fill="none" stroke="#00786f" stroke-width="4"/>
+      <rect x="500" y="350" width="230" height="100" rx="14" fill="#ffffff" stroke="#d4d4d4" stroke-width="2"/>
+      <path d="M515 400 q10 -22 20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0" fill="none" stroke="#00786f" stroke-width="4"/>
+    </g>
+    <rect x="760" y="90" width="80" height="360" rx="14" fill="#e6f2f1"/>
+    <rect x="782" y="190" width="36" height="240" rx="8" fill="#00786f"/>
+    <text x="800" y="170" text-anchor="middle" font-size="18" font-weight="700" fill="#00564f">−14</text>
+    <text x="450" y="520" text-anchor="middle" font-size="20" fill="#00564f">Measured by BS.1770 · peaks under −1 dBTP</text>
+  </g>
+</svg>

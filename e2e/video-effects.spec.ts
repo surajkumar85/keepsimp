@@ -3,9 +3,11 @@ import { test, expect } from "@playwright/test"
 import {
   brightness,
   clip,
+  croppedLike,
   CROP,
   decodesCleanly,
   download,
+  ebur128,
   loudness,
   MUTE,
   packets,
@@ -41,6 +43,12 @@ test("crops the sample to 9:16 around its middle, checked", async ({
   )
   expect(video).toMatchObject({ width: 304, height: 540 })
   expect(decodesCleanly(result.bytes, "crop.mp4")).toBe(true)
+  // The middle of the picture, not the whole of it squeezed.
+  const scene = readFileSync("public/samples/keepsimp-scene.mp4")
+  const middle = croppedLike(result.bytes, scene, "304:540:328:0")
+  expect(croppedLike(result.bytes, scene, "304:540:0:0")).toBeLessThan(
+    middle - 3
+  )
 })
 
 test("plays a clip twice as fast, every other frame, the tone keeping its pitch", async ({
@@ -121,4 +129,84 @@ test("mutes the sample: the picture copied packet for packet, no sound", async (
       "v"
     )
   )
+})
+
+test("makes a quiet clip's sound −16 LUFS, as FFmpeg's meter reads it", async ({
+  page,
+}) => {
+  test.setTimeout(150_000)
+  const quiet = clip("quiet.mp4", {
+    size: "320x180",
+    seconds: 4,
+    args: [
+      "-c:v",
+      "libx264",
+      "-pix_fmt",
+      "yuv420p",
+      "-af",
+      "volume=-24dB",
+      "-c:a",
+      "aac",
+    ],
+  })
+  expect(ebur128(quiet.buffer, "quiet-in.mp4").integrated).toBeLessThan(-30)
+  await page.goto(EDITOR)
+  await page.locator("#video-file").setInputFiles([quiet])
+  await settled(page)
+  await page
+    .getByRole("radiogroup", { name: "Loudness" })
+    .getByRole("radio", { name: "−16 LUFS", exact: true })
+    .click()
+  await expect(page.getByTestId("video-plan")).toContainText(
+    "made louder or quieter to −16 LUFS"
+  )
+  await settled(page, 120_000)
+  await expect(page.getByTestId("video-level")).toContainText("dB louder to")
+  const result = await download(page, "quiet.mp4")
+  const measured = ebur128(result.bytes, "quiet-out.mp4")
+  expect(Math.abs(measured.integrated - -16)).toBeLessThanOrEqual(1)
+  expect(measured.truePeak).toBeLessThanOrEqual(-0.5)
+  // The picture is copied as it is.
+  expect(packets(result.bytes, "quiet-out.mp4", "v")).toEqual(
+    packets(quiet.buffer, "quiet-in.mp4", "v")
+  )
+})
+
+test("crops by hand with the keys: the result is the source cropped there", async ({
+  page,
+}) => {
+  test.setTimeout(150_000)
+  const wide = clip("hand-crop.mp4", { size: "640x360", seconds: 2 })
+  await page.goto(EDITOR)
+  await page.locator("#video-file").setInputFiles([wide])
+  await settled(page)
+  await page.getByRole("button", { name: "Crop by hand" }).click()
+  await page
+    .getByRole("radiogroup", { name: "Crop shape" })
+    .getByRole("radio", { name: "1:1", exact: true })
+    .click()
+  // A square of 360 in the middle (left 140), moved right by a tenth (64 px).
+  const box = page.getByTestId("crop-box")
+  await box.focus()
+  for (let step = 0; step < 10; step++) await page.keyboard.press("ArrowRight")
+  await page.getByRole("button", { name: "Use this crop" }).click()
+  await expect(page.getByTestId("crop-said")).toHaveText(
+    "Cropped by hand to 360 × 360."
+  )
+  await expect(page.getByTestId("video-plan")).toContainText(
+    "because it is cropped to 360 × 360"
+  )
+  await settled(page, 120_000)
+  const result = await download(page, "hand-crop.mp4")
+  expect(
+    probe(result.bytes, "hand-crop-out.mp4").streams.find(
+      (one) => one.codec_type === "video"
+    )
+  ).toMatchObject({ width: 360, height: 360 })
+  // Most alike where it was cropped, and less so a few pixels either way.
+  const there = croppedLike(result.bytes, wide.buffer, "360:360:204:0")
+  for (const left of [196, 212, 0])
+    expect(
+      croppedLike(result.bytes, wide.buffer, `360:360:${left}:0`)
+    ).toBeLessThan(there - 3)
 })

@@ -1,5 +1,5 @@
 /** What the video specs share: the page, generated files, and FFmpeg to read results. */
-import { execFileSync } from "node:child_process"
+import { execFileSync, spawnSync } from "node:child_process"
 import { mkdtempSync, readFileSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
@@ -372,6 +372,61 @@ export function pitch(sound: Float32Array, from: number, to: number) {
   for (let index = 1; index < part.length; index++)
     if (part[index - 1] < 0 && part[index] >= 0) crossings++
   return crossings / (to - from)
+}
+
+/** Integrated loudness (LUFS) and true peak (dBTP), as FFmpeg's EBU R 128 meter reads them. */
+export function ebur128(bytes: Uint8Array, name: string) {
+  const path = join(folder, name)
+  writeFileSync(path, bytes)
+  const said = spawnSync(
+    "ffmpeg",
+    [
+      "-nostats",
+      "-i",
+      path,
+      "-vn",
+      "-af",
+      "ebur128=peak=true",
+      "-f",
+      "null",
+      "-",
+    ],
+    { encoding: "utf8" }
+  ).stderr
+  const summary = said.slice(said.lastIndexOf("Summary:"))
+  return {
+    integrated: Number(/I:\s+(-?[\d.]+) LUFS/.exec(summary)![1]),
+    truePeak: Number(/Peak:\s+(-?[\d.]+) dBFS/.exec(summary)![1]),
+  }
+}
+
+/** How alike a result is to the source as FFmpeg crops it (PSNR in dB, averaged over frames). */
+export function croppedLike(
+  result: Uint8Array,
+  source: Uint8Array,
+  crop: string
+) {
+  const out = join(folder, "crop-result.mp4")
+  const original = join(folder, "crop-source.mp4")
+  writeFileSync(out, result)
+  writeFileSync(original, source)
+  const said = spawnSync(
+    "ffmpeg",
+    [
+      "-nostats",
+      "-i",
+      out,
+      "-i",
+      original,
+      "-lavfi",
+      `[1:v]crop=${crop}[ref];[0:v][ref]psnr`,
+      "-f",
+      "null",
+      "-",
+    ],
+    { encoding: "utf8" }
+  ).stderr
+  return Number(/average:([\d.]+|inf)/.exec(said)![1].replace("inf", "99"))
 }
 
 /** Print what a worker reports as an error, so a failed run says why. */

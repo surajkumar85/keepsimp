@@ -1,7 +1,13 @@
 // @vitest-environment node
 import { describe, expect, it } from "vitest"
 import { AudioSample, VideoSample } from "mediabunny"
-import { fadeGain, shapePicture, shapeSound, sped } from "./effects"
+import {
+  cropPicture,
+  fadeGain,
+  shapePicture,
+  shapeSound,
+  sped,
+} from "./effects"
 
 const frame = (timestamp: number, duration = 0.1) =>
   new VideoSample(new Uint8Array(4 * 4), {
@@ -157,5 +163,97 @@ describe("the sound", () => {
     expect(middle.timestamp).toBe(0.1)
     expect(of(middle)[400]).toBeCloseTo(tone(400), 6)
     expect(of(last)[400]).toBeCloseTo(tone(400) * 0.5, 6)
+  })
+})
+
+describe("the sound's level", () => {
+  const all = (samples: AudioSample[]) => {
+    const out: number[] = []
+    for (const sample of samples) {
+      const values = new Float32Array(sample.numberOfFrames)
+      sample.copyTo(values, { planeIndex: 0, format: "f32-planar" })
+      out.push(...values)
+    }
+    return out
+  }
+
+  it("is made louder by its gain, with nothing held back without a ceiling", () => {
+    const hook = shapeSound(AudioSample, 1, { in: 0, out: 0 }, 0.1, {
+      db: 6,
+      ceiling: null,
+    })
+    const [out] = hook(tenth(0, 1))
+    const values = all([out])
+    expect(values[400]).toBeCloseTo(
+      Math.sin((400 * 2 * Math.PI * 440) / RATE) * 10 ** (6 / 20),
+      5
+    )
+    expect(hook.limited()).toBe(0)
+  })
+
+  it("is held under its ceiling by the limiter, every frame let out at the end", () => {
+    const ceiling = 10 ** (-1 / 20)
+    const hook = shapeSound(AudioSample, 1, { in: 0, out: 0 }, 1, {
+      db: 20,
+      ceiling,
+    })
+    const out = Array.from({ length: 10 }, (_, index) =>
+      hook(tenth(index / 10, 1))
+    ).flat()
+    const values = all(out)
+    expect(values).toHaveLength(RATE)
+    expect(Math.max(...values.map(Math.abs))).toBeLessThanOrEqual(ceiling)
+    // Late by its look-ahead, but on the clock without a gap.
+    let at = 0
+    for (const sample of out) {
+      expect(sample.timestamp).toBeCloseTo(at, 9)
+      at += sample.numberOfFrames / RATE
+    }
+    expect(hook.limited()).toBeGreaterThan(19)
+  })
+})
+
+describe("cropping the picture", () => {
+  it("draws the frame whole, then the rectangle from it at the result's size", () => {
+    const calls: unknown[][] = []
+    const canvases: { width: number; height: number }[] = []
+    const canvasOf = (width: number, height: number) => {
+      const canvas = {
+        width,
+        height,
+        getContext: () => ({
+          drawImage: (...args: unknown[]) =>
+            calls.push([
+              "drawImage",
+              canvases.indexOf(args[0] as never),
+              ...args.slice(1),
+            ]),
+        }),
+      }
+      canvases.push(canvas)
+      return canvas as unknown as OffscreenCanvas
+    }
+    class Made {
+      constructor(
+        readonly source: unknown,
+        readonly init: { timestamp: number; duration: number }
+      ) {}
+    }
+    const hook = cropPicture(
+      Made as never,
+      { left: 10, top: 20, width: 30, height: 40 },
+      60,
+      80,
+      canvasOf
+    )
+    const frame = drawn(1.5)
+    const made = hook(frame.sample as never) as unknown as Made
+    expect(frame.calls).toEqual([["draw", 0, 0, 4, 2]])
+    expect(calls).toEqual([["drawImage", 1, 10, 20, 30, 40, 0, 0, 60, 80]])
+    expect(made.source).toBe(canvases[0])
+    expect(made.init).toEqual({ timestamp: 1.5, duration: 0.1 })
+    // The whole frame's canvas is kept for frames of the same size.
+    hook(drawn(1.6).sample as never)
+    expect(canvases).toHaveLength(2)
   })
 })

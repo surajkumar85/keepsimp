@@ -4,11 +4,12 @@
  * page's folder on disk (scratch.ts) where the browser allows, opened again
  * and checked before they are handed over.
  */
-import { writtenProblems } from "./check"
+import { levelProblems, writtenProblems } from "./check"
 import { fastStart } from "./faststart"
 import { outputInfo } from "./formats"
 import { VideoProblem } from "./mediabunny-video"
 import type {
+  VideoLevel,
   ConvertJob,
   IndexPlace,
   ReadJob,
@@ -17,6 +18,8 @@ import type {
 } from "./protocol"
 import { removeScratch, scratchFile } from "./scratch"
 import type { Plan } from "./settings"
+import type { SoundGain } from "./effects"
+import { gainFor, SAFE_CEILING } from "@/lib/audio/level"
 import type { Looks } from "./looks"
 import { MOST_PASSES, nextPass, passStands, willMiss } from "./target"
 import { soundStart } from "./sound-start"
@@ -77,8 +80,11 @@ async function writePass(
   stop: AbortController,
   pass: { number: number; of: number; limit: number | null },
   send: (message: VideoResponse) => void,
-  software: boolean
-): Promise<{ missed: number } | { file: Blob; scratch: string | null }> {
+  software: boolean,
+  gain: SoundGain | null
+): Promise<
+  { missed: number } | { file: Blob; scratch: string | null; limited: number }
+> {
   const mediabunny = await engine()
   const { convertVideo, joinParts } = await engineFiles()
   const name = `${job.id}-${++written}.${outputInfo[plan.container].extension}`
@@ -96,11 +102,13 @@ async function writePass(
   stop.signal.addEventListener("abort", end, { once: true })
   const watch: { miss: number | null } = { miss: null }
   let last = 0
+  let limited = 0
   try {
     const write = plan.cut?.mode === "join" ? joinParts : convertVideo
-    await write(mediabunny, job.file, plan, target, {
+    const made = await write(mediabunny, job.file, plan, target, {
       signal: own.signal,
       software,
+      gain,
       onProgress: (fraction) => {
         if (
           pass.limit !== null &&
@@ -124,6 +132,7 @@ async function writePass(
         })
       },
     })
+    limited = (made as { limited?: number } | undefined)?.limited ?? 0
   } catch (error) {
     scratch?.close()
     if (scratch) await removeScratch(job.folder, name)
@@ -139,6 +148,7 @@ async function writePass(
   return {
     file: new Blob([file], { type: outputInfo[plan.container].mime }),
     scratch: scratch ? name : null,
+    limited,
   }
 }
 
@@ -203,6 +213,7 @@ async function writeJob(
     scratch: string | null
     index: IndexPlace | null
     plan: Plan
+    limited: number
   }[] = []
   try {
     const mediabunny = await engine()
@@ -220,6 +231,30 @@ async function writeJob(
         plan.audio.bitrate
       )
       priming = samples / job.facts.audio!.sampleRate
+    }
+    // The sound measured as it will be written, for the gain that reaches its loudness.
+    let gain: SoundGain | null = null
+    let level: Omit<VideoLevel, "after" | "limited"> | null = null
+    if (plan.audio.action === "encode" && plan.audio.loudness !== null) {
+      const { measureSound } = await engineFiles()
+      const before = await measureSound(mediabunny, job.file, plan, stop.signal)
+      if (stop.signal.aborted) return
+      const chosen = gainFor(
+        {
+          mode: "loudness",
+          target: plan.audio.loudness,
+          ceiling: SAFE_CEILING,
+          louder: 0,
+        },
+        before
+      )
+      gain = { db: chosen.db, ceiling: chosen.ceiling }
+      level = {
+        target: plan.audio.loudness,
+        before,
+        db: chosen.db,
+        notes: chosen.notes,
+      }
     }
     const limit = plan.video.action === "encode" ? plan.video.target : null
     const passes = limit === null ? 1 : MOST_PASSES
@@ -261,7 +296,8 @@ async function writeJob(
         stop,
         { number, of: passes, limit },
         send,
-        safe.picture
+        safe.picture,
+        gain
       )
       if (stop.signal.aborted) return
       if ("missed" in pass) {
@@ -277,7 +313,13 @@ async function writeJob(
         file = moved.file
         index = moved.moved ? "front" : moved.reason
       }
-      const result = { file, scratch: pass.scratch, index, plan: passPlan }
+      const result = {
+        file,
+        scratch: pass.scratch,
+        index,
+        plan: passPlan,
+        limited: pass.limited,
+      }
       made.push(result)
       if (limit === null || passStands(limit, file.size, number === passes))
         chosen = result
@@ -290,15 +332,26 @@ async function writeJob(
       if (other !== chosen && other.scratch)
         await removeScratch(job.folder, other.scratch)
     const back = await readBack(mediabunny, chosen.file, plan.container)
-    const problems = writtenProblems(
-      chosen.plan,
-      back.facts,
-      {
-        duration: plan.length,
-        frameRate: job.facts.video?.frameRate ?? null,
-      },
-      back.decoded
-    )
+    // The result's sound measured as it was written.
+    const heard: VideoLevel | null = level && {
+      ...level,
+      after: await (
+        await engineFiles()
+      ).measureSound(mediabunny, chosen.file, null),
+      limited: chosen.limited,
+    }
+    const problems = [
+      ...(heard ? levelProblems(heard) : []),
+      ...writtenProblems(
+        chosen.plan,
+        back.facts,
+        {
+          duration: plan.length,
+          frameRate: job.facts.video?.frameRate ?? null,
+        },
+        back.decoded
+      ),
+    ]
     // How close it looks, for a picture encoded again and not turned,
     // cropped or faded (they are meant to look different).
     let looks: Looks | null = null
@@ -341,6 +394,7 @@ async function writeJob(
       problems,
       index: chosen.index,
       passes: made.length,
+      level: heard,
       resized:
         chosen.plan.width !== plan.width
           ? { width: chosen.plan.width, height: chosen.plan.height }

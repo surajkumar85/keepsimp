@@ -169,6 +169,7 @@ describe("encoding when something has to change", () => {
       action: "encode",
       codec: "opus",
       bitrate: 128_000,
+      loudness: null,
     })
     expect(plan.notes[0]).toBe(
       "The picture is encoded again as VP9, 1920 × 1080, at 4.8 Mbit/s, because WebM does not hold H.264."
@@ -375,10 +376,20 @@ describe("the sound", () => {
     )
     expect(
       planFor(withSound({ channels: 1 }), set({ sound: "convert" }), all).audio
-    ).toEqual({ action: "encode", codec: "aac", bitrate: 96_000 })
+    ).toEqual({
+      action: "encode",
+      codec: "aac",
+      bitrate: 96_000,
+      loudness: null,
+    })
     expect(
       planFor(withSound({ channels: 1 }), set({ format: "webm" }), all).audio
-    ).toEqual({ action: "encode", codec: "opus", bitrate: 64_000 })
+    ).toEqual({
+      action: "encode",
+      codec: "opus",
+      bitrate: 64_000,
+      loudness: null,
+    })
   })
 
   it("converts sound an MP4 would not play everywhere", () => {
@@ -407,6 +418,7 @@ describe("the sound", () => {
       action: "encode",
       codec: "opus",
       bitrate: 72_000,
+      loudness: null,
     })
     expect(thin.notes[1]).toBe(
       "The sound is converted to Opus at 72 kbit/s, no more than the file holds, as WebM would not play AAC everywhere."
@@ -420,10 +432,16 @@ describe("the sound", () => {
       action: "encode",
       codec: "aac",
       bitrate: 48_000,
+      loudness: null,
     })
     expect(
       planFor(withSound({ bitrate: 8_000 }), set({ format: "webm" }), all).audio
-    ).toEqual({ action: "encode", codec: "opus", bitrate: 32_000 })
+    ).toEqual({
+      action: "encode",
+      codec: "opus",
+      bitrate: 32_000,
+      loudness: null,
+    })
   })
 
   it("falls back to Vorbis for WebM where Opus cannot be written", () => {
@@ -437,6 +455,7 @@ describe("the sound", () => {
       action: "encode",
       codec: "vorbis",
       bitrate: 128_000,
+      loudness: null,
     })
     expect(
       planFor(clip, set({ format: "webm" }), all, () => false).problem
@@ -455,6 +474,7 @@ describe("the sound", () => {
       action: "encode",
       codec: "opus",
       bitrate: 128_000,
+      loudness: null,
     })
     const late = planFor(
       clip,
@@ -596,6 +616,7 @@ describe("a size limit", () => {
       action: "encode",
       codec: "aac",
       bitrate: 48_000,
+      loudness: null,
     })
     expect(plan.notes).toContain(
       "The sound is converted to AAC at 48 kbit/s, to leave room for the picture."
@@ -961,5 +982,66 @@ describe("shape, speed and fades", () => {
       "Choose a fade of at most 10 s."
     )
     expect(settingsProblem(set({ speed: 1.25, fadeIn: 2 }))).toBeNull()
+  })
+})
+
+describe("loudness", () => {
+  it("measures and sets the sound's loudness, encoding it", () => {
+    const plan = planFor(clip, set({ loudness: -16 }), all)
+    expect(plan.audio).toMatchObject({ action: "encode", loudness: -16 })
+    expect(plan.video).toEqual({ action: "copy" })
+    expect(plan.notes).toContain(
+      "It is measured as it will be written and made louder or quieter to −16 LUFS (BS.1770), its peaks held under −1 dBTP by a limiter."
+    )
+    expect(planFor(clip, set({}), all).audio).toEqual({ action: "copy" })
+    // Several parts joined: sound set to a loudness cannot be joined as copies.
+    expect(
+      planFor(clip, set({ loudness: -14 }), all, undefined, {
+        parts: [
+          { start: 0, end: 2 },
+          { start: 4, end: 6 },
+        ],
+        exact: false,
+      }).cut
+    ).toMatchObject({ mode: "exact" })
+  })
+
+  it("refuses a loudness out of range", () => {
+    expect(settingsProblem(set({ loudness: -50 }))).toBe(
+      "Choose a loudness from −40 to −5 LUFS."
+    )
+    expect(settingsProblem(set({ loudness: -23 }))).toBeNull()
+  })
+})
+
+describe("a crop box of one's own", () => {
+  it("takes the place of the shape, after the turn, and is said in pixels", () => {
+    const box = { x: 0.5, y: 0, width: 0.5, height: 0.5 }
+    const plan = planFor(clip, set({ shape: "1:1" }), all, undefined, null, box)
+    expect(plan.crop).toEqual({ left: 960, top: 0, width: 960, height: 540 })
+    expect([plan.width, plan.height]).toEqual([960, 540])
+    expect(plan.notes[0]).toMatch(/because it is cropped to 960 × 540\./)
+    const turned = planFor(clip, set({ rotate: 90 }), all, undefined, null, box)
+    expect(turned.crop).toEqual({
+      left: 540,
+      top: 960,
+      width: 540,
+      height: 960,
+    })
+    expect(shownSize(clip.video!, { rotate: 0, size: 360 }, box)).toEqual({
+      width: 640,
+      height: 360,
+      scaled: true,
+      crop: { left: 960, top: 0, width: 960, height: 540 },
+    })
+    // The whole picture is no crop at all.
+    expect(
+      planFor(clip, set({}), all, undefined, null, {
+        x: 0,
+        y: 0,
+        width: 1,
+        height: 1,
+      }).video
+    ).toEqual({ action: "copy" })
   })
 })

@@ -24,6 +24,8 @@ import {
 } from "@/lib/video/trim"
 import { looksSaid } from "@/lib/video/looks"
 import { floorSaid } from "@/lib/video/target"
+import { levelSaid } from "@/lib/video/check"
+import { LOUDEST_TARGET, QUIETEST_TARGET } from "@/lib/audio/level"
 import {
   defaultSettings,
   FASTEST_SPEED,
@@ -42,6 +44,7 @@ import {
   type VideoSettings,
 } from "@/lib/video/settings"
 import type { PoolJobs } from "./pool-jobs"
+import type { Box } from "@/lib/video/frame"
 import { asTool, fileProperty, ToolError, type AgentTool } from "./registry"
 import type { FileStore } from "./files"
 
@@ -54,7 +57,15 @@ export interface VideoEngines {
   frame: (file: Blob, seconds: number) => Promise<Blob>
 }
 
-type Settings = Partial<
+/** A crop box in pixels of the picture as shown, before any turn. */
+interface Crop {
+  left: number
+  top: number
+  width: number
+  height: number
+}
+
+type Settings = { crop?: Crop } & Partial<
   Pick<
     VideoSettings,
     | "format"
@@ -71,6 +82,7 @@ type Settings = Partial<
     | "speed"
     | "fadeIn"
     | "fadeOut"
+    | "loudness"
   >
 >
 
@@ -144,6 +156,26 @@ const settingsSchema = {
     maximum: LONGEST_FADE,
     description: "Seconds of fade from black and silence at the start.",
   },
+  crop: {
+    type: "object",
+    properties: {
+      left: { type: "integer", minimum: 0 },
+      top: { type: "integer", minimum: 0 },
+      width: { type: "integer", minimum: 2 },
+      height: { type: "integer", minimum: 2 },
+    },
+    required: ["left", "top", "width", "height"],
+    additionalProperties: false,
+    description:
+      "A crop of one's own, in pixels of the picture as shown (as video_info gives its size), before any turn; it takes the place of shape. The picture is encoded again.",
+  },
+  loudness: {
+    type: "number",
+    minimum: QUIETEST_TARGET,
+    maximum: LOUDEST_TARGET,
+    description:
+      "Make the sound this loud, in LUFS (BS.1770): -14 for streaming, -16 for Apple Podcasts, -23 for EBU R 128 broadcast; it is measured as it will be written and its peaks held under -1 dBTP by a limiter. Leave out to keep its level.",
+  },
   fadeOut: {
     type: "number",
     minimum: 0,
@@ -167,6 +199,25 @@ const partsSchema = (description: string) =>
     },
     description,
   }) as const
+
+/** A crop in pixels as a box of shares, refused when it leaves the picture. */
+export function boxOf(crop: Crop, facts: VideoFacts, name: string): Box {
+  const video = facts.video
+  if (!video) throw new ToolError(`${name} has no picture to crop.`)
+  if (
+    crop.left + crop.width > video.width ||
+    crop.top + crop.height > video.height
+  )
+    throw new ToolError(
+      `The crop goes past the picture, which is ${video.width} × ${video.height} as shown.`
+    )
+  return {
+    x: crop.left / video.width,
+    y: crop.top / video.height,
+    width: crop.width / video.width,
+    height: crop.height / video.height,
+  }
+}
 
 /** What is kept: the parts asked for (or the whole), less the parts cut. */
 export function kept(duration: number, keep?: Part[], cut?: Part[]) {
@@ -245,7 +296,9 @@ export function videoTools(engines: VideoEngines): AgentTool[] {
     context: Parameters<AgentTool["run"]>[1],
     cutFor: (facts: VideoFacts) => Cut | null = () => null,
     /** A part's own name, which says what it is. */
-    name?: string
+    name?: string,
+    /** A crop box of one's own, in pixels of the picture as shown. */
+    crop?: Crop
   ) {
     const opened = await open(context.files, file, context.signal)
     const plan = await browserPlan(
@@ -253,7 +306,8 @@ export function videoTools(engines: VideoEngines): AgentTool[] {
       settings,
       engines.ask,
       undefined,
-      cutFor(opened.facts)
+      cutFor(opened.facts),
+      crop ? boxOf(crop, opened.facts, opened.ref.name) : null
     )
     if (plan.problem) throw new ToolError(plan.problem)
     const done = (await engines.pool.run(
@@ -290,6 +344,7 @@ export function videoTools(engines: VideoEngines): AgentTool[] {
       summary: [
         ...plan.notes,
         ...(done.resized ? [floorSaid(done.resized)] : []),
+        ...(done.level ? [levelSaid(done.level)] : []),
         `Written and checked: ${factsLine(done.written)}, ${bytes(done.file.size)}${done.passes > 1 ? `, in ${done.passes} passes` : ""}.`,
         ...(done.looks ? [looksSaid(done.looks)] : []),
       ].join(" "),
@@ -306,6 +361,7 @@ export function videoTools(engines: VideoEngines): AgentTool[] {
         written: done.written,
         passes: done.passes,
         resized: done.resized,
+        level: done.level,
         looks: done.looks,
       },
     }
@@ -333,8 +389,8 @@ export function videoTools(engines: VideoEngines): AgentTool[] {
       additionalProperties: false,
     },
     annotations: { readOnlyHint: true },
-    async run({ file, ...asked }, context) {
-      return write(file, settingsOf(asked), context)
+    async run({ file, crop, ...asked }, context) {
+      return write(file, settingsOf(asked), context, undefined, undefined, crop)
     },
   }
 
@@ -367,7 +423,7 @@ export function videoTools(engines: VideoEngines): AgentTool[] {
       additionalProperties: false,
     },
     annotations: { readOnlyHint: true },
-    async run({ file, megabytes, share, ...asked }, context) {
+    async run({ file, megabytes, share, crop, ...asked }, context) {
       if ((megabytes === undefined) === (share === undefined))
         throw new ToolError('Give either "megabytes" or "share".')
       return write(
@@ -379,7 +435,10 @@ export function videoTools(engines: VideoEngines): AgentTool[] {
               ? { bytes: Math.round(megabytes * MB) }
               : { share: share! },
         },
-        context
+        context,
+        undefined,
+        undefined,
+        crop
       )
     },
   }
@@ -410,14 +469,16 @@ export function videoTools(engines: VideoEngines): AgentTool[] {
       additionalProperties: false,
     },
     annotations: { readOnlyHint: true },
-    async run({ file, keep, cut, exact = false, ...asked }, context) {
+    async run({ file, keep, cut, exact = false, crop, ...asked }, context) {
       if (!keep?.length && !cut?.length)
         throw new ToolError('Give the parts to "keep" or to "cut", or both.')
       return write(
         file,
         settingsOf({ format: "same", ...asked }),
         context,
-        (facts) => ({ parts: kept(facts.duration, keep, cut), exact })
+        (facts) => ({ parts: kept(facts.duration, keep, cut), exact }),
+        undefined,
+        crop
       )
     },
   }
@@ -467,7 +528,7 @@ export function videoTools(engines: VideoEngines): AgentTool[] {
     },
     annotations: { readOnlyHint: true },
     async run(
-      { file, at, every, keep, cut, exact = false, ...asked },
+      { file, at, every, keep, cut, exact = false, crop, ...asked },
       context
     ) {
       if ((at === undefined) === (every === undefined))
@@ -500,7 +561,8 @@ export function videoTools(engines: VideoEngines): AgentTool[] {
                 ),
             },
             () => ({ parts, exact }),
-            partName(ref.name, index + 1)
+            partName(ref.name, index + 1),
+            crop
           )
         )
       return {

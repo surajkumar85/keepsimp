@@ -62,6 +62,7 @@ const item = (change: Partial<VideoItem> = {}): VideoItem => ({
   trim: null,
   trimApplied: null,
   part: null,
+  box: null,
   progress: null,
   result: null,
   ...change,
@@ -78,6 +79,7 @@ const result = (change: Partial<NonNullable<VideoItem["result"]>> = {}) => ({
   passes: 1,
   resized: null,
   looks: null,
+  level: null,
   error: null,
   ...change,
 })

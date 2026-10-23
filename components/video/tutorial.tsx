@@ -10,9 +10,12 @@ import {
   LIMIT_SIZES,
   KEYFRAME_SECONDS,
   PRESET_SHARE,
+  FASTEST_SPEED,
+  SHAPES,
+  SLOWEST_SPEED,
 } from "@/lib/video/settings"
 import { MAX_FILES } from "@/lib/video/queue"
-import { FASTEST_SPEED, SHAPES, SLOWEST_SPEED } from "@/lib/video/settings"
+import { TARGETS } from "@/lib/audio/level"
 import { shortcutGroups } from "@/lib/video/shortcuts"
 import { JOIN_FADE } from "@/lib/audio/edits"
 
@@ -63,8 +66,17 @@ const options: TutorialContent["options"] = [
     detail: `Cuts each picture to ${SHAPES.join(", ")} around its middle, after any turn: 9:16 for Reels, Shorts and TikTok, 1:1 for square posts, 4:5 for portrait posts. A picture already within a hundredth of the shape is left whole. Cropping means the picture is encoded again.`,
   },
   {
+    term: "Crop by hand",
+    detail:
+      "Crop by hand draws a box over the picture: drag it, drag its corners, or focus it and use the arrow keys (Shift resizes). Lock it to a shape or leave it free, then Use this crop. Each video keeps its own box, which takes the place of the shape setting for it; the turn chosen is applied first.",
+  },
+  {
     term: "Speed",
     detail: `From ${SLOWEST_SPEED} to ${FASTEST_SPEED} times. Faster keeps the frame rate, so frames are left out; slower plays every frame for longer, so a 30 fps video at half speed has 15 frames a second. The sound is stretched by the audio editor's own engine (WSOLA), which keeps its pitch. Both are encoded again.`,
+  },
+  {
+    term: "Loudness",
+    detail: `Makes the sound ${TARGETS.map((target) => `${target.label} (${target.for})`).join(", ")} as BS.1770 measures it, with the audio editor's own meter. Each sound is measured as it will be written (after trims, speed and fades), made louder or quieter, and its true peaks held under −1 dBTP by the audio editor's limiter; the result is measured again and held to the target within 1 LU, unless the limiter had to keep it quieter, which the page says. The picture is not touched by it.`,
   },
   {
     term: "Fades",

@@ -3,6 +3,10 @@
  * was read back to the plan: the kind, the picture's codec and size, the
  * sound, the length, the frame rate, and that the picture and sound decode.
  */
+import { LOUDNESS_TOLERANCE } from "@/lib/audio/check"
+import { dbLabel, levelSaid as soundLevelSaid } from "@/lib/audio/level"
+import { SILENT } from "@/lib/audio/loudness"
+import type { VideoLevel } from "./protocol"
 import {
   soundLabel,
   videoCodecLabels,
@@ -98,4 +102,44 @@ export function writtenProblems(
       `The file written is ${seconds(written.duration)} long, not ${seconds(expected.duration)}.`
     )
   return problems
+}
+
+/**
+ * What is wrong with a sound set to a loudness, measured as written: it
+ * must be within the audio workspace's tolerance of the target, unless it
+ * could not be reached (too quiet to measure, louder than is done here,
+ * or held quieter by the limiter), which the result says. Lossy encoders add a little to peaks, so
+ * they are not held to the ceiling, as in the audio workspace.
+ */
+export function levelProblems(level: VideoLevel): string[] {
+  if (!level.after) return ["The sound written could not be measured."]
+  // Not reached because it could not be, or because the limiter held its
+  // peaks (a loud, uneven sound): said in the result's sentence.
+  if (level.notes.length || level.after.integrated === SILENT) return []
+  if (level.limited > 0.5 && level.after.integrated < level.target) return []
+  return Math.abs(level.after.integrated - level.target) > LOUDNESS_TOLERANCE
+    ? [
+        `Its sound measures ${dbLabel(level.after.integrated)} LUFS, not ${dbLabel(level.target)}.`,
+      ]
+    : []
+}
+
+/** What was done to the sound's level, in a sentence. */
+export function levelSaid(level: VideoLevel) {
+  return [
+    ...level.notes,
+    soundLevelSaid({
+      mode: "loudness",
+      before: level.before,
+      db: level.db,
+      after: level.after ?? {
+        integrated: SILENT,
+        range: 0,
+        truePeak: SILENT,
+        peak: SILENT,
+      },
+      limited: level.limited,
+      notes: [],
+    }),
+  ].join(" ")
 }

@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest"
-import { lengthTolerance, writtenProblems } from "./check"
+import {
+  lengthTolerance,
+  levelProblems,
+  levelSaid,
+  writtenProblems,
+} from "./check"
 import {
   defaultSettings,
   planFor,
@@ -157,5 +162,51 @@ describe("holding a written file to its plan", () => {
     expect(
       writtenProblems(copy, { ...source, duration: 10.2 }, expected, ok)
     ).toEqual(["The file written is 10.2 s long, not 10 s."])
+  })
+})
+
+describe("the sound's level", () => {
+  const loud = (integrated: number) => ({
+    integrated,
+    range: 4,
+    truePeak: -1.2,
+    peak: -1.5,
+  })
+  const level = {
+    target: -14,
+    before: loud(-20),
+    db: 6,
+    after: loud(-14.3),
+    limited: 0,
+    notes: [],
+  }
+
+  it("is held to its target within a loudness unit", () => {
+    expect(levelProblems(level)).toEqual([])
+    expect(levelProblems({ ...level, after: loud(-16) })).toEqual([
+      "Its sound measures −16 LUFS, not −14.",
+    ])
+    // Not reached, and said: not a fault.
+    expect(
+      levelProblems({
+        ...level,
+        after: loud(-30),
+        notes: ["It would need to be 40 dB louder."],
+      })
+    ).toEqual([])
+    // Held quieter by the limiter: said, not a fault.
+    expect(levelProblems({ ...level, after: loud(-17), limited: 3 })).toEqual(
+      []
+    )
+    expect(levelProblems({ ...level, after: null })).toEqual([
+      "The sound written could not be measured.",
+    ])
+  })
+
+  it("is said as the audio editor says it", () => {
+    expect(levelSaid(level)).toBe("Made 6 dB louder to −14.3 LUFS.")
+    expect(
+      levelSaid({ ...level, limited: 2, after: null, notes: ["Too quiet."] })
+    ).toMatch(/^Too quiet\. Made 6 dB louder to /)
   })
 })
