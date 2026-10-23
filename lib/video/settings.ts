@@ -4,7 +4,15 @@
  * the check holds the result to it.
  */
 import { fitToSize, MOST_PASSES } from "./target"
-import { isWhole, keptLength, snapOut, snapSaid, tidy, type Part } from "./trim"
+import {
+  clock,
+  isWhole,
+  keptLength,
+  snapOut,
+  snapSaid,
+  tidy,
+  type Part,
+} from "./trim"
 import {
   containerLabels,
   outputInfo,
@@ -110,6 +118,40 @@ export type FrameRate = 60 | 50 | 30 | 25 | 24 | 15
 export const FRAME_RATES: readonly FrameRate[] = [60, 50, 30, 25, 24, 15]
 export type Turn = 0 | 90 | 180 | 270
 
+/** Shapes the picture can be cut to, around its middle (common sharing shapes). */
+export type Shape = "same" | "16:9" | "9:16" | "1:1" | "4:5" | "4:3"
+export const SHAPES: readonly Exclude<Shape, "same">[] = [
+  "16:9",
+  "9:16",
+  "1:1",
+  "4:5",
+  "4:3",
+]
+/** Speeds offered; the audio editor's range (its stretcher keeps the pitch from 0.5 to 2 times). */
+export const SPEEDS = [0.5, 0.75, 1.25, 1.5, 2] as const
+export const SLOWEST_SPEED = 0.5
+export const FASTEST_SPEED = 2
+/** Fades offered, in seconds. */
+export const FADES = [0.5, 1, 2] as const
+export const LONGEST_FADE = 10
+
+export interface Fade {
+  /** Seconds from black and silence at the start. */
+  in: number
+  /** Seconds to black and silence at the end. */
+  out: number
+}
+
+/** A speed in words. */
+export const speedSaid = (speed: number) =>
+  speed === 2
+    ? "twice as fast"
+    : speed === 0.5
+      ? "at half speed"
+      : speed > 1
+        ? `${speed} times as fast`
+        : `at ${speed} times its speed`
+
 export interface VideoSettings {
   format: "same" | OutContainer
   codec: "auto" | VideoCodec
@@ -127,6 +169,13 @@ export interface VideoSettings {
   keepTags: boolean
   /** A size the file must fit under: bytes, or a share of the file's own size. */
   limit: Limit
+  /** Cut to a shape around the middle of the picture, after the turn. */
+  shape: Shape
+  /** How much faster it plays: 0.5 to 2; the sound keeps its pitch. */
+  speed: number
+  /** Seconds it fades in from black and silence, and out to them. */
+  fadeIn: number
+  fadeOut: number
 }
 
 export type Limit = null | { bytes: number } | { share: number }
@@ -152,6 +201,10 @@ export const defaultSettings: VideoSettings = {
   sound: "keep",
   keepTags: true,
   limit: null,
+  shape: "same",
+  speed: 1,
+  fadeIn: 0,
+  fadeOut: 0,
 }
 
 export const LEAST_BITRATE = 100
@@ -226,6 +279,12 @@ export interface Plan {
   /** Turn and mirror asked for, on top of the file's own. */
   rotate: Turn
   flip: boolean
+  /** The part of the picture kept, after the turn, in its pixels; null keeps it all. */
+  crop: { left: number; top: number; width: number; height: number } | null
+  /** How much faster it plays. */
+  speed: number
+  /** Seconds it fades in and out, picture and sound. */
+  fade: Fade
   /** As shown, after every turn; 0 with no picture. */
   width: number
   height: number
@@ -317,15 +376,45 @@ export function highBitrate(width: number, height: number, fps: number) {
   return Math.round(last.rate * (pixels / last.pixels) * 1000)
 }
 
-/** The size as shown after the turn and the shorter-side limit. */
+/** The ratio of a shape, width over height. */
+export const shapeRatio = (shape: Exclude<Shape, "same">) => {
+  const [width, height] = shape.split(":").map(Number)
+  return width / height
+}
+
+/**
+ * The size as shown after the turn, the shape and the shorter-side limit,
+ * and the part of the turned picture the shape keeps (around its middle).
+ */
 export function shownSize(
   video: NonNullable<VideoFacts["video"]>,
-  settings: Pick<VideoSettings, "rotate" | "size">
+  settings: Pick<VideoSettings, "rotate" | "size"> &
+    Partial<Pick<VideoSettings, "shape">>
 ) {
   let [width, height] =
     settings.rotate % 180 === 0
       ? [video.width, video.height]
       : [video.height, video.width]
+  let crop: Plan["crop"] = null
+  const shape = settings.shape ?? "same"
+  if (shape !== "same") {
+    const ratio = shapeRatio(shape)
+    // Within a hundredth of the shape already: left as it is.
+    if (Math.abs(width / height / ratio - 1) > 0.01) {
+      const [w, h] =
+        width / height > ratio
+          ? [even(height * ratio), height]
+          : [width, even(width / ratio)]
+      crop = {
+        left: Math.floor((width - w) / 2),
+        top: Math.floor((height - h) / 2),
+        width: Math.min(w, width),
+        height: Math.min(h, height),
+      }
+      width = crop.width
+      height = crop.height
+    }
+  }
   const short = Math.min(width, height)
   const scaled = settings.size !== "same" && short > settings.size
   if (scaled) {
@@ -333,7 +422,7 @@ export function shownSize(
     width = even(width * ratio)
     height = even(height * ratio)
   }
-  return { width, height, scaled }
+  return { width, height, scaled, crop }
 }
 
 const mbps = (bits: number) =>
@@ -393,7 +482,15 @@ export function planFor(
   const cutting = kept?.length && !isWhole(kept, facts.duration) ? kept : null
   let length = cutting ? keptLength(cutting) : facts.duration
   const share = length / Math.max(facts.duration, 0.001)
+  // Speed and fades change both picture and sound, so both are encoded.
+  const changesTime = settings.speed !== 1
+  const fades = settings.fadeIn > 0 || settings.fadeOut > 0
+  length = length / settings.speed
   const totalBits = target ? (target * 8) / Math.max(length, 0.001) : 0
+  if (settings.fadeIn + settings.fadeOut > length + 1e-6)
+    fail(
+      `The fades (${settings.fadeIn + settings.fadeOut} s) are longer than the video (${length.toFixed(1)} s). Choose shorter ones.`
+    )
 
   if (settings.format === "same" && container !== facts.container)
     notes.push(
@@ -428,7 +525,10 @@ export function planFor(
         const reasons = [
           settings.quality !== "original" && "the quality was chosen",
           over && `it is to fit under ${sizeSaid(target!)}`,
+          shown.crop && `it is cut to ${settings.shape}`,
           shown.scaled && `it is made ${shown.width} × ${shown.height}`,
+          changesTime && `it plays ${speedSaid(settings.speed)}`,
+          fades && "it fades",
           slower && `it is made ${settings.frameRate} frames a second`,
           asked && `${videoCodecLabels[asked]} was chosen`,
           !held &&
@@ -491,7 +591,7 @@ export function planFor(
             },
           ]
         : snapOut(cutting, keyframes!, facts.duration)
-  if (parts) length = keptLength(parts)
+  if (parts) length = keptLength(parts) / settings.speed
 
   // The sound first: a size limit shares its bits between the two.
   let audio: Plan["audio"] = { action: "none" }
@@ -503,7 +603,7 @@ export function planFor(
       soundNotes.push("The sound is left out.")
     } else {
       // Sound cut to the frame is cut to the sample, which needs encoding.
-      const copies = soundCopies(sound) && !exactCut
+      const copies = soundCopies(sound) && !exactCut && !changesTime && !fades
       if (copies) {
         audio = { action: "copy" }
         soundBits = sound.bitrate ?? 128_000
@@ -608,6 +708,12 @@ export function planFor(
           `${label} cannot hold ${videoCodecLabels[asked]}. It holds ${HOLDS[container].video.map((codec) => videoCodecLabels[codec]).join(", ")}.`
         )
       let fps = slower ? (settings.frameRate as number) : null
+      // Faster keeps the frame rate (frames are left out); slower has as many frames as there are.
+      if (changesTime)
+        fps = Math.min(
+          fps ?? sourceRate,
+          Math.round(sourceRate * settings.speed * 100) / 100
+        )
       const fitFor = (codec: VideoCodec) =>
         over
           ? fitToSize({
@@ -717,6 +823,21 @@ export function planFor(
     }
   }
   notes.push(...soundNotes)
+  if (changesTime)
+    notes.push(
+      `It plays ${speedSaid(settings.speed)}: ${clock(length * settings.speed)} becomes ${clock(length)}${sound && settings.sound !== "none" ? ", the sound keeping its pitch" : ""}.`
+    )
+  if (fades)
+    notes.push(
+      `It fades ${[
+        settings.fadeIn > 0 && `in from black over ${settings.fadeIn} s`,
+        settings.fadeOut > 0 && `out to black over ${settings.fadeOut} s`,
+      ]
+        .filter(Boolean)
+        .join(
+          " and "
+        )}${sound && settings.sound !== "none" ? ", the sound with it" : ""}.`
+    )
 
   if (!source && !sound)
     fail("This file has neither a picture nor sound in it.")
@@ -735,6 +856,9 @@ export function planFor(
     video,
     rotate: settings.rotate,
     flip: settings.flip,
+    crop: why?.shown.crop ?? null,
+    speed: settings.speed,
+    fade: { in: settings.fadeIn, out: settings.fadeOut },
     width,
     height,
     audio,
@@ -774,5 +898,10 @@ export function settingsProblem(settings: VideoSettings): string | null {
       limit.bytes > MOST_LIMIT * MB)
   )
     return `Give a size from ${LEAST_LIMIT} to ${MOST_LIMIT.toLocaleString("en")} MB.`
+  if (!(settings.speed >= SLOWEST_SPEED && settings.speed <= FASTEST_SPEED))
+    return `Choose a speed from ${SLOWEST_SPEED} to ${FASTEST_SPEED} times.`
+  for (const fade of [settings.fadeIn, settings.fadeOut])
+    if (!(fade >= 0 && fade <= LONGEST_FADE))
+      return `Choose a fade of at most ${LONGEST_FADE} s.`
   return null
 }

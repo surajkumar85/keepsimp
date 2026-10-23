@@ -299,9 +299,17 @@ async function writeJob(
       },
       back.decoded
     )
-    // How close it looks, for a picture encoded again and not turned.
+    // How close it looks, for a picture encoded again and not turned,
+    // cropped or faded (they are meant to look different).
     let looks: Looks | null = null
-    if (plan.video.action === "encode" && !plan.rotate && !plan.flip)
+    if (
+      plan.video.action === "encode" &&
+      !plan.rotate &&
+      !plan.flip &&
+      !plan.crop &&
+      !plan.fade.in &&
+      !plan.fade.out
+    )
       try {
         const parts = plan.cut?.parts
         looks = await looksAlike(
@@ -313,7 +321,9 @@ async function writeJob(
             height: chosen.plan.height,
             duration: plan.length,
           },
-          parts ? (time) => sourceTime(time, parts) : undefined
+          // A moment of the result is the speed times further into what is kept.
+          (time) =>
+            parts ? sourceTime(time * plan.speed, parts) : time * plan.speed
         )
       } catch {
         looks = null

@@ -1,5 +1,8 @@
 import {
   IconArrowsDiagonalMinimize2,
+  IconAspectRatio,
+  IconClockPlay,
+  IconVolumeOff,
   IconArrowsMinimize,
   IconArrowsSplit2,
   IconBraces,
@@ -49,6 +52,9 @@ const icons: Record<string, typeof IconBraces> = {
   "video-converter": IconMovie,
   "video-compressor": IconFileZip,
   "video-trimmer": IconCut,
+  "crop-video": IconAspectRatio,
+  "change-video-speed": IconClockPlay,
+  "mute-video": IconVolumeOff,
   "audio-editor": IconWaveSquare,
   "audio-extractor": IconMusicDown,
   "audio-converter": IconWaveSine,

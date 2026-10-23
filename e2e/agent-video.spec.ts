@@ -144,3 +144,24 @@ test("splits a video into files at its keyframes, for an agent", async ({
     )
   }
 })
+
+test("crops to a square and speeds up, for an agent", async ({ page }) => {
+  test.setTimeout(120_000)
+  await ready(page)
+  const file = await hand(page, "clip.mp4", clip, "video/mp4")
+  if (!(await canEncode(page, "avc", 180, 180))) test.skip()
+  const done = await ran(page, "convert_video", {
+    file,
+    shape: "1:1",
+    speed: 2,
+  })
+  expect(done.summary).toContain("It plays twice as fast")
+  const out = await saved(page, done.files![0].id)
+  const said = probe(out.bytes, "agent-square.mp4")
+  expect(said.streams.find((one) => one.codec_type === "video")).toMatchObject({
+    width: 180,
+    height: 180,
+  })
+  expect(Number(said.format.duration)).toBeCloseTo(3, 0)
+  expect(decodesCleanly(out.bytes, "agent-square.mp4")).toBe(true)
+})

@@ -337,4 +337,196 @@ export const videoPosts: readonly BlogPost[] = [
     ],
     sources: [sources.editList, sources.mediabunny, sources.webcodecs],
   },
+  {
+    published: "2026-10-23",
+    slug: "crop-video-to-9-16-or-square",
+    title: "Every picture, in the shape it is shown.",
+    searchTitle: "How to crop a video to 9:16 or square, without uploading",
+    description:
+      "Crop a video to 9:16 for Reels, Shorts and TikTok, to a square or to 4:5, in your browser, many at once. Nothing is uploaded.",
+    keywords: [
+      "crop video",
+      "crop video to 9:16",
+      "vertical video for reels",
+      "square video",
+      "4:5 video",
+      "change video aspect ratio",
+    ],
+    category: "A little know-how",
+    readingTime: "3 min read",
+    image: "/images/video-crop-guide.svg",
+    imageAlt:
+      "A wide video frame with a tall 9:16 box and a square box marked around its middle",
+    tool: "crop-video",
+    intro:
+      "A wide recording looks small in a feed made for phones held upright. Cropping it to the shape where it will be shown fills the screen. KeepSimp's crop does it on your device, to the common shapes, many videos at once.",
+    sections: [
+      {
+        id: "shapes",
+        title: "Which shape for where.",
+        paragraphs: [
+          "9:16 is a phone held upright: Instagram Reels, YouTube Shorts and TikTok. 1:1 is square, for feeds; 4:5 is a little taller, for portrait posts. 16:9 is widescreen, for YouTube and TVs, and 4:3 suits older screens and slides.",
+          "Each picture is cut to the shape around its middle, keeping as much of it as the shape allows: a 1920 × 1080 video becomes 608 × 1080 at 9:16, or 1080 × 1080 square. A video already within a hundredth of the shape is left whole.",
+        ],
+        links: [{ label: "Open the crop", href: "/dashboard/crop-video/" }],
+      },
+      {
+        id: "how",
+        title: "How to crop.",
+        paragraphs: [
+          "Open Crop video and drop your videos; 9:16 is chosen to start with. Choose another shape if you need one, and a turn first if a video lies on its side: the shape is cut after the turn. Each video is written, opened again and checked, and offered for download alone or in a ZIP.",
+          "Cropping means the picture is encoded again, by your browser's own encoder, at YouTube's recommended bitrate for its new size unless you choose a quality or a size limit. The sound is copied as it is.",
+        ],
+      },
+      {
+        id: "limits",
+        title: "What it does not do.",
+        paragraphs: [
+          "The crop is always around the middle. If what matters is to one side, a centred crop may cut into it: check the result in the player before you share it. Nothing is uploaded: the videos never leave your device.",
+        ],
+        links: [
+          {
+            label: "Guide: converting video, in full",
+            href: "/blog/convert-video-without-uploading/",
+          },
+        ],
+      },
+    ],
+    sources: [
+      {
+        title: "Mediabunny: converting media files (crop)",
+        url: "https://mediabunny.dev/guide/converting-media-files",
+      },
+      sources.webcodecs,
+    ],
+  },
+  {
+    published: "2026-10-23",
+    slug: "speed-up-or-slow-down-a-video",
+    title: "Faster or slower, and still in tune.",
+    searchTitle:
+      "How to speed up or slow down a video, keeping the sound's pitch",
+    description:
+      "Change a video's speed from half to twice as fast in your browser, the sound stretched so its pitch stays the same. Nothing is uploaded.",
+    keywords: [
+      "speed up video",
+      "slow down video",
+      "change video speed",
+      "slow motion",
+      "video speed without chipmunk voice",
+    ],
+    category: "A little know-how",
+    readingTime: "3 min read",
+    image: "/images/video-speed-guide.svg",
+    imageAlt:
+      "A film strip running at twice the speed beside a sound wave that keeps the same pitch",
+    tool: "change-video-speed",
+    intro:
+      "A long screen recording is quicker to watch at 1.5 times; a moment is clearer at half speed. Changing speed by playing samples faster raises the pitch, and voices sound like cartoons. KeepSimp stretches the sound instead, so it keeps its pitch, and does it all on your device.",
+    sections: [
+      {
+        id: "picture",
+        title: "The picture: frames left out or held longer.",
+        paragraphs: [
+          "Faster keeps the frame rate: at twice the speed, every other frame is left out, so a 30 fps video stays 30 fps and lasts half as long. Slower plays every frame for longer: at half speed a 30 fps video has 15 frames a second, as no frames are made up between them.",
+        ],
+        links: [
+          {
+            label: "Open Change video speed",
+            href: "/dashboard/change-video-speed/",
+          },
+        ],
+      },
+      {
+        id: "sound",
+        title: "The sound: stretched, not sped up.",
+        paragraphs: [
+          "The sound goes through the audio editor's own engine, which cuts it into short overlapping pieces and lays them closer together or further apart (WSOLA), so the length changes and the pitch does not. It works best on speech and steady music; very fast or very slow settings can make music sound a little rough.",
+          "Speeds from half to twice are offered, the range the stretcher keeps clean. The sound always lasts exactly as long as the picture.",
+        ],
+      },
+      {
+        id: "how",
+        title: "How to do it.",
+        paragraphs: [
+          "Open Change video speed and drop your videos: twice as fast is chosen to start with. Choose the speed, add a fade in or out if you like, and each video is written, checked and offered for download. Picture and sound are both encoded again.",
+        ],
+        links: [
+          {
+            label: "Guide: trim a video without losing quality",
+            href: "/blog/trim-video-without-losing-quality/",
+          },
+        ],
+      },
+    ],
+    sources: [
+      {
+        title:
+          "Verhelst and Roelands: an overlap-add technique based on waveform similarity (WSOLA) for time-scale modification of speech",
+        url: "https://doi.org/10.1109/ICASSP.1993.319366",
+      },
+      sources.mediabunny,
+    ],
+  },
+  {
+    published: "2026-10-23",
+    slug: "remove-sound-from-a-video",
+    title: "The picture, without a sound.",
+    searchTitle: "How to remove the sound from a video, without losing quality",
+    description:
+      "Take the audio out of MP4, MOV, WebM and MKV videos in your browser, the picture copied as it is so nothing is lost. Nothing is uploaded.",
+    keywords: [
+      "remove audio from video",
+      "mute video",
+      "remove sound from video",
+      "silent video",
+      "strip audio from mp4",
+    ],
+    category: "A little know-how",
+    readingTime: "2 min read",
+    image: "/images/video-mute-guide.svg",
+    imageAlt:
+      "A video file with its sound track crossed out, the picture passing through unchanged",
+    tool: "mute-video",
+    intro:
+      "Background noise, a conversation that should not be shared, music a site will not accept: often the simplest answer is no sound at all. Taking it out should not cost the picture anything, and with KeepSimp it does not.",
+    sections: [
+      {
+        id: "copy",
+        title: "Nothing is encoded again.",
+        paragraphs: [
+          "A video file keeps its picture and its sound as separate tracks. Muting writes a new file with the picture's track copied as it is, packet for packet, and no sound track at all. Nothing is lost, and an hour of video takes seconds.",
+          "Each result is opened again and checked to have its picture, its length and no sound before it is offered.",
+        ],
+        links: [{ label: "Open Mute video", href: "/dashboard/mute-video/" }],
+      },
+      {
+        id: "why",
+        title: "When to keep the sound after all.",
+        paragraphs: [
+          "Muting takes away everything on the sound track: speech, music and room noise alike. If only a moment is unwanted, cut that moment out with the Video trimmer instead, and the rest keeps its sound. Sites that refuse a song often accept the same video with the music taken out.",
+        ],
+        links: [
+          {
+            label: "Guide: trim a video without losing quality",
+            href: "/blog/trim-video-without-losing-quality/",
+          },
+        ],
+      },
+      {
+        id: "how",
+        title: "How to do it.",
+        paragraphs: [
+          "Open Mute video and drop your videos: MP4, MOV, WebM, MKV or MPEG-TS, up to twenty at once. The sound is left out as soon as each is read; download them one by one or as a ZIP. To keep only the sound instead, use the Audio extractor.",
+        ],
+        links: [
+          {
+            label: "Take the sound out of a video, as audio",
+            href: "/dashboard/audio-extractor/",
+          },
+        ],
+      },
+    ],
+    sources: [sources.mediabunny],
+  },
 ]

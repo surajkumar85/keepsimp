@@ -238,11 +238,13 @@ describe("encoding when something has to change", () => {
       width: 1920,
       height: 1080,
       scaled: false,
+      crop: null,
     })
     expect(shownSize(clip.video!, { rotate: 270, size: 720 })).toEqual({
       width: 720,
       height: 1280,
       scaled: true,
+      crop: null,
     })
   })
 
@@ -868,5 +870,96 @@ describe("cutting", () => {
       lossless([{ start: 0, end: 4 }])
     )
     expect(small.video).toEqual({ action: "copy" })
+  })
+})
+
+describe("shape, speed and fades", () => {
+  it("cuts the picture to a shape around its middle, after the turn, then sizes it", () => {
+    const tall = planFor(clip, set({ shape: "9:16" }), all)
+    expect(tall.crop).toEqual({ left: 656, top: 0, width: 608, height: 1080 })
+    expect([tall.width, tall.height]).toEqual([608, 1080])
+    expect(tall.notes[0]).toMatch(/because it is cut to 9:16\./)
+    const square = planFor(clip, set({ shape: "1:1", size: 720 }), all)
+    expect(square.crop).toEqual({
+      left: 420,
+      top: 0,
+      width: 1080,
+      height: 1080,
+    })
+    expect([square.width, square.height]).toEqual([720, 720])
+    // Turned first: an upright 1080 × 1920, then 4:5 off its top and bottom.
+    const turned = planFor(clip, set({ shape: "4:5", rotate: 90 }), all)
+    expect(turned.crop).toEqual({
+      left: 0,
+      top: 285,
+      width: 1080,
+      height: 1350,
+    })
+    // Already the shape: copied as it is.
+    const same = planFor(clip, set({ shape: "16:9" }), all)
+    expect(same.crop).toBeNull()
+    expect(same.video).toEqual({ action: "copy" })
+  })
+
+  it("speeds it up, keeping the frame rate, and the sound with it", () => {
+    const fast = planFor(clip, set({ speed: 2 }), all)
+    expect(fast.length).toBe(5)
+    expect(fast.speed).toBe(2)
+    expect(fast.video).toMatchObject({ action: "encode", frameRate: 30 })
+    expect(fast.audio).toMatchObject({ action: "encode", codec: "aac" })
+    expect(fast.notes).toContain(
+      "It plays twice as fast: 0:10.00 becomes 0:05.00, the sound keeping its pitch."
+    )
+    expect(fast.notes[0]).toMatch(/because it plays twice as fast\./)
+    // Slower has as many frames as there are.
+    const slow = planFor(clip, set({ speed: 0.5 }), all)
+    expect(slow.length).toBe(20)
+    expect(slow.video).toMatchObject({ frameRate: 15 })
+    expect(planFor(clip, set({ speed: 0.75 }), all).notes[0]).toMatch(
+      /it plays at 0\.75 times its speed/
+    )
+    expect(
+      planFor(clip, set({ speed: 1.5, sound: "none" }), all).notes
+    ).toContain("It plays 1.5 times as fast: 0:10.00 becomes 0:06.67.")
+  })
+
+  it("speeds up what is kept, cut to the frame", () => {
+    const plan = planFor(clip, set({ speed: 2 }), all, undefined, {
+      parts: [
+        { start: 1, end: 3 },
+        { start: 5, end: 7 },
+      ],
+      exact: false,
+    })
+    expect(plan.cut).toMatchObject({ mode: "exact" })
+    expect(plan.length).toBe(2)
+  })
+
+  it("fades in and out, picture and sound, and says what is too long", () => {
+    const plan = planFor(clip, set({ fadeIn: 1, fadeOut: 2 }), all)
+    expect(plan.fade).toEqual({ in: 1, out: 2 })
+    expect(plan.audio).toMatchObject({ action: "encode" })
+    expect(plan.notes).toContain(
+      "It fades in from black over 1 s and out to black over 2 s, the sound with it."
+    )
+    expect(
+      planFor(clip, set({ fadeOut: 1, sound: "none" }), all).notes
+    ).toContain("It fades out to black over 1 s.")
+    expect(planFor(clip, set({ fadeIn: 6, fadeOut: 6 }), all).problem).toBe(
+      "The fades (12 s) are longer than the video (10.0 s). Choose shorter ones."
+    )
+  })
+
+  it("refuses a speed or fade out of range", () => {
+    expect(settingsProblem(set({ speed: 3 }))).toBe(
+      "Choose a speed from 0.5 to 2 times."
+    )
+    expect(settingsProblem(set({ fadeIn: -1 }))).toBe(
+      "Choose a fade of at most 10 s."
+    )
+    expect(settingsProblem(set({ fadeOut: 11 }))).toBe(
+      "Choose a fade of at most 10 s."
+    )
+    expect(settingsProblem(set({ speed: 1.25, fadeIn: 2 }))).toBeNull()
   })
 })

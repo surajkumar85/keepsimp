@@ -479,3 +479,29 @@ describe("splitting a video for an agent", () => {
     )
   })
 })
+
+describe("shape, speed and fades for an agent", () => {
+  it("crops, speeds up and fades as the editor does", async () => {
+    const { call, add, jobs } = setup()
+    const result = await call("convert_video", {
+      file: add(MP4, "clip.mp4").id,
+      shape: "1:1",
+      speed: 2,
+      fadeIn: 0.5,
+      fadeOut: 1,
+    })
+    const job = jobs().find((one) => one.job === "convert")!
+    expect(job.job === "convert" && job.plan).toMatchObject({
+      crop: { left: 70, top: 0, width: 180, height: 180 },
+      speed: 2,
+      fade: { in: 0.5, out: 1 },
+      length: 3,
+    })
+    expect(result.summary).toContain(
+      "It plays twice as fast: 0:06.00 becomes 0:03.00, the sound keeping its pitch."
+    )
+    await expect(
+      call("convert_video", { file: add(MP4, "clip.mp4").id, speed: 4 })
+    ).rejects.toThrow()
+  })
+})

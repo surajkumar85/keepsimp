@@ -12,6 +12,7 @@ import {
   PRESET_SHARE,
 } from "@/lib/video/settings"
 import { MAX_FILES } from "@/lib/video/queue"
+import { FASTEST_SPEED, SHAPES, SLOWEST_SPEED } from "@/lib/video/settings"
 import { shortcutGroups } from "@/lib/video/shortcuts"
 import { JOIN_FADE } from "@/lib/audio/edits"
 
@@ -56,6 +57,19 @@ const options: TutorialContent["options"] = [
     term: "Turn and mirror",
     detail:
       "MP4 and MOV carry a turn as a setting that players follow, so turning a copied video is instant and loses nothing. In WebM and MKV, and whenever the picture is encoded again, it is turned as it is drawn, so every player shows it upright.",
+  },
+  {
+    term: "Shape",
+    detail: `Cuts each picture to ${SHAPES.join(", ")} around its middle, after any turn: 9:16 for Reels, Shorts and TikTok, 1:1 for square posts, 4:5 for portrait posts. A picture already within a hundredth of the shape is left whole. Cropping means the picture is encoded again.`,
+  },
+  {
+    term: "Speed",
+    detail: `From ${SLOWEST_SPEED} to ${FASTEST_SPEED} times. Faster keeps the frame rate, so frames are left out; slower plays every frame for longer, so a 30 fps video at half speed has 15 frames a second. The sound is stretched by the audio editor's own engine (WSOLA), which keeps its pitch. Both are encoded again.`,
+  },
+  {
+    term: "Fades",
+    detail:
+      "Fade in from black and silence at the start, and out to them at the end, over the seconds chosen, after any trim and speed change. Both picture and sound are encoded again.",
   },
   {
     term: "Sound",
@@ -202,6 +216,84 @@ const cutting: TutorialContent = {
   ],
   options: [...trimming, ...options],
   guideHref: "/blog/trim-video-without-losing-quality/",
+}
+
+const cropping: TutorialContent = {
+  ...editor,
+  name: "How to crop a video to 9:16, square or 4:5",
+  description:
+    "Crop videos for Reels, Shorts, TikTok or feeds in your browser, around the middle of the picture. Nothing is uploaded.",
+  steps: [
+    {
+      title: "Add your videos",
+      text: `Drop them or choose them: MP4, MOV, WebM, MKV or MPEG-TS, of any length. Up to ${MAX_FILES} at once.`,
+    },
+    {
+      title: "Choose the shape",
+      text: "9:16 is chosen to start with; 1:1, 4:5, 16:9 and 4:3 are there too, with a turn first if a video lies on its side.",
+    },
+    {
+      title: "Download",
+      text: "Each video is cropped, checked and offered: one by one or as a ZIP.",
+    },
+  ],
+  guideHref: "/blog/crop-video-to-9-16-or-square/",
+}
+
+const speeding: TutorialContent = {
+  ...editor,
+  name: "How to speed up or slow down a video",
+  description:
+    "Change a video's speed in your browser, from half to twice as fast, the sound keeping its pitch. Nothing is uploaded.",
+  steps: [
+    {
+      title: "Add your videos",
+      text: `Drop them or choose them: MP4, MOV, WebM, MKV or MPEG-TS, of any length. Up to ${MAX_FILES} at once.`,
+    },
+    {
+      title: "Choose the speed",
+      text: "Twice as fast is chosen to start with; half, three quarters, 1.25 and 1.5 times are there too. Add fades if you like.",
+    },
+    {
+      title: "Download",
+      text: "Each video is written at its new length, checked and offered.",
+    },
+  ],
+  guideHref: "/blog/speed-up-or-slow-down-a-video/",
+}
+
+const muting: TutorialContent = {
+  ...editor,
+  name: "How to remove the sound from a video",
+  description:
+    "Take the sound out of videos in your browser, the picture copied as it is so nothing is lost. Nothing is uploaded.",
+  steps: [
+    {
+      title: "Add your videos",
+      text: `Drop them or choose them: MP4, MOV, WebM, MKV or MPEG-TS, of any length. Up to ${MAX_FILES} at once.`,
+    },
+    {
+      title: "That is all",
+      text: "The sound is left out as soon as each is read, and the picture copied as it is: no encoding, no loss.",
+    },
+    {
+      title: "Download",
+      text: "One by one or as a ZIP, each checked to have its picture and no sound.",
+    },
+  ],
+  guideHref: "/blog/remove-sound-from-a-video/",
+}
+
+export function CropVideoTutorial() {
+  return <ToolTutorial content={cropping} />
+}
+
+export function VideoSpeedTutorial() {
+  return <ToolTutorial content={speeding} />
+}
+
+export function MuteVideoTutorial() {
+  return <ToolTutorial content={muting} />
 }
 
 export function VideoTrimmerTutorial() {

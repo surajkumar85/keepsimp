@@ -112,6 +112,57 @@ export const tools: readonly Tool[] = [
     status: "available",
   },
   {
+    id: "crop-video",
+    name: "Crop video",
+    description:
+      "Crop a video to 9:16 for Reels, Shorts and TikTok, square or 4:5, around its middle, on your device.",
+    partOf: "video-editor",
+    category: "video",
+    keywords: [
+      "crop video",
+      "crop video to 9:16",
+      "vertical video",
+      "square video",
+      "video aspect ratio",
+      "video for reels",
+      "video for tiktok",
+    ],
+    status: "available",
+  },
+  {
+    id: "change-video-speed",
+    name: "Change video speed",
+    description:
+      "Speed a video up or slow it down, from half to twice its speed, the sound keeping its pitch, on your device.",
+    partOf: "video-editor",
+    category: "video",
+    keywords: [
+      "video speed",
+      "speed up video",
+      "slow down video",
+      "slow motion video",
+      "fast forward video",
+      "timelapse",
+    ],
+    status: "available",
+  },
+  {
+    id: "mute-video",
+    name: "Mute video",
+    description:
+      "Take the sound out of a video without encoding the picture again, many at once, on your device.",
+    partOf: "video-editor",
+    category: "video",
+    keywords: [
+      "mute video",
+      "remove audio from video",
+      "remove sound from video",
+      "silent video",
+      "video without sound",
+    ],
+    status: "available",
+  },
+  {
     id: "audio-editor",
     name: "Audio editor",
     description:

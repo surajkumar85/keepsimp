@@ -33,6 +33,7 @@ export default defineConfig({
         "lib/video/trim.ts",
         "lib/video/cut.ts",
         "lib/video/shortcuts.ts",
+        "lib/video/effects.ts",
         "lib/audio/formats.ts",
         "lib/audio/settings.ts",
         "lib/audio/target-size.ts",

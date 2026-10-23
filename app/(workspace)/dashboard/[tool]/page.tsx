@@ -12,6 +12,9 @@ import {
   VideoConverterTutorial,
   VideoEditorTutorial,
   VideoTrimmerTutorial,
+  CropVideoTutorial,
+  VideoSpeedTutorial,
+  MuteVideoTutorial,
 } from "@/components/video/tutorial"
 import {
   AudioConverterTutorial,
@@ -109,6 +112,24 @@ export async function generateMetadata({
     return pageMetadata(
       "Compress video online for free: under 8, 10 or 25 MB",
       "Make a video smaller in your browser, to fit under 8, 10 or 25 MB, half its size or a size of your own, with the bitrate, frame rate and size chosen for it and the quality measured. Any length, no account, no uploads.",
+      `/dashboard/${id}/`
+    )
+  if (id === "crop-video")
+    return pageMetadata(
+      "Crop video to 9:16, square or 4:5, free and without uploading",
+      "Crop videos to 9:16 for Reels, Shorts and TikTok, to a square or to 4:5, around the middle of the picture, many at once, in your browser. Every result is checked. No account, no uploads.",
+      `/dashboard/${id}/`
+    )
+  if (id === "change-video-speed")
+    return pageMetadata(
+      "Change video speed online: speed up or slow down, free",
+      "Speed a video up to twice as fast or slow it to half speed in your browser, the sound keeping its pitch, with fades if you like. Every result is checked. No account, no uploads.",
+      `/dashboard/${id}/`
+    )
+  if (id === "mute-video")
+    return pageMetadata(
+      "Mute a video: remove the sound, free and without uploading",
+      "Take the sound out of MP4, MOV, WebM and MKV videos in your browser, the picture copied as it is so nothing is lost, many at once. No account, no uploads.",
       `/dashboard/${id}/`
     )
   if (id === "video-trimmer")
@@ -365,6 +386,12 @@ export default async function ToolPage({
         <VideoWorkspace mode="compressor" />
       ) : id === "video-trimmer" ? (
         <VideoWorkspace mode="trimmer" />
+      ) : id === "crop-video" ? (
+        <VideoWorkspace mode="cropper" />
+      ) : id === "change-video-speed" ? (
+        <VideoWorkspace mode="speed" />
+      ) : id === "mute-video" ? (
+        <VideoWorkspace mode="mute" />
       ) : id === "audio-editor" ? (
         <AudioWorkspace mode="editor" />
       ) : id === "audio-converter" ? (
@@ -444,6 +471,12 @@ export default async function ToolPage({
         <VideoCompressorTutorial />
       ) : id === "video-trimmer" ? (
         <VideoTrimmerTutorial />
+      ) : id === "crop-video" ? (
+        <CropVideoTutorial />
+      ) : id === "change-video-speed" ? (
+        <VideoSpeedTutorial />
+      ) : id === "mute-video" ? (
+        <MuteVideoTutorial />
       ) : id === "audio-editor" ? (
         <AudioEditorTutorial />
       ) : id === "audio-converter" ? (

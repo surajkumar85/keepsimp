@@ -283,6 +283,24 @@ const cards = [
     "/images/video-trim-guide.svg",
   ],
   [
+    "crop-video-to-9-16-or-square",
+    "Every picture, in its shape.",
+    "Crop video to 9:16, square or 4:5, on your device.",
+    "/images/video-crop-guide.svg",
+  ],
+  [
+    "speed-up-or-slow-down-a-video",
+    "Faster or slower, still in tune.",
+    "Change video speed, the sound keeping its pitch.",
+    "/images/video-speed-guide.svg",
+  ],
+  [
+    "remove-sound-from-a-video",
+    "The picture, without a sound.",
+    "Mute a video without encoding it again.",
+    "/images/video-mute-guide.svg",
+  ],
+  [
     "keepsimp-tools-for-ai-agents",
     "Ask your agent. The work stays here.",
     "KeepSimp's tools in Claude Code, Codex and WebMCP.",

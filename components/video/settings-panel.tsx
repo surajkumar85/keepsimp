@@ -6,7 +6,10 @@ import { Input } from "@/components/ui/input"
 import { outputInfo, type OutContainer } from "@/lib/video/formats"
 import { useState } from "react"
 import {
+  FADES,
   FRAME_RATES,
+  SHAPES,
+  SPEEDS,
   HOLDS,
   LEAST_BITRATE,
   LEAST_LIMIT,
@@ -18,6 +21,7 @@ import {
   SHORT_SIDES,
   videoCodecLabels,
   type Quality,
+  type Shape,
   type Turn,
   type VideoSettings,
 } from "@/lib/video/settings"
@@ -272,7 +276,7 @@ export function SettingsPanel({
 
       {!limitFirst && limitSection}
 
-      <Section title="Turn">
+      <Section title="Turn and shape">
         <ChoiceChips
           label="Turn"
           hideLabel
@@ -286,6 +290,55 @@ export function SettingsPanel({
           hint="Flips the picture left to right, as a front camera shows it."
           checked={settings.flip}
           onCheckedChange={(flip) => update({ flip })}
+        />
+        <ChoiceChips
+          label="Shape"
+          hint={
+            settings.shape === "same"
+              ? "Keeps the whole picture."
+              : `Cuts each picture to ${settings.shape} around its middle, after the turn: ${settings.shape === "9:16" ? "for Reels, Shorts and TikTok" : settings.shape === "1:1" ? "square, for feeds" : settings.shape === "4:5" ? "for portrait posts" : settings.shape === "16:9" ? "widescreen" : "for older screens"}. The picture is encoded again.`
+          }
+          value={settings.shape}
+          onValueChange={(shape) => update({ shape: shape as Shape })}
+          options={[
+            { value: "same", label: "Same" },
+            ...SHAPES.map((shape) => ({ value: shape, label: shape })),
+          ]}
+        />
+      </Section>
+
+      <Section title="Speed and fades">
+        <ChoiceChips
+          label="Speed"
+          hint="Faster keeps the frame rate; slower plays every frame for longer. The sound keeps its pitch. The picture and sound are encoded again."
+          value={String(settings.speed)}
+          onValueChange={(speed) => update({ speed: Number(speed) })}
+          options={[...SPEEDS.slice(0, 2), 1, ...SPEEDS.slice(2)].map(
+            (speed) => ({
+              value: String(speed),
+              label: speed === 1 ? "Normal" : `${speed}×`,
+            })
+          )}
+        />
+        <ChoiceChips
+          label="Fade in"
+          hint="From black and silence at the start."
+          value={String(settings.fadeIn)}
+          onValueChange={(fade) => update({ fadeIn: Number(fade) })}
+          options={[0, ...FADES].map((fade) => ({
+            value: String(fade),
+            label: fade === 0 ? "None" : `${fade} s`,
+          }))}
+        />
+        <ChoiceChips
+          label="Fade out"
+          hint="To black and silence at the end."
+          value={String(settings.fadeOut)}
+          onValueChange={(fade) => update({ fadeOut: Number(fade) })}
+          options={[0, ...FADES].map((fade) => ({
+            value: String(fade),
+            label: fade === 0 ? "None" : `${fade} s`,
+          }))}
         />
       </Section>
 

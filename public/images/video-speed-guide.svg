@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 600" role="img" aria-labelledby="title desc">
+  <title id="title">Changing a video's speed</title><desc id="desc">A strip of eight frames becoming four at twice the speed, and a sound wave that keeps the same pitch while it becomes shorter.</desc>
+  <rect width="900" height="600" rx="24" fill="#f5f5f0"/>
+  <g font-family="sans-serif">
+    <g fill="#00786f">
+      <rect x="80" y="110" width="80" height="60" rx="6"/><rect x="170" y="110" width="80" height="60" rx="6" opacity="0.35"/><rect x="260" y="110" width="80" height="60" rx="6"/><rect x="350" y="110" width="80" height="60" rx="6" opacity="0.35"/><rect x="440" y="110" width="80" height="60" rx="6"/><rect x="530" y="110" width="80" height="60" rx="6" opacity="0.35"/><rect x="620" y="110" width="80" height="60" rx="6"/><rect x="710" y="110" width="80" height="60" rx="6" opacity="0.35"/>
+    </g>
+    <text x="80" y="90" font-size="20" font-weight="600" fill="#171717">Picture: every other frame left out</text>
+    <g fill="#00564f"><rect x="80" y="200" width="80" height="60" rx="6"/><rect x="170" y="200" width="80" height="60" rx="6"/><rect x="260" y="200" width="80" height="60" rx="6"/><rect x="350" y="200" width="80" height="60" rx="6"/></g>
+    <text x="460" y="238" font-size="22" font-weight="700" fill="#00786f">2× · 30 fps kept</text>
+    <text x="80" y="330" font-size="20" font-weight="600" fill="#171717">Sound: stretched, the same pitch</text>
+    <path d="M80 400 q20 -40 40 0 t40 0 t40 0 t40 0 t40 0 t40 0 t40 0 t40 0 t40 0 t40 0 t40 0 t40 0 t40 0 t40 0 t40 0 t40 0 t40 0" fill="none" stroke="#a3a3a3" stroke-width="4"/>
+    <path d="M80 480 q20 -40 40 0 t40 0 t40 0 t40 0 t40 0 t40 0 t40 0 t40 0" fill="none" stroke="#00786f" stroke-width="5"/>
+    <text x="440" y="488" font-size="18" fill="#00564f">half as long, in tune</text>
+  </g>
+</svg>

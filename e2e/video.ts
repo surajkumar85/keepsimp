@@ -10,6 +10,9 @@ export const EDITOR = "/dashboard/video-editor/"
 export const CONVERTER = "/dashboard/video-converter/"
 export const COMPRESSOR = "/dashboard/video-compressor/"
 export const TRIMMER = "/dashboard/video-trimmer/"
+export const CROP = "/dashboard/crop-video/"
+export const SPEED = "/dashboard/change-video-speed/"
+export const MUTE = "/dashboard/mute-video/"
 export const folder = mkdtempSync(join(tmpdir(), "keepsimp-video-e2e-"))
 
 export const workspace = (page: Page) => page.getByTestId("video-workspace")
@@ -319,6 +322,56 @@ export function syncOffset(bytes: Uint8Array, name: string) {
   const sound = new Float32Array(pcm.buffer, pcm.byteOffset, pcm.length / 4)
   const onset = sound.findIndex((value) => Math.abs(value) > 0.1) / 48000
   return (onset - flash) * 1000
+}
+
+/** Each frame's time and average brightness (0 to 255), as FFmpeg decodes them. */
+export function brightness(bytes: Uint8Array, name: string) {
+  const path = join(folder, name)
+  writeFileSync(path, bytes)
+  return execFileSync("ffprobe", [
+    "-v",
+    "error",
+    "-f",
+    "lavfi",
+    `movie=${path},signalstats`,
+    "-show_entries",
+    "frame=pts_time:frame_tags=lavfi.signalstats.YAVG",
+    "-of",
+    "csv=p=0",
+  ])
+    .toString()
+    .trim()
+    .split("\n")
+    .map((line) => line.split(",").map(Number) as [number, number])
+}
+
+/** The sound, mono at 48 kHz, as FFmpeg decodes it. */
+export function soundOf(bytes: Uint8Array, name: string) {
+  const path = join(folder, name)
+  writeFileSync(path, bytes)
+  const pcm = execFileSync(
+    "ffmpeg",
+    ["-v", "error", "-i", path, "-ac", "1", "-ar", "48000", "-f", "f32le", "-"],
+    { maxBuffer: 1 << 28 }
+  )
+  return new Float32Array(pcm.buffer, pcm.byteOffset, pcm.length / 4)
+}
+
+/** How loud a stretch of sound is (root mean square), from and to seconds. */
+export function loudness(sound: Float32Array, from: number, to: number) {
+  const part = sound.subarray(Math.round(from * 48000), Math.round(to * 48000))
+  return Math.sqrt(
+    part.reduce((sum, value) => sum + value * value, 0) / part.length
+  )
+}
+
+/** A steady tone's pitch, by its upward zero crossings over a stretch. */
+export function pitch(sound: Float32Array, from: number, to: number) {
+  const part = sound.subarray(Math.round(from * 48000), Math.round(to * 48000))
+  let crossings = 0
+  for (let index = 1; index < part.length; index++)
+    if (part[index - 1] < 0 && part[index] >= 0) crossings++
+  return crossings / (to - from)
 }
 
 /** Print what a worker reports as an error, so a failed run says why. */

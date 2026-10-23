@@ -65,7 +65,14 @@ import { SettingsPanel } from "./settings-panel"
 import { TrimPanel } from "./trim-panel"
 
 /** What the workspace is opened for: everything, or one job through a door. */
-export type VideoMode = "editor" | "converter" | "compressor" | "trimmer"
+export type VideoMode =
+  | "editor"
+  | "converter"
+  | "compressor"
+  | "trimmer"
+  | "cropper"
+  | "speed"
+  | "mute"
 
 const INPUT_ID = "video-file"
 /** Settings are taken up this long after the last change, so a run of choices starts one job. */
@@ -75,7 +82,7 @@ const COPY: Record<VideoMode, DropZoneCopy> = {
   editor: {
     heading: "Drop video files",
     dropping: "Drop to add these videos",
-    body: "Convert them to MP4, WebM, MOV or MKV, trim them, make them smaller, turn them or take the sound out. Many at once, on your device.",
+    body: "Convert them to MP4, WebM, MOV or MKV, trim, crop, speed up or fade them, make them smaller, turn them or take the sound out. Many at once, on your device.",
     inputLabel: "Choose video files",
     action: "Choose videos",
     limits: `Stays on your device · up to ${MAX_FILES} videos at once · any length`,
@@ -96,6 +103,30 @@ const COPY: Record<VideoMode, DropZoneCopy> = {
     action: "Choose videos",
     limits: `Stays on your device · up to ${MAX_FILES} videos at once · any length`,
   },
+  cropper: {
+    heading: "Drop videos to crop",
+    dropping: "Drop to crop these videos",
+    body: "Crop each to 9:16, a square, 4:5, 16:9 or 4:3 around its middle, for Reels, Shorts, TikTok or feeds.",
+    inputLabel: "Choose video files to crop",
+    action: "Choose videos",
+    limits: `Stays on your device · up to ${MAX_FILES} videos at once · any length`,
+  },
+  speed: {
+    heading: "Drop videos to speed up or slow down",
+    dropping: "Drop to change these videos' speed",
+    body: "From half to twice their speed, the sound keeping its pitch, with fades in and out if you like.",
+    inputLabel: "Choose video files to change their speed",
+    action: "Choose videos",
+    limits: `Stays on your device · up to ${MAX_FILES} videos at once · any length`,
+  },
+  mute: {
+    heading: "Drop videos to mute",
+    dropping: "Drop to take the sound out of these videos",
+    body: "The sound is left out and the picture copied as it is: nothing is lost and it is quick.",
+    inputLabel: "Choose video files to mute",
+    action: "Choose videos",
+    limits: `Stays on your device · up to ${MAX_FILES} videos at once · any length`,
+  },
   trimmer: {
     heading: "Drop videos to trim",
     dropping: "Drop to trim these videos",
@@ -111,6 +142,9 @@ const SAMPLES: Record<VideoMode, string> = {
   converter: "keepsimp-clip.mp4",
   compressor: "keepsimp-scene.mp4",
   trimmer: "keepsimp-scene.mp4",
+  cropper: "keepsimp-scene.mp4",
+  speed: "keepsimp-scene.mp4",
+  mute: "keepsimp-clip.mp4",
 }
 
 /** What each door starts with. */
@@ -119,6 +153,9 @@ const FIRST: Record<VideoMode, Partial<VideoSettings>> = {
   converter: {},
   compressor: { limit: { share: 0.5 } },
   trimmer: { format: "same" },
+  cropper: { format: "same", shape: "9:16" },
+  speed: { format: "same", speed: 2 },
+  mute: { format: "same", sound: "none" },
 }
 
 const OPENED_FOR: Record<VideoMode, string> = {
@@ -126,6 +163,9 @@ const OPENED_FOR: Record<VideoMode, string> = {
   converter: "converting",
   compressor: "making videos smaller",
   trimmer: "trimming",
+  cropper: "cropping",
+  speed: "changing speed",
+  mute: "muting",
 }
 
 /** The doors that show the trimmer at once; the others have it one press away. */
@@ -134,6 +174,9 @@ const TRIMS: Record<VideoMode, boolean> = {
   converter: false,
   compressor: false,
   trimmer: true,
+  cropper: false,
+  speed: false,
+  mute: false,
 }
 
 let counter = 0

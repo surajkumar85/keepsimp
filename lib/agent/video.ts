@@ -26,7 +26,11 @@ import { looksSaid } from "@/lib/video/looks"
 import { floorSaid } from "@/lib/video/target"
 import {
   defaultSettings,
+  FASTEST_SPEED,
   FRAME_RATES,
+  LONGEST_FADE,
+  SHAPES,
+  SLOWEST_SPEED,
   LEAST_BITRATE,
   LEAST_LIMIT,
   MB,
@@ -63,6 +67,10 @@ type Settings = Partial<
     | "flip"
     | "sound"
     | "keepTags"
+    | "shape"
+    | "speed"
+    | "fadeIn"
+    | "fadeOut"
   >
 >
 
@@ -116,6 +124,31 @@ const settingsSchema = {
   keepTags: {
     type: "boolean",
     description: "Keep the title and other details (yes by default).",
+  },
+  shape: {
+    type: "string",
+    enum: ["same", ...SHAPES],
+    description:
+      "Cut the picture to a shape around its middle, after the turn: 9:16 for Reels, Shorts and TikTok, 1:1 square, 4:5 portrait; the picture is encoded again.",
+  },
+  speed: {
+    type: "number",
+    minimum: SLOWEST_SPEED,
+    maximum: FASTEST_SPEED,
+    description:
+      "How much faster it plays (0.5 is half speed, 2 twice as fast); the sound keeps its pitch; both are encoded again.",
+  },
+  fadeIn: {
+    type: "number",
+    minimum: 0,
+    maximum: LONGEST_FADE,
+    description: "Seconds of fade from black and silence at the start.",
+  },
+  fadeOut: {
+    type: "number",
+    minimum: 0,
+    maximum: LONGEST_FADE,
+    description: "Seconds of fade to black and silence at the end.",
   },
 } as const
 
@@ -289,7 +322,7 @@ export function videoTools(engines: VideoEngines): AgentTool[] {
     name: "convert_video",
     title: "Convert a video",
     description:
-      "Writes a video as MP4, WebM, MOV or MKV, as the video editor does: the picture is copied as it is wherever nothing has to change, and encoded again by the browser for a quality, a smaller size, a lower frame rate, another codec, or a turn a format cannot carry. Sound converted stays in step with the picture. The result is opened again and its codec, size, frame rate, sound, length and first and last frames checked before it is handed over.",
+      "Writes a video as MP4, WebM, MOV or MKV, as the video editor does: the picture is copied as it is wherever nothing has to change, and encoded again by the browser for a quality, a smaller size, a lower frame rate, another codec, a shape (crop), a speed, fades, or a turn a format cannot carry. Sound converted stays in step with the picture. The result is opened again and its codec, size, frame rate, sound, length and first and last frames checked before it is handed over.",
     inputSchema: {
       type: "object",
       properties: {

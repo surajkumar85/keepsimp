@@ -9,6 +9,7 @@ import type { Decoded } from "./check"
 import type { Plan, Turn, VideoCodec, VideoFacts } from "./settings"
 import { lookSize, moments, type Looks } from "./looks"
 import { cutPicture, cutSound } from "./cut"
+import { shapePicture, shapeSound } from "./effects"
 import { similarity } from "@/lib/image-compressor/ssim"
 
 type Engine = typeof Mediabunny
@@ -174,6 +175,25 @@ const DISCARDED: Record<string, string> = {
   cannot_copy: "it cannot be copied as it is",
 }
 
+/** Speed and fades are made by the hooks. */
+const timed = (plan: Plan) =>
+  plan.speed !== 1 || plan.fade.in > 0 || plan.fade.out > 0
+
+/** Hooks one after the other: what the first drops, the second never sees. */
+function chained<T>(
+  first: ((sample: T) => T | null) | null,
+  then: ((sample: T) => unknown) | null
+) {
+  if (!first && !then) return {}
+  return {
+    process: (sample: T) => {
+      const kept = first ? first(sample) : sample
+      if (kept === null) return null
+      return then ? then(kept) : kept
+    },
+  }
+}
+
 /** Several parts cut to the frame need the hooks; one is a trim. */
 const hooked = (plan: Plan) =>
   plan.cut?.mode === "exact" && plan.cut.parts.length > 1
@@ -190,12 +210,24 @@ function videoOptions(
   if (video.action === "copy") return { rotate: plan.rotate, flip: plan.flip }
   const parts = hooked(plan)
   return {
-    ...(parts ? { process: cutPicture(parts) } : {}),
+    ...(chained(
+      parts ? cutPicture(parts) : null,
+      timed(plan)
+        ? shapePicture(
+            plan.speed,
+            plan.fade,
+            plan.length,
+            (width, height) => new OffscreenCanvas(width, height)
+          )
+        : null
+    ) as Pick<Mediabunny.ConversionVideoOptions, "process">),
+    ...(plan.crop ? { crop: plan.crop } : {}),
     codec: video.codec,
     width: video.width,
     height: video.height,
     fit: "fill",
-    frameRate: video.frameRate ?? undefined,
+    // In the file's own time: the hook then moves frames to the result's.
+    frameRate: video.frameRate ? video.frameRate / plan.speed : undefined,
     quality: new engine.Quality({ bitrate: video.bitrate }),
     keyFrameInterval: video.keyFrameInterval,
     rotate: plan.rotate,
@@ -216,8 +248,24 @@ function audioOptions(
   if (audio.action === "drop") return { discard: true }
   if (audio.action !== "encode") return undefined
   const parts = hooked(plan)
+  const cut = parts ? cutSound(engine.AudioSample, parts) : null
+  const shape = timed(plan)
+    ? shapeSound(
+        engine.AudioSample,
+        plan.speed,
+        plan.fade,
+        plan.length * plan.speed
+      )
+    : null
   return {
-    ...(parts ? { process: cutSound(engine.AudioSample, parts) } : {}),
+    ...(cut || shape
+      ? {
+          process: (sample: Mediabunny.AudioSample) =>
+            shape
+              ? (cut ? cut(sample) : [sample]).flatMap(shape)
+              : cut!(sample),
+        }
+      : {}),
     codec: audio.codec,
     quality: new engine.Quality({ bitrate: audio.bitrate }),
     sampleRate: audio.codec === "opus" ? 48000 : undefined,
