@@ -1169,7 +1169,7 @@ function Selected({
       const url = URL.createObjectURL(picture)
       const link = document.createElement("a")
       link.href = url
-      link.download = `${item.name.replace(/\.[^.]+$/, "")} ${clock(time).replaceAll(":", "-")}.png`
+      link.download = `${item.name.replace(/\.[^.]+$/, "")}-${clock(time).replaceAll(":", "-")}.png`
       link.click()
       setTimeout(() => URL.revokeObjectURL(url), 60_000)
     } catch (error) {

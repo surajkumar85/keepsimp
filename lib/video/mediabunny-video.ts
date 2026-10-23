@@ -539,7 +539,10 @@ async function* soundtrackRuns(
     musicTrack.sampleRate === rate
       ? null
       : new Resampler(channels, musicTrack.sampleRate / rate)
-  let musicRuns = new engine.AudioSampleSink(musicTrack).samples()
+  // From 0 s: what a sound file holds before it (an AAC encoder's priming)
+  // is not sound, and fed to it first, WebKit's decoder on Linux decodes
+  // every frame after it wrongly.
+  let musicRuns = new engine.AudioSampleSink(musicTrack).samples(0)
   let musicEnded = false
   /** Fill the music queue to `frames`, playing it again while it loops. */
   async function fillMusic(frames: number) {
@@ -547,7 +550,7 @@ async function* soundtrackRuns(
       const next = await musicRuns.next()
       if (next.done) {
         if (track.loop) {
-          musicRuns = new engine.AudioSampleSink(musicTrack).samples()
+          musicRuns = new engine.AudioSampleSink(musicTrack).samples(0)
           continue
         }
         if (resampler) musicQueue.push(resampler.flush())
@@ -755,6 +758,38 @@ export async function withSoundtrack(
   }
 }
 
+/**
+ * Whether every frame of a picture decodes, counted against its packets:
+ * WebKit's decoder on Linux gives the frames after a keyframe before zero
+ * (an edit list's lead-in) the last time before zero, so a frame cannot
+ * be found by its time there. Returns the last frame decoded, or null.
+ */
+async function everyFrame(
+  engine: Engine,
+  picture: Mediabunny.InputVideoTrack,
+  sink: Mediabunny.VideoSampleSink
+) {
+  let packets = 0
+  for await (const packet of new engine.EncodedPacketSink(picture).packets(
+    undefined,
+    undefined,
+    { metadataOnly: true }
+  )) {
+    void packet
+    packets++
+  }
+  let frames = 0
+  let last: Mediabunny.VideoSample | null = null
+  for await (const sample of sink.samples()) {
+    frames++
+    last?.close()
+    last = sample
+  }
+  if (frames === packets) return last
+  last?.close()
+  return null
+}
+
 /** Read a written file back: its facts, and whether its first and last frames and its sound decode. */
 export async function readBack(
   engine: Engine,
@@ -768,11 +803,15 @@ export async function readBack(
     const picture = await input.getPrimaryVideoTrack()
     if (picture && (await picture.canDecode())) {
       const sink = new engine.VideoSampleSink(picture)
-      const start = await picture.getFirstTimestamp()
-      const end = start + (await picture.computeDuration())
+      // What is shown starts at 0: an edit list keeps earlier frames only to decode from.
+      const start = Math.max(0, await picture.getFirstTimestamp())
+      // Where the picture ends: its own time, not a length after its start,
+      // which an edit list can put before zero.
+      const end = await picture.computeDuration()
       try {
         const first = await sink.getSample(start)
-        const last = await sink.getSample(Math.max(start, end - 0.001))
+        let last = await sink.getSample(Math.max(start, end - 0.001))
+        if (first && !last) last = await everyFrame(engine, picture, sink)
         decoded.picture = Boolean(first && last)
         first?.close()
         last?.close()
@@ -1087,7 +1126,8 @@ async function* segmentSound(
     playable && playable.sampleRate !== rate
       ? new Resampler(channels, playable.sampleRate / rate)
       : null
-  const runs = playable ? new engine.AudioSampleSink(playable).samples() : null
+  // From 0 s, as for a soundtrack (`soundtrackRuns`).
+  const runs = playable ? new engine.AudioSampleSink(playable).samples(0) : null
   let ended = !runs
   let given = 0
   try {

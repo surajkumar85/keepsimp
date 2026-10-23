@@ -127,7 +127,7 @@ test("trims a video and saves a frame, for an agent", async ({ page }) => {
   const frame = await ran(page, "video_frame", { file, seconds: 2 })
   expect(frame.summary).toMatch(/^The frame at 0:02\.00: 320 × 180 PNG, /)
   const png = await saved(page, frame.files![0].id)
-  expect(png.name).toBe("clip 0-02.00.png")
+  expect(png.name).toBe("clip-0-02.00.png")
   expect([...png.bytes.subarray(1, 4)]).toEqual([0x50, 0x4e, 0x47])
 })
 

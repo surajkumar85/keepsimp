@@ -136,7 +136,7 @@ test("cuts a part out exactly with the keys, undoes it, and saves a frame", asyn
   const pending = page.waitForEvent("download")
   await panel(page).getByRole("button", { name: "Save this frame" }).click()
   const frame = await pending
-  expect(frame.suggestedFilename()).toMatch(/^keyed 0-0\d\.\d\d\.png$/)
+  expect(frame.suggestedFilename()).toMatch(/^keyed-0-0\d\.\d\d\.png$/)
   const png = await bytesOf(frame)
   const view = new DataView(png.buffer, png.byteOffset)
   expect([view.getUint32(16), view.getUint32(20)]).toEqual([640, 360])

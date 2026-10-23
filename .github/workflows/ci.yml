@@ -16,7 +16,8 @@ jobs:
         with:
           node-version: 24
           cache: npm
-      - run: npm ci
+      # Once more after a pause: the registry is sometimes out of reach for a moment.
+      - run: npm ci || (sleep 20 && npm ci)
       # Whisper's models come from pinned revisions, checked by their hashes;
       # kept between runs so each job does not download them again.
       - uses: actions/cache@v6.1.0
@@ -44,13 +45,15 @@ jobs:
           cache-dependency-path: |
             package-lock.json
             bridge/package-lock.json
-      - run: npm ci
+      # Once more after a pause: the registry is sometimes out of reach for a moment.
+      - run: npm ci || (sleep 20 && npm ci)
       - uses: actions/cache@v6.1.0
         with:
           path: .next/cache/whisper
           key: whisper-${{ hashFiles('lib/audio/whisper-models.json') }}
       - run: npm run build
-      - run: npm ci
+      # Once more after a pause: the registry is sometimes out of reach for a moment.
+      - run: npm ci || (sleep 20 && npm ci)
         working-directory: bridge
       - run: npm audit --omit=dev
         working-directory: bridge
@@ -97,7 +100,8 @@ jobs:
         with:
           node-version: 24
           cache: npm
-      - run: npm ci
+      # Once more after a pause: the registry is sometimes out of reach for a moment.
+      - run: npm ci || (sleep 20 && npm ci)
       # Whisper's models come from pinned revisions, checked by their hashes;
       # kept between runs so each job does not download them again.
       - uses: actions/cache@v6.1.0

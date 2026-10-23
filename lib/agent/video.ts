@@ -826,7 +826,7 @@ export function videoTools(engines: VideoEngines): AgentTool[] {
         )
       const made = files.add(
         picture,
-        `${ref.name.replace(/\.[^.]+$/, "")} ${clock(seconds).replaceAll(":", "-")}.png`,
+        `${ref.name.replace(/\.[^.]+$/, "")}-${clock(seconds).replaceAll(":", "-")}.png`,
         "made"
       )
       return {

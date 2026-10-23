@@ -432,7 +432,7 @@ describe("saving a frame for an agent", () => {
     })
     expect(result.summary).toBe("The frame at 0:01.50: 320 × 180 PNG, 1 KB.")
     expect(agent.files.get(result.files![0].id).ref.name).toBe(
-      "clip 0-01.50.png"
+      "clip-0-01.50.png"
     )
   })
 
