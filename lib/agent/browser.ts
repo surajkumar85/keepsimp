@@ -211,6 +211,12 @@ export function startAgent(): Started {
           ])
           return frameAt(engine, file, seconds)
         },
+        picture: async (file) => {
+          const bitmap = await createImageBitmap(file)
+          const size = { width: bitmap.width, height: bitmap.height }
+          bitmap.close()
+          return size
+        },
         track: async (file, name) => {
           const [engine, { readTrack }] = await Promise.all([
             import("mediabunny"),

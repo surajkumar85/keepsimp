@@ -11,6 +11,7 @@ import {
   KEYFRAME_SECONDS,
   PRESET_SHARE,
   FASTEST_SPEED,
+  LOGO_SIZES,
   SHAPES,
   SLOWEST_SPEED,
 } from "@/lib/video/settings"
@@ -78,6 +79,10 @@ const options: TutorialContent["options"] = [
   {
     term: "Loudness",
     detail: `Makes the sound ${TARGETS.map((target) => `${target.label} (${target.for})`).join(", ")} as BS.1770 measures it, with the audio editor's own meter. Each sound is measured as it will be written (after trims, speed and fades), made louder or quieter, and its true peaks held under −1 dBTP by the audio editor's limiter; the result is measured again and held to the target within 1 LU, unless the limiter had to keep it quieter, which the page says. The picture is not touched by it.`,
+  },
+  {
+    term: "Text and logo",
+    detail: `Text along the top and the bottom of the picture is written with the animation converter's own captions: the site's Outfit, wrapped to fit, small, medium or large, white or black with an outline of the other colour, for the whole video or between two times of the result. A logo (PNG, JPEG, WebP, GIF or AVIF) sits in a corner or the middle, ${LOGO_SIZES.join(", ")}% of the picture's width in its own shape, solid or see-through. Both are drawn on every frame, so the picture is encoded again. A logo marks a video; it does not stop it being copied.`,
   },
   {
     term: "Soundtrack",
@@ -333,6 +338,36 @@ const scoring: TutorialContent = {
     },
   ],
   guideHref: "/blog/add-music-to-a-video/",
+}
+
+const titling: TutorialContent = {
+  ...editor,
+  name: "How to add text or a logo to a video",
+  description:
+    "Write a title or caption on your videos and put a logo in a corner, in your browser. Nothing is uploaded.",
+  steps: [
+    {
+      title: "Add your videos",
+      text: `Drop them or choose them: MP4, MOV, WebM, MKV or MPEG-TS, of any length. Up to ${MAX_FILES} at once.`,
+    },
+    {
+      title: "Write the text",
+      text: "Along the top, the bottom or both, in a size and colour that reads on the picture, for the whole video or a few seconds.",
+    },
+    {
+      title: "Add a logo",
+      text: "A PNG with a clear background works best; choose its corner, width and how solid it is.",
+    },
+    {
+      title: "Download",
+      text: "Each video is written with them, checked and offered.",
+    },
+  ],
+  guideHref: "/blog/add-text-or-a-logo-to-a-video/",
+}
+
+export function TextTutorial() {
+  return <ToolTutorial content={titling} />
 }
 
 export function MusicTutorial() {

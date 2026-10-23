@@ -313,6 +313,12 @@ const cards = [
     "/images/video-music-guide.svg",
   ],
   [
+    "add-text-or-a-logo-to-a-video",
+    "A title on the picture, a mark in the corner.",
+    "Add text or a logo to a video, on your device.",
+    "/images/video-text-guide.svg",
+  ],
+  [
     "keepsimp-tools-for-ai-agents",
     "Ask your agent. The work stays here.",
     "KeepSimp's tools in Claude Code, Codex and WebMCP.",

@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 600" role="img" aria-labelledby="title desc">
+  <title id="title">Text and a logo on a video</title><desc id="desc">A video frame with a title along its bottom in white with a dark outline, and a small logo in its top right corner.</desc>
+  <rect width="900" height="600" rx="24" fill="#f5f5f0"/>
+  <g font-family="sans-serif">
+    <rect x="90" y="80" width="720" height="405" rx="16" fill="#00564f"/>
+    <path d="M90 400 L260 260 L400 360 L560 220 L810 380 V485 H90 Z" fill="#00786f"/>
+    <rect x="690" y="104" width="96" height="48" rx="10" fill="#ffffff" opacity="0.9"/>
+    <text x="738" y="136" text-anchor="middle" font-size="20" font-weight="700" fill="#00564f">LOGO</text>
+    <text x="450" y="452" text-anchor="middle" font-size="40" font-weight="800" fill="#ffffff" stroke="#171717" stroke-width="6" paint-order="stroke" stroke-linejoin="round">Summer, by the sea</text>
+    <rect x="90" y="510" width="720" height="50" rx="14" fill="#e6f2f1"/>
+    <text x="450" y="542" text-anchor="middle" font-size="18" fill="#00564f">Top or bottom · from a time until a time · a logo in its corner</text>
+  </g>
+</svg>

@@ -10,6 +10,7 @@ import {
   SAFE_CEILING,
 } from "@/lib/audio/level"
 import { fitToSize, MOST_PASSES } from "./target"
+import type { CaptionSize, Corner } from "@/lib/animation/effects"
 import { trackSaid, type Soundtrack, type TrackFacts } from "./soundtrack"
 import { boxCrop, isWholeBox, type Box } from "./frame"
 import {
@@ -186,6 +187,19 @@ export interface VideoSettings {
   fadeOut: number
   /** The loudness the sound is made, in LUFS (its peaks held under −1 dBTP); null leaves its level. */
   loudness: number | null
+  /** Text written along the top and the bottom of the picture (the animation converter's captions). */
+  captionTop: string
+  captionBottom: string
+  captionSize: CaptionSize
+  captionColour: "white" | "black"
+  captionOutline: boolean
+  /** Seconds of the result the text shows from and until; null for the start and the end. */
+  captionFrom: number | null
+  captionUntil: number | null
+  /** Where a logo sits, how wide it is (percent of the picture) and how solid (percent). */
+  logoCorner: Corner
+  logoSize: number
+  logoOpacity: number
 }
 
 export type Limit = null | { bytes: number } | { share: number }
@@ -216,7 +230,33 @@ export const defaultSettings: VideoSettings = {
   fadeIn: 0,
   fadeOut: 0,
   loudness: null,
+  captionTop: "",
+  captionBottom: "",
+  captionSize: "medium",
+  captionColour: "white",
+  captionOutline: true,
+  captionFrom: null,
+  captionUntil: null,
+  logoCorner: "bottom-right",
+  logoSize: 15,
+  logoOpacity: 100,
 }
+
+/** A logo's file as read on the page: its name there and its size. */
+export interface LogoFacts {
+  id: string
+  name: string
+  width: number
+  height: number
+}
+
+/** The longest caption, in letters (the animation converter's). */
+export const LONGEST_CAPTION = 200
+/** Logo widths offered and allowed, as percents of the picture. */
+export const LOGO_SIZES = [10, 15, 20, 30] as const
+export const SMALLEST_LOGO = 5
+export const LARGEST_LOGO = 50
+export const FAINTEST_LOGO = 10
 
 export const LEAST_BITRATE = 100
 export const MOST_BITRATE = 200_000
@@ -296,6 +336,27 @@ export interface Plan {
   speed: number
   /** Seconds it fades in and out, picture and sound. */
   fade: Fade
+  /** Text and a logo drawn on every frame (or while the text shows); null for none. */
+  overlay: {
+    caption: {
+      top: string
+      bottom: string
+      size: CaptionSize
+      colour: [number, number, number]
+      outline: boolean
+      from: number | null
+      until: number | null
+    } | null
+    logo: {
+      id: string
+      name: string
+      width: number
+      height: number
+      corner: Corner
+      size: number
+      opacity: number
+    } | null
+  } | null
   /** Another file's sound under the video, and how; null for none. */
   track:
     | (Soundtrack & {
@@ -508,7 +569,9 @@ export function planFor(
   /** A crop box of one's own for this file. */
   box: Box | null = null,
   /** Another file's sound to put under the video, and how. */
-  track: (TrackFacts & Soundtrack) | null = null
+  track: (TrackFacts & Soundtrack) | null = null,
+  /** A picture to draw on every frame: the page's name for it and its size. */
+  logo: LogoFacts | null = null
 ): Plan {
   const container =
     settings.format === "same"
@@ -528,6 +591,21 @@ export function planFor(
   const cutting = kept?.length && !isWhole(kept, facts.duration) ? kept : null
   let length = cutting ? keptLength(cutting) : facts.duration
   const share = length / Math.max(facts.duration, 0.001)
+  // Text and a logo are drawn on the picture, which is then encoded.
+  const caption =
+    settings.captionTop.trim() || settings.captionBottom.trim()
+      ? {
+          top: settings.captionTop.trim(),
+          bottom: settings.captionBottom.trim(),
+          size: settings.captionSize,
+          colour: (settings.captionColour === "white"
+            ? [255, 255, 255]
+            : [0, 0, 0]) as [number, number, number],
+          outline: settings.captionOutline,
+          from: settings.captionFrom,
+          until: settings.captionUntil,
+        }
+      : null
   // Speed and fades change both picture and sound, so both are encoded.
   const changesTime = settings.speed !== 1
   const fades = settings.fadeIn > 0 || settings.fadeOut > 0
@@ -571,6 +649,8 @@ export function planFor(
         const reasons = [
           settings.quality !== "original" && "the quality was chosen",
           over && `it is to fit under ${sizeSaid(target!)}`,
+          caption && "text is written on it",
+          logo && "a logo is drawn on it",
           shown.crop &&
             (box && !isWholeBox(box)
               ? `it is cropped to ${shown.crop.width} × ${shown.crop.height}`
@@ -736,7 +816,7 @@ export function planFor(
         audio = { action: "encode", ...chosen, loudness: settings.loudness }
         soundBits = chosen.bitrate
         soundNotes.push(
-          `The sound is converted to ${soundLabel(chosen.codec)} at ${Math.round(chosen.bitrate / 1000)} kbit/s${squeezed ? ", to leave room for the picture" : soundCapped ? ", no more than the file holds" : ""}${settings.sound === "keep" && sound.codec && !PLAYS_EVERYWHERE[container].includes(sound.codec) ? `, as ${label} would not play ${soundLabel(sound.codec)} everywhere` : ""}.`
+          `The sound is converted to ${soundLabel(chosen.codec)} at ${Math.round(chosen.bitrate / 1000)} kbit/s${squeezed ? ", to leave room for the picture" : soundCapped ? ", no more than the file holds" : ""}${settings.sound === "keep" && !track && sound.codec && !PLAYS_EVERYWHERE[container].includes(sound.codec) ? `, as ${label} would not play ${soundLabel(sound.codec)} everywhere` : ""}.`
         )
         if (settings.loudness !== null)
           soundNotes.push(
@@ -948,6 +1028,18 @@ export function planFor(
     crop: why?.shown.crop ?? null,
     speed: settings.speed,
     fade: { in: settings.fadeIn, out: settings.fadeOut },
+    overlay:
+      (caption || logo) && facts.video
+        ? {
+            caption,
+            logo: logo && {
+              ...logo,
+              corner: settings.logoCorner,
+              size: settings.logoSize,
+              opacity: settings.logoOpacity,
+            },
+          }
+        : null,
     track: track
       ? {
           id: track.id,
@@ -1010,6 +1102,24 @@ export function settingsProblem(settings: VideoSettings): string | null {
     )
   )
     return `Choose a loudness from ${dbLabel(QUIETEST_TARGET)} to ${dbLabel(LOUDEST_TARGET)} LUFS.`
+  if (
+    settings.captionTop.length > LONGEST_CAPTION ||
+    settings.captionBottom.length > LONGEST_CAPTION
+  )
+    return `Keep each caption under ${LONGEST_CAPTION} letters.`
+  const { captionFrom: from, captionUntil: until } = settings
+  if (
+    (from !== null && !(from >= 0)) ||
+    (until !== null && !(until > 0)) ||
+    (from !== null && until !== null && from >= until)
+  )
+    return "Give the text's times in seconds, the start before the end."
+  if (!(
+    settings.logoSize >= SMALLEST_LOGO && settings.logoSize <= LARGEST_LOGO
+  ))
+    return `Choose a logo width from ${SMALLEST_LOGO}% to ${LARGEST_LOGO}%.`
+  if (!(settings.logoOpacity >= FAINTEST_LOGO && settings.logoOpacity <= 100))
+    return `Choose how solid the logo is, from ${FAINTEST_LOGO}% to 100%.`
   for (const fade of [settings.fadeIn, settings.fadeOut])
     if (!(fade >= 0 && fade <= LONGEST_FADE))
       return `Choose a fade of at most ${LONGEST_FADE} s.`

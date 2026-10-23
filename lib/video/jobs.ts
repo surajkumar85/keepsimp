@@ -10,6 +10,7 @@ import { planKey } from "./queue"
 import {
   planFor,
   type Cut,
+  type LogoFacts,
   type Plan,
   type SoundCodec,
   type VideoCodec,
@@ -37,7 +38,8 @@ export async function browserPlan(
   known = new Map<string, boolean>(),
   cut: Cut | null = null,
   box: Box | null = null,
-  track: (TrackFacts & Soundtrack) | null = null
+  track: (TrackFacts & Soundtrack) | null = null,
+  logo: LogoFacts | null = null
 ): Promise<Plan> {
   const sounds = new Map<SoundCodec, boolean>([["aac", true]])
   let plan = planFor(
@@ -47,7 +49,8 @@ export async function browserPlan(
     (codec) => sounds.get(codec) ?? null,
     cut,
     box,
-    track
+    track,
+    logo
   )
   for (let round = 0; round < MOST_ROUNDS; round++) {
     const waiting = plan.pending[0]
@@ -70,7 +73,8 @@ export async function browserPlan(
       (codec) => sounds.get(codec) ?? null,
       cut,
       box,
-      track
+      track,
+      logo
     )
   }
   return plan
@@ -87,7 +91,8 @@ export const convertJob = (
   facts: VideoFacts,
   plan: Plan,
   folder: string,
-  track: Blob | null = null
+  track: Blob | null = null,
+  logo: Blob | null = null
 ): Omit<ConvertJob, "id"> => ({
   job: "convert",
   file,
@@ -97,4 +102,5 @@ export const convertJob = (
   key: planKey(plan),
   folder,
   track,
+  logo,
 })

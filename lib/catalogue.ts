@@ -180,6 +180,22 @@ export const tools: readonly Tool[] = [
     status: "available",
   },
   {
+    id: "add-text-to-video",
+    name: "Add text to video",
+    description:
+      "Write a title or caption on a video, and put a logo in a corner, on every frame or for a while, on your device.",
+    partOf: "video-editor",
+    category: "video",
+    keywords: [
+      "add text to video",
+      "video caption",
+      "title on video",
+      "add logo to video",
+      "watermark video",
+    ],
+    status: "available",
+  },
+  {
     id: "audio-editor",
     name: "Audio editor",
     description:

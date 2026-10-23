@@ -40,6 +40,8 @@ export interface ConvertJob {
   folder: string
   /** The soundtrack's file, when the plan has one. */
   track?: Blob | null
+  /** The logo's picture, when the plan has one. */
+  logo?: Blob | null
 }
 
 export type VideoJob = ReadJob | ConvertJob

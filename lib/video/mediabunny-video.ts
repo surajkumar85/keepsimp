@@ -14,6 +14,7 @@ import {
   fadeGain,
   shapePicture,
   shapeSound,
+  type Layers,
   type SoundGain,
 } from "./effects"
 import {
@@ -193,6 +194,8 @@ const DISCARDED: Record<string, string> = {
 /** Speed and fades are made by the hooks. */
 const timed = (plan: Plan) =>
   plan.speed !== 1 || plan.fade.in > 0 || plan.fade.out > 0
+/** As are text and a logo on the picture. */
+const drawn = (plan: Plan) => timed(plan) || plan.overlay !== null
 
 /** Hooks one after the other: what one drops, the next never sees; the last may give a canvas. */
 function chained<T>(
@@ -221,7 +224,8 @@ const hooked = (plan: Plan) =>
 function videoOptions(
   engine: Engine,
   plan: Plan,
-  software: boolean
+  software: boolean,
+  layers: Layers | null
 ): Mediabunny.ConversionVideoOptions | undefined {
   const video = plan.video
   if (video.action === "none") return undefined
@@ -247,8 +251,8 @@ function videoOptions(
   return {
     ...(chained(
       steps,
-      timed(plan)
-        ? shapePicture(plan.speed, plan.fade, plan.length, canvasOf)
+      drawn(plan)
+        ? shapePicture(plan.speed, plan.fade, plan.length, canvasOf, layers)
         : null
     ) as Pick<Mediabunny.ConversionVideoOptions, "process">),
     ...(plan.crop
@@ -324,6 +328,7 @@ export async function convertVideo(
     onProgress,
     software = false,
     gain = null,
+    layers = null,
   }: {
     signal?: AbortSignal
     onProgress?: (fraction: number) => void
@@ -331,6 +336,8 @@ export async function convertVideo(
     software?: boolean
     /** The sound's gain and ceiling, worked out from measuring it. */
     gain?: SoundGain | null
+    /** Text and a logo drawn over the frames, made at the result's size. */
+    layers?: Layers | null
   } = {}
 ): Promise<{ limited: number }> {
   const input = opened(engine, file)
@@ -349,7 +356,7 @@ export async function convertVideo(
       // encoder's priming, say): every track is shifted together, so the
       // picture and the sound stay in step.
       copy: { shiftTolerance: 1, boundaryPolicy: "expand" },
-      video: videoOptions(engine, plan, software),
+      video: videoOptions(engine, plan, software, layers),
       ...(plan.cut
         ? {
             trim: {

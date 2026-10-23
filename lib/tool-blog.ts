@@ -252,7 +252,7 @@ export const overviewPost: BlogPost = {
       id: "video-editor",
       title: "Video editor: any video, in the format you need.",
       paragraphs: [
-        "Convert videos between MP4, WebM, MOV and MKV, many at once and of any length, with the picture copied as it is wherever nothing has to change. Trim it without encoding or to the frame, crop it to a shape, speed it up or slow it down, fade it in and out, put music under it, set its loudness, change the quality, the size or the frame rate, turn a video or leave its sound out; every result is opened again and checked before you download it.",
+        "Convert videos between MP4, WebM, MOV and MKV, many at once and of any length, with the picture copied as it is wherever nothing has to change. Trim it without encoding or to the frame, crop it to a shape, speed it up or slow it down, fade it in and out, put music under it, set its loudness, write text and put a logo on it, change the quality, the size or the frame rate, turn a video or leave its sound out; every result is opened again and checked before you download it.",
       ],
       links: [
         {
@@ -286,6 +286,10 @@ export const overviewPost: BlogPost = {
         {
           label: "Add music to a video",
           href: "/dashboard/add-music-to-video/",
+        },
+        {
+          label: "Add text or a logo to a video",
+          href: "/dashboard/add-text-to-video/",
         },
         {
           label: "Guide: convert video without uploading",

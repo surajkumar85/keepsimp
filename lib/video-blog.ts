@@ -674,4 +674,71 @@ export const videoPosts: readonly BlogPost[] = [
       sources.mediabunny,
     ],
   },
+  {
+    published: "2026-10-23",
+    slug: "add-text-or-a-logo-to-a-video",
+    title: "A title on the picture, a mark in the corner.",
+    searchTitle:
+      "How to add text or a logo to a video, free and without uploading",
+    description:
+      "Write a title or caption on a video and put a logo in a corner in your browser, for the whole video or a few seconds. Nothing is uploaded.",
+    keywords: [
+      "add text to video",
+      "add logo to video",
+      "watermark video",
+      "caption video",
+      "title on video",
+    ],
+    category: "A little know-how",
+    readingTime: "3 min read",
+    image: "/images/video-text-guide.svg",
+    imageAlt:
+      "A video frame with a title along its bottom in white with a dark outline, and a small logo in its top right corner",
+    tool: "add-text-to-video",
+    intro:
+      "A name under a speaker, a title over an opening shot, your logo in the corner of every clip: small marks that make a video yours. KeepSimp writes them on the picture in your browser, many videos at once.",
+    sections: [
+      {
+        id: "text",
+        title: "Text that reads on any picture.",
+        paragraphs: [
+          "Text goes along the top, the bottom or both, in the site's Outfit typeface, wrapped onto more lines when it is long and made smaller if a word will not fit. White letters get a dark outline and black ones a light one, so they read over bright skies and dark rooms alike. Show it for the whole video, or from and until a time of the result: a name for the first five seconds, say.",
+        ],
+        links: [
+          {
+            label: "Open Add text to video",
+            href: "/dashboard/add-text-to-video/",
+          },
+        ],
+      },
+      {
+        id: "logo",
+        title: "A logo in its place.",
+        paragraphs: [
+          "A logo sits in a corner or the middle, 10, 15, 20 or 30% of the picture's width in its own shape, solid or see-through. A PNG with a clear background looks best. It is on every frame, kept a little in from the edges.",
+          "A logo marks a video as yours; it does not stop anyone copying it or cutting it out.",
+        ],
+      },
+      {
+        id: "how",
+        title: "How to do it.",
+        paragraphs: [
+          "Open Add text to video, drop your videos, write the text and add a logo if you like. Each video is written with them, its picture encoded again by your browser at the quality you choose, and checked before you download it; the sound is copied as it is. Trims, crops, speed and fades all work with them: the times you give are times of the result.",
+        ],
+        links: [
+          {
+            label: "Guide: crop a video to 9:16 or square",
+            href: "/blog/crop-video-to-9-16-or-square/",
+          },
+        ],
+      },
+    ],
+    sources: [
+      {
+        title: "MDN: OffscreenCanvas, drawing in a worker",
+        url: "https://developer.mozilla.org/en-US/docs/Web/API/OffscreenCanvas",
+      },
+      sources.webcodecs,
+    ],
+  },
 ]

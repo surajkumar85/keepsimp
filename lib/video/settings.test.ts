@@ -1137,3 +1137,73 @@ describe("a soundtrack", () => {
     })
   })
 })
+
+describe("text and a logo", () => {
+  const logo = { id: "logo-1", name: "logo.png", width: 200, height: 100 }
+  it("are drawn on the picture, which is encoded", () => {
+    const plan = planFor(
+      clip,
+      set({
+        captionTop: "  Hello ",
+        captionColour: "black",
+        captionFrom: 1,
+        logoCorner: "top-left",
+        logoSize: 20,
+        logoOpacity: 50,
+      }),
+      all,
+      undefined,
+      null,
+      null,
+      null,
+      logo
+    )
+    expect(plan.overlay).toEqual({
+      caption: {
+        top: "Hello",
+        bottom: "",
+        size: "medium",
+        colour: [0, 0, 0],
+        outline: true,
+        from: 1,
+        until: null,
+      },
+      logo: { ...logo, corner: "top-left", size: 20, opacity: 50 },
+    })
+    expect(plan.notes[0]).toMatch(
+      /because text is written on it and a logo is drawn on it\./
+    )
+    expect(plan.audio).toEqual({ action: "copy" })
+    // White text alone; nothing to write is no overlay.
+    expect(
+      planFor(clip, set({ captionBottom: "Bye" }), all).overlay?.caption?.colour
+    ).toEqual([255, 255, 255])
+    expect(planFor(clip, set({ captionTop: "   " }), all).overlay).toBeNull()
+    // A file with no picture has nothing to draw on.
+    expect(
+      planFor({ ...clip, video: null }, set({ captionTop: "Hi" }), all).overlay
+    ).toBeNull()
+  })
+
+  it("refuses text too long, times backwards and a logo out of range", () => {
+    expect(settingsProblem(set({ captionTop: "x".repeat(201) }))).toBe(
+      "Keep each caption under 200 letters."
+    )
+    for (const times of [
+      { captionFrom: 3, captionUntil: 2 },
+      { captionFrom: -1 },
+      { captionUntil: 0 },
+      { captionFrom: Number.NaN },
+    ])
+      expect(settingsProblem(set(times))).toBe(
+        "Give the text's times in seconds, the start before the end."
+      )
+    expect(settingsProblem(set({ logoSize: 60 }))).toBe(
+      "Choose a logo width from 5% to 50%."
+    )
+    expect(settingsProblem(set({ logoOpacity: 5 }))).toBe(
+      "Choose how solid the logo is, from 10% to 100%."
+    )
+    expect(settingsProblem(set({ captionFrom: 1, captionUntil: 4 }))).toBeNull()
+  })
+})

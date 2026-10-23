@@ -37,7 +37,9 @@ export function shapePicture(
   canvasOf: (
     width: number,
     height: number
-  ) => OffscreenCanvas | HTMLCanvasElement
+  ) => OffscreenCanvas | HTMLCanvasElement,
+  /** Layers drawn over every frame: a logo always, text while it shows (seconds of the result). */
+  layers: Layers | null = null
 ) {
   let canvas: OffscreenCanvas | HTMLCanvasElement | null = null
   return (sample: Mediabunny.VideoSample) => {
@@ -46,8 +48,16 @@ export function shapePicture(
       sample.setDuration(sped(sample.duration, speed))
     }
     // Faded by the middle of the frame, so the first and last are not left whole.
-    const gain = fadeGain(sample.timestamp + sample.duration / 2, length, fade)
-    if (gain >= 1) return sample
+    const middle = sample.timestamp + sample.duration / 2
+    const gain = fadeGain(middle, length, fade)
+    const text =
+      layers?.caption &&
+      middle >= (layers.caption.from ?? 0) &&
+      middle < (layers.caption.until ?? Infinity)
+        ? layers.caption.layer
+        : null
+    const logo = layers?.logo ?? null
+    if (gain >= 1 && !text && !logo) return sample
     const width = sample.displayWidth
     const height = sample.displayHeight
     if (!canvas || canvas.width !== width || canvas.height !== height)
@@ -55,8 +65,12 @@ export function shapePicture(
     const context = canvas.getContext("2d") as
       OffscreenCanvasRenderingContext2D | CanvasRenderingContext2D
     sample.draw(context, 0, 0, width, height)
-    context.fillStyle = `rgba(0, 0, 0, ${Number((1 - gain).toFixed(3))})`
-    context.fillRect(0, 0, width, height)
+    if (logo) context.drawImage(logo, 0, 0, width, height)
+    if (text) context.drawImage(text, 0, 0, width, height)
+    if (gain < 1) {
+      context.fillStyle = `rgba(0, 0, 0, ${Number((1 - gain).toFixed(3))})`
+      context.fillRect(0, 0, width, height)
+    }
     // Mediabunny takes the frame's own time for a canvas.
     return canvas
   }
@@ -116,6 +130,16 @@ function planesOf(sample: Mediabunny.AudioSample) {
     sample.copyTo(values, { planeIndex: plane, format: "f32-planar" })
     return values
   })
+}
+
+/** Pictures the size of a frame, drawn over it: a logo, and text with the seconds it shows. */
+export interface Layers {
+  logo: CanvasImageSource | null
+  caption: {
+    layer: CanvasImageSource
+    from: number | null
+    until: number | null
+  } | null
 }
 
 /** A gain for the sound, and the ceiling its true peaks are held under (a level), or none. */

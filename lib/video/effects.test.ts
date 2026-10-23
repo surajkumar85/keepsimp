@@ -257,3 +257,48 @@ describe("cropping the picture", () => {
     expect(canvases).toHaveLength(2)
   })
 })
+
+describe("text and a logo on the picture", () => {
+  it("draw the logo on every frame and the text only while it shows", () => {
+    const { made, canvasOf } = canvases()
+    const drawnImages: unknown[] = []
+    const canvasWithImages = (width: number, height: number) => {
+      const canvas = canvasOf(width, height) as unknown as {
+        getContext: () => Record<string, unknown>
+      }
+      const context = canvas.getContext()
+      canvas.getContext = () => ({
+        ...context,
+        drawImage: (image: unknown) => drawnImages.push(image),
+      })
+      return canvas as unknown as OffscreenCanvas
+    }
+    const logo = { name: "logo" } as unknown as CanvasImageSource
+    const text = { name: "text" } as unknown as CanvasImageSource
+    const hook = shapePicture(1, { in: 0, out: 0 }, 10, canvasWithImages, {
+      logo,
+      caption: { layer: text, from: 2, until: 4 },
+    })
+    hook(drawn(1).sample as never)
+    expect(drawnImages).toEqual([logo])
+    hook(drawn(3).sample as never)
+    expect(drawnImages).toEqual([logo, logo, text])
+    expect(made).toHaveLength(1)
+    // With only text, a frame outside its times is the frame itself.
+    const textOnly = shapePicture(1, { in: 0, out: 0 }, 10, canvasWithImages, {
+      logo: null,
+      caption: { layer: text, from: null, until: 1 },
+    })
+    const late = drawn(5)
+    expect(textOnly(late.sample as never)).toBe(late.sample)
+    textOnly(drawn(0.5).sample as never)
+    expect(drawnImages.at(-1)).toBe(text)
+    // From a time to the end.
+    const toEnd = shapePicture(1, { in: 0, out: 0 }, 10, canvasWithImages, {
+      logo: null,
+      caption: { layer: text, from: 2, until: null },
+    })
+    const end = drawn(9)
+    expect(toEnd(end.sample as never)).not.toBe(end.sample)
+  })
+})

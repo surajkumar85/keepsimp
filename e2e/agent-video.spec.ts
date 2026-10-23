@@ -8,6 +8,8 @@ import {
   packets,
   probe,
   reportWorkerErrors,
+  frameAt,
+  plainPicture,
   soundOf,
   toneFile,
   toneLevel,
@@ -185,4 +187,30 @@ test("puts a soundtrack under a video, for an agent", async ({ page }) => {
   expect(packets(out.bytes, "agent-soundtrack.mp4", "v")).toEqual(
     packets(clip, "agent-soundtrack-in.mp4", "v")
   )
+})
+
+test("writes text and draws a logo on a video, for an agent", async ({
+  page,
+}) => {
+  test.setTimeout(120_000)
+  await ready(page)
+  const file = await hand(page, "clip.mp4", clip, "video/mp4")
+  const red = plainPicture("agent-logo.png", "red", "60x60")
+  const logo = await hand(page, red.name, red.buffer, "image/png")
+  const done = await ran(page, "convert_video", {
+    file,
+    captionTop: "Hello",
+    logo,
+    logoCorner: "bottom-left",
+    logoSize: 20,
+  })
+  expect(done.summary).toMatch(
+    /text is written on it and a logo is drawn on it/
+  )
+  const out = await saved(page, done.files![0].id)
+  // 320 × 180: the logo 64 px wide, 7 px in from the bottom left.
+  const frame = frameAt(out.bytes, "agent-overlay.mp4", 1)
+  const [r, g, b] = frame.at(39, 140)
+  expect(r).toBeGreaterThan(180)
+  expect(g + b).toBeLessThan(140)
 })

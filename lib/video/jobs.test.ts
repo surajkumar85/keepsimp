@@ -145,6 +145,7 @@ describe("jobs", () => {
       key: planKey(plan),
       folder: "page",
       track: null,
+      logo: null,
     })
   })
 })

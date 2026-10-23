@@ -18,7 +18,9 @@ import type {
 } from "./protocol"
 import { removeScratch, scratchFile } from "./scratch"
 import type { Plan } from "./settings"
-import type { SoundGain } from "./effects"
+import type { Layers, SoundGain } from "./effects"
+import { captionLayout, overlayRect } from "@/lib/animation/effects"
+import { renderCaption } from "@/lib/animation/caption"
 import { gainFor, SAFE_CEILING } from "@/lib/audio/level"
 import type { Looks } from "./looks"
 import { MOST_PASSES, nextPass, passStands, willMiss } from "./target"
@@ -120,6 +122,7 @@ async function writePass(
           })
         )
       : null
+    const layers = await layersFor(plan, job.logo ?? null)
     const made = await (picture
       ? (async () => {
           try {
@@ -141,6 +144,7 @@ async function writePass(
           signal: own.signal,
           software,
           gain,
+          layers,
           onProgress: (fraction) => {
             if (
               pass.limit !== null &&
@@ -184,6 +188,63 @@ async function writePass(
   }
 }
 
+/**
+ * Text and a logo as pictures the size of the result, drawn over its
+ * frames: the text by the animation converter's own captions (the site's
+ * Outfit, wrapped and outlined), the logo where its corner puts it, as wide
+ * and as solid as asked.
+ */
+async function layersFor(
+  plan: Plan,
+  logo: Blob | null
+): Promise<Layers | null> {
+  const overlay = plan.overlay
+  if (!overlay || plan.video.action !== "encode") return null
+  const { width, height } = plan.video
+  let caption: Layers["caption"] = null
+  const layout =
+    overlay.caption &&
+    captionLayout({ width, height }, { ...overlay.caption, uppercase: false })
+  if (overlay.caption && layout) {
+    const pixels = await renderCaption(layout)
+    const canvas = new OffscreenCanvas(width, height)
+    canvas
+      .getContext("2d")!
+      .putImageData(
+        new ImageData(
+          pixels.data as ImageDataArray,
+          pixels.width,
+          pixels.height
+        ),
+        0,
+        0
+      )
+    caption = {
+      layer: canvas,
+      from: overlay.caption.from,
+      until: overlay.caption.until,
+    }
+  }
+  let logoLayer: OffscreenCanvas | null = null
+  if (overlay.logo && logo) {
+    const bitmap = await createImageBitmap(logo).catch(() => null)
+    if (!bitmap)
+      throw new VideoProblem("The logo could not be read as a picture.")
+    const place = overlayRect(
+      { width, height },
+      { width: bitmap.width, height: bitmap.height },
+      overlay.logo.corner,
+      overlay.logo.size
+    )
+    logoLayer = new OffscreenCanvas(width, height)
+    const context = logoLayer.getContext("2d")!
+    context.globalAlpha = overlay.logo.opacity / 100
+    context.drawImage(bitmap, place.x, place.y, place.width, place.height)
+    bitmap.close()
+  }
+  return { logo: logoLayer, caption }
+}
+
 /** The picture alone, written by the plan with no sound, into a file of its own to put together with a soundtrack. */
 async function pictureFirst(
   job: ConvertJob,
@@ -194,6 +255,7 @@ async function pictureFirst(
 ) {
   const mediabunny = await engine()
   const { convertVideo } = await engineFiles()
+  const layers = await layersFor(plan, job.logo ?? null)
   const name = `${job.id}-${++written}-picture.${outputInfo[plan.container].extension}`
   const scratch = await scratchFile(job.folder, name)
   const memory = scratch ? null : new mediabunny.BufferTarget()
@@ -209,7 +271,7 @@ async function pictureFirst(
       job.file,
       { ...plan, audio: { action: "drop" }, track: null },
       target,
-      { signal, software, onProgress }
+      { signal, software, onProgress, layers }
     )
   } catch (error) {
     await remove()
@@ -440,6 +502,7 @@ async function writeJob(
       !plan.rotate &&
       !plan.flip &&
       !plan.crop &&
+      !plan.overlay &&
       !plan.fade.in &&
       !plan.fade.out
     )

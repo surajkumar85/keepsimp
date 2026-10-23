@@ -28,7 +28,11 @@ import { levelSaid } from "@/lib/video/check"
 import { LOUDEST_TARGET, QUIETEST_TARGET } from "@/lib/audio/level"
 import {
   defaultSettings,
+  FAINTEST_LOGO,
   FASTEST_SPEED,
+  LARGEST_LOGO,
+  LONGEST_CAPTION,
+  SMALLEST_LOGO,
   FRAME_RATES,
   LONGEST_FADE,
   SHAPES,
@@ -63,6 +67,8 @@ export interface VideoEngines {
   frame: (file: Blob, seconds: number) => Promise<Blob>
   /** What a soundtrack's file holds, read as the workspace reads it (`readTrack`). */
   track: (file: Blob, name: string) => Promise<Omit<TrackFacts, "id">>
+  /** A logo's size, read as the workspace reads it (`createImageBitmap`). */
+  picture: (file: Blob) => Promise<{ width: number; height: number }>
 }
 
 /** A crop box in pixels of the picture as shown, before any turn. */
@@ -74,6 +80,8 @@ interface Crop {
 }
 
 interface SoundtrackAsked {
+  /** A picture drawn on every frame. */
+  logo?: string
   /** The file whose sound goes under the video. */
   soundtrack?: string
   soundtrackMode?: TrackMode
@@ -100,6 +108,16 @@ type Settings = { crop?: Crop } & SoundtrackAsked &
       | "fadeIn"
       | "fadeOut"
       | "loudness"
+      | "captionTop"
+      | "captionBottom"
+      | "captionSize"
+      | "captionColour"
+      | "captionOutline"
+      | "captionFrom"
+      | "captionUntil"
+      | "logoCorner"
+      | "logoSize"
+      | "logoOpacity"
     >
   >
 
@@ -185,6 +203,56 @@ const settingsSchema = {
     additionalProperties: false,
     description:
       "A crop of one's own, in pixels of the picture as shown (as video_info gives its size), before any turn; it takes the place of shape. The picture is encoded again.",
+  },
+  captionTop: {
+    type: "string",
+    maxLength: LONGEST_CAPTION,
+    description:
+      "Text written along the top of the picture (the site's Outfit, outlined, wrapped to fit).",
+  },
+  captionBottom: {
+    type: "string",
+    maxLength: LONGEST_CAPTION,
+    description: "Text written along the bottom of the picture.",
+  },
+  captionSize: { type: "string", enum: ["small", "medium", "large"] },
+  captionColour: { type: "string", enum: ["white", "black"] },
+  captionOutline: {
+    type: "boolean",
+    description:
+      "A line of the other colour around the letters (yes by default).",
+  },
+  captionFrom: {
+    type: "number",
+    minimum: 0,
+    description:
+      "Seconds of the result the text shows from (the start when left out).",
+  },
+  captionUntil: {
+    type: "number",
+    exclusiveMinimum: 0,
+    description:
+      "Seconds of the result the text shows until (the end when left out).",
+  },
+  logo: fileProperty(
+    "A picture (PNG, JPEG, WebP, GIF or AVIF) drawn on every frame, at logoCorner, logoSize and logoOpacity."
+  ),
+  logoCorner: {
+    type: "string",
+    enum: ["top-left", "top-right", "bottom-left", "bottom-right", "centre"],
+  },
+  logoSize: {
+    type: "number",
+    minimum: SMALLEST_LOGO,
+    maximum: LARGEST_LOGO,
+    description:
+      "The logo's width, as a percent of the picture's (15 by default).",
+  },
+  logoOpacity: {
+    type: "number",
+    minimum: FAINTEST_LOGO,
+    maximum: 100,
+    description: "How solid the logo is, in percent (100 by default).",
   },
   soundtrack: fileProperty(
     "A sound file (or a video) whose sound goes under the video: in place of its own sound, or mixed under it (soundtrackMode)."
@@ -343,6 +411,7 @@ export function videoTools(engines: VideoEngines): AgentTool[] {
     const track = music.soundtrack
       ? await soundtrackOf(context.files, music)
       : null
+    const logo = music.logo ? await logoOf(context.files, music.logo) : null
     const plan = await browserPlan(
       opened.facts,
       settings,
@@ -350,7 +419,8 @@ export function videoTools(engines: VideoEngines): AgentTool[] {
       undefined,
       cutFor(opened.facts),
       crop ? boxOf(crop, opened.facts, opened.ref.name) : null,
-      track && track.facts
+      track && track.facts,
+      logo && logo.facts
     )
     if (plan.problem) throw new ToolError(plan.problem)
     const done = (await engines.pool.run(
@@ -360,7 +430,8 @@ export function videoTools(engines: VideoEngines): AgentTool[] {
         opened.facts,
         plan,
         engines.folder,
-        track?.blob ?? null
+        track?.blob ?? null,
+        logo?.blob ?? null
       ),
       {
         signal: context.signal,
@@ -436,6 +507,15 @@ export function videoTools(engines: VideoEngines): AgentTool[] {
     }
   }
 
+  /** A logo asked for: its picture's size, read as the workspace reads one. */
+  async function logoOf(files: FileStore, id: string) {
+    const { blob, ref } = files.get(id)
+    const size = await engines.picture(blob).catch(() => {
+      throw new ToolError(`${ref.name} could not be read as a picture.`)
+    })
+    return { blob, facts: { id: ref.id, name: ref.name, ...size } }
+  }
+
   /** The settings asked for, laid over the workspace's. */
   function settingsOf(asked: Settings): VideoSettings {
     if (asked.quality === "custom" && asked.bitrate === undefined)
@@ -446,9 +526,10 @@ export function videoTools(engines: VideoEngines): AgentTool[] {
       soundtrackMode: _mode,
       soundtrackVolume: _volume,
       soundtrackLoop: _loop,
+      logo: _logo,
       ...settings
     } = asked
-    void [_crop, _soundtrack, _mode, _volume, _loop]
+    void [_crop, _soundtrack, _mode, _volume, _loop, _logo]
     return { ...defaultSettings, ...settings }
   }
 

@@ -137,6 +137,10 @@ function setup({
       ask: { video: async () => canWrite, sound: async () => true },
       folder: "agent-test",
       frame: async () => frame,
+      picture: async (file: Blob) => {
+        if (file.size < 4) throw new Error("Not a picture.")
+        return { width: 64, height: 32 }
+      },
       track: async (_file: Blob, name: string) => {
         if (name.endsWith(".txt")) throw new Error(`${name} has no sound.`)
         if (name.endsWith(".bin")) throw "not an error"
@@ -638,5 +642,40 @@ describe("a soundtrack for an agent", () => {
         soundtrack: odd.id,
       })
     ).rejects.toThrow("odd.bin could not be read.")
+  })
+})
+
+describe("text and a logo for an agent", () => {
+  it("are planned with the logo's size and handed to the worker with its picture", async () => {
+    const { call, add, jobs, agent } = setup()
+    const logo = agent.files.add(new Blob([new Uint8Array(16)]), "logo.png")
+    const result = await call("convert_video", {
+      file: add(MP4, "clip.mp4").id,
+      captionBottom: "Hello",
+      captionFrom: 1,
+      logo: logo.id,
+      logoCorner: "top-right",
+      logoSize: 20,
+    })
+    const job = jobs().find((one) => one.job === "convert")!
+    expect(job.job === "convert" && job.plan.overlay).toMatchObject({
+      caption: { bottom: "Hello", from: 1 },
+      logo: {
+        id: logo.id,
+        name: "logo.png",
+        width: 64,
+        height: 32,
+        corner: "top-right",
+        size: 20,
+      },
+    })
+    expect(job.job === "convert" && job.logo).toBeInstanceOf(Blob)
+    expect(result.summary).toMatch(
+      /text is written on it and a logo is drawn on it/
+    )
+    const broken = agent.files.add(new Blob(["x"]), "broken.png")
+    await expect(
+      call("convert_video", { file: add(MP4, "clip.mp4").id, logo: broken.id })
+    ).rejects.toThrow("broken.png could not be read as a picture.")
   })
 })

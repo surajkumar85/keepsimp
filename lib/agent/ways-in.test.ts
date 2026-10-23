@@ -74,6 +74,7 @@ const engines = {
     track: async () => {
       throw new Error("No soundtrack here.")
     },
+    picture: async () => ({ width: 1, height: 1 }),
   },
 }
 

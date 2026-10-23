@@ -68,6 +68,7 @@ import { browserAsker } from "@/lib/video/probe"
 import { SettingsPanel } from "./settings-panel"
 import { TrimPanel } from "./trim-panel"
 import { SoundtrackPanel, type ChosenTrack } from "./soundtrack-panel"
+import { OverlayPanel, type ChosenLogo } from "./overlay-panel"
 import { defaultSoundtrack } from "@/lib/video/soundtrack"
 import { CropControls, CropOverlay, startingBox } from "./crop-box"
 import { isWholeBox, WHOLE, type Box } from "@/lib/video/frame"
@@ -82,6 +83,7 @@ export type VideoMode =
   | "speed"
   | "mute"
   | "music"
+  | "text"
 
 const INPUT_ID = "video-file"
 /** Settings are taken up this long after the last change, so a run of choices starts one job. */
@@ -128,6 +130,14 @@ const COPY: Record<VideoMode, DropZoneCopy> = {
     action: "Choose videos",
     limits: `Stays on your device · up to ${MAX_FILES} videos at once · any length`,
   },
+  text: {
+    heading: "Drop videos to add text to",
+    dropping: "Drop to add text to these videos",
+    body: "Then write a title or caption along the top or bottom, and add a logo in a corner if you like.",
+    inputLabel: "Choose video files to add text to",
+    action: "Choose videos",
+    limits: `Stays on your device · up to ${MAX_FILES} videos at once · any length`,
+  },
   music: {
     heading: "Drop videos to add music to",
     dropping: "Drop to add music to these videos",
@@ -163,6 +173,7 @@ const SAMPLES: Record<VideoMode, string> = {
   speed: "keepsimp-scene.mp4",
   mute: "keepsimp-clip.mp4",
   music: "keepsimp-scene.mp4",
+  text: "keepsimp-scene.mp4",
 }
 
 /** What each door starts with. */
@@ -175,6 +186,7 @@ const FIRST: Record<VideoMode, Partial<VideoSettings>> = {
   speed: { format: "same", speed: 2 },
   mute: { format: "same", sound: "none" },
   music: { format: "same" },
+  text: { format: "same" },
 }
 
 const OPENED_FOR: Record<VideoMode, string> = {
@@ -186,6 +198,7 @@ const OPENED_FOR: Record<VideoMode, string> = {
   speed: "changing speed",
   mute: "muting",
   music: "adding music",
+  text: "adding text",
 }
 
 /** The doors that show the trimmer at once; the others have it one press away. */
@@ -198,6 +211,7 @@ const TRIMS: Record<VideoMode, boolean> = {
   speed: false,
   mute: false,
   music: false,
+  text: false,
 }
 
 let counter = 0
@@ -230,6 +244,9 @@ export function VideoWorkspace({ mode }: { mode: VideoMode }) {
   const [soundtrack, setSoundtrack] = useState<ChosenTrack | null>(null)
   const [trackReading, setTrackReading] = useState(false)
   const [trackProblem, setTrackProblem] = useState<string | null>(null)
+  const [logo, setLogo] = useState<ChosenLogo | null>(null)
+  const [logoReading, setLogoReading] = useState(false)
+  const [logoProblem, setLogoProblem] = useState<string | null>(null)
 
   // Settings settle before they are taken up.
   useEffect(() => {
@@ -266,12 +283,13 @@ export function VideoWorkspace({ mode }: { mode: VideoMode }) {
                   mode: soundtrack.mode,
                   volume: soundtrack.volume,
                   loop: soundtrack.loop,
-                }
+                },
+                logo?.facts ?? null
               )
             : null,
         ])
       ),
-    [items, applied, canEncode, canEncodeSound, soundtrack]
+    [items, applied, canEncode, canEncodeSound, soundtrack, logo]
   )
   const planOf = useCallback(
     (item: VideoItem) => plans.get(item.id) ?? null,
@@ -302,13 +320,14 @@ export function VideoWorkspace({ mode }: { mode: VideoMode }) {
   }, [plans])
 
   // The newest state, for the pool's callbacks, which outlive renders.
-  const live = useRef({ items, plans, selectedId, soundtrack })
+  const live = useRef({ items, plans, selectedId, soundtrack, logo })
   useEffect(() => {
     live.current = {
       items: live.current.items,
       plans,
       selectedId,
       soundtrack,
+      logo,
     }
   })
 
@@ -423,7 +442,8 @@ export function VideoWorkspace({ mode }: { mode: VideoMode }) {
                 item.facts!,
                 plan!,
                 folder,
-                plan!.track ? (live.current.soundtrack?.file ?? null) : null
+                plan!.track ? (live.current.soundtrack?.file ?? null) : null,
+                plan!.overlay?.logo ? (live.current.logo?.file ?? null) : null
               ),
               id: item.id,
             }
@@ -460,7 +480,7 @@ export function VideoWorkspace({ mode }: { mode: VideoMode }) {
       return
     }
     pool.current?.supersede()
-  }, [soundtrack])
+  }, [soundtrack, logo])
   useEffect(() => {
     pool.current?.kick()
   }, [items, plans, selectedId])
@@ -620,6 +640,8 @@ export function VideoWorkspace({ mode }: { mode: VideoMode }) {
   }, [finished, names])
 
   const problem = settingsProblem(settings)
+  const update = (change: Partial<VideoSettings>) =>
+    setSettings((current) => ({ ...current, ...change }))
 
   // A soundtrack is read on the page, as it is chosen.
   const tracks = useRef(0)
@@ -647,7 +669,40 @@ export function VideoWorkspace({ mode }: { mode: VideoMode }) {
       setTrackReading(false)
     }
   }, [])
-  const soundtrackPanel = (
+  const logos = useRef(0)
+  const chooseLogo = useCallback(async (file: File) => {
+    setLogoReading(true)
+    setLogoProblem(null)
+    try {
+      const bitmap = await createImageBitmap(file)
+      setLogo({
+        file,
+        facts: {
+          id: `logo-${++logos.current}`,
+          name: file.name,
+          width: bitmap.width,
+          height: bitmap.height,
+        },
+      })
+      bitmap.close()
+    } catch {
+      setLogoProblem(`${file.name} could not be read as a picture.`)
+    } finally {
+      setLogoReading(false)
+    }
+  }, [])
+  const overlayPanel = (
+    <OverlayPanel
+      settings={settings}
+      update={update}
+      logo={logo}
+      reading={logoReading}
+      problem={logoProblem}
+      onLogo={(file) => void chooseLogo(file)}
+      onRemoveLogo={() => setLogo(null)}
+    />
+  )
+  const soundtrackOnly = (
     <SoundtrackPanel
       track={soundtrack}
       reading={trackReading}
@@ -659,9 +714,19 @@ export function VideoWorkspace({ mode }: { mode: VideoMode }) {
       onRemove={() => setSoundtrack(null)}
     />
   )
+  const soundtrackPanel =
+    mode === "music" ? (
+      <>
+        {soundtrackOnly}
+        {overlayPanel}
+      </>
+    ) : (
+      <>
+        {overlayPanel}
+        {soundtrackOnly}
+      </>
+    )
   const selected = items.find((item) => item.id === selectedId) ?? null
-  const update = (change: Partial<VideoSettings>) =>
-    setSettings((current) => ({ ...current, ...change }))
 
   if (!items.length)
     return (
@@ -701,7 +766,7 @@ export function VideoWorkspace({ mode }: { mode: VideoMode }) {
               update={update}
               problem={problem}
               limitFirst={mode === "compressor"}
-              childrenFirst={mode === "music"}
+              childrenFirst={mode === "music" || mode === "text"}
             >
               {soundtrackPanel}
             </SettingsPanel>
@@ -834,7 +899,7 @@ export function VideoWorkspace({ mode }: { mode: VideoMode }) {
             update={update}
             problem={problem}
             limitFirst={mode === "compressor"}
-            childrenFirst={mode === "music"}
+            childrenFirst={mode === "music" || mode === "text"}
           >
             {soundtrackPanel}
           </SettingsPanel>

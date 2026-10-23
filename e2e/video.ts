@@ -473,6 +473,110 @@ export function toneFile(
   return { name, mimeType: "audio/mp4", buffer: readFileSync(path) }
 }
 
+/** One frame's pixels at a moment, as FFmpeg decodes it: RGB, a row at a time. */
+export function frameAt(
+  bytes: Uint8Array,
+  name: string,
+  seconds: number
+): { width: number; height: number; at: (x: number, y: number) => number[] } {
+  const path = join(folder, name)
+  writeFileSync(path, bytes)
+  const [width, height] = execFileSync("ffprobe", [
+    "-v",
+    "error",
+    "-select_streams",
+    "v:0",
+    "-show_entries",
+    "stream=width,height",
+    "-of",
+    "csv=p=0",
+    path,
+  ])
+    .toString()
+    .trim()
+    .split(",")
+    .map(Number)
+  const raw = execFileSync(
+    "ffmpeg",
+    [
+      "-v",
+      "error",
+      "-ss",
+      String(seconds),
+      "-i",
+      path,
+      "-frames:v",
+      "1",
+      "-f",
+      "rawvideo",
+      "-pix_fmt",
+      "rgb24",
+      "-",
+    ],
+    { maxBuffer: 1 << 28 }
+  )
+  return {
+    width,
+    height,
+    at: (x, y) => {
+      const index = (y * width + x) * 3
+      return [raw[index], raw[index + 1], raw[index + 2]]
+    },
+  }
+}
+
+/** A clip of one colour, with a tone, as FFmpeg makes it. */
+export function plainClip(
+  name: string,
+  colour: string,
+  seconds: number
+): Upload {
+  const path = join(folder, name)
+  execFileSync("ffmpeg", [
+    "-v",
+    "error",
+    "-y",
+    "-f",
+    "lavfi",
+    "-i",
+    `color=c=${colour}:size=640x360:rate=30:duration=${seconds}`,
+    "-f",
+    "lavfi",
+    "-i",
+    `sine=frequency=440:duration=${seconds}`,
+    "-c:v",
+    "libx264",
+    "-pix_fmt",
+    "yuv420p",
+    "-c:a",
+    "aac",
+    path,
+  ])
+  return { name, mimeType: "video/mp4", buffer: readFileSync(path) }
+}
+
+/** A picture of one colour, as a PNG file. */
+export function plainPicture(
+  name: string,
+  colour: string,
+  size: string
+): Upload {
+  const path = join(folder, name)
+  execFileSync("ffmpeg", [
+    "-v",
+    "error",
+    "-y",
+    "-f",
+    "lavfi",
+    "-i",
+    `color=c=${colour}:size=${size}`,
+    "-frames:v",
+    "1",
+    path,
+  ])
+  return { name, mimeType: "image/png", buffer: readFileSync(path) }
+}
+
 /** Print what a worker reports as an error, so a failed run says why. */
 export function reportWorkerErrors() {
   test.beforeEach(({ page }) => {
