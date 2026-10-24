@@ -22,10 +22,10 @@ test("landing CTA opens the working dashboard", async ({ page }) => {
     .first()
     .click()
   await expect(page).toHaveURL(/\/dashboard\/$/)
-  await expect(page.getByTestId("tool-card")).toHaveCount(12)
+  await expect(page.getByTestId("tool-card")).toHaveCount(13)
   await expect(
     page.getByTestId("tools-ready").getByTestId("tool-card")
-  ).toHaveCount(12)
+  ).toHaveCount(13)
   await expect(page.getByTestId("tools-planned")).toHaveCount(0)
   await page.getByRole("link", { name: "JSON formatter", exact: true }).click()
   await expect(page.getByLabel("Your JSON", { exact: true })).toBeVisible()
@@ -320,7 +320,7 @@ test("can be installed to the home screen", async ({ page, request }) => {
   }
 
   // The app opens on the tools, and each shortcut leads to a working one.
-  expect(manifest.shortcuts).toHaveLength(12)
+  expect(manifest.shortcuts).toHaveLength(13)
   for (const url of [
     manifest.start_url,
     ...manifest.shortcuts.map((shortcut: { url: string }) => shortcut.url),

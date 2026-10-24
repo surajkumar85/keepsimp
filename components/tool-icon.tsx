@@ -11,6 +11,7 @@ import {
   IconArrowsMinimize,
   IconArrowsSplit2,
   IconBraces,
+  IconMarkdown,
   IconPalette,
   IconCut,
   IconDimensions,
@@ -99,6 +100,7 @@ const icons: Record<string, typeof IconBraces> = {
   "ocr-pdf": IconTextRecognition,
   "verify-pdf-signature": IconRosetteDiscountCheck,
   "json-formatter": IconBraces,
+  "markdown-editor": IconMarkdown,
   "color-utility": IconPalette,
 }
 

@@ -108,7 +108,8 @@ export function ToolSearch() {
 
   useEffect(() => {
     const onKey = (event: globalThis.KeyboardEvent) => {
-      if (!isSearchShortcut(event, apple)) return
+      // A field that uses the key itself (the Markdown editor's link) keeps it.
+      if (event.defaultPrevented || !isSearchShortcut(event, apple)) return
       event.preventDefault()
       setOpen((before) => !before)
       setQuery("")

@@ -6,7 +6,7 @@ test("tools are grouped, coloured by kind, and follow validated category URLs", 
   page,
 }) => {
   await page.goto("/dashboard/")
-  await expect(page.getByTestId("tool-card")).toHaveCount(12)
+  await expect(page.getByTestId("tool-card")).toHaveCount(13)
   // What works comes first; what is still to come is kept apart and quiet
   // (nothing is, now that every tool is built).
   const ready = page.getByTestId("tools-ready")
@@ -14,9 +14,9 @@ test("tools are grouped, coloured by kind, and follow validated category URLs", 
   await expect(ready.getByRole("heading", { level: 3 }).first()).toContainText(
     "Ready to use"
   )
-  await expect(ready.getByTestId("tool-card")).toHaveCount(12)
+  await expect(ready.getByTestId("tool-card")).toHaveCount(13)
   await expect(planned).toHaveCount(0)
-  await expect(ready.getByRole("link")).toHaveCount(12)
+  await expect(ready.getByRole("link")).toHaveCount(13)
   // Each kind of tool has its own colour, taken from the tokens.
   const colourOf = (name: string) =>
     ready
@@ -47,7 +47,7 @@ test("tools are grouped, coloured by kind, and follow validated category URLs", 
     page.getByTestId("tools-ready").getByTestId("tool-card")
   ).toHaveText([/Video editor/])
   await page.goto("/dashboard/?category=invalid")
-  await expect(page.getByTestId("tool-card")).toHaveCount(12)
+  await expect(page.getByTestId("tool-card")).toHaveCount(13)
 })
 
 test("the search in the top bar finds tools and opens them", async ({
@@ -61,7 +61,7 @@ test("the search in the top bar finds tools and opens them", async ({
   await expect(box).toBeFocused()
   const options = dialog.getByRole("option")
   // With nothing typed, every tool is offered, working tools first.
-  await expect(options).toHaveCount(47)
+  await expect(options).toHaveCount(48)
   await expect(options.first()).toContainText("Video editor")
   await expect(options.first()).toHaveAttribute("aria-selected", "true")
   // Both converters write WebP; only one of them makes boomerangs.
@@ -80,8 +80,8 @@ test("the search in the top bar finds tools and opens them", async ({
 
   // Arrow keys move between tools that can be opened, going round at the ends.
   await box.fill("pdf")
-  // The four PDF tools, the pages that open the editor for one job, and one more that names PDFs.
-  await expect(options).toHaveCount(14)
+  // The four PDF tools, the pages that open the editor for one job, and two more that name PDFs.
+  await expect(options).toHaveCount(15)
   await expect(options.nth(0)).toHaveAttribute("aria-selected", "true")
   await box.press("ArrowDown")
   await expect(options.nth(1)).toHaveAttribute("aria-selected", "true")
@@ -89,11 +89,11 @@ test("the search in the top bar finds tools and opens them", async ({
     "aria-activedescendant",
     (await options.nth(1).getAttribute("id"))!
   )
-  for (let press = 0; press < 13; press++) await box.press("ArrowDown")
+  for (let press = 0; press < 14; press++) await box.press("ArrowDown")
   await expect(options.nth(0)).toHaveAttribute("aria-selected", "true")
   await box.press("ArrowUp")
-  await expect(options.nth(13)).toHaveAttribute("aria-selected", "true")
-  for (let press = 0; press < 12; press++) await box.press("ArrowUp")
+  await expect(options.nth(14)).toHaveAttribute("aria-selected", "true")
+  for (let press = 0; press < 13; press++) await box.press("ArrowUp")
   await expect(options.nth(1)).toHaveAttribute("aria-selected", "true")
   await box.press("Enter")
   await expect(page).toHaveURL(/\/dashboard\/pdf-splitter\/$/)
@@ -128,7 +128,7 @@ test("search results scroll inside a bounded dialog on short and narrow screens"
     const dialog = page.getByRole("dialog", { name: "Search tools" })
     const input = dialog.getByRole("combobox"),
       list = dialog.getByRole("listbox")
-    await expect(dialog.getByRole("option")).toHaveCount(47)
+    await expect(dialog.getByRole("option")).toHaveCount(48)
     const bounds = (await dialog.boundingBox())!
     expect(bounds.y).toBeGreaterThanOrEqual(0)
     expect(bounds.y + bounds.height).toBeLessThanOrEqual(height - 8)
@@ -266,7 +266,7 @@ test("theme persists and both themes pass accessibility checks", async ({
     // The search, with its list open and a tool chosen.
     await page.getByTestId("search-button").click()
     const search = page.getByRole("dialog", { name: "Search tools" })
-    await expect(search.getByRole("option")).toHaveCount(47)
+    await expect(search.getByRole("option")).toHaveCount(48)
     const open = await new AxeBuilder({ page })
       .include("[role=dialog]")
       .withTags(["wcag2a", "wcag2aa", "wcag21aa"])
@@ -393,7 +393,7 @@ test("navigation remains usable at 320px", async ({ page }) => {
   // The search still fits, as a round button, and its list fits the screen.
   await page.getByTestId("search-button").click()
   const search = page.getByRole("dialog", { name: "Search tools" })
-  await expect(search.getByRole("option")).toHaveCount(47)
+  await expect(search.getByRole("option")).toHaveCount(48)
   const box = await search.boundingBox()
   expect(box!.x).toBeGreaterThanOrEqual(0)
   expect(box!.x + box!.width).toBeLessThanOrEqual(320)
@@ -416,6 +416,6 @@ test("navigation remains usable at 320px", async ({ page }) => {
     .getByRole("navigation", { name: "Tool categories" })
     .getByRole("link", { name: "Documents" })
     .click()
-  await expect(page.getByTestId("tool-card")).toHaveCount(4)
+  await expect(page.getByTestId("tool-card")).toHaveCount(5)
   await expect(dialog).not.toBeVisible()
 })

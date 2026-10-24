@@ -13,7 +13,7 @@ export default function PrivacyPage() {
         A straightforward approach to privacy.
       </h1>
       <p className="mt-4 text-sm text-muted-foreground">
-        Updated 21 October 2026
+        Updated 24 October 2026
       </p>
       <div className="article-copy">
         <h2>Files and text stay in your browser.</h2>
@@ -52,6 +52,14 @@ export default function PrivacyPage() {
           deleted when the take is finished or you delete it, and it is never
           sent anywhere. The microphone is used only after you press Record and
           the browser asks you, and only until you press Stop.
+        </p>
+        <p>
+          The Markdown editor reads the files you open on this device and keeps
+          nothing of them in the browser&apos;s storage. Where your browser lets
+          a page write a file you chose (Chrome and Edge), Save writes back to
+          that file and nowhere else. Pictures that a document links from other
+          sites are fetched by your browser to show them in the preview, as any
+          page fetches its pictures; the preview options can leave them out.
         </p>
         <p>
           The video editor writes each video it makes to this browser’s own

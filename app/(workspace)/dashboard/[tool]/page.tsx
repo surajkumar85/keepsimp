@@ -69,6 +69,8 @@ import { PdfMergerTutorial } from "@/components/pdf-merger/tutorial"
 import { PdfSplitter } from "@/components/pdf-splitter/pdf-splitter"
 import { PdfSplitterTutorial } from "@/components/pdf-splitter/tutorial"
 import { JsonTutorial } from "@/components/json-workspace/tutorial"
+import { MarkdownEditor } from "@/components/markdown/markdown-editor"
+import { MarkdownTutorial } from "@/components/markdown/tutorial"
 
 const ready = tools.filter((tool) => tool.status === "available")
 export function generateStaticParams() {
@@ -101,6 +103,12 @@ export async function generateMetadata({
         "company brand colors",
       ],
     }
+  if (id === "markdown-editor")
+    return pageMetadata(
+      "Free online Markdown editor with live preview",
+      "Write Markdown with a live preview: GitHub's tables, task lists, footnotes and alerts, front matter and heading anchors. Save files in place, export HTML or print to PDF, in your browser. No account, no uploads.",
+      `/dashboard/${id}/`
+    )
   if (id === "json-formatter")
     return pageMetadata(
       "Free JSON formatter, validator & viewer",
@@ -373,6 +381,19 @@ export default async function ToolPage({
                 ],
               }
             : {}),
+          ...(id === "markdown-editor"
+            ? {
+                featureList: [
+                  "Markdown editor with live preview",
+                  "GitHub Flavored Markdown: tables, task lists, footnotes, alerts",
+                  "Front matter shown as a table",
+                  "Open and save files on the device",
+                  "Export to HTML and print to PDF",
+                  "Copy as rich text",
+                  "Local and offline",
+                ],
+              }
+            : {}),
           ...(id === "json-formatter"
             ? {
                 featureList: [
@@ -495,6 +516,8 @@ export default async function ToolPage({
         <PdfEditor mode="ocr" />
       ) : id === "verify-pdf-signature" ? (
         <PdfEditor mode="verify" />
+      ) : id === "markdown-editor" ? (
+        <MarkdownEditor />
       ) : (
         <JsonTool />
       )}
@@ -590,6 +613,8 @@ export default async function ToolPage({
         <PdfOcrTutorial />
       ) : id === "verify-pdf-signature" ? (
         <PdfVerifyTutorial />
+      ) : id === "markdown-editor" ? (
+        <MarkdownTutorial />
       ) : (
         <JsonTutorial />
       )}

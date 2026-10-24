@@ -906,6 +906,28 @@ export const tools: readonly Tool[] = [
     status: "available",
   },
   {
+    id: "markdown-editor",
+    name: "Markdown editor",
+    description:
+      "Write Markdown with a live preview, GitHub's tables, task lists and footnotes, then save it, export a web page or print it to PDF, on your device.",
+    category: "document",
+    keywords: [
+      "markdown",
+      "md",
+      "markdown editor",
+      "markdown preview",
+      "readme",
+      "github flavored markdown",
+      "gfm",
+      "markdown to html",
+      "markdown to pdf",
+      "write",
+      "notes",
+      "front matter",
+    ],
+    status: "available",
+  },
+  {
     id: "json-formatter",
     name: "JSON formatter",
     description: "Format, explore, query, compare and convert JSON locally.",
