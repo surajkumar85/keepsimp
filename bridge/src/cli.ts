@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs"
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { Session } from "./browser.ts"
 import { HELP, readOptions } from "./options.ts"
-import { Folders } from "./paths.ts"
+import { Folders, startFolders } from "./paths.ts"
 import { makeServer } from "./server.ts"
 
 // Everything said goes to stderr: stdout carries the protocol.
@@ -41,7 +41,7 @@ const { start } = makeServer({
   version,
   tools: session,
   folders: new Folders(),
-  fallback: [process.cwd()],
+  fallback: startFolders(process.cwd()),
   allow: options.allow,
   log,
 })

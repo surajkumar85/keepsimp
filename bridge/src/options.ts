@@ -16,9 +16,10 @@ export const HELP = `keepsimp-mcp: KeepSimp's tools for MCP agents, run on this 
 
 Usage: keepsimp-mcp [options]
 
-  --allow <folder>   Also let KeepSimp read and write in this folder (repeatable).
-                     By default it uses the folders the agent names, or the
-                     folder it was started in.
+  --allow <folder>   Also let KeepSimp read and write in this folder (repeatable;
+                     ~ is your home folder). By default it uses the folders
+                     the agent names, or the folder it was started in, never
+                     the top of a disk.
   --browser <which>  chrome, chromium or auto (the default: Chrome if installed).
   --headed           Show the browser window instead of hiding it.
   --site <url>       The KeepSimp site to open (${SITE}).

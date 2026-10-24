@@ -22,12 +22,15 @@ import {
   IconWifiOff,
   IconZoomScan,
 } from "@tabler/icons-react"
+import { AppTile } from "@/components/agent/app-logo"
 import { EditorialImage } from "@/components/editorial-image"
 import { DropAnything } from "@/components/landing/drop-anything"
 import { StructuredData } from "@/components/structured-data"
 import { ToolIcon, categoryTone } from "@/components/tool-icon"
 import { buttonVariants } from "@/components/ui/button"
 import { cn } from "cn"
+import { agentClients } from "@/lib/agent/clients"
+import { BRIDGE_COMMAND } from "@/lib/agent/setup"
 import { posts } from "@/lib/blog"
 import { categories } from "@/lib/catalogue"
 import { families, pagesOf, toolById } from "@/lib/landing"
@@ -561,10 +564,30 @@ export default function LandingPage() {
               them too.
             </h2>
             <p className="mt-4 max-w-md text-base leading-7 text-muted-foreground">
-              Claude Code, Codex and other MCP clients can call the tools
-              through the keepsimp-mcp bridge. They still run on your computer,
-              with the same engines as these pages.
+              Claude, Codex, Cursor, Copilot, Gemini CLI and other MCP agents
+              can call the tools through the keepsimp-mcp bridge. They still run
+              on your computer, with the same engines as these pages.
             </p>
+            <ul
+              aria-label="Agent apps it works with"
+              className="mt-5 flex flex-wrap gap-2"
+            >
+              {agentClients.map((client) => (
+                <li key={client.id}>
+                  <Link
+                    prefetch={false}
+                    href={`/dashboard/agents/#app-${client.id}`}
+                    className="inline-flex min-h-11 items-center gap-2 rounded-full border bg-card py-1 pr-3.5 pl-1.5 text-sm transition-colors hover:border-foreground/30 md:min-h-9"
+                  >
+                    <AppTile
+                      logo={client.logo}
+                      className="size-7 rounded-full"
+                    />
+                    {client.name}
+                  </Link>
+                </li>
+              ))}
+            </ul>
             <ul className="mt-6 space-y-3 text-sm">
               {[
                 "Reads and writes only in the folders you allow",
@@ -607,7 +630,7 @@ export default function LandingPage() {
                 <span className="text-muted-foreground" aria-hidden="true">
                   ${" "}
                 </span>
-                claude mcp add keepsimp -- npx -y keepsimp-mcp
+                {BRIDGE_COMMAND}
               </p>
               <div className="border-t pt-4">
                 <p className="font-sans text-xs text-muted-foreground">

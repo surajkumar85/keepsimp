@@ -1,10 +1,16 @@
 import { before, describe, it } from "node:test"
 import assert from "node:assert/strict"
 import { mkdir, mkdtemp, realpath, symlink, writeFile } from "node:fs/promises"
-import { tmpdir } from "node:os"
-import { join } from "node:path"
+import { homedir, tmpdir } from "node:os"
+import { join, parse } from "node:path"
 import { pathToFileURL } from "node:url"
-import { BridgeProblem, Folders, freePath, rootPath } from "../../src/paths.ts"
+import {
+  BridgeProblem,
+  Folders,
+  freePath,
+  rootPath,
+  startFolders,
+} from "../../src/paths.ts"
 import { HELP, readOptions, SITE } from "../../src/options.ts"
 
 let base: string
@@ -36,6 +42,20 @@ describe("the folders", () => {
       join(base, "work", "a.json"),
     ])
     assert.deepEqual(folders.list(), [join(base, "work")])
+  })
+
+  it("reads a leading ~ as the home folder, as apps that start it from JSON do not", () => {
+    assert.equal(rootPath("~", "/home/me"), "/home/me")
+    assert.equal(rootPath("~/Documents", "/home/me"), "/home/me/Documents")
+    assert.equal(rootPath("~\\Documents", "/home/me"), "/home/me/Documents")
+    assert.equal(rootPath("~/Documents"), join(homedir(), "Documents"))
+    // Only a ~ that starts the path, alone or before a separator.
+    assert.equal(rootPath("~me", "/home/me"), join(process.cwd(), "~me"))
+  })
+
+  it("uses the folder it was started in, but never the top of a disk", () => {
+    assert.deepEqual(startFolders(join(base, "work")), [join(base, "work")])
+    assert.deepEqual(startFolders(parse(base).root), [])
   })
 
   it("lets in files inside, by absolute or relative path", async () => {

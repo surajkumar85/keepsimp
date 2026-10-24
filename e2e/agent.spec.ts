@@ -1,4 +1,5 @@
 import { chromium, expect, test, type BrowserContext } from "@playwright/test"
+import { agentClients } from "@/lib/agent/clients"
 import { ORIGIN_TRIAL_TOKENS } from "@/lib/agent/setup"
 import AxeBuilder from "@axe-core/playwright"
 import { parse as parseYaml } from "yaml"
@@ -466,4 +467,50 @@ test("asks Chrome for WebMCP with the site's origin-trial tokens, in the page's 
     "https://www.keepsimp.com:443",
     "https://keepsimp.vercel.app:443",
   ])
+})
+
+test("shows each agent app with its logo, where its setup goes and its own guide", async ({
+  page,
+}) => {
+  await page.goto("/dashboard/agents/#app-cursor")
+  const apps = page.getByTestId("agent-apps")
+  await expect(apps.locator("details")).toHaveCount(agentClients.length)
+  for (const client of agentClients)
+    await expect(
+      apps.getByRole("heading", { name: client.name, exact: true })
+    ).toBeVisible()
+  // Every app but Codex has its maker's logo.
+  await expect(apps.locator('summary svg[fill="currentColor"]')).toHaveCount(
+    agentClients.filter((client) => client.logo).length
+  )
+  // The address opens one, with what to paste and the maker's guide.
+  const cursor = page.locator("#app-cursor")
+  await expect(cursor).toHaveAttribute("open", "")
+  await expect(cursor.getByLabel("mcp.json")).toContainText(
+    '"args": ["-y", "keepsimp-mcp", "--allow", "~/Documents"]'
+  )
+  await expect(
+    cursor.getByRole("link", { name: "Cursor’s guide to MCP servers" })
+  ).toHaveAttribute("href", "https://cursor.com/docs/context/mcp")
+  // Opening another closes it.
+  await page.locator("#app-codex summary").click()
+  await expect(page.locator("#app-codex")).toHaveAttribute("open", "")
+  await expect(cursor).not.toHaveAttribute("open", "")
+  expect(
+    (
+      await new AxeBuilder({ page })
+        .include('[data-testid="agent-apps"]')
+        .withTags(["wcag2a", "wcag2aa", "wcag21aa"])
+        .analyze()
+    ).violations
+  ).toEqual([])
+
+  // The home page links each app to its setup.
+  await page.goto("/")
+  await page
+    .getByRole("list", { name: "Agent apps it works with" })
+    .getByRole("link", { name: "Gemini CLI" })
+    .click()
+  await expect(page).toHaveURL(/\/dashboard\/agents\/#app-gemini-cli$/)
+  await expect(page.locator("#app-gemini-cli")).toHaveAttribute("open", "")
 })

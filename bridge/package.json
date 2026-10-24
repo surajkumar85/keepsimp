@@ -1,6 +1,6 @@
 {
   "name": "keepsimp-mcp",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "KeepSimp's tools for Claude Code, Codex and other MCP agents, run on your own computer in a hidden browser.",
   "license": "AGPL-3.0-only",
   "type": "module",

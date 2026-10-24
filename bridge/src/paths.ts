@@ -11,9 +11,11 @@ import {
   extname,
   isAbsolute,
   join,
+  parse,
   resolve,
   sep,
 } from "node:path"
+import { homedir } from "node:os"
 import { fileURLToPath } from "node:url"
 
 /** A problem with what the agent asked, told to it in words. */
@@ -23,9 +25,26 @@ const within = (path: string, folder: string) =>
   path === folder ||
   path.startsWith(folder.endsWith(sep) ? folder : folder + sep)
 
-/** A root as MCP gives it (a file: address) or as a path. */
-export function rootPath(root: string) {
-  return root.startsWith("file:") ? fileURLToPath(root) : resolve(root)
+/**
+ * A root as MCP gives it (a file: address) or as a path. A leading ~ is the
+ * home folder, since apps that start the bridge from a JSON file do not
+ * expand it themselves.
+ */
+export function rootPath(root: string, home = homedir()) {
+  if (root.startsWith("file:")) return fileURLToPath(root)
+  if (root === "~" || root.startsWith("~/") || root.startsWith("~\\"))
+    return resolve(home, root.slice(2))
+  return resolve(root)
+}
+
+/**
+ * The folder the bridge was started in, to use when the agent names none:
+ * never the top of a disk, which is where desktop apps start the programs
+ * they run, and which would open the whole disk.
+ */
+export function startFolders(cwd: string): string[] {
+  const folder = resolve(cwd)
+  return parse(folder).root === folder ? [] : [folder]
 }
 
 export class Folders {

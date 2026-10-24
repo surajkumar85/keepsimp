@@ -2,8 +2,6 @@
 
 import { useCallback, useEffect, useState, useSyncExternalStore } from "react"
 import {
-  IconCheck,
-  IconCopy,
   IconDownload,
   IconFileUpload,
   IconPlayerStop,
@@ -18,50 +16,10 @@ import { cn } from "cn"
 import type { Agent, Call } from "@/lib/agent/agent"
 import { download, startAgent, type Started } from "@/lib/agent/browser"
 import { sizeLabel } from "@/lib/image-compressor/formats"
-import { BRIDGE_COMMAND, CODEX_CONFIG } from "@/lib/agent/setup"
+import { AgentApps } from "@/components/agent/agent-apps"
 
 const FILE_INPUT = "agent-file"
 const NOTHING: never[] = []
-
-function CopyBlock({ label, text }: { label: string; text: string }) {
-  const [copied, setCopied] = useState(false)
-  return (
-    <div className="space-y-1.5">
-      <div className="flex items-center justify-between gap-2">
-        <p className="text-sm font-medium">{label}</p>
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          onClick={() =>
-            navigator.clipboard.writeText(text).then(
-              () => {
-                setCopied(true)
-                setTimeout(() => setCopied(false), 2000)
-              },
-              () => undefined
-            )
-          }
-        >
-          {copied ? (
-            <IconCheck data-icon="inline-start" aria-hidden="true" />
-          ) : (
-            <IconCopy data-icon="inline-start" aria-hidden="true" />
-          )}
-          {copied ? "Copied" : "Copy"}
-          <span className="sr-only"> {label}</span>
-        </Button>
-      </div>
-      <pre
-        tabIndex={0}
-        aria-label={label}
-        className="overflow-x-auto rounded-lg border bg-muted px-3 py-2 font-mono text-xs leading-relaxed"
-      >
-        {text}
-      </pre>
-    </div>
-  )
-}
 
 const CALLERS = {
   page: "this page",
@@ -204,7 +162,8 @@ export function AgentPage() {
         <p className="eyebrow mb-3 text-primary">For AI agents</p>
         <h1 className="page-title">Let your agent use KeepSimp</h1>
         <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
-          Claude Code, Codex and agents in your browser can call KeepSimp’s
+          Claude Code, Claude Desktop, Codex, Cursor, GitHub Copilot, Gemini CLI
+          and other agent apps, and agents in your browser, can call KeepSimp’s
           tools: the same engines as the tools’ own pages, on your device. Files
           go from your computer into a browser on your computer and back, never
           to a server.
@@ -224,8 +183,7 @@ export function AgentPage() {
           your agent names and saves what the tools make next to them. It reads
           and writes only inside the folders your agent works in.
         </p>
-        <CopyBlock label="Claude Code" text={BRIDGE_COMMAND} />
-        <CopyBlock label="Codex (~/.codex/config.toml)" text={CODEX_CONFIG} />
+        <AgentApps />
         <div className="space-y-1">
           <p className="text-sm font-medium">An agent in this browser</p>
           <p

@@ -162,6 +162,7 @@ KeepSimp's tools can be used by agents: Claude Code, Codex and other MCP clients
 ### The agent page (`/dashboard/agents/`)
 
 - **What it is:** a workspace page, not a catalogue entry, linked from the sidebar footer, in the sitemap and in the offline copy.
+- **Agent apps:** `lib/agent/clients.ts` (`agentClients`) lists the apps that can start the bridge (Claude Code, Claude Desktop, Codex, Cursor, GitHub Copilot in VS Code, Gemini CLI, Zed, Cline, JetBrains AI Assistant, opencode), each with what to paste where as its maker's own MCP guide gives it (checked 2026-10-24) and a link to that guide. The page shows them one at a time (`components/agent/agent-apps.tsx`; `#app-<id>` opens one), and the home page's agents section links to each. Apps that start the bridge from a settings file get `--allow ~/Documents` to change. Logos are Simple Icons paths (CC0) in `components/agent/app-logo.tsx`, drawn in the text colour; OpenAI and Microsoft do not offer their marks there, so Codex has a plain tile and Copilot is shown by GitHub's. Windsurf was left out while it becomes Devin Desktop and its MCP setup changes.
 - **Starting the tools:** `lib/agent/browser.ts` (`startAgent`) does three things:
   - starts the engines;
   - offers `window.keepsimp` (`bridge-api.ts`);
@@ -181,7 +182,7 @@ KeepSimp's tools can be used by agents: Claude Code, Codex and other MCP clients
 
 ### The bridge (`bridge/`, npm `keepsimp-mcp`)
 
-Published on npm as `keepsimp-mcp` (0.1.0 on 2026-10-22, 0.1.1 on 2026-10-24). From 0.1.1 it opens `https://www.keepsimp.com`, the site's main address since 2026-10-24. 0.1.0 opens `https://keepsimp.vercel.app`, which now redirects there; since the bridge refuses every address outside the site it opened, 0.1.0 works only with `--site https://www.keepsimp.com`. `--site` chooses another. Its first start downloads the package, and Playwright's Chromium when Chrome is missing, which takes longer than Codex waits by default (10 s); the setup we give Codex therefore sets `startup_timeout_sec = 120`, and `tool_timeout_sec = 300` for long jobs such as transcription. Codex then read a PDF and converted a FLAC through `npx -y keepsimp-mcp`.
+Published on npm as `keepsimp-mcp` (0.1.0 on 2026-10-22, 0.1.1 and 0.1.2 on 2026-10-24). 0.1.2 reads a leading `~` in `--allow` as the home folder and never takes the top of a disk as the folder it was started in, since desktop apps start the programs they run there and that would have opened the whole disk. From 0.1.1 it opens `https://www.keepsimp.com`, the site's main address since 2026-10-24. 0.1.0 opens `https://keepsimp.vercel.app`, which now redirects there; since the bridge refuses every address outside the site it opened, 0.1.0 works only with `--site https://www.keepsimp.com`. `--site` chooses another. Its first start downloads the package, and Playwright's Chromium when Chrome is missing, which takes longer than Codex waits by default (10 s); the setup we give Codex therefore sets `startup_timeout_sec = 120`, and `tool_timeout_sec = 300` for long jobs such as transcription. Codex then read a PDF and converted a FLAC through `npx -y keepsimp-mcp`.
 
 A package of its own, in TypeScript that Node runs as it is (type stripping), built to `dist/` for npm. Dependencies: `@modelcontextprotocol/sdk` and `playwright-core`.
 

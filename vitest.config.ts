@@ -137,6 +137,7 @@ export default defineConfig({
         "lib/json-workspace/client.ts",
         "lib/color/sample.ts",
         "lib/agent/agent.ts",
+        "lib/agent/clients.ts",
         "lib/agent/files.ts",
         "lib/agent/registry.ts",
         "lib/agent/schema.ts",

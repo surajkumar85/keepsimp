@@ -21,7 +21,20 @@ startup_timeout_sec = 120
 tool_timeout_sec = 300
 ```
 
-Any other client: run `npx -y keepsimp-mcp` as a stdio server.
+Claude Desktop, Cursor, Zed, Cline, JetBrains AI Assistant and other apps that start it from their settings: add `--allow` and the folder your files are in, since they do not say which folder they work in.
+
+```json
+{
+  "mcpServers": {
+    "keepsimp": {
+      "command": "npx",
+      "args": ["-y", "keepsimp-mcp", "--allow", "~/Documents"]
+    }
+  }
+}
+```
+
+The exact place and format for each app (Claude Code, Claude Desktop, Codex, Cursor, GitHub Copilot in VS Code, Gemini CLI, Zed, Cline, JetBrains AI Assistant, opencode) are on [the agents page](https://www.keepsimp.com/dashboard/agents/). Any other client: run `npx -y keepsimp-mcp` as a stdio server.
 
 Then ask in plain words: "merge a.pdf and b.pdf", "split book.pdf at its bookmarks", "format data.json with sorted keys", "check the contrast of #777 on white", "find the main colours of logo.png".
 
@@ -48,7 +61,7 @@ Signing a PDF and recording stay for you to do yourself.
 
 ## What it may touch
 
-- **Files:** only inside the folders the agent works in. That means the roots the client names, or the folder the bridge was started in, plus any folder given with `--allow <folder>`. Paths are followed through links before they are judged.
+- **Files:** only inside the folders the agent works in. That means the roots the client names, or the folder the bridge was started in (never the top of a disk, where desktop apps start the programs they run), plus any folder given with `--allow <folder>` (`~` is your home folder). Paths are followed through links before they are judged.
 - **Results:** saved beside the first file given, or in `outputFolder`. An existing file is never overwritten: a second copy is called `name (2).ext`.
 - **The browser:** it opens the KeepSimp site and refuses every other address. It uses Google Chrome when it is installed; otherwise it installs Playwright's Chromium once (about 150 MB).
 
