@@ -290,6 +290,7 @@ export const posts: readonly BlogPost[] = [
   },
   {
     slug: "merge-pdfs-without-uploading",
+    published: "2026-10-11",
     searchTitle: "How to merge PDF files online for free, without uploading",
     keywords: [
       "merge PDF",
@@ -381,6 +382,7 @@ export const posts: readonly BlogPost[] = [
   },
   {
     slug: "split-pdfs-without-uploading",
+    published: "2026-10-11",
     searchTitle: "How to split a PDF online for free, without uploading",
     keywords: [
       "split PDF",
@@ -481,6 +483,7 @@ export const posts: readonly BlogPost[] = [
   },
   {
     slug: "compress-pdfs-without-uploading",
+    published: "2026-10-12",
     searchTitle: "How to compress a PDF online without losing quality",
     keywords: [
       "compress PDF",

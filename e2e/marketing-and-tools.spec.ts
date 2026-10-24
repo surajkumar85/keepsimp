@@ -215,6 +215,11 @@ test("sitemap, robots and social graphics are production ready", async ({
     "https://www.keepsimp.com/dashboard/image-compressor/"
   )
   expect(sitemap).not.toContain("design-system")
+  // Each article names its picture, and each page its own date.
+  expect(sitemap).toContain("<image:loc>https://www.keepsimp.com/images/")
+  expect(sitemap.match(/<url>/g)).toHaveLength(
+    sitemap.match(/<lastmod>/g)!.length
+  )
   // Ready tools and their doors are listed.
   expect(sitemap).toContain("https://www.keepsimp.com/dashboard/video-editor/")
   expect(sitemap).toContain(

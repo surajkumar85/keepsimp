@@ -4,6 +4,7 @@ import type { BlogPost } from "./blog"
 export const overviewPost: BlogPost = {
   modified: "2026-10-15T00:00:00+05:30",
   slug: "free-online-tools-no-upload",
+  published: "2026-10-12",
   title: "Eleven free tools that never ask for your files.",
   searchTitle: "Free PDF, image, audio, JSON and color tools without uploading",
   description:
@@ -520,6 +521,7 @@ export const overviewPost: BlogPost = {
 
 export const resizePost: BlogPost = {
   slug: "resize-images-without-uploading",
+  published: "2026-10-12",
   title: "The right size, without losing the important part.",
   searchTitle:
     "How to resize images online for free, in pixels, cm or for print",
@@ -642,6 +644,7 @@ export const resizePost: BlogPost = {
 
 export const targetSizePost: BlogPost = {
   slug: "compress-pdf-to-200kb",
+  published: "2026-10-12",
   title: "Under 200 KB, and still easy to read.",
   searchTitle: "How to compress a PDF to 200 KB, 100 KB or 1 MB for free",
   description:
@@ -755,6 +758,7 @@ export const targetSizePost: BlogPost = {
 
 export const editPost: BlogPost = {
   slug: "edit-pdfs-without-uploading",
+  published: "2026-10-12",
   title: "Write on a PDF, without sending it anywhere.",
   searchTitle: "How to edit a PDF online for free without uploading it",
   description:
@@ -882,6 +886,7 @@ export const editPost: BlogPost = {
 
 export const annotatePost: BlogPost = {
   slug: "annotate-pdfs-without-uploading",
+  published: "2026-10-12",
   title: "Mark it up, and keep it to yourself.",
   searchTitle: "How to annotate a PDF online for free without uploading it",
   description:
@@ -990,6 +995,7 @@ export const annotatePost: BlogPost = {
 
 export const signPost: BlogPost = {
   slug: "sign-pdfs-without-uploading",
+  published: "2026-10-12",
   title: "Sign it, and keep it to yourself.",
   searchTitle: "How to sign a PDF online for free without uploading it",
   description:
@@ -1092,6 +1098,7 @@ export const signPost: BlogPost = {
 
 export const formPost: BlogPost = {
   slug: "fill-pdf-forms-without-uploading",
+  published: "2026-10-12",
   title: "Fill it in, and send only what you mean to.",
   searchTitle: "How to fill in a PDF form online for free without uploading it",
   description:
@@ -1210,6 +1217,7 @@ export const formPost: BlogPost = {
 
 export const cropPost: BlogPost = {
   slug: "crop-pdfs-without-uploading",
+  published: "2026-10-13",
   title: "Trim the page, and know what trimming means.",
   searchTitle: "How to crop a PDF online for free without uploading it",
   description:
@@ -1303,6 +1311,7 @@ export const cropPost: BlogPost = {
 
 export const numbersPost: BlogPost = {
   slug: "add-page-numbers-to-a-pdf",
+  published: "2026-10-13",
   title: "Number the pages, where you want the numbers.",
   searchTitle: "How to add page numbers to a PDF online for free",
   description:
@@ -1410,6 +1419,7 @@ export const numbersPost: BlogPost = {
 
 export const watermarkPost: BlogPost = {
   slug: "watermark-a-pdf-without-uploading",
+  published: "2026-10-13",
   title: "Mark it as a draft, without sending it anywhere.",
   searchTitle: "How to add a watermark to a PDF online for free",
   description:
@@ -1504,6 +1514,7 @@ export const watermarkPost: BlogPost = {
 
 export const redactPost: BlogPost = {
   slug: "redact-a-pdf-without-uploading",
+  published: "2026-10-14",
   title: "A black box is not a redaction.",
   searchTitle:
     "How to redact a PDF online for free, so the text is really gone",
@@ -1607,6 +1618,7 @@ export const redactPost: BlogPost = {
 
 export const ocrPost: BlogPost = {
   slug: "make-a-scanned-pdf-searchable",
+  published: "2026-10-14",
   title: "A scan you can search.",
   searchTitle: "How to OCR a PDF online for free and make a scan searchable",
   description:

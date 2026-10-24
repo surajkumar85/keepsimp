@@ -23,6 +23,7 @@ export default defineConfig({
         "lib/handoff.ts",
         "lib/file-actions.ts",
         "lib/landing.ts",
+        "lib/sitemap.ts",
         "lib/video/formats.ts",
         "lib/video/settings.ts",
         "lib/video/faststart.ts",
