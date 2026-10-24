@@ -131,6 +131,15 @@ export default function PrivacyPage() {
           kept the same way the first time you use them; the sound, its noise
           and its words are never sent anywhere.
         </p>
+        <h2>See and remove what is kept.</h2>
+        <p>
+          The database button at the top of every tool page, Kept on this
+          device, lists everything above that this browser holds for KeepSimp,
+          with the size of each part and a button to remove it: the offline
+          copy, the engines kept once used, drafts, video work files, and what
+          you asked to be remembered. It measures them on your device and sends
+          nothing anywhere.
+        </p>
         <h2>Keep the limits in mind.</h2>
         <p>
           Browser extensions, clipboard synchronization and device software can

@@ -7,7 +7,7 @@ import { usePathname } from "next/navigation"
 import { AppSidebar } from "@/components/app-sidebar"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { ToolSearch } from "@/components/tool-search"
-import { MemoryUsage } from "@/components/memory-usage"
+import { DeviceStorage } from "@/components/device-storage"
 import {
   SidebarInset,
   SidebarProvider,
@@ -55,7 +55,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               <span className="hidden text-xs text-muted-foreground xl:block">
                 Free. Simple. Yours.
               </span>
-              <MemoryUsage />
+              <DeviceStorage />
               <ThemeToggle />
             </div>
           </header>
