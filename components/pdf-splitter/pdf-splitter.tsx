@@ -103,6 +103,7 @@ import { PageBoard } from "./page-board"
 import { MOST_ROWS, PartsList, type WrittenPart } from "./parts-list"
 import { RulesPanel, type SizeChoice } from "./rules-panel"
 import { BlankRules, HalvePanel, TextRules } from "./scan-panel"
+import { useHandedFiles } from "@/hooks/use-handed-files"
 
 const INPUT_ID = "split-file"
 const ACCEPT = "application/pdf,.pdf"
@@ -337,6 +338,7 @@ export function PdfSplitter() {
     },
     [limits]
   )
+  useHandedFiles((files) => void addFiles(files))
 
   /** Let go of everything found out about a file: its pictures, bookmarks, result and what was looked for in it. */
   const letGo = useCallback(

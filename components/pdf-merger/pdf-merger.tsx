@@ -91,6 +91,7 @@ import { OutputPanel } from "./output-panel"
 import { PageGrid, type GridFile } from "./page-grid"
 import { PrintPanel } from "./print-panel"
 import { StructurePanel } from "./structure-panel"
+import { useHandedFiles } from "@/hooks/use-handed-files"
 
 const INPUT_ID = "pdf-file"
 const ACCEPT = "application/pdf,.pdf,image/*,.heic,.heif,.jxl"
@@ -319,6 +320,7 @@ export function PdfMerger() {
     },
     [dispatch, limits]
   )
+  useHandedFiles((files) => void addFiles(files))
 
   useEffect(() => {
     function paste(event: ClipboardEvent) {

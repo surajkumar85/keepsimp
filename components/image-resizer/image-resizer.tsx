@@ -66,6 +66,7 @@ import {
   resizerChanges,
   type ResizerGroup,
 } from "@/lib/image-resizer/summary"
+import { useHandedFiles } from "@/hooks/use-handed-files"
 
 const INPUT_ID = "resizer-file"
 const DEBOUNCE_MS = 350
@@ -371,6 +372,7 @@ export function ImageResizer() {
     },
     [dispatch, select]
   )
+  useHandedFiles((files) => void addFiles(files))
 
   async function loadSamples() {
     setNotice("")

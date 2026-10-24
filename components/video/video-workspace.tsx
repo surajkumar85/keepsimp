@@ -81,6 +81,7 @@ import { OverlayPanel, type ChosenLogo } from "./overlay-panel"
 import { defaultSoundtrack } from "@/lib/video/soundtrack"
 import { CropControls, CropOverlay, startingBox } from "./crop-box"
 import { isWholeBox, WHOLE, type Box } from "@/lib/video/frame"
+import { useHandedFiles } from "@/hooks/use-handed-files"
 
 /** What the workspace is opened for: everything, or one job through a door. */
 export type VideoMode =
@@ -704,6 +705,7 @@ export function VideoWorkspace({ mode }: { mode: VideoMode }) {
     },
     [change]
   )
+  useHandedFiles((files) => void addFiles(files))
 
   const loadSample = useCallback(async () => {
     const name = SAMPLES[mode]

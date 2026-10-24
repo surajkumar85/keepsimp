@@ -20,6 +20,9 @@ export default defineConfig({
       provider: "v8",
       include: [
         "lib/catalogue.ts",
+        "lib/handoff.ts",
+        "lib/file-actions.ts",
+        "lib/landing.ts",
         "lib/video/formats.ts",
         "lib/video/settings.ts",
         "lib/video/faststart.ts",

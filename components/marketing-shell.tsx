@@ -27,8 +27,11 @@ export function MarketingShell({ children }: { children: React.ReactNode }) {
             <Link prefetch={false} href="/#tools" className="nav-link">
               The tools
             </Link>
-            <Link prefetch={false} href="/#how-it-works" className="nav-link">
-              How it works
+            <Link prefetch={false} href="/#private" className="nav-link">
+              Privacy
+            </Link>
+            <Link prefetch={false} href="/#agents" className="nav-link">
+              For agents
             </Link>
             <Link prefetch={false} href="/blog/" className="nav-link">
               Blog

@@ -1,6 +1,6 @@
 # KeepSimp
 
-A free, browser-first utility platform. The homepage introduces the tools with an interactive image-compression example. `/dashboard/` contains four working tools: image compressor, resizer, converter and JSON formatter. Other catalogue tools remain marked as coming soon. The blog contains practical, statically rendered guides.
+Free tools for video, audio, PDFs, images, Markdown and JSON that run in the browser, with no uploads. The homepage takes any file and opens it in the tool for the job the visitor picks. `/dashboard/` lists every tool: the video, audio, PDF and Markdown editors with a page for each of their jobs, the image tools, the animation converter, the JSON formatter and the colour utility. The blog contains practical, statically rendered guides.
 
 ## Run locally
 

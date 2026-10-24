@@ -72,6 +72,7 @@ import { resetAll, resetOf } from "@/lib/settings-groups"
 import { toast } from "@/components/ui/toast"
 import { ComparePanel, FormatPanel, type ComparisonState } from "./format-panel"
 import { OptionsPanel } from "./options-panel"
+import { useHandedFiles } from "@/hooks/use-handed-files"
 
 type Item = QueueItem<Target>
 
@@ -367,6 +368,7 @@ export function ImageConverter() {
     },
     [dispatch, select]
   )
+  useHandedFiles((files) => void addFiles(files))
 
   async function loadSamples() {
     setNotice("")

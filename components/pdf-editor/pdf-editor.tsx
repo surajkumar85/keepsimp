@@ -116,6 +116,7 @@ import { useFind } from "./use-find"
 import { useInpage } from "./use-inpage"
 import { useLinks } from "./use-links"
 import { useRetext } from "./use-retext"
+import { useHandedFiles } from "@/hooks/use-handed-files"
 
 const INPUT_ID = "editor-file"
 const ACCEPT = "application/pdf,.pdf"
@@ -2050,6 +2051,7 @@ export function PdfEditor({ mode = "edit" }: { mode?: EditorMode }) {
     },
     [limits.fileBytes]
   )
+  useHandedFiles((files) => void openFile(files))
 
   const closeFile = useCallback(() => {
     const now = live.current

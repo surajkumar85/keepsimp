@@ -119,6 +119,7 @@ import { Presenter } from "./slides"
 import { MarkdownToolbar, type ToolbarCommand } from "./toolbar"
 import { useDocuments, type Doc } from "./use-documents"
 import { VersionsPanel } from "./versions-panel"
+import { useHandedFiles } from "@/hooks/use-handed-files"
 
 type View = "write" | "split" | "preview"
 type Panel = "outline" | "check" | "versions" | "folder"
@@ -281,6 +282,7 @@ export function MarkdownEditor({ mode = "editor" }: { mode?: MarkdownMode }) {
     },
     [documents]
   )
+  useHandedFiles((files) => void openFile(files[0]))
 
   const open = useCallback(async () => {
     try {

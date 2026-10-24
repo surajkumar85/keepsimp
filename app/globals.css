@@ -358,18 +358,11 @@
       transparent 70%
     );
   }
-  .demo-window {
-    box-shadow: 0 24px 80px -32px
-      color-mix(in oklch, var(--foreground), transparent 80%);
-  }
   .enter-soft {
     animation: enter-soft 700ms ease-out both;
   }
   .enter-delayed {
     animation: enter-soft 900ms 100ms ease-out both;
-  }
-  .demo-working {
-    animation: processing-sweep 650ms ease-in-out alternate 4;
   }
   .faq-row summary {
     list-style: none;
@@ -479,14 +472,6 @@
   }
   to {
     transform: translateY(0);
-  }
-}
-@keyframes processing-sweep {
-  from {
-    transform: scale(0.98);
-  }
-  to {
-    transform: scale(1);
   }
 }
 

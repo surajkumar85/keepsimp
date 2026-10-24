@@ -50,8 +50,8 @@ const cards = [
   ],
   [
     "keepsimp",
-    "Less busywork. More room to create.",
-    "Free browser tools. No account. No uploads.",
+    "Do more with your files. Upload none of them.",
+    "Video, audio, PDF, images and Markdown, in your browser.",
     "/images/coastline.jpg",
   ],
   [

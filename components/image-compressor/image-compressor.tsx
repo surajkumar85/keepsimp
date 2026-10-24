@@ -62,6 +62,7 @@ import {
   compressorChanges,
 } from "@/lib/image-compressor/summary"
 import { resetAll } from "@/lib/settings-groups"
+import { useHandedFiles } from "@/hooks/use-handed-files"
 
 interface Source {
   width: number
@@ -244,6 +245,7 @@ export function ImageCompressor() {
     },
     [clear]
   )
+  useHandedFiles((files) => void chooseFile(files[0]))
 
   async function loadSample() {
     setError("")

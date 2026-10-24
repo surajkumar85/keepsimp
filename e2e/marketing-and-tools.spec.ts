@@ -14,9 +14,11 @@ async function downloadedBytes(download: Download) {
 test("landing CTA opens the working dashboard", async ({ page }) => {
   await page.goto("/")
   await expect(page.getByRole("heading", { level: 1 })).toContainText(
-    "Less busywork"
+    "Do more with your files"
   )
   await expect(page.locator('[data-sidebar="sidebar"]')).toHaveCount(0)
+  // Every tool and every job's page is offered on the home page.
+  await expect(page.getByTestId("tool-family")).toHaveCount(6)
   await page
     .getByRole("link", { name: "Open the dashboard", exact: true })
     .first()
@@ -31,34 +33,65 @@ test("landing CTA opens the working dashboard", async ({ page }) => {
   await expect(page.getByLabel("Your JSON", { exact: true })).toBeVisible()
 })
 
-test("landing demonstration creates a real smaller image download", async ({
+test("the home page hands a chosen file to the tool that does the job", async ({
   page,
 }) => {
   await page.goto("/")
-  const webpSupported = await page.evaluate(() => {
-    const canvas = document.createElement("canvas")
-    canvas.width = canvas.height = 1
-    return canvas.toDataURL("image/webp").startsWith("data:image/webp")
-  })
-  await page.getByRole("button", { name: "Try image compression" }).click()
-  const link = page.getByRole("link", { name: "Download example" })
-  await expect(link).toBeVisible()
-  const downloading = page.waitForEvent("download")
-  await link.click()
-  const download = await downloading
-  expect(download.suggestedFilename()).toBe(
-    `coastline-keepsimp.${webpSupported ? "webp" : "jpg"}`
+  const chooser = page.getByLabel(
+    "Choose a file to see what you can do with it"
   )
-  const buffer = await downloadedBytes(download)
-  const metadata = await sharp(buffer).metadata()
-  expect(metadata.format).toBe(webpSupported ? "webp" : "jpeg")
-  expect(metadata.width).toBe(960)
-  const original = await page.request.get("/images/coastline.jpg")
-  expect(buffer.length).toBeLessThan((await original.body()).length)
-  await page.getByRole("button", { name: "Try again", exact: true }).click()
+  await chooser.setInputFiles({
+    name: "budget.xlsx",
+    mimeType: "application/vnd.ms-excel",
+    buffer: Buffer.from("not a kind the tools take"),
+  })
   await expect(
-    page.getByRole("button", { name: "Try image compression" })
+    page.getByRole("heading", {
+      name: "There is no tool for this kind of file yet",
+    })
+  ).toBeFocused()
+  await page.getByRole("button", { name: /Choose another/ }).click()
+  await expect(chooser).toBeFocused()
+
+  // A file goes to the tool in memory and opens there, digits and all.
+  const json = '{"id":9007199254740993}'
+  await chooser.setInputFiles({
+    name: "data.json",
+    mimeType: "application/json",
+    buffer: Buffer.from(json),
+  })
+  await expect(
+    page.getByRole("heading", { name: "What would you like to do?" })
+  ).toBeFocused()
+  await expect(page.getByTestId("drop-file-name")).toHaveText("data.json")
+  await page.getByRole("link", { name: /Format and check it/ }).click()
+  await expect(page).toHaveURL(/\/dashboard\/json-formatter\/$/)
+  await expect(page.getByLabel("Your JSON", { exact: true })).toContainText(
+    "9007199254740993"
+  )
+
+  // Several PDFs are offered the merger first; one opens in the editor's door.
+  await page.goto("/")
+  const pdf = await (
+    await page.request.get("/samples/keepsimp-report.pdf")
+  ).body()
+  await chooser.setInputFiles([
+    { name: "a.pdf", mimeType: "application/pdf", buffer: pdf },
+    { name: "b.pdf", mimeType: "application/pdf", buffer: pdf },
+  ])
+  await expect(page.getByTestId("drop-file-name")).toHaveText("2 files")
+  await expect(
+    page.getByRole("link").filter({ hasText: "Merge them into one PDF" })
   ).toBeVisible()
+  await page.getByRole("button", { name: /Choose another/ }).click()
+  await chooser.setInputFiles({
+    name: "report.pdf",
+    mimeType: "application/pdf",
+    buffer: pdf,
+  })
+  await page.getByRole("link", { name: /Sign it/ }).click()
+  await expect(page).toHaveURL(/\/dashboard\/sign-pdf\/$/)
+  await expect(page.getByText("report.pdf").first()).toBeVisible()
 })
 
 // Each image tool has its own engine and spec file: image-compressor,
@@ -259,6 +292,7 @@ test("mobile marketing has no overflow, keyboard FAQ access or unhandled errors"
   await expect(page.locator("details").first()).toHaveAttribute("open", "")
   const duration = await page
     .locator(".enter-soft")
+    .first()
     .evaluate((element) =>
       parseFloat(getComputedStyle(element).animationDuration)
     )

@@ -442,7 +442,7 @@ test("every tool works offline after one visit", async ({ page }) => {
   // The rest of the site is there too, including a path without its slash.
   await page.goto(`${site.origin}/`)
   await expect(page.getByRole("heading", { level: 1 })).toContainText(
-    "Less busywork"
+    "Do more with your files"
   )
   await page.goto(`${site.origin}/blog/jpeg-png-webp-which-format/`)
   await expect(page.getByRole("heading", { level: 1 })).toBeVisible()

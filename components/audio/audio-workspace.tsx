@@ -130,6 +130,7 @@ import { VideoPanel } from "./video-panel"
 import { JoinPanel, type JoinRow } from "./join-panel"
 import { Waveform } from "./waveform"
 import { Spectrogram } from "./spectrogram"
+import { useHandedFiles } from "@/hooks/use-handed-files"
 
 /** What the workspace is opened for: everything, or one job through a door. */
 export type AudioMode =
@@ -978,6 +979,7 @@ export function AudioWorkspace({ mode = "editor" }: { mode?: AudioMode }) {
     },
     [dispatch]
   )
+  useHandedFiles((files) => void addFiles(files))
 
   // Paste files from the clipboard anywhere on the page.
   useEffect(() => {

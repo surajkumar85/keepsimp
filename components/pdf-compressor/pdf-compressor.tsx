@@ -97,6 +97,7 @@ import { CompareView } from "./compare-view"
 import { FileRows, type RowResult } from "./file-rows"
 import { CUSTOM_SIZE, LevelPanel, type SizeChoice } from "./level-panel"
 import { OptionsPanel } from "./options-panel"
+import { useHandedFiles } from "@/hooks/use-handed-files"
 
 const INPUT_ID = "compress-file"
 const ACCEPT = "application/pdf,.pdf"
@@ -264,6 +265,7 @@ export function PdfCompressor() {
     },
     [limits]
   )
+  useHandedFiles((files) => void addFiles(files))
 
   const letGo = useCallback(
     (id: string) => {

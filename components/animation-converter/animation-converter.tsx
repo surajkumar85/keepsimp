@@ -93,6 +93,7 @@ import { FrameList, type StillFrame } from "./frame-list"
 import { OptionsPanel } from "./options-panel"
 import { Player, type Playable } from "./player"
 import { TimingPanel } from "./timing-panel"
+import { useHandedFiles } from "@/hooks/use-handed-files"
 
 type Item = QueueItem<Target>
 
@@ -624,6 +625,7 @@ export function AnimationConverter() {
     },
     [dispatch, select, setFrames]
   )
+  useHandedFiles((files) => void addFiles(files))
 
   async function loadSamples() {
     setNotice("")

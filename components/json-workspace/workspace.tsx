@@ -50,6 +50,7 @@ import {
 import type { JsonJob, JsonResult } from "@/lib/json-workspace/protocol"
 import type { Transform } from "@/lib/json-workspace/transforms"
 import type { Conversion } from "@/lib/json-workspace/convert"
+import { useHandedFiles } from "@/hooks/use-handed-files"
 
 type Mode = "edit" | "explore" | "query" | "compare" | "schema" | "convert"
 const modes: readonly Mode[] = [
@@ -260,6 +261,7 @@ export function JsonWorkspace() {
       )
     }
   }
+  useHandedFiles((files) => void openFile(files[0]))
   async function copy(text: string, label = "Result") {
     try {
       await navigator.clipboard.writeText(text)
