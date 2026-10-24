@@ -128,7 +128,8 @@ test("JSON formatting validates input and preserves precision in the download", 
 test("blog articles have crawlable content, accurate metadata and working tool links", async ({
   page,
 }) => {
-  test.setTimeout(90_000)
+  // Every article is opened and its links fetched: a few seconds each on CI's slower machines.
+  test.setTimeout(30_000 + posts.length * 3_000)
   await page.goto("/blog/")
   await expect(page.getByRole("article")).toHaveCount(posts.length)
   for (const post of posts) {
