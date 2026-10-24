@@ -36,6 +36,7 @@ export const posts: readonly BlogPost[] = [
   ...videoPosts,
   ...markdownPosts,
   overviewPost,
+  storagePost,
   {
     slug: "compress-images-without-uploading",
     searchTitle: "How to compress images online without uploading them",
@@ -738,6 +739,7 @@ import {
   agentWorkflowsPost,
   gaplessPost,
   overviewPost,
+  storagePost,
   resizePost,
   targetSizePost,
 } from "./tool-blog"

@@ -270,6 +270,14 @@ function KeptParts({ env }: { env: StorageEnv }) {
       <p className="text-xs text-muted-foreground">
         Your choice of light or dark is kept too. None of this is ever sent
         anywhere; your browser’s settings for this site can remove all of it.{" "}
+        <Link
+          prefetch={false}
+          href="/blog/see-what-keepsimp-keeps-in-your-browser/"
+          className="text-primary"
+        >
+          What each part is
+        </Link>
+        {" · "}
         <Link prefetch={false} href="/privacy/" className="text-primary">
           Privacy
         </Link>

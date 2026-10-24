@@ -49,6 +49,12 @@ const cards = [
     "/images/color-brand-guide.svg",
   ],
   [
+    "see-what-keepsimp-keeps-in-your-browser",
+    "Everything kept on your device, in one list.",
+    "See it, size it, remove it. Nothing sent anywhere.",
+    "/images/device-storage-guide.svg",
+  ],
+  [
     "keepsimp",
     "Do more with your files. Upload none of them.",
     "Video, audio, PDF, images and Markdown, in your browser.",

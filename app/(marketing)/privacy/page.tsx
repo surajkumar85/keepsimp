@@ -1,3 +1,4 @@
+import Link from "next/link"
 import { pageMetadata } from "@/lib/site"
 
 export const metadata = pageMetadata(
@@ -138,7 +139,14 @@ export default function PrivacyPage() {
           with the size of each part and a button to remove it: the offline
           copy, the engines kept once used, drafts, video work files, and what
           you asked to be remembered. It measures them on your device and sends
-          nothing anywhere.
+          nothing anywhere.{" "}
+          <Link
+            prefetch={false}
+            href="/blog/see-what-keepsimp-keeps-in-your-browser/"
+          >
+            Read what each part is and when to remove it
+          </Link>
+          .
         </p>
         <h2>Keep the limits in mind.</h2>
         <p>
