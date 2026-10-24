@@ -167,7 +167,7 @@ KeepSimp's tools can be used by agents: Claude Code, Codex and other MCP clients
   - offers `window.keepsimp` (`bridge-api.ts`);
   - registers every tool with WebMCP where `document.modelContext` exists (`webmcp.ts`).
 
-  They stop when the page goes. The origin-trial token is set in `lib/agent/setup.ts` (`ORIGIN_TRIAL_TOKEN`) and written as a `<meta http-equiv="origin-trial">` on this page only, since a static export cannot send headers. The token was registered for `https://keepsimp.vercel.app` on 2026-10-22 and expires on 2027-03-30; it works only on that origin, so local builds and previews still need `--enable-features=WebMCP`.
+  They stop when the page goes. The origin-trial tokens are set in `lib/agent/setup.ts` (`ORIGIN_TRIAL_TOKENS`) and written as `<meta http-equiv="origin-trial">` tags on this page only, since a static export cannot send headers. There is one for each address the site is served from: `https://keepsimp.vercel.app` (registered 2026-10-22) and `https://www.keepsimp.com` (registered 2026-10-24); Chrome uses the one for the page's own origin and ignores the other. Both expire on 2027-03-30. A token works only on its origin, so local builds and previews still need `--enable-features=WebMCP`.
 
 - **What the person sees:**
   - how to connect Claude Code and Codex;

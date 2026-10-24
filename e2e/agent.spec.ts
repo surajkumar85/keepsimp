@@ -1,5 +1,5 @@
 import { chromium, expect, test, type BrowserContext } from "@playwright/test"
-import { ORIGIN_TRIAL_TOKEN } from "@/lib/agent/setup"
+import { ORIGIN_TRIAL_TOKENS } from "@/lib/agent/setup"
 import AxeBuilder from "@axe-core/playwright"
 import { parse as parseYaml } from "yaml"
 import { hand, ran, ready, run, saved, twoColourPng } from "./agent"
@@ -441,16 +441,29 @@ test("the page is accessible in both themes and fits a phone", async ({
   ).toBe(true)
 })
 
-test("asks Chrome for WebMCP with the site's origin-trial token, in the page's head", async ({
+test("asks Chrome for WebMCP with the site's origin-trial tokens, in the page's head", async ({
   page,
 }) => {
   await ready(page)
   expect(
-    await page.evaluate(
-      () =>
-        document.head.querySelector<HTMLMetaElement>(
+    await page.evaluate(() =>
+      Array.from(
+        document.head.querySelectorAll<HTMLMetaElement>(
           'meta[http-equiv="origin-trial"]'
-        )?.content
+        ),
+        (meta) => meta.content
+      )
     )
-  ).toBe(ORIGIN_TRIAL_TOKEN)
+  ).toEqual(ORIGIN_TRIAL_TOKENS)
+  // One for each address the site is served from, each for WebMCP.
+  const origins = ORIGIN_TRIAL_TOKENS.map((token) => {
+    const bytes = Buffer.from(token, "base64")
+    const claims = JSON.parse(bytes.subarray(69).toString("utf8"))
+    expect(claims.feature).toBe("WebMCP")
+    return claims.origin
+  })
+  expect(origins).toEqual([
+    "https://www.keepsimp.com:443",
+    "https://keepsimp.vercel.app:443",
+  ])
 })

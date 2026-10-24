@@ -1,5 +1,5 @@
 import { AgentPage } from "@/components/agent/agent-page"
-import { ORIGIN_TRIAL_TOKEN } from "@/lib/agent/setup"
+import { ORIGIN_TRIAL_TOKENS } from "@/lib/agent/setup"
 import { pageMetadata } from "@/lib/site"
 
 export const metadata = pageMetadata(
@@ -11,9 +11,9 @@ export const metadata = pageMetadata(
 export default function Page() {
   return (
     <>
-      {ORIGIN_TRIAL_TOKEN && (
-        <meta httpEquiv="origin-trial" content={ORIGIN_TRIAL_TOKEN} />
-      )}
+      {ORIGIN_TRIAL_TOKENS.map((token) => (
+        <meta key={token} httpEquiv="origin-trial" content={token} />
+      ))}
       <AgentPage />
     </>
   )
