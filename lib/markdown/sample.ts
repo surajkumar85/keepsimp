@@ -51,7 +51,7 @@ flowchart LR
   Station --> Hill --> Hotel
 \`\`\`
 
-Find more at https://keepsimp.vercel.app/blog/.
+Find more at https://www.keepsimp.com/blog/.
 
 ---
 

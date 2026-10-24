@@ -3,7 +3,7 @@ import type { Metadata } from "next"
 export const site = {
   name: "KeepSimp",
   origin: (
-    process.env.NEXT_PUBLIC_SITE_URL || "https://keepsimp.vercel.app"
+    process.env.NEXT_PUBLIC_SITE_URL || "https://www.keepsimp.com"
   ).replace(/\/$/, ""),
   updated: "2026-10-10T00:00:00+05:30",
 }

@@ -84,7 +84,7 @@ export function spriteJson(
         duration: round(frame.duration),
       })),
       meta: {
-        app: "https://keepsimp.vercel.app",
+        app: "https://www.keepsimp.com",
         image,
         size: { w: layout.sheetWidth, h: layout.sheetHeight },
         frameSize: { w: layout.width, h: layout.height },

@@ -478,7 +478,7 @@ try {
           "position:absolute;right:56px;top:80px;width:500px;height:470px;object-fit:cover;border-radius:24px;"
         if (image.endsWith(".svg")) photo.style.objectFit = "contain"
         const footer = document.createElement("p")
-        footer.textContent = "keepsimp.vercel.app"
+        footer.textContent = "keepsimp.com"
         footer.style.cssText =
           "position:absolute;left:56px;bottom:42px;font-family:var(--font-inter),sans-serif;font-size:18px;color:var(--primary);margin:0;"
         card.append(logo, copy, photo, footer)

@@ -145,7 +145,7 @@ test("blog articles have crawlable content, accurate metadata and working tool l
       await expect(page.getByTestId("topics")).toContainText(post.keywords[0])
     await expect(page.locator('link[rel="canonical"]')).toHaveAttribute(
       "href",
-      `https://keepsimp.vercel.app/blog/${post.slug}/`
+      `https://www.keepsimp.com/blog/${post.slug}/`
     )
     await expect(page.locator('meta[property="og:type"]')).toHaveAttribute(
       "content",
@@ -200,7 +200,7 @@ test("sitemap, robots and social graphics are production ready", async ({
   await page.goto("/")
   await expect(page.locator('link[rel="canonical"]')).toHaveAttribute(
     "href",
-    "https://keepsimp.vercel.app/"
+    "https://www.keepsimp.com/"
   )
   await expect(page.locator('meta[name="twitter:card"]')).toHaveAttribute(
     "content",
@@ -210,27 +210,23 @@ test("sitemap, robots and social graphics are production ready", async ({
   expect(response.ok()).toBe(true)
   const sitemap = await response.text()
   for (const post of posts)
-    expect(sitemap).toContain(`https://keepsimp.vercel.app/blog/${post.slug}/`)
+    expect(sitemap).toContain(`https://www.keepsimp.com/blog/${post.slug}/`)
   expect(sitemap).toContain(
-    "https://keepsimp.vercel.app/dashboard/image-compressor/"
+    "https://www.keepsimp.com/dashboard/image-compressor/"
   )
   expect(sitemap).not.toContain("design-system")
   // Ready tools and their doors are listed.
+  expect(sitemap).toContain("https://www.keepsimp.com/dashboard/video-editor/")
   expect(sitemap).toContain(
-    "https://keepsimp.vercel.app/dashboard/video-editor/"
+    "https://www.keepsimp.com/dashboard/video-converter/"
   )
   expect(sitemap).toContain(
-    "https://keepsimp.vercel.app/dashboard/video-converter/"
+    "https://www.keepsimp.com/dashboard/video-compressor/"
   )
-  expect(sitemap).toContain(
-    "https://keepsimp.vercel.app/dashboard/video-compressor/"
-  )
-  expect(sitemap).toContain(
-    "https://keepsimp.vercel.app/dashboard/video-trimmer/"
-  )
+  expect(sitemap).toContain("https://www.keepsimp.com/dashboard/video-trimmer/")
   const robots = await (await request.get("/robots.txt")).text()
   expect(robots).toContain("Allow: /")
-  expect(robots).toContain("Sitemap: https://keepsimp.vercel.app/sitemap.xml")
+  expect(robots).toContain("Sitemap: https://www.keepsimp.com/sitemap.xml")
   for (const slug of ["keepsimp", ...posts.map((post) => post.slug)]) {
     const graphic = await request.get(`/images/social/${slug}.png`)
     expect(graphic.ok()).toBe(true)

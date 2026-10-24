@@ -2,10 +2,10 @@ import { expect, it, vi } from "vitest"
 import { absoluteUrl, jsonLd, pageMetadata } from "./site"
 
 it("uses the real deployment origin for canonical and sharing metadata", () => {
-  expect(absoluteUrl("/blog/")).toBe("https://keepsimp.vercel.app/blog/")
+  expect(absoluteUrl("/blog/")).toBe("https://www.keepsimp.com/blog/")
   const metadata = pageMetadata("A guide", "Helpful words", "/blog/a-guide/")
   expect(metadata.alternates?.canonical).toBe(
-    "https://keepsimp.vercel.app/blog/a-guide/"
+    "https://www.keepsimp.com/blog/a-guide/"
   )
   expect(metadata.description).toBe("Helpful words")
 })

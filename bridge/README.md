@@ -1,6 +1,6 @@
 # keepsimp-mcp
 
-[KeepSimp](https://keepsimp.vercel.app)'s tools for Claude Code, Codex and any other agent that speaks the Model Context Protocol. The tools run on your own computer, in a browser the bridge opens and hides: the same engines as KeepSimp's pages, with your files read from your disk and the results saved next to them. Nothing goes to a server.
+[KeepSimp](https://www.keepsimp.com)'s tools for Claude Code, Codex and any other agent that speaks the Model Context Protocol. The tools run on your own computer, in a browser the bridge opens and hides: the same engines as KeepSimp's pages, with your files read from your disk and the results saved next to them. Nothing goes to a server.
 
 ## Use it
 
@@ -58,7 +58,7 @@ Signing a PDF and recording stay for you to do yourself.
 --allow <folder>   Also let KeepSimp read and write in this folder (repeatable).
 --browser <which>  chrome, chromium or auto (the default).
 --headed           Show the browser window.
---site <url>       The KeepSimp site to open (https://keepsimp.vercel.app).
+--site <url>       The KeepSimp site to open (https://www.keepsimp.com).
 ```
 
 ## Licence

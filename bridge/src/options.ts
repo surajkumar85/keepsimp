@@ -1,7 +1,7 @@
 /** What the bridge is started with, read from its command line. */
 import type { BrowserChoice } from "./browser.ts"
 
-export const SITE = "https://keepsimp.vercel.app"
+export const SITE = "https://www.keepsimp.com"
 
 export interface Options {
   site: string

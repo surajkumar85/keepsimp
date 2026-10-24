@@ -1,6 +1,6 @@
 {
   "name": "keepsimp-mcp",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "KeepSimp's tools for Claude Code, Codex and other MCP agents, run on your own computer in a hidden browser.",
   "license": "AGPL-3.0-only",
   "type": "module",
@@ -16,7 +16,7 @@
   "engines": {
     "node": ">=22.18"
   },
-  "homepage": "https://keepsimp.vercel.app/dashboard/agents/",
+  "homepage": "https://www.keepsimp.com/dashboard/agents/",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/surajkumar85/keepsimp.git",

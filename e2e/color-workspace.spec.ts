@@ -690,7 +690,7 @@ test("publishes the color tool and guides with matching SEO and dates", async ({
   )
   await expect(page.locator('link[rel="canonical"]')).toHaveAttribute(
     "href",
-    "https://keepsimp.vercel.app/dashboard/color-utility/"
+    "https://www.keepsimp.com/dashboard/color-utility/"
   )
   await expect(page.locator('meta[property="og:image"]')).toHaveAttribute(
     "content",
@@ -709,7 +709,7 @@ test("publishes the color tool and guides with matching SEO and dates", async ({
     await expect(page.locator("time")).toHaveText("13 October 2026")
     await expect(page.locator('link[rel="canonical"]')).toHaveAttribute(
       "href",
-      `https://keepsimp.vercel.app/blog/${slug}/`
+      `https://www.keepsimp.com/blog/${slug}/`
     )
     const data = await page
       .locator('script[type="application/ld+json"]')
