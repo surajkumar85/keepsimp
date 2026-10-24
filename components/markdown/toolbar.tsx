@@ -16,13 +16,15 @@ import {
   IconSourceCode,
   IconStrikethrough,
   IconTable,
+  IconPhoto,
 } from "@tabler/icons-react"
-import { useSyncExternalStore } from "react"
+import { Fragment, useSyncExternalStore } from "react"
 import { Button } from "@/components/ui/button"
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import {
@@ -34,7 +36,18 @@ import {
 
 /** What the toolbar asks the editor to do: the editor's commands and headings of every level. */
 export type ToolbarCommand =
-  MarkdownCommand | "h4" | "h5" | "h6" | "table" | "rule"
+  | MarkdownCommand
+  | "h4"
+  | "h5"
+  | "h6"
+  | "rule"
+  | "picture"
+  | "table"
+  | "table-tidy"
+  | "table-row"
+  | "table-column"
+  | "table-delete-row"
+  | "table-delete-column"
 
 const isMac = () => /Mac|iPhone|iPad/.test(navigator.platform)
 
@@ -69,8 +82,17 @@ const BUTTONS: {
     icon: IconSourceCode,
     group: true,
   },
-  { command: "table", label: "Table", icon: IconTable },
+  { command: "picture", label: "Picture", icon: IconPhoto },
   { command: "rule", label: "Line across", icon: IconSeparatorHorizontal },
+]
+
+const TABLE_ITEMS: { command: ToolbarCommand; label: string }[] = [
+  { command: "table", label: "Make a table…" },
+  { command: "table-tidy", label: "Line up the table's pipes" },
+  { command: "table-row", label: "Add a row below" },
+  { command: "table-column", label: "Add a column to the right" },
+  { command: "table-delete-row", label: "Delete this row" },
+  { command: "table-delete-column", label: "Delete this column" },
 ]
 
 /**
@@ -145,6 +167,31 @@ export function MarkdownToolbar({
           </Button>
         </span>
       ))}
+      <DropdownMenu>
+        <DropdownMenuTrigger
+          render={
+            <Button
+              variant="ghost"
+              className="shrink-0 gap-1 px-2"
+              aria-label="Table"
+              title="Table"
+            />
+          }
+        >
+          <IconTable aria-hidden="true" />
+          <IconChevronDown className="size-3.5" aria-hidden="true" />
+        </DropdownMenuTrigger>
+        <DropdownMenuContent>
+          {TABLE_ITEMS.map((item, index) => (
+            <Fragment key={item.command}>
+              {index === 1 && <DropdownMenuSeparator />}
+              <DropdownMenuItem onClick={() => onCommand(item.command)}>
+                {item.label}
+              </DropdownMenuItem>
+            </Fragment>
+          ))}
+        </DropdownMenuContent>
+      </DropdownMenu>
       <span className="mx-1 h-5 w-px shrink-0 bg-border" aria-hidden="true" />
       <Button
         variant="ghost"

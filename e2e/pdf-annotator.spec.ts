@@ -549,7 +549,7 @@ test("the written help and the guide are there, and the editor has the same tool
     page.getByRole("link", { name: "PDF editor", exact: true })
   ).toHaveAttribute("href", "/dashboard/pdf-editor/")
   await page.goto("/dashboard/?category=document")
-  await expect(page.getByTestId("tool-card")).toHaveCount(4)
+  await expect(page.getByTestId("tool-card")).toHaveCount(5)
   await expect(
     page.getByTestId("tool-card").filter({ hasText: "PDF annotator" })
   ).toHaveCount(0)

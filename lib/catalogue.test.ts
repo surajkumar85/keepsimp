@@ -47,6 +47,12 @@ describe("doors", () => {
       "create-pdf-form",
       "verify-pdf-signature",
       "ocr-pdf",
+      "markdown-to-html",
+      "markdown-to-pdf",
+      "markdown-to-word",
+      "html-to-markdown",
+      "word-to-markdown",
+      "markdown-table-generator",
     ])
     expect(listed).toHaveLength(tools.length - doors.length)
     expect(listed.some((tool) => tool.partOf)).toBe(false)

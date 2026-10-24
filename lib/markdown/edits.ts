@@ -235,3 +235,25 @@ export function insertTable(doc: string, range: Range): Edit {
 export function insertRule(doc: string, range: Range): Edit {
   return insertBlock(doc, range, "---", [3, 3])
 }
+
+/** Ticks or clears the box of the task on a line (from 0), or null when the line is not a task. */
+export function toggleTask(doc: string, line: number): Edit | null {
+  let from = 0
+  for (let index = 0; index < line; index++) {
+    const end = doc.indexOf("\n", from)
+    if (end === -1) return null
+    from = end + 1
+  }
+  const end = doc.indexOf("\n", from)
+  const text = doc.slice(from, end === -1 ? doc.length : end)
+  const match = /^(\s*(?:>\s*)*[-*+]\s+\[)([ xX])\]/.exec(text)
+  if (!match) return null
+  const at = from + match[1].length
+  return {
+    from: at,
+    to: at + 1,
+    insert: match[2] === " " ? "x" : " ",
+    anchor: at + 1,
+    head: at + 1,
+  }
+}

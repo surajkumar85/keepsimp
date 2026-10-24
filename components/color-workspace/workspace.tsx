@@ -82,6 +82,12 @@ function FormatRows({
   )
 }
 export function ColorWorkspace() {
+  // True once the page is live here, false while it is made on the server: what is typed before then is not taken.
+  const hydrated = useSyncExternalStore(
+    () => () => {},
+    () => true,
+    () => false
+  )
   const [tab, setTab] = useState("convert"),
     [input, setInput] = useState<string>(defaults.color),
     [notice, setNotice] = useState("")
@@ -128,7 +134,11 @@ export function ColorWorkspace() {
   }
   return (
     <CurrentColor.Provider value={current.value?.hex ?? ""}>
-      <div className="space-y-4">
+      <div
+        className="space-y-4"
+        data-testid="color-workspace"
+        data-ready={hydrated || undefined}
+      >
         <WorkspaceTabs
           value={tab}
           onValueChange={(value) => {

@@ -15,12 +15,15 @@ import { alert } from "@mdit/plugin-alert"
 import { slug } from "github-slugger"
 import { parse as parseYaml } from "yaml"
 import { clean } from "./clean"
+import { mathRules } from "./math"
 
 export interface RenderOptions {
   /** Curly quotes, dashes and ellipses in the HTML; the text is not changed. */
   typographer: boolean
   /** Pictures from other sites are shown; off, they are left out and said. */
   remoteImages: boolean
+  /** Pictures kept with the document (pasted or dropped), by the name the text uses, as addresses the page can show. */
+  pictures?: ReadonlyMap<string, string>
 }
 
 export const defaultRenderOptions: RenderOptions = {
@@ -47,6 +50,8 @@ export interface Rendered {
   blockedImages: number
   /** The words as read, without their marks: for counting. */
   plain: string
+  /** Whether the document has maths, diagrams or code in a named language: what the page fills in after drawing. */
+  needs: { math: boolean; diagrams: boolean; code: boolean }
 }
 
 export type FrontMatter =
@@ -128,7 +133,8 @@ function makeParser(options: RenderOptions, found: { front: string | null }) {
   })
     .enable(["table", "strikethrough"])
     .use(footnote)
-    .use(taskLists, { enabled: false, label: true })
+    // Boxes can be ticked in the preview; the page writes the tick into the text.
+    .use(taskLists, { enabled: true, label: true })
     .use(frontMatter, (text: string) => {
       found.front = text
     })
@@ -138,10 +144,23 @@ function makeParser(options: RenderOptions, found: { front: string | null }) {
       // GitHub's second "Install" is "install-1".
       uniqueSlugStartIndex: 1,
     })
+    .use(mathRules)
+  // Diagrams and maths are drawn later, by the page, from what is kept here as text.
+  const fence = md.renderer.rules.fence!
+  md.renderer.rules.fence = (tokens, index, options, env, self) => {
+    const token = tokens[index]
+    const language = token.info.trim().split(/\s+/)[0].toLowerCase()
+    const line = token.attrGet("data-source-line")
+    if (language === "mermaid")
+      return `<figure class="diagram" data-diagram="mermaid" data-source-line="${line}"><pre><code>${escape(token.content)}</code></pre></figure>\n`
+    if (language === "math")
+      return `<div class="math math-display" data-tex="${escape(token.content.trim())}" data-source-line="${line}">${escape(token.content.trim())}</div>\n`
+    return fence(tokens, index, options, env, self)
+  }
   // Every block says the line it starts on, for scrolling the two sides together.
   md.core.ruler.push("source_lines", (state) => {
     for (const token of state.tokens)
-      if (token.map && token.nesting !== -1 && token.level === 0)
+      if (token.map && token.nesting !== -1 && token.type !== "inline")
         token.attrSet("data-source-line", String(token.map[0]))
   })
   return md
@@ -160,6 +179,7 @@ export function renderMarkdown(
       frontMatter: null,
       blockedImages: 0,
       plain: "",
+      needs: { math: false, diagrams: false, code: false },
     }
   const found: { front: string | null } = { front: null }
   const md = makeParser(options, found)
@@ -190,7 +210,8 @@ export function renderMarkdown(
   const front = found.front === null ? null : readFrontMatter(found.front)
   const cleaned = clean(
     (front ? frontMatterHtml(front) : "") + body,
-    options.remoteImages
+    options.remoteImages,
+    options.pictures
   )
   return {
     html: cleaned.html,
@@ -198,5 +219,36 @@ export function renderMarkdown(
     frontMatter: front,
     blockedImages: cleaned.blockedImages,
     plain,
+    needs: {
+      math: tokens.some(
+        (token) =>
+          token.type === "math_block" ||
+          (token.type === "fence" && token.info.trim() === "math") ||
+          !!token.children?.some((child) => child.type === "math_inline")
+      ),
+      diagrams: tokens.some(
+        (token) =>
+          token.type === "fence" && /^mermaid\b/i.test(token.info.trim())
+      ),
+      code: tokens.some(
+        (token) =>
+          token.type === "fence" &&
+          !!token.info.trim() &&
+          !/^(mermaid|math)\b/i.test(token.info.trim())
+      ),
+    },
+  }
+}
+
+/** The tokens of a document, as markdown-it reads it with the preview's rules: for exports that build their own files. */
+export function markdownTokens(
+  text: string,
+  options: RenderOptions = defaultRenderOptions
+) {
+  const found: { front: string | null } = { front: null }
+  const md = makeParser(options, found)
+  return {
+    tokens: md.parse(text, {}),
+    frontMatter: found.front === null ? null : readFrontMatter(found.front),
   }
 }

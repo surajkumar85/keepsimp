@@ -40,6 +40,17 @@ A short guide to **Markdown**, written in _Markdown_. Everything here stays on y
 const total = [12.5, 8, 21].reduce((sum, cost) => sum + cost, 0)
 \`\`\`
 
+The budget for three days is $3 \\times 40 = 120$ euros, or
+
+$$
+\\text{per day} = \\frac{120}{3}
+$$
+
+\`\`\`mermaid
+flowchart LR
+  Station --> Hill --> Hotel
+\`\`\`
+
 Find more at https://keepsimp.vercel.app/blog/.
 
 ---

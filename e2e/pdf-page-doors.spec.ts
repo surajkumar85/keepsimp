@@ -110,7 +110,7 @@ for (const door of DOORS)
     await expect(page.locator(`a[href="${door.route}"]`).first()).toBeVisible()
     // It is found by searching, and is not a tool of its own in the list.
     await page.goto("/dashboard/?category=document")
-    await expect(page.getByTestId("tool-card")).toHaveCount(4)
+    await expect(page.getByTestId("tool-card")).toHaveCount(5)
     await expect(
       page.getByTestId("tool-card").filter({ hasText: door.name })
     ).toHaveCount(0)

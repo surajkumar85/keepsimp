@@ -76,6 +76,10 @@ const engines = {
     },
     picture: async () => ({ width: 1, height: 1 }),
   },
+  markdown: {
+    enrich: async (html: string) => html,
+    word: async () => new Blob(["docx"]),
+  },
 }
 
 describe("every tool", () => {

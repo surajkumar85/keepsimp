@@ -16,6 +16,14 @@ const icon = (name: string, size: number, purpose: "any" | "maskable") => ({
 })
 
 /** What a phone needs to install KeepSimp to the home screen. */
+/** Kinds of file the installed app opens (Chromium on a computer): Markdown, in the Markdown editor. */
+export const fileHandlers = [
+  {
+    action: "/dashboard/markdown-editor/",
+    accept: { "text/markdown": [".md", ".markdown", ".mdown", ".mkd"] },
+  },
+]
+
 export function webManifest(): MetadataRoute.Manifest {
   return {
     id: "/",
@@ -48,5 +56,7 @@ export function webManifest(): MetadataRoute.Manifest {
         url: `/dashboard/${tool.id}/`,
         icons: [icon("icon-192.png", 192, "any")],
       })),
+    // Next.js's type does not name it yet; the field is the Web App Manifest's own.
+    ...({ file_handlers: fileHandlers } as object),
   }
 }

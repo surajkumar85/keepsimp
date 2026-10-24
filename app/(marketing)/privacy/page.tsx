@@ -54,12 +54,18 @@ export default function PrivacyPage() {
           the browser asks you, and only until you press Stop.
         </p>
         <p>
-          The Markdown editor reads the files you open on this device and keeps
-          nothing of them in the browser&apos;s storage. Where your browser lets
-          a page write a file you chose (Chrome and Edge), Save writes back to
-          that file and nowhere else. Pictures that a document links from other
-          sites are fetched by your browser to show them in the preview, as any
-          page fetches its pictures; the preview options can leave them out.
+          The Markdown editor reads the files you open on this device. It keeps
+          nothing of them in the browser&apos;s storage unless you switch on
+          &ldquo;Keep a draft on this device&rdquo;: then your open documents,
+          the pictures you added to them and their versions are kept in this
+          browser&apos;s own storage (IndexedDB), on this device, until you
+          switch it off, which deletes them. Where your browser lets a page
+          write a file or a folder you chose (Chrome and Edge), Save writes back
+          to that file and nowhere else, and only while the page is open.
+          Pictures that a document links from other sites are fetched by your
+          browser to show them in the preview, as any page fetches its pictures;
+          the preview options can leave them out. Links are never checked over
+          the internet.
         </p>
         <p>
           The video editor writes each video it makes to this browser’s own

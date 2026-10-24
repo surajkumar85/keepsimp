@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest"
 import {
+  toggleTask,
   insertCodeBlock,
   insertLink,
   insertRule,
@@ -187,5 +188,21 @@ describe("blocks", () => {
         "|          |          |          |",
       ].join("\n")
     )
+  })
+})
+
+describe("toggleTask", () => {
+  it("ticks and clears a task's box on its line, in a quote too", () => {
+    const doc = "# List\n- [ ] milk\n  * [X] tea\n> - [ ] quoted\nplain"
+    const tick = (line: number) => {
+      const edit = toggleTask(doc, line)
+      return edit && doc.slice(0, edit.from) + edit.insert + doc.slice(edit.to)
+    }
+    expect(tick(1)).toContain("- [x] milk")
+    expect(tick(2)).toContain("* [ ] tea")
+    expect(tick(3)).toContain("> - [x] quoted")
+    expect(tick(0)).toBeNull()
+    expect(tick(4)).toBeNull()
+    expect(tick(9)).toBeNull()
   })
 })

@@ -11,6 +11,7 @@ import { imageTools, type ImageEngines } from "./image"
 import { animationTools, type AnimationJob } from "./animation"
 import { audioTools, type AudioEngines } from "./audio"
 import { videoTools, type VideoEngines } from "./video"
+import { markdownTools, type MarkdownEngines } from "./markdown"
 import type { PoolJobs } from "./pool-jobs"
 import type { AnimationResponse } from "@/lib/animation/protocol"
 import { asTool, type AgentTool } from "./registry"
@@ -26,6 +27,7 @@ export interface Engines {
   animation: PoolJobs<AnimationJob, AnimationResponse>
   audio: AudioEngines
   video: VideoEngines
+  markdown: MarkdownEngines
 }
 
 const listFiles: AgentTool<Record<string, never>> = {
@@ -61,5 +63,6 @@ export function agentTools(engines: Engines): AgentTool[] {
     ...animationTools(engines.animation),
     ...audioTools(engines.audio),
     ...videoTools(engines.video),
+    ...markdownTools(engines.markdown),
   ]
 }

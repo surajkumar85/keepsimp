@@ -45,3 +45,12 @@ it("lists only working tools as shortcuts", () => {
   )
   for (const shortcut of shortcuts) expect(shortcut.icons).toHaveLength(1)
 })
+
+it("opens Markdown files in the Markdown editor once installed", () => {
+  expect((webManifest() as { file_handlers?: unknown }).file_handlers).toEqual([
+    {
+      action: "/dashboard/markdown-editor/",
+      accept: { "text/markdown": [".md", ".markdown", ".mdown", ".mkd"] },
+    },
+  ])
+})

@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest"
 import { clean } from "./clean"
-import { frontMatterHtml, readFrontMatter, renderMarkdown } from "./render"
+import {
+  frontMatterHtml,
+  markdownTokens,
+  readFrontMatter,
+  renderMarkdown,
+} from "./render"
 
 describe("renderMarkdown", () => {
   it("draws nothing for an empty document", () => {
@@ -10,6 +15,7 @@ describe("renderMarkdown", () => {
       frontMatter: null,
       blockedImages: 0,
       plain: "",
+      needs: { math: false, diagrams: false, code: false },
     })
   })
 
@@ -140,6 +146,30 @@ describe("renderMarkdown", () => {
     expect(kept.html).toContain('data-blocked-src="https://example.com/a.png"')
     expect(kept.html).toContain('src="./b.png"')
     expect(kept.blockedImages).toBe(1)
+  })
+})
+
+describe("pictures kept with a document", () => {
+  it("are shown from where the page holds them", () => {
+    const { html } = renderMarkdown(
+      "![a](pictures/a.png) ![b](./pictures/a.png) ![c](other.png)",
+      {
+        typographer: false,
+        remoteImages: true,
+        pictures: new Map([["pictures/a.png", "blob:http://x/1"]]),
+      }
+    )
+    expect(html.match(/src="blob:http:\/\/x\/1"/g)).toHaveLength(2)
+    expect(html).toContain('src="other.png"')
+  })
+})
+
+describe("markdownTokens", () => {
+  it("reads a document with the preview's rules, for exports", () => {
+    const { tokens, frontMatter } = markdownTokens("---\na: 1\n---\n# Hi $x$")
+    expect(tokens.find((token) => token.type === "heading_open")).toBeDefined()
+    expect(frontMatter).toEqual({ ok: true, entries: [["a", "1"]] })
+    expect(markdownTokens("plain").frontMatter).toBeNull()
   })
 })
 

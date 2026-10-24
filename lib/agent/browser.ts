@@ -225,6 +225,21 @@ export function startAgent(): Started {
           return readTrack(engine, file, name)
         },
       },
+      // The Markdown editor's own drawing and Word file, as its page makes them.
+      markdown: {
+        enrich: async (html, needs) =>
+          (await import("@/components/markdown/enrich")).enrichHtml(
+            html,
+            needs,
+            false
+          ),
+        word: async (text, title) =>
+          (await import("@/components/markdown/export")).wordFile(
+            text,
+            title,
+            new Map()
+          ),
+      },
     })
   )
   window.keepsimp = bridgeApi(agent, {

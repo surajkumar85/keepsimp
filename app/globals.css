@@ -247,6 +247,67 @@
   .markdown-body .front-matter-problem {
     color: var(--destructive);
   }
+  /* Maths drawn as MathML, diagrams as drawings, and what could not be drawn. */
+  .markdown-body .math-display {
+    display: block;
+    margin: 1em 0;
+    overflow-x: auto;
+    text-align: center;
+  }
+  .markdown-body math[display="block"] {
+    margin: 0;
+  }
+  .markdown-body .math-problem,
+  .markdown-body .diagram-problem {
+    color: var(--destructive);
+  }
+  .markdown-body figure.diagram {
+    margin: 0 0 1em;
+    overflow-x: auto;
+    text-align: center;
+  }
+  .markdown-body figure.diagram svg {
+    max-width: 100%;
+    height: auto;
+  }
+  .markdown-body .diagram-problem {
+    font-size: 0.875em;
+    text-align: left;
+  }
+  .markdown-body .task-list-item-checkbox {
+    cursor: pointer;
+  }
+  /* Code coloured by the editor's own parsers (CodeMirror's class names). */
+  .markdown-body
+    :is(
+      .tok-keyword,
+      .tok-operator,
+      .tok-typeName,
+      .tok-number,
+      .tok-bool,
+      .tok-atom
+    ) {
+    color: var(--primary);
+  }
+  .markdown-body :is(.tok-comment, .tok-meta, .tok-punctuation) {
+    color: var(--muted-foreground);
+  }
+  .markdown-body :is(.tok-definition, .tok-function, .tok-propertyName) {
+    font-weight: 600;
+  }
+  .markdown-body :is(.tok-string, .tok-string2) {
+    color: color-mix(in oklch, var(--primary) 55%, var(--foreground));
+  }
+  .markdown-body .tok-comment {
+    font-style: italic;
+  }
+  /* A slide fills the screen with larger type. */
+  .markdown-body.slide {
+    font-size: clamp(18px, 2.4vw, 30px);
+  }
+  .markdown-body.slide :is(h1, h2) {
+    border-bottom: 0;
+  }
   /* Neutral checkerboard behind transparent pixels, built from theme tokens. */
   .checkerboard {
     background-color: var(--background);

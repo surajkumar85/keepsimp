@@ -1,9 +1,15 @@
-import { test, expect, type Download } from "@playwright/test"
+import { test, expect, type Download, type Page } from "@playwright/test"
 import AxeBuilder from "@axe-core/playwright"
 import sharp from "sharp"
 import { serveExport } from "./static-server"
 
 const route = "/dashboard/color-utility/"
+/** Waits until the page is live: a value typed before then is put back. */
+const ready = (page: Page) =>
+  expect(page.getByTestId("color-workspace")).toHaveAttribute(
+    "data-ready",
+    "true"
+  )
 async function bytes(download: Download) {
   const stream = await download.createReadStream()
   const chunks: Buffer[] = []
@@ -32,6 +38,7 @@ test("converts actual colors, preserves alpha and distinguishes wide-gamut fallb
   browserName,
 }) => {
   await page.goto(route)
+  await ready(page)
   if (browserName === "chromium")
     await page.context().grantPermissions(["clipboard-read", "clipboard-write"])
   const field = page.getByLabel("Color value", { exact: true })
@@ -87,6 +94,7 @@ test("brand references open, copy and load a palette without fetching assets", a
       external.push(request.url())
   })
   await page.goto(route)
+  await ready(page)
   await tab(page, "Brand colors")
   for (const name of [
     "Google",
@@ -164,6 +172,7 @@ test("picks visually with pointer or touch and native keyboard channels without 
   isMobile,
 }) => {
   await page.goto(route)
+  await ready(page)
   const source = page.getByLabel("Color value", { exact: true })
   await source.fill("red")
   const area = page.getByTestId("Color-color-area")
@@ -225,6 +234,7 @@ test("edits one palette color explicitly, undoes it and explores every palette m
   page,
 }) => {
   await page.goto(route)
+  await ready(page)
   await tab(page, "Palettes")
   await page.getByRole("button", { name: "Edit color 1", exact: true }).click()
   await page.getByLabel("Palette color 1", { exact: true }).fill("broken")
@@ -283,6 +293,7 @@ test("opens the same large picker for contrast and gradients, and moves a select
   page,
 }) => {
   await page.goto(route)
+  await ready(page)
   await tab(page, "Contrast")
   await page
     .getByRole("button", { name: "Pick text color", exact: true })
@@ -323,6 +334,7 @@ test("downloads real JSON, tokens, SVG and transparent PNG palettes", async ({
   page,
 }) => {
   await page.goto(route)
+  await ready(page)
   await page.getByLabel("Color value", { exact: true }).fill("#ff000080")
   await page
     .getByRole("button", { name: "Add to palette", exact: true })
@@ -363,6 +375,7 @@ test("checks alpha-aware contrast and applies a verified passing suggestion", as
   page,
 }) => {
   await page.goto(route)
+  await ready(page)
   await tab(page, "Contrast")
   await page.getByLabel("Text color", { exact: true }).fill("black")
   await page.getByLabel("Background color", { exact: true }).fill("white")
@@ -403,6 +416,7 @@ test("builds actual gradient CSS, validates stop order and retains hard edges", 
   page,
 }) => {
   await page.goto(route)
+  await ready(page)
   await tab(page, "Gradients")
   await page.getByLabel("Stop 1 color", { exact: true }).fill("red")
   await page.getByLabel("Stop 2 color", { exact: true }).fill("blue")
@@ -449,6 +463,7 @@ test("extracts actual local image pixels with a keyboard-equivalent sampling pat
     .png()
     .toBuffer()
   await page.goto(route)
+  await ready(page)
   await tab(page, "From image")
   await page.getByLabel("Choose an image for colors").setInputFiles({
     name: "two-colors.png",
@@ -508,6 +523,7 @@ test("batch reports line errors and clears outdated results", async ({
   page,
 }) => {
   await page.goto(route)
+  await ready(page)
   await tab(page, "Batch")
   await page.getByLabel("Colors, one per line").fill("red\nbroken\n#abc8")
   await page.getByRole("button", { name: "Convert color list" }).click()
@@ -532,6 +548,7 @@ test("keeps controls accessible in both themes at narrow and reflow widths", asy
   const errors: string[] = []
   page.on("pageerror", (e) => errors.push(e.message))
   await page.goto(route)
+  await ready(page)
   for (const width of [1440, 720, 320]) {
     await page.setViewportSize({ width, height: 900 })
     for (const name of [
@@ -633,6 +650,7 @@ test.describe("offline colors", () => {
       })
       await site.stop()
       await page.goto(`${site.origin}${route}`)
+      await ready(page)
       await page
         .getByLabel("Color value", { exact: true })
         .fill("hsl(120 100% 50%)")
@@ -666,6 +684,7 @@ test("publishes the color tool and guides with matching SEO and dates", async ({
   page,
 }) => {
   await page.goto(route)
+  await ready(page)
   await expect(page).toHaveTitle(
     /Free color converter, palette maker & contrast checker/
   )

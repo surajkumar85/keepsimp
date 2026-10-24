@@ -141,6 +141,17 @@ KeepSimp's tools can be used by agents: Claude Code, Codex and other MCP clients
 - **A GIF of a video:** `convert_animation` (the animation converter's tool) takes a video, so a video tool's result is given to it; `convert_video` says so.
 - **`trim_video`** (part 3) takes the parts to keep and to cut, in seconds of the original, worked out as the trim panel works them out (`kept`, from `lib/video/trim.ts`), copied at keyframes or `exact`, and plans them with `browserPlan`'s cut; each file keeps its own format unless one is given, and the result's length is checked against the parts kept. **`split_video`** splits a file at points or every so many seconds, after `keep` and `cut`, into a file for each piece that keeps something (`splitParts`, the trimmer's own), each written through the same path as `trim_video` and named `-part-N` (`partName`). **`video_frame`** saves the frame at a moment as a PNG through the page's own `frameAt` (the agent page imports Mediabunny for it when asked), handed over only when the PNG's header gives the picture's size as shown.
 
+### Markdown (`lib/agent/markdown.ts`)
+
+- **The Markdown editor's own code**, with the page handing in what needs a browser: `enrich` (the preview's maths, diagrams and coloured code, from `components/markdown/enrich.ts`) and `word` (the editor's Word file, its diagrams as pictures, from `components/markdown/export.ts`).
+- **`markdown_to_html`**: a web page that stands alone (`standaloneHtml`) or the body alone, cleaned by `clean`, with GitHub's anchors as heading ids; optional curly quotes.
+- **`markdown_to_word`**: a .docx by `markdownToWord`; it says when maths stays as its TeX.
+- **`html_to_markdown`** and **`word_to_markdown`**: Turndown with KeepSimp's rules, and mammoth then the same rules; a Word file's pictures come back as files, with the names the Markdown gives them in `data.pictures`, and what mammoth could not read in `data.notes`.
+- **`markdown_table`**: from rows of cells or tab-separated text, pipes lined up (`tableFromCells`, `tableFromTabs`).
+- **`check_markdown`**: markdownlint's findings in the page's own words, word counts and the readability estimate; with `fix`, the text with every fixable finding fixed (`fixAll`).
+- **`tidy_markdown`**: Prettier's Markdown printer, lines kept as wrapped.
+- Words come and go as text or as a file (`text.ts`); results made from text with no file to be named after are named `page.html` and `converted.md`.
+
 ### Every setting of the image pages (phase 6, part 4)
 
 - **`compress_image`** takes the compressor's sizes (a share, or a width and height in pixels or percent, kept in shape or fitted), a crop box or the largest box of a shape in the middle of the image as it is turned (`initialCrop`, `aspectValue`, as the crop panel makes it), turns and flips, and the encoder's own choices (full-resolution colour, progressive JPEG, PNG colours, dithering, resampling). All go through the page's own `buildPlan`.

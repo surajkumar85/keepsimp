@@ -147,20 +147,21 @@ export function SummaryBar({
         </div>
       )}
       <div className="flex flex-wrap gap-2">
-        {single ? (
+        {single && applying ? (
+          // While a change is taken up, the old file cannot be had: a button that says so, not a link.
+          <Button size="lg" className="flex-1 sm:flex-none" disabled>
+            <IconDownload aria-hidden="true" /> {singleLabel}
+          </Button>
+        ) : single ? (
           <a
             href={single.url}
             download={single.name}
-            aria-disabled={applying || undefined}
-            onClick={(event) => {
-              if (applying) event.preventDefault()
-              else
-                toast.success("Download started", { description: single.name })
-            }}
+            onClick={() =>
+              toast.success("Download started", { description: single.name })
+            }
             className={cn(
               buttonVariants({ size: "lg" }),
-              "flex-1 sm:flex-none",
-              applying && "pointer-events-none opacity-50"
+              "flex-1 sm:flex-none"
             )}
           >
             <IconDownload aria-hidden="true" /> {singleLabel}

@@ -265,6 +265,42 @@ const cards = [
     "/images/markdown-guide.svg",
   ],
   [
+    "markdown-to-html",
+    "From Markdown to a page anyone can open.",
+    "Markdown to HTML, on your device.",
+    "/images/markdown-html-guide.svg",
+  ],
+  [
+    "markdown-to-pdf",
+    "Markdown, set for paper.",
+    "Markdown to PDF, from your browser.",
+    "/images/markdown-pdf-guide.svg",
+  ],
+  [
+    "markdown-to-word",
+    "Markdown into Word, headings and all.",
+    "Markdown to .docx, on your device.",
+    "/images/markdown-word-guide.svg",
+  ],
+  [
+    "html-to-markdown",
+    "Any web page, as clean Markdown.",
+    "HTML to Markdown, on your device.",
+    "/images/html-markdown-guide.svg",
+  ],
+  [
+    "word-to-markdown",
+    "Word files, written as Markdown.",
+    "Word to Markdown, pictures kept.",
+    "/images/word-markdown-guide.svg",
+  ],
+  [
+    "markdown-table-generator",
+    "Tables without counting pipes.",
+    "Markdown tables from a grid or a sheet.",
+    "/images/markdown-table-guide.svg",
+  ],
+  [
     "compress-video-to-a-size",
     "Under the limit, still worth watching.",
     "Compress video to 25, 10 or 8 MB, on your device.",

@@ -928,6 +928,98 @@ export const tools: readonly Tool[] = [
     status: "available",
   },
   {
+    id: "markdown-to-html",
+    name: "Markdown to HTML",
+    description:
+      "Turn Markdown into a web page that stands alone, or copy its HTML, with GitHub's tables, task lists and code, on your device.",
+    partOf: "markdown-editor",
+    category: "document",
+    keywords: [
+      "markdown to html",
+      "md to html",
+      "convert markdown",
+      "markdown converter",
+      "html",
+    ],
+    status: "available",
+  },
+  {
+    id: "markdown-to-pdf",
+    name: "Markdown to PDF",
+    description:
+      "Turn Markdown into a PDF through your browser's print dialog, with headings kept with their text and tables not cut in half.",
+    partOf: "markdown-editor",
+    category: "document",
+    keywords: [
+      "markdown to pdf",
+      "md to pdf",
+      "print markdown",
+      "readme to pdf",
+    ],
+    status: "available",
+  },
+  {
+    id: "markdown-to-word",
+    name: "Markdown to Word",
+    description:
+      "Turn Markdown into a Word file (.docx) with Word's own headings, lists, tables, links, pictures and footnotes, on your device.",
+    partOf: "markdown-editor",
+    category: "document",
+    keywords: [
+      "markdown to word",
+      "markdown to docx",
+      "md to docx",
+      "convert markdown to word",
+    ],
+    status: "available",
+  },
+  {
+    id: "html-to-markdown",
+    name: "HTML to Markdown",
+    description:
+      "Turn HTML files, web pages and copied text into clean Markdown, tables and code blocks included, on your device.",
+    partOf: "markdown-editor",
+    category: "document",
+    keywords: [
+      "html to markdown",
+      "convert html to markdown",
+      "web page to markdown",
+      "html to md",
+    ],
+    status: "available",
+  },
+  {
+    id: "word-to-markdown",
+    name: "Word to Markdown",
+    description:
+      "Turn Word files (.docx) into Markdown: headings, lists, tables, links and pictures, on your device.",
+    partOf: "markdown-editor",
+    category: "document",
+    keywords: [
+      "word to markdown",
+      "docx to markdown",
+      "convert word to markdown",
+      "docx to md",
+    ],
+    status: "available",
+  },
+  {
+    id: "markdown-table-generator",
+    name: "Markdown table generator",
+    description:
+      "Make Markdown tables in a grid of cells or by pasting from a spreadsheet, with their pipes lined up.",
+    partOf: "markdown-editor",
+    category: "document",
+    keywords: [
+      "markdown table",
+      "markdown table generator",
+      "table to markdown",
+      "excel to markdown",
+      "csv to markdown table",
+    ],
+    status: "available",
+  },
+  {
     id: "json-formatter",
     name: "JSON formatter",
     description: "Format, explore, query, compare and convert JSON locally.",

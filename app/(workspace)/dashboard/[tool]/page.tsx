@@ -103,6 +103,42 @@ export async function generateMetadata({
         "company brand colors",
       ],
     }
+  if (id === "markdown-to-html")
+    return pageMetadata(
+      "Markdown to HTML converter, free and without uploading",
+      "Turn Markdown into a web page that stands alone, or copy its HTML: GitHub's tables, task lists, code, maths and diagrams. In your browser, no account, no uploads.",
+      `/dashboard/${id}/`
+    )
+  if (id === "markdown-to-pdf")
+    return pageMetadata(
+      "Markdown to PDF, free and without uploading",
+      "Turn Markdown into a PDF through your browser's print dialog, laid out for paper: headings kept with their text, tables and code not cut in half. No account, no uploads.",
+      `/dashboard/${id}/`
+    )
+  if (id === "markdown-to-word")
+    return pageMetadata(
+      "Markdown to Word (.docx) converter, free and private",
+      "Turn Markdown into a Word file with Word's own headings, numbered lists, tables, links, pictures and footnotes, in your browser. No account, no uploads.",
+      `/dashboard/${id}/`
+    )
+  if (id === "html-to-markdown")
+    return pageMetadata(
+      "HTML to Markdown converter, free and without uploading",
+      "Turn HTML files, web pages and copied text into clean Markdown: headings, lists, links, tables and code blocks. In your browser, no account, no uploads.",
+      `/dashboard/${id}/`
+    )
+  if (id === "word-to-markdown")
+    return pageMetadata(
+      "Word (.docx) to Markdown converter, free and private",
+      "Turn Word files into Markdown with their headings, lists, tables, links and pictures, in your browser. No account, no uploads.",
+      `/dashboard/${id}/`
+    )
+  if (id === "markdown-table-generator")
+    return pageMetadata(
+      "Markdown table generator, free",
+      "Make Markdown tables in a grid of cells or by pasting from Excel or Google Sheets, with their pipes lined up. In your browser, no account.",
+      `/dashboard/${id}/`
+    )
   if (id === "markdown-editor")
     return pageMetadata(
       "Free online Markdown editor with live preview",
@@ -518,6 +554,18 @@ export default async function ToolPage({
         <PdfEditor mode="verify" />
       ) : id === "markdown-editor" ? (
         <MarkdownEditor />
+      ) : id === "markdown-to-html" ? (
+        <MarkdownEditor mode="to-html" />
+      ) : id === "markdown-to-pdf" ? (
+        <MarkdownEditor mode="to-pdf" />
+      ) : id === "markdown-to-word" ? (
+        <MarkdownEditor mode="to-word" />
+      ) : id === "html-to-markdown" ? (
+        <MarkdownEditor mode="from-html" />
+      ) : id === "word-to-markdown" ? (
+        <MarkdownEditor mode="from-word" />
+      ) : id === "markdown-table-generator" ? (
+        <MarkdownEditor mode="table" />
       ) : (
         <JsonTool />
       )}
@@ -615,6 +663,18 @@ export default async function ToolPage({
         <PdfVerifyTutorial />
       ) : id === "markdown-editor" ? (
         <MarkdownTutorial />
+      ) : id === "markdown-to-html" ? (
+        <MarkdownTutorial mode="to-html" />
+      ) : id === "markdown-to-pdf" ? (
+        <MarkdownTutorial mode="to-pdf" />
+      ) : id === "markdown-to-word" ? (
+        <MarkdownTutorial mode="to-word" />
+      ) : id === "html-to-markdown" ? (
+        <MarkdownTutorial mode="from-html" />
+      ) : id === "word-to-markdown" ? (
+        <MarkdownTutorial mode="from-word" />
+      ) : id === "markdown-table-generator" ? (
+        <MarkdownTutorial mode="table" />
       ) : (
         <JsonTutorial />
       )}

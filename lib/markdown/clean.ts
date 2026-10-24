@@ -16,6 +16,7 @@ let purifier: ReturnType<typeof DOMPurify> | null = null
 /** Set while one call runs: whether remote pictures are kept, and how many were not. */
 let keepRemote = true
 let blocked = 0
+let pictures: ReadonlyMap<string, string> | undefined
 
 function instance() {
   if (purifier) return purifier
@@ -35,10 +36,18 @@ function instance() {
       }
     }
     // Code and tables scroll sideways on a narrow screen: they take the keyboard's focus so they can be scrolled without a pointer.
-    if (node.tagName === "PRE" || node.tagName === "TABLE")
+    if (
+      node.tagName === "PRE" ||
+      node.tagName === "TABLE" ||
+      (node.tagName === "DIV" && node.classList.contains("math-display")) ||
+      (node.tagName === "FIGURE" && node.classList.contains("diagram"))
+    )
       node.setAttribute("tabindex", "0")
     if (node.tagName === "IMG") {
       const source = node.getAttribute("src") ?? ""
+      // A picture kept with the document is shown from where the page holds it.
+      const kept = pictures?.get(source.replace(/^\.\//, ""))
+      if (kept) node.setAttribute("src", kept)
       if (!keepRemote && REMOTE.test(source)) {
         node.removeAttribute("src")
         node.removeAttribute("srcset")
@@ -52,9 +61,14 @@ function instance() {
   return purifier
 }
 
-export function clean(html: string, remoteImages = true) {
+export function clean(
+  html: string,
+  remoteImages = true,
+  kept?: ReadonlyMap<string, string>
+) {
   const purify = instance()
   keepRemote = remoteImages
+  pictures = kept
   blocked = 0
   const out = purify.sanitize(html, {
     ALLOWED_URI_REGEXP: SAFE_URI,
@@ -73,4 +87,20 @@ export function clean(html: string, remoteImages = true) {
     FORBID_ATTR: ["style"],
   })
   return { html: out, blockedImages: blocked }
+}
+
+let svgPurifier: ReturnType<typeof DOMPurify> | null = null
+
+/**
+ * A drawing made on the page (a diagram) cleaned before it is shown: SVG
+ * only, with its own styles kept (they are written by the diagram library
+ * for its own shapes) and nothing that runs, links out or embeds HTML.
+ */
+export function cleanSvg(svg: string) {
+  svgPurifier ??= DOMPurify()
+  return svgPurifier.sanitize(svg, {
+    USE_PROFILES: { svg: true, svgFilters: true },
+    ADD_TAGS: ["style"],
+    FORBID_TAGS: ["foreignObject", "a", "script", "image", "use"],
+  })
 }

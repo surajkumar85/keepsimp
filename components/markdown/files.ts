@@ -9,6 +9,12 @@ import { MARKDOWN_EXTENSIONS } from "@/lib/markdown/document"
 interface PickerWindow {
   showOpenFilePicker?: (options: object) => Promise<FileSystemFileHandle[]>
   showSaveFilePicker?: (options: object) => Promise<FileSystemFileHandle>
+  showDirectoryPicker?: (options: object) => Promise<FileSystemDirectoryHandle>
+  launchQueue?: {
+    setConsumer: (
+      consumer: (params: { files: FileSystemFileHandle[] }) => void
+    ) => void
+  }
 }
 
 const TYPES = [
@@ -108,12 +114,93 @@ export function printPage(html: string) {
   document.body.append(frame)
 }
 
-/** Puts the document on the clipboard as rich text for mail and documents, and as Markdown for plain fields. */
-export async function copyRich(html: string, markdown: string) {
-  await navigator.clipboard.write([
+/**
+ * Puts the document on the clipboard as rich text for mail and documents,
+ * and as Markdown for plain fields. Called during the press itself, with
+ * the HTML still being made: Safari only lets a page write the clipboard
+ * while handling a press, so the HTML is handed over as a promise.
+ */
+export function copyRich(html: Promise<string>, markdown: string) {
+  return navigator.clipboard.write([
     new ClipboardItem({
-      "text/html": new Blob([html], { type: "text/html" }),
+      "text/html": html.then((made) => new Blob([made], { type: "text/html" })),
       "text/plain": new Blob([markdown], { type: "text/plain" }),
     }),
   ])
+}
+
+/** Puts text on the clipboard that is still being made, in the same way. */
+export function copyText(text: Promise<string>) {
+  return navigator.clipboard.write([
+    new ClipboardItem({
+      "text/plain": text.then(
+        (made) => new Blob([made], { type: "text/plain" })
+      ),
+    }),
+  ])
+}
+
+/** Whether a folder can be opened and its files written in place in this browser. */
+export const canOpenFolders = () =>
+  typeof window !== "undefined" && "showDirectoryPicker" in window
+
+/** A Markdown file of an open folder: where it is in the folder, and its handle. */
+export interface FolderFile {
+  path: string
+  handle: FileSystemFileHandle
+}
+
+/** The most files listed from one folder, and how deep its folders are read. */
+const MOST_FILES = 500
+const DEEPEST = 4
+
+/** Asks for a folder; null when the person closed the picker. */
+export async function pickFolder(): Promise<FileSystemDirectoryHandle | null> {
+  try {
+    return await pickers().showDirectoryPicker!({ mode: "readwrite" })
+  } catch (error) {
+    if ((error as DOMException).name === "AbortError") return null
+    throw error
+  }
+}
+
+type Entries = { entries: () => AsyncIterable<[string, FileSystemHandle]> }
+
+/** Every file of a folder and the folders in it (hidden ones and node_modules left out), by its path. */
+export async function filesOf(folder: FileSystemDirectoryHandle) {
+  const all: FolderFile[] = []
+  const walk = async (
+    directory: FileSystemDirectoryHandle,
+    prefix: string,
+    depth: number
+  ) => {
+    for await (const [name, handle] of (
+      directory as unknown as Entries
+    ).entries()) {
+      if (all.length >= MOST_FILES) return
+      if (name.startsWith(".") || name === "node_modules") continue
+      if (handle.kind === "file")
+        all.push({
+          path: prefix + name,
+          handle: handle as FileSystemFileHandle,
+        })
+      else if (depth < DEEPEST)
+        await walk(
+          handle as FileSystemDirectoryHandle,
+          `${prefix}${name}/`,
+          depth + 1
+        )
+    }
+  }
+  await walk(folder, "", 0)
+  return all.sort((a, b) => a.path.localeCompare(b.path))
+}
+
+/** Files the installed app was opened with (from the system's "Open with"), handed over as they come. */
+export function onLaunchFiles(open: (handles: FileSystemFileHandle[]) => void) {
+  const queue = pickers().launchQueue
+  if (!queue) return
+  queue.setConsumer((params) => {
+    if (params.files.length) open(params.files)
+  })
 }

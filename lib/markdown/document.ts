@@ -96,6 +96,9 @@ ul.contains-task-list{list-style:none;padding-left:1.2em}
 .markdown-alert-caution{border-color:var(--caution)}.markdown-alert-caution .markdown-alert-title{color:var(--caution)}
 .footnotes{font-size:.875em;color:var(--muted)}
 table.front-matter{font-size:.875em}
+.math-display{display:block;margin:1em 0;overflow-x:auto;text-align:center}
+figure.diagram{margin:0 0 1em;text-align:center;overflow-x:auto}figure.diagram svg{max-width:100%;height:auto}
+.tok-keyword,.tok-operator,.tok-typeName{color:#cf222e}.tok-string,.tok-string2,.tok-number,.tok-bool,.tok-atom{color:#0a3069}.tok-comment,.tok-meta{color:#59636e;font-style:italic}.tok-definition,.tok-function,.tok-propertyName{color:#8250df}
 table.front-matter caption{text-align:left;color:var(--muted);padding-bottom:.25em}
 @media print{
 :root{--fg:#000;--bg:#fff;--soft:#f6f8fa;--line:#d0d7de}
